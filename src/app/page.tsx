@@ -1,8 +1,13 @@
 import Link from "next/link";
+import { getServerSession } from "next-auth";
+import { authOptions } from "@/auth";
 
 export const dynamic = "force-dynamic";
 
 export default async function Home() {
+  const session = await getServerSession(authOptions);
+  const isConnected = Boolean(session?.user?.email);
+
   const highlights = [
     {
       title: "Rapports intelligents",
@@ -35,12 +40,27 @@ export default async function Home() {
             <Link href="/reports" className="rounded-md px-3 py-2 hover:bg-black/5 dark:hover:bg-white/10">
               Produit
             </Link>
-            <Link
-              href="/auth/signin"
-              className="rounded-md border border-black/15 px-3 py-2 font-semibold hover:bg-black/5 dark:border-white/20 dark:hover:bg-white/10"
-            >
-              Se connecter
-            </Link>
+            {isConnected ? (
+              <>
+                <div className="hidden rounded-lg border border-black/10 bg-white px-3 py-1.5 text-right dark:border-white/10 dark:bg-zinc-900 sm:block">
+                  <p className="text-xs font-semibold leading-tight">{session?.user?.name ?? "Utilisateur"}</p>
+                  <p className="text-[11px] leading-tight text-black/60 dark:text-white/60">{session?.user?.email}</p>
+                </div>
+                <Link
+                  href="/profile"
+                  className="rounded-md border border-black/15 px-3 py-2 font-semibold hover:bg-black/5 dark:border-white/20 dark:hover:bg-white/10"
+                >
+                  Mon profil
+                </Link>
+              </>
+            ) : (
+              <Link
+                href="/auth/signin"
+                className="rounded-md border border-black/15 px-3 py-2 font-semibold hover:bg-black/5 dark:border-white/20 dark:hover:bg-white/10"
+              >
+                Se connecter
+              </Link>
+            )}
           </div>
         </div>
       </header>
@@ -61,9 +81,15 @@ export default async function Home() {
             <Link href="/reports" className="rounded-xl bg-black px-5 py-3 text-sm font-semibold text-white dark:bg-white dark:text-black">
               Découvrir la plateforme
             </Link>
-            <Link href="/auth/signin" className="rounded-xl border border-black/15 px-5 py-3 text-sm font-semibold dark:border-white/20">
-              Connexion équipe
-            </Link>
+            {isConnected ? (
+              <Link href="/profile" className="rounded-xl border border-black/15 px-5 py-3 text-sm font-semibold dark:border-white/20">
+                Voir mon profil
+              </Link>
+            ) : (
+              <Link href="/auth/signin" className="rounded-xl border border-black/15 px-5 py-3 text-sm font-semibold dark:border-white/20">
+                Connexion équipe
+              </Link>
+            )}
           </div>
 
           <div className="mt-8 grid gap-3 sm:grid-cols-3">
@@ -109,9 +135,15 @@ export default async function Home() {
             Un cadre de travail moderne, pensé pour la direction et les équipes terrain.
           </p>
           <div className="flex flex-wrap gap-2">
-            <Link href="/auth/signin" className="rounded-lg border border-black/15 px-4 py-2 text-sm font-semibold dark:border-white/20">
-              Commencer
-            </Link>
+            {isConnected ? (
+              <Link href="/profile" className="rounded-lg border border-black/15 px-4 py-2 text-sm font-semibold dark:border-white/20">
+                Mon profil
+              </Link>
+            ) : (
+              <Link href="/auth/signin" className="rounded-lg border border-black/15 px-4 py-2 text-sm font-semibold dark:border-white/20">
+                Commencer
+              </Link>
+            )}
             <Link href="/reports" className="rounded-lg bg-black px-4 py-2 text-sm font-semibold text-white dark:bg-white dark:text-black">
               Voir les modules
             </Link>
