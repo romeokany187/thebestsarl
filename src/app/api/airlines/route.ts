@@ -3,6 +3,8 @@ import { prisma } from "@/lib/prisma";
 import { z } from "zod";
 import { requireApiRoles } from "@/lib/rbac";
 
+export const dynamic = "force-dynamic";
+
 const airlineSchema = z.object({
   code: z.string().min(2).max(4).toUpperCase(),
   name: z.string().min(2),
