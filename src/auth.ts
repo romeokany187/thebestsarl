@@ -1,70 +1,21 @@
 import { type NextAuthOptions } from "next-auth";
-import Credentials from "next-auth/providers/credentials";
 import GoogleProvider from "next-auth/providers/google";
-import bcrypt from "bcryptjs";
 import { prisma } from "@/lib/prisma";
-
-const credentialsProvider = Credentials({
-  name: "Email & Password",
-  credentials: {
-    email: { label: "Email", type: "email" },
-    password: { label: "Password", type: "password" },
-  },
-  async authorize(credentials) {
-    if (!credentials) {
-      return null;
-    }
-
-    const email = credentials.email as string;
-    const password = credentials.password as string;
-
-    if (!email || !password) {
-      return null;
-    }
-
-    const user = await prisma.user.findUnique({ where: { email } });
-
-    if (!user) {
-      return null;
-    }
-
-    const isValid = await bcrypt.compare(password, user.passwordHash);
-
-    if (!isValid) {
-      return null;
-    }
-
-    return {
-      id: user.id,
-      name: user.name,
-      email: user.email,
-      role: user.role,
-    };
-  },
-});
-
-const providers = [
-  ...(process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET
-    ? [
-        GoogleProvider({
-          clientId: process.env.GOOGLE_CLIENT_ID,
-          clientSecret: process.env.GOOGLE_CLIENT_SECRET,
-        }),
-      ]
-    : []),
-  credentialsProvider,
-];
 
 export const authOptions: NextAuthOptions = {
   session: { strategy: "jwt" },
-  providers,
+  providers: [
+    GoogleProvider({
+      clientId: process.env.GOOGLE_CLIENT_ID ?? "",
+      clientSecret: process.env.GOOGLE_CLIENT_SECRET ?? "",
+    }),
+  ],
+  pages: {
+    signIn: "/auth/signin",
+  },
   callbacks: {
     async signIn({ user, account }) {
-      if (account?.provider !== "google") {
-        return true;
-      }
-
-      if (!user.email) {
+      if (account?.provider !== "google" || !user.email) {
         return false;
       }
 
@@ -84,11 +35,11 @@ export const authOptions: NextAuthOptions = {
       return true;
     },
     async jwt({ token, user }) {
-      if (user) {
-        token.role = (user as { role?: string }).role;
+      if (user?.email) {
+        token.email = user.email;
       }
 
-      if ((!token.role || !token.name) && token.email) {
+      if (token.email) {
         const dbUser = await prisma.user.findUnique({
           where: { email: token.email },
           select: { id: true, name: true, role: true },
@@ -108,6 +59,7 @@ export const authOptions: NextAuthOptions = {
         session.user.id = token.sub ?? "";
         session.user.role = token.role as string;
         session.user.name = token.name ?? session.user.name;
+        session.user.email = token.email ?? session.user.email;
       }
       return session;
     },

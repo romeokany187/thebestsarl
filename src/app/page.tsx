@@ -13,7 +13,7 @@ export default async function Home() {
               Produit
             </Link>
             <Link
-              href="/api/auth/signin"
+              href="/auth/signin"
               className="rounded-md border border-black/15 px-3 py-2 font-semibold hover:bg-black/5 dark:border-white/20 dark:hover:bg-white/10"
             >
               Se connecter
@@ -38,7 +38,7 @@ export default async function Home() {
             <Link href="/reports" className="rounded-xl bg-black px-5 py-3 text-sm font-semibold text-white dark:bg-white dark:text-black">
               Découvrir la plateforme
             </Link>
-            <Link href="/api/auth/signin" className="rounded-xl border border-black/15 px-5 py-3 text-sm font-semibold dark:border-white/20">
+            <Link href="/auth/signin" className="rounded-xl border border-black/15 px-5 py-3 text-sm font-semibold dark:border-white/20">
               Connexion équipe
             </Link>
           </div>

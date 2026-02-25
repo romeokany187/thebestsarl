@@ -14,7 +14,7 @@ Application web professionnelle pour la gestion opérationnelle d'une agence de 
 - Tailwind CSS
 - Prisma ORM
 - PostgreSQL
-- NextAuth (Google OAuth + email/mot de passe)
+- NextAuth (Google OAuth uniquement)
 - API Route Handlers + Zod validation
 
 ## Fonctionnalités livrées (MVP opérationnel)
@@ -128,12 +128,10 @@ GOOGLE_CLIENT_SECRET=<google-client-secret>
 
 4. Déployer puis exécuter la synchro Prisma (CI/CD ou local pointé vers prod)
 
-## Comptes de démonstration (seed)
+## Comptes et accès
 
-- admin@thebestsarl.com / password123
-- manager@thebestsarl.com / password123
-- employee@thebestsarl.com / password123
-- accountant@thebestsarl.com / password123
+- Connexion uniquement via Google (`/auth/signin`)
+- Les utilisateurs Google sont créés automatiquement en base au premier login (rôle initial: `EMPLOYEE`)
 
 ## Scripts utiles
 

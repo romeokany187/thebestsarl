@@ -1,5 +1,7 @@
 import Link from "next/link";
 import type { AppRole } from "@/lib/rbac";
+import { getServerSession } from "next-auth";
+import { authOptions } from "@/auth";
 
 const links = [
   { href: "/", label: "Dashboard", roles: ["ADMIN", "MANAGER", "ACCOUNTANT"] as AppRole[] },
@@ -56,7 +58,7 @@ const links = [
   { href: "/admin", label: "Admin", roles: ["ADMIN"] as AppRole[] },
 ];
 
-export function AppShell({
+export async function AppShell({
   children,
   role,
   accessNote,
@@ -65,6 +67,7 @@ export function AppShell({
   role?: AppRole;
   accessNote?: string;
 }) {
+  const session = await getServerSession(authOptions);
   const visibleLinks = links.filter((link) => !role || link.roles.includes(role));
   const roleLabel = role ? `Rôle ${role}` : null;
 
@@ -107,6 +110,20 @@ export function AppShell({
                 <span className="rounded-full border border-black/15 px-3 py-1 text-xs font-semibold dark:border-white/20">
                   {roleLabel}
                 </span>
+              ) : null}
+              {session?.user?.email ? (
+                <div className="rounded-xl border border-black/10 bg-white px-3 py-1.5 text-right dark:border-white/10 dark:bg-zinc-900">
+                  <p className="text-xs font-semibold leading-tight">{session.user.name ?? "Utilisateur"}</p>
+                  <p className="text-[11px] leading-tight text-black/60 dark:text-white/60">{session.user.email}</p>
+                </div>
+              ) : null}
+              {session?.user?.email ? (
+                <Link
+                  href="/api/auth/signout?callbackUrl=/"
+                  className="rounded-md border border-black/15 px-3 py-1.5 text-xs font-semibold hover:bg-black/5 dark:border-white/20 dark:hover:bg-white/10"
+                >
+                  Déconnexion
+                </Link>
               ) : null}
             </div>
 
