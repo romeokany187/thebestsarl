@@ -4,52 +4,60 @@ import GoogleProvider from "next-auth/providers/google";
 import bcrypt from "bcryptjs";
 import { prisma } from "@/lib/prisma";
 
+const credentialsProvider = Credentials({
+  name: "Email & Password",
+  credentials: {
+    email: { label: "Email", type: "email" },
+    password: { label: "Password", type: "password" },
+  },
+  async authorize(credentials) {
+    if (!credentials) {
+      return null;
+    }
+
+    const email = credentials.email as string;
+    const password = credentials.password as string;
+
+    if (!email || !password) {
+      return null;
+    }
+
+    const user = await prisma.user.findUnique({ where: { email } });
+
+    if (!user) {
+      return null;
+    }
+
+    const isValid = await bcrypt.compare(password, user.passwordHash);
+
+    if (!isValid) {
+      return null;
+    }
+
+    return {
+      id: user.id,
+      name: user.name,
+      email: user.email,
+      role: user.role,
+    };
+  },
+});
+
+const providers = [
+  ...(process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET
+    ? [
+        GoogleProvider({
+          clientId: process.env.GOOGLE_CLIENT_ID,
+          clientSecret: process.env.GOOGLE_CLIENT_SECRET,
+        }),
+      ]
+    : []),
+  credentialsProvider,
+];
+
 export const authOptions: NextAuthOptions = {
   session: { strategy: "jwt" },
-  providers: [
-    GoogleProvider({
-      clientId: process.env.GOOGLE_CLIENT_ID ?? "",
-      clientSecret: process.env.GOOGLE_CLIENT_SECRET ?? "",
-    }),
-    Credentials({
-      name: "Email & Password",
-      credentials: {
-        email: { label: "Email", type: "email" },
-        password: { label: "Password", type: "password" },
-      },
-      async authorize(credentials) {
-        if (!credentials) {
-          return null;
-        }
-
-        const email = credentials.email as string;
-        const password = credentials.password as string;
-
-        if (!email || !password) {
-          return null;
-        }
-
-        const user = await prisma.user.findUnique({ where: { email } });
-
-        if (!user) {
-          return null;
-        }
-
-        const isValid = await bcrypt.compare(password, user.passwordHash);
-
-        if (!isValid) {
-          return null;
-        }
-
-        return {
-          id: user.id,
-          name: user.name,
-          email: user.email,
-          role: user.role,
-        };
-      },
-    }),
-  ],
+  providers,
   callbacks: {
     async signIn({ user, account }) {
       if (account?.provider !== "google") {
