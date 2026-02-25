@@ -1,0 +1,169 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+enum Role {
+  ADMIN
+  MANAGER
+  EMPLOYEE
+  ACCOUNTANT
+}
+
+enum ReportPeriod {
+  DAILY
+  WEEKLY
+  MONTHLY
+  ANNUAL
+}
+
+enum ReportStatus {
+  DRAFT
+  SUBMITTED
+  APPROVED
+  REJECTED
+}
+
+enum AttendanceStatus {
+  PRESENT
+  LATE
+  ABSENT
+  OFF
+}
+
+enum PaymentStatus {
+  PAID
+  UNPAID
+  PARTIAL
+}
+
+model Team {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  users     User[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model User {
+  id            String        @id @default(cuid())
+  name          String
+  email         String        @unique
+  passwordHash  String
+  role          Role
+  teamId        String?
+  team          Team?         @relation(fields: [teamId], references: [id])
+  reports       WorkerReport[] @relation("ReportAuthor")
+  approvals     WorkerReport[] @relation("ReportReviewer")
+  attendances   Attendance[]
+  ticketsSold   TicketSale[]  @relation("TicketSeller")
+  logs          AuditLog[]
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+}
+
+model WorkerReport {
+  id              String       @id @default(cuid())
+  title           String
+  content         String
+  period          ReportPeriod
+  periodStart     DateTime
+  periodEnd       DateTime
+  status          ReportStatus @default(DRAFT)
+  authorId        String
+  author          User         @relation("ReportAuthor", fields: [authorId], references: [id])
+  reviewerId      String?
+  reviewer        User?        @relation("ReportReviewer", fields: [reviewerId], references: [id])
+  reviewerComment String?
+  submittedAt     DateTime?
+  approvedAt      DateTime?
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+}
+
+model Attendance {
+  id             String           @id @default(cuid())
+  userId         String
+  user           User             @relation(fields: [userId], references: [id])
+  date           DateTime
+  clockIn        DateTime?
+  clockOut       DateTime?
+  status         AttendanceStatus @default(PRESENT)
+  latenessMins   Int              @default(0)
+  overtimeMins   Int              @default(0)
+  notes          String?
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+
+  @@unique([userId, date])
+}
+
+model Airline {
+  id              String           @id @default(cuid())
+  code            String           @unique
+  name            String
+  tickets         TicketSale[]
+  commissionRules CommissionRule[]
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+}
+
+model CommissionRule {
+  id          String   @id @default(cuid())
+  airlineId   String
+  airline     Airline  @relation(fields: [airlineId], references: [id])
+  ratePercent Float
+  startsAt    DateTime
+  endsAt      DateTime?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model TicketSale {
+  id                 String        @id @default(cuid())
+  ticketNumber       String        @unique
+  customerName       String
+  route              String
+  travelDate         DateTime
+  soldAt             DateTime      @default(now())
+  amount             Float
+  currency           String        @default("EUR")
+  airlineId          String
+  airline            Airline       @relation(fields: [airlineId], references: [id])
+  sellerId           String
+  seller             User          @relation("TicketSeller", fields: [sellerId], references: [id])
+  paymentStatus      PaymentStatus @default(UNPAID)
+  commissionRateUsed Float
+  notes              String?
+  payments           Payment[]
+  createdAt          DateTime      @default(now())
+  updatedAt          DateTime      @updatedAt
+}
+
+model Payment {
+  id          String    @id @default(cuid())
+  ticketId    String
+  ticket      TicketSale @relation(fields: [ticketId], references: [id])
+  amount      Float
+  paidAt      DateTime  @default(now())
+  method      String
+  reference   String?
+  createdAt   DateTime  @default(now())
+}
+
+model AuditLog {
+  id         String   @id @default(cuid())
+  actorId    String
+  actor      User     @relation(fields: [actorId], references: [id])
+  action     String
+  entityType String
+  entityId   String
+  payload    Json?
+  createdAt  DateTime @default(now())
+}

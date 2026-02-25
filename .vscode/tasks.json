@@ -1,0 +1,21 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"label": "Prepare Next.js Debug Session",
+			"type": "shell",
+			"command": "for p in 3000 3001; do lsof -ti tcp:$p | xargs kill -9 2>/dev/null || true; done; rm -f .next/dev/lock"
+		},
+		{
+			"label": "Run Next.js Dev Server",
+			"type": "shell",
+			"command": "npm",
+			"args": [
+				"run",
+				"dev"
+			],
+			"isBackground": true,
+			"group": "build"
+		}
+	]
+}
