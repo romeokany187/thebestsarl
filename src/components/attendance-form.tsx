@@ -6,6 +6,53 @@ type UserOption = { id: string; name: string };
 
 export function AttendanceForm({ users }: { users: UserOption[] }) {
   const [status, setStatus] = useState<string>("");
+  const [isSigning, setIsSigning] = useState(false);
+
+  async function signNow() {
+    if (!navigator.geolocation) {
+      setStatus("Géolocalisation non supportée par votre navigateur.");
+      return;
+    }
+
+    setIsSigning(true);
+    setStatus("Détection de votre position...");
+
+    navigator.geolocation.getCurrentPosition(
+      async (position) => {
+        const payload = {
+          latitude: position.coords.latitude,
+          longitude: position.coords.longitude,
+          accuracyM: position.coords.accuracy,
+        };
+
+        const response = await fetch("/api/attendance/sign", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+
+        if (!response.ok) {
+          setStatus("Signature échouée. Vérifiez vos permissions.");
+          setIsSigning(false);
+          return;
+        }
+
+        const result = await response.json();
+        const signedAt = new Date(result.metadata.signedAt).toLocaleString();
+        const locationLabel = result.metadata.matchedSiteName
+          ? `${result.metadata.locationStatus} - ${result.metadata.matchedSiteName}`
+          : result.metadata.locationStatus;
+        setStatus(`Présence signée à ${signedAt} (${locationLabel}).`);
+        setIsSigning(false);
+        window.location.reload();
+      },
+      () => {
+        setStatus("Impossible de récupérer votre position.");
+        setIsSigning(false);
+      },
+      { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 },
+    );
+  }
 
   async function onSubmit(formData: FormData) {
     setStatus("Enregistrement...");
@@ -39,6 +86,14 @@ export function AttendanceForm({ users }: { users: UserOption[] }) {
       className="grid gap-3 rounded-xl border border-black/10 bg-white p-4 dark:border-white/10 dark:bg-zinc-900"
     >
       <h3 className="text-sm font-semibold">Saisie de présence</h3>
+      <button
+        type="button"
+        onClick={signNow}
+        disabled={isSigning}
+        className="rounded-md border border-black/15 px-3 py-2 text-sm font-semibold hover:bg-black/5 disabled:cursor-not-allowed disabled:opacity-60 dark:border-white/20 dark:hover:bg-white/10"
+      >
+        {isSigning ? "Signature en cours..." : "Signer ma présence maintenant"}
+      </button>
       <select name="userId" required className="rounded-md border px-3 py-2">
         <option value="">Employé</option>
         {users.map((user) => (

@@ -36,6 +36,18 @@ enum AttendanceStatus {
   OFF
 }
 
+enum SiteType {
+  OFFICE
+  ASSIGNMENT
+}
+
+enum PresenceLocationStatus {
+  OFFICE
+  ASSIGNMENT
+  OFFSITE
+  UNKNOWN
+}
+
 enum PaymentStatus {
   PAID
   UNPAID
@@ -93,14 +105,35 @@ model Attendance {
   date           DateTime
   clockIn        DateTime?
   clockOut       DateTime?
+  signedAt       DateTime?
   status         AttendanceStatus @default(PRESENT)
   latenessMins   Int              @default(0)
   overtimeMins   Int              @default(0)
+  signLatitude   Float?
+  signLongitude  Float?
+  signAccuracyM  Float?
+  locationStatus PresenceLocationStatus @default(UNKNOWN)
+  matchedSiteId  String?
+  matchedSite    WorkSite?        @relation(fields: [matchedSiteId], references: [id])
+  matchDistanceM Float?
   notes          String?
   createdAt      DateTime         @default(now())
   updatedAt      DateTime         @updatedAt
 
   @@unique([userId, date])
+}
+
+model WorkSite {
+  id           String    @id @default(cuid())
+  name         String
+  type         SiteType
+  latitude     Float
+  longitude    Float
+  radiusMeters Int       @default(150)
+  isActive     Boolean   @default(true)
+  attendances  Attendance[]
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
 }
 
 model Airline {

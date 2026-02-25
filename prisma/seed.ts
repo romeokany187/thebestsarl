@@ -118,6 +118,28 @@ async function main() {
     },
   });
 
+  await prisma.workSite.createMany({
+    data: [
+      {
+        name: "Siège Principal",
+        type: "OFFICE",
+        latitude: 14.7167,
+        longitude: -17.4677,
+        radiusMeters: 250,
+        isActive: true,
+      },
+      {
+        name: "Antenne Aéroport",
+        type: "ASSIGNMENT",
+        latitude: 14.7397,
+        longitude: -17.4902,
+        radiusMeters: 300,
+        isActive: true,
+      },
+    ],
+    skipDuplicates: true,
+  }).catch(() => undefined);
+
   const ticket = await prisma.ticketSale.upsert({
     where: { ticketNumber: "TBS-2026-0001" },
     update: {},

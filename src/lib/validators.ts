@@ -21,6 +21,12 @@ export const attendanceSchema = z.object({
   notes: z.string().max(500).optional(),
 });
 
+export const attendanceSignSchema = z.object({
+  latitude: z.number().min(-90).max(90),
+  longitude: z.number().min(-180).max(180),
+  accuracyM: z.number().positive().max(5000).optional(),
+});
+
 export const ticketSchema = z.object({
   ticketNumber: z.string().min(3),
   customerName: z.string().min(2),
