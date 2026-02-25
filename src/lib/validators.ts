@@ -1,4 +1,4 @@
-import { PaymentStatus, ReportPeriod, ReportStatus } from "@prisma/client";
+import { PaymentStatus, ReportPeriod, ReportStatus, SiteType } from "@prisma/client";
 import { z } from "zod";
 
 export const reportSchema = z.object({
@@ -25,6 +25,24 @@ export const attendanceSignSchema = z.object({
   latitude: z.number().min(-90).max(90),
   longitude: z.number().min(-180).max(180),
   accuracyM: z.number().positive().max(5000).optional(),
+});
+
+export const workSiteCreateSchema = z.object({
+  name: z.string().min(2).max(120),
+  type: z.nativeEnum(SiteType),
+  latitude: z.number().min(-90).max(90),
+  longitude: z.number().min(-180).max(180),
+  radiusMeters: z.number().int().min(20).max(5000),
+  isActive: z.boolean().optional(),
+});
+
+export const workSiteUpdateSchema = z.object({
+  name: z.string().min(2).max(120).optional(),
+  type: z.nativeEnum(SiteType).optional(),
+  latitude: z.number().min(-90).max(90).optional(),
+  longitude: z.number().min(-180).max(180).optional(),
+  radiusMeters: z.number().int().min(20).max(5000).optional(),
+  isActive: z.boolean().optional(),
 });
 
 export const ticketSchema = z.object({

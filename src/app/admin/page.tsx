@@ -1,4 +1,5 @@
 import { AppShell } from "@/components/app-shell";
+import { WorkSiteAdmin } from "@/components/worksite-admin";
 import { prisma } from "@/lib/prisma";
 import { requirePageRoles } from "@/lib/rbac";
 
@@ -7,7 +8,7 @@ export const dynamic = "force-dynamic";
 export default async function AdminPage() {
   const { role } = await requirePageRoles(["ADMIN"]);
 
-  const [users, teams, airlines, rules] = await Promise.all([
+  const [users, teams, airlines, rules, sites] = await Promise.all([
     prisma.user.findMany({
       include: { team: true },
       orderBy: { createdAt: "desc" },
@@ -22,6 +23,9 @@ export default async function AdminPage() {
     prisma.commissionRule.findMany({
       include: { airline: true },
       where: { isActive: true },
+      orderBy: { createdAt: "desc" },
+    }),
+    prisma.workSite.findMany({
       orderBy: { createdAt: "desc" },
     }),
   ]);
@@ -80,6 +84,10 @@ export default async function AdminPage() {
           </ul>
         </div>
       </div>
+
+      <section className="mt-6">
+        <WorkSiteAdmin sites={sites} />
+      </section>
     </AppShell>
   );
 }
