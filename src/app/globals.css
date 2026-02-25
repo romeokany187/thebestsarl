@@ -28,3 +28,17 @@ body {
 * {
   -webkit-tap-highlight-color: transparent;
 }
+
+@keyframes floatSoft {
+  0%,
+  100% {
+    transform: translateY(0px);
+  }
+  50% {
+    transform: translateY(-10px);
+  }
+}
+
+.motif-float {
+  animation: floatSoft 7s ease-in-out infinite;
+}
