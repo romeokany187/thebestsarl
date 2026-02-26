@@ -15,6 +15,16 @@ enum Role {
   ACCOUNTANT
 }
 
+enum JobTitle {
+  COMMERCIAL
+  COMPTABLE
+  CAISSIERE
+  RELATION_PUBLIQUE
+  APPROVISIONNEMENT_MARKETING
+  AGENT_TERRAIN
+  DIRECTION_GENERALE
+}
+
 enum ReportPeriod {
   DAILY
   WEEKLY
@@ -68,6 +78,7 @@ model User {
   email         String        @unique
   passwordHash  String
   role          Role
+  jobTitle      JobTitle      @default(AGENT_TERRAIN)
   teamId        String?
   team          Team?         @relation(fields: [teamId], references: [id])
   reports       WorkerReport[] @relation("ReportAuthor")

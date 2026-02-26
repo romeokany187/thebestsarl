@@ -14,6 +14,7 @@ export async function GET() {
       name: true,
       email: true,
       role: true,
+      jobTitle: true,
       team: { select: { name: true } },
     },
     orderBy: { name: "asc" },

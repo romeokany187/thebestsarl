@@ -1,5 +1,5 @@
 import bcrypt from "bcryptjs";
-import { PrismaClient, ReportPeriod, ReportStatus, Role, AttendanceStatus, PaymentStatus } from "@prisma/client";
+import { PrismaClient, ReportPeriod, ReportStatus, Role, AttendanceStatus, PaymentStatus, JobTitle } from "@prisma/client";
 
 const prisma = new PrismaClient();
 
@@ -27,6 +27,7 @@ async function main() {
       email: "admin@thebestsarl.com",
       passwordHash,
       role: Role.ADMIN,
+      jobTitle: JobTitle.DIRECTION_GENERALE,
       teamId: opsTeam.id,
     },
   });
@@ -39,6 +40,7 @@ async function main() {
       email: "manager@thebestsarl.com",
       passwordHash,
       role: Role.MANAGER,
+      jobTitle: JobTitle.RELATION_PUBLIQUE,
       teamId: opsTeam.id,
     },
   });
@@ -51,6 +53,7 @@ async function main() {
       email: "employee@thebestsarl.com",
       passwordHash,
       role: Role.EMPLOYEE,
+      jobTitle: JobTitle.COMMERCIAL,
       teamId: salesTeam.id,
     },
   });
@@ -63,6 +66,7 @@ async function main() {
       email: "accountant@thebestsarl.com",
       passwordHash,
       role: Role.ACCOUNTANT,
+      jobTitle: JobTitle.COMPTABLE,
       teamId: salesTeam.id,
     },
   });

@@ -5,6 +5,20 @@ import { prisma } from "@/lib/prisma";
 import { requirePageRoles } from "@/lib/rbac";
 import Link from "next/link";
 
+function jobTitleLabel(jobTitle: string) {
+  const labels: Record<string, string> = {
+    COMMERCIAL: "Commercial",
+    COMPTABLE: "Comptable",
+    CAISSIERE: "Caissière",
+    RELATION_PUBLIQUE: "Relation publique",
+    APPROVISIONNEMENT_MARKETING: "Chargé des approvisionnements marketing",
+    AGENT_TERRAIN: "Agent de terrain",
+    DIRECTION_GENERALE: "Direction générale",
+  };
+
+  return labels[jobTitle] ?? jobTitle;
+}
+
 export const dynamic = "force-dynamic";
 
 export default async function ReportsPage() {
@@ -17,7 +31,7 @@ export default async function ReportsPage() {
     }),
     prisma.workerReport.findMany({
       include: {
-        author: { select: { name: true, role: true, team: { select: { name: true } } } },
+        author: { select: { name: true, jobTitle: true, team: { select: { name: true } } } },
         reviewer: { select: { name: true } },
       },
       orderBy: { createdAt: "desc" },
@@ -50,7 +64,8 @@ export default async function ReportsPage() {
             users={authorOptions.map((user) => ({
               id: user.id,
               name: user.name,
-              role: user.role,
+              role: jobTitleLabel(user.jobTitle),
+              jobTitle: user.jobTitle,
               service: user.team?.name ?? "Service non défini",
             }))}
           />
@@ -69,7 +84,7 @@ export default async function ReportsPage() {
               </div>
               <p className="mt-2 text-sm text-black/80 dark:text-white/80">{report.content}</p>
               <p className="mt-2 text-xs text-black/60 dark:text-white/60">
-                Auteur: {report.author.name} • Fonction: {report.author.role} • Service: {report.author.team?.name ?? "-"} • Période: {report.period}
+                Auteur: {report.author.name} • Fonction: {jobTitleLabel(report.author.jobTitle)} • Service: {report.author.team?.name ?? "-"} • Période: {report.period}
               </p>
               <div className="mt-2">
                 <Link

@@ -16,6 +16,20 @@ function formatPeriodLabel(period: string) {
   return period;
 }
 
+function jobTitleLabel(jobTitle: string) {
+  const labels: Record<string, string> = {
+    COMMERCIAL: "Commercial",
+    COMPTABLE: "Comptable",
+    CAISSIERE: "Caissière",
+    RELATION_PUBLIQUE: "Relation publique",
+    APPROVISIONNEMENT_MARKETING: "Chargé des approvisionnements marketing",
+    AGENT_TERRAIN: "Agent de terrain",
+    DIRECTION_GENERALE: "Direction générale",
+  };
+
+  return labels[jobTitle] ?? jobTitle;
+}
+
 function renderContentParagraphs(content: string) {
   return content
     .split("\n")
@@ -84,7 +98,7 @@ export default async function ReportPrintPage({ params }: PageProps) {
           </div>
           <div className="rounded-lg border border-zinc-200 p-3 text-sm">
             <p><span className="font-semibold">Employé:</span> {report.author.name}</p>
-            <p><span className="font-semibold">Fonction:</span> {report.author.role}</p>
+            <p><span className="font-semibold">Fonction:</span> {jobTitleLabel(report.author.jobTitle)}</p>
             <p><span className="font-semibold">Service:</span> {report.author.team?.name ?? "Service non défini"}</p>
             <p><span className="font-semibold">Statut:</span> {report.status}</p>
           </div>

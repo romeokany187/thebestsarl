@@ -33,12 +33,18 @@ export const authOptions: NextAuthOptions = {
             email: user.email,
             passwordHash: "",
             role: isAdminEmail ? "ADMIN" : "EMPLOYEE",
+            jobTitle: isAdminEmail ? "DIRECTION_GENERALE" : "AGENT_TERRAIN",
           },
         });
       } else if (isAdminEmail && existing.role !== "ADMIN") {
         await prisma.user.update({
           where: { id: existing.id },
-          data: { role: "ADMIN" },
+          data: { role: "ADMIN", jobTitle: "DIRECTION_GENERALE" },
+        });
+      } else if (isAdminEmail && existing.jobTitle !== "DIRECTION_GENERALE") {
+        await prisma.user.update({
+          where: { id: existing.id },
+          data: { jobTitle: "DIRECTION_GENERALE" },
         });
       }
 

@@ -3,6 +3,20 @@ import { prisma } from "@/lib/prisma";
 import { reportSchema } from "@/lib/validators";
 import { requireApiRoles } from "@/lib/rbac";
 
+function jobTitleLabel(jobTitle: string) {
+  const labels: Record<string, string> = {
+    COMMERCIAL: "Commercial",
+    COMPTABLE: "Comptable",
+    CAISSIERE: "Caissière",
+    RELATION_PUBLIQUE: "Relation publique",
+    APPROVISIONNEMENT_MARKETING: "Chargé des approvisionnements marketing",
+    AGENT_TERRAIN: "Agent de terrain",
+    DIRECTION_GENERALE: "Direction générale",
+  };
+
+  return labels[jobTitle] ?? jobTitle;
+}
+
 export async function GET(request: NextRequest) {
   const access = await requireApiRoles(["ADMIN", "MANAGER", "EMPLOYEE", "ACCOUNTANT"]);
   if (access.error) {
@@ -61,8 +75,9 @@ export async function POST(request: NextRequest) {
   }
 
   const serviceLabel = author.team?.name ?? "Service non défini";
+  const functionLabel = jobTitleLabel(author.jobTitle);
   const enrichedContent = [
-    `Fonction: ${author.role}`,
+    `Fonction: ${functionLabel}`,
     `Service: ${serviceLabel}`,
     "",
     parsed.data.content,
