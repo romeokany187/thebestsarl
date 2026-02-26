@@ -40,6 +40,48 @@ function computeOvertimeMinutes(signTime: Date) {
   return Math.max(0, deltaMins);
 }
 
+async function resolveAddressFromCoords(latitude: number, longitude: number) {
+  try {
+    const url = new URL("https://nominatim.openstreetmap.org/reverse");
+    url.searchParams.set("format", "jsonv2");
+    url.searchParams.set("lat", String(latitude));
+    url.searchParams.set("lon", String(longitude));
+    url.searchParams.set("addressdetails", "1");
+
+    const response = await fetch(url.toString(), {
+      headers: {
+        "Accept-Language": "fr",
+        "User-Agent": "THEBEST-SARL/1.0 (attendance)",
+      },
+      cache: "no-store",
+    });
+
+    if (!response.ok) {
+      return null;
+    }
+
+    const payload = await response.json();
+    const address = payload?.address;
+
+    const road = address?.road ?? address?.pedestrian ?? address?.path ?? null;
+    const houseNumber = address?.house_number ?? null;
+    const quarter = address?.suburb ?? address?.neighbourhood ?? address?.quarter ?? null;
+    const city = address?.city ?? address?.town ?? address?.village ?? null;
+
+    const concise = [
+      [road, houseNumber].filter(Boolean).join(" "),
+      quarter,
+      city,
+    ]
+      .filter(Boolean)
+      .join(", ");
+
+    return concise || payload?.display_name || null;
+  } catch {
+    return null;
+  }
+}
+
 export async function GET() {
   const access = await requireApiRoles(["ADMIN", "MANAGER", "EMPLOYEE", "ACCOUNTANT"]);
   if (access.error) {
@@ -93,6 +135,7 @@ export async function POST(request: NextRequest) {
   const signTime = new Date();
   const day = new Date(signTime.toDateString());
   const { latitude, longitude, accuracyM, action } = parsed.data;
+  const resolvedAddress = await resolveAddressFromCoords(latitude, longitude);
 
   const activeSites = await prisma.workSite.findMany({
     where: { isActive: true },
@@ -124,6 +167,7 @@ export async function POST(request: NextRequest) {
       ? "OFFICE"
       : "ASSIGNMENT"
     : "OFFSITE";
+  const isAtOffice = locationStatus === "OFFICE";
 
   const isClockOut = action === "CLOCK_OUT";
   const latenessMins = isClockOut ? 0 : computeLatenessMinutes(signTime);
@@ -169,12 +213,13 @@ export async function POST(request: NextRequest) {
       signLatitude: latitude,
       signLongitude: longitude,
       signAccuracyM: accuracyM,
+      signAddress: resolvedAddress,
       locationStatus,
       matchedSiteId: matchedSite?.id,
       matchDistanceM: matchedSite?.distanceM,
       notes: matchedSite
         ? `${isClockOut ? "Sortie" : "Entrée"} validée sur ${matchedSite.name}`
-        : `${isClockOut ? "Sortie" : "Entrée"} hors zone bureau/affectation`,
+        : `${isClockOut ? "Sortie" : "Entrée"} hors bureau${resolvedAddress ? ` • ${resolvedAddress}` : ""}`,
     },
     create: {
       userId: access.session.user.id,
@@ -185,12 +230,13 @@ export async function POST(request: NextRequest) {
       signLatitude: latitude,
       signLongitude: longitude,
       signAccuracyM: accuracyM,
+      signAddress: resolvedAddress,
       locationStatus,
       matchedSiteId: matchedSite?.id,
       matchDistanceM: matchedSite?.distanceM,
       notes: matchedSite
         ? `${isClockOut ? "Sortie" : "Entrée"} validée sur ${matchedSite.name}`
-        : `${isClockOut ? "Sortie" : "Entrée"} hors zone bureau/affectation`,
+        : `${isClockOut ? "Sortie" : "Entrée"} hors bureau${resolvedAddress ? ` • ${resolvedAddress}` : ""}`,
     },
     include: {
       matchedSite: {
@@ -205,8 +251,10 @@ export async function POST(request: NextRequest) {
       action,
       signedAt: signTime.toISOString(),
       locationStatus,
+      isAtOffice,
       matchedSiteName: matchedSite?.name ?? null,
       matchDistanceM: matchedSite?.distanceM ?? null,
+      resolvedAddress,
     },
   });
 }

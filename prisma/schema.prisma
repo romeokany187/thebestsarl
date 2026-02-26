@@ -123,6 +123,7 @@ model Attendance {
   signLatitude   Float?
   signLongitude  Float?
   signAccuracyM  Float?
+  signAddress    String?
   locationStatus PresenceLocationStatus @default(UNKNOWN)
   matchedSiteId  String?
   matchedSite    WorkSite?        @relation(fields: [matchedSiteId], references: [id])

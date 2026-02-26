@@ -59,6 +59,7 @@ export default async function AttendancePage() {
                 <th className="px-3 py-2 text-left">Sortie</th>
                 <th className="px-3 py-2 text-left">Signé à</th>
                 <th className="px-3 py-2 text-left">Localisation détectée</th>
+                <th className="px-3 py-2 text-left">Adresse détectée</th>
                 <th className="px-3 py-2 text-left">Retard</th>
                 <th className="px-3 py-2 text-left">Heures supp.</th>
               </tr>
@@ -78,6 +79,7 @@ export default async function AttendancePage() {
                       ? ` • ${row.signLatitude.toFixed(5)}, ${row.signLongitude.toFixed(5)}`
                       : ""}
                   </td>
+                  <td className="px-3 py-2">{row.signAddress ?? "-"}</td>
                   <td className="px-3 py-2">{row.latenessMins} min</td>
                   <td className="px-3 py-2">{row.overtimeMins} min</td>
                 </tr>

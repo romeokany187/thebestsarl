@@ -91,8 +91,10 @@ export function AttendanceForm({ users, role }: { users: UserOption[]; role: App
         const locationLabel = result.metadata.matchedSiteName
           ? `${result.metadata.locationStatus} - ${result.metadata.matchedSiteName}`
           : result.metadata.locationStatus;
+        const officeText = result.metadata.isAtOffice ? "Au bureau" : "Hors bureau";
+        const addressText = result.metadata.resolvedAddress ? ` • ${result.metadata.resolvedAddress}` : "";
         setStatus(
-          `${action === "CLOCK_IN" ? "Entrée" : "Sortie"} signée à ${signedAt} (${locationLabel}).`,
+          `${action === "CLOCK_IN" ? "Entrée" : "Sortie"} signée à ${signedAt} (${officeText} • ${locationLabel}${addressText}).`,
         );
         const refreshResponse = await fetch("/api/attendance/sign", { cache: "no-store" });
         if (refreshResponse.ok) {
