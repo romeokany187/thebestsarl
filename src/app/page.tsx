@@ -1,12 +1,34 @@
 import Link from "next/link";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/auth";
+import { AppShell } from "@/components/app-shell";
+import { DashboardOverview } from "@/components/dashboard-overview";
+import type { AppRole } from "@/lib/rbac";
 
 export const dynamic = "force-dynamic";
 
 export default async function Home() {
   const session = await getServerSession(authOptions);
   const isConnected = Boolean(session?.user?.email);
+  const userRole = session?.user?.role;
+  const canAccessExecutiveDashboard = userRole === "ADMIN" || userRole === "MANAGER" || userRole === "ACCOUNTANT";
+
+  if (canAccessExecutiveDashboard) {
+    return (
+      <AppShell
+        role={userRole as AppRole}
+        accessNote="Tableau de pilotage interactif: utilisateurs, présences/absences, rapports par employé/fonction et ventes multi-fréquences."
+      >
+        <section className="mb-6">
+          <h1 className="text-2xl font-semibold">Dashboard direction</h1>
+          <p className="text-sm text-black/60 dark:text-white/60">
+            Vision complète et interactive de l&apos;activité agence selon la période, la fonction et l&apos;employé.
+          </p>
+        </section>
+        <DashboardOverview />
+      </AppShell>
+    );
+  }
 
   const highlights = [
     {
