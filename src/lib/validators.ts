@@ -25,6 +25,7 @@ export const attendanceSignSchema = z.object({
   latitude: z.number().min(-90).max(90),
   longitude: z.number().min(-180).max(180),
   accuracyM: z.number().positive().max(5000).optional(),
+  action: z.enum(["CLOCK_IN", "CLOCK_OUT"]).default("CLOCK_IN"),
 });
 
 export const workSiteCreateSchema = z.object({

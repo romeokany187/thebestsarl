@@ -42,7 +42,7 @@ export default async function AttendancePage() {
 
       <div className="grid gap-6 lg:grid-cols-[380px,1fr]">
         {canManageAttendance ? (
-          <AttendanceForm users={users} />
+          <AttendanceForm users={users} role={role} />
         ) : (
           <section className="rounded-xl border border-black/10 bg-white p-4 text-sm text-black/70 dark:border-white/10 dark:bg-zinc-900 dark:text-white/70">
             Accès en lecture seule: vous pouvez consulter les présences mais pas les modifier.

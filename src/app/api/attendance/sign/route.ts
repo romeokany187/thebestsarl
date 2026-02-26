@@ -33,6 +33,13 @@ function computeLatenessMinutes(signTime: Date) {
   return Math.max(0, deltaMins);
 }
 
+function computeOvertimeMinutes(signTime: Date) {
+  const officeEnd = new Date(signTime);
+  officeEnd.setHours(18, 0, 0, 0);
+  const deltaMins = Math.round((signTime.getTime() - officeEnd.getTime()) / 60000);
+  return Math.max(0, deltaMins);
+}
+
 export async function POST(request: NextRequest) {
   const access = await requireApiRoles(["ADMIN", "MANAGER", "EMPLOYEE", "ACCOUNTANT"]);
   if (access.error) {
@@ -48,7 +55,7 @@ export async function POST(request: NextRequest) {
 
   const signTime = new Date();
   const day = new Date(signTime.toDateString());
-  const { latitude, longitude, accuracyM } = parsed.data;
+  const { latitude, longitude, accuracyM, action } = parsed.data;
 
   const activeSites = await prisma.workSite.findMany({
     where: { isActive: true },
@@ -81,7 +88,9 @@ export async function POST(request: NextRequest) {
       : "ASSIGNMENT"
     : "OFFSITE";
 
-  const latenessMins = computeLatenessMinutes(signTime);
+  const isClockOut = action === "CLOCK_OUT";
+  const latenessMins = isClockOut ? 0 : computeLatenessMinutes(signTime);
+  const overtimeMins = isClockOut ? computeOvertimeMinutes(signTime) : 0;
 
   const record = await prisma.attendance.upsert({
     where: {
@@ -91,10 +100,9 @@ export async function POST(request: NextRequest) {
       },
     },
     update: {
-      clockIn: signTime,
-      signedAt: signTime,
+      ...(isClockOut ? { clockOut: signTime } : { clockIn: signTime, signedAt: signTime }),
       status: "PRESENT",
-      latenessMins,
+      ...(isClockOut ? { overtimeMins } : { latenessMins }),
       signLatitude: latitude,
       signLongitude: longitude,
       signAccuracyM: accuracyM,
@@ -102,16 +110,15 @@ export async function POST(request: NextRequest) {
       matchedSiteId: matchedSite?.id,
       matchDistanceM: matchedSite?.distanceM,
       notes: matchedSite
-        ? `Signature validée sur ${matchedSite.name}`
-        : "Signature hors zone bureau/affectation",
+        ? `${isClockOut ? "Sortie" : "Entrée"} validée sur ${matchedSite.name}`
+        : `${isClockOut ? "Sortie" : "Entrée"} hors zone bureau/affectation`,
     },
     create: {
       userId: access.session.user.id,
       date: day,
-      clockIn: signTime,
-      signedAt: signTime,
+      ...(isClockOut ? { clockOut: signTime } : { clockIn: signTime, signedAt: signTime }),
       status: "PRESENT",
-      latenessMins,
+      ...(isClockOut ? { overtimeMins } : { latenessMins }),
       signLatitude: latitude,
       signLongitude: longitude,
       signAccuracyM: accuracyM,
@@ -119,8 +126,8 @@ export async function POST(request: NextRequest) {
       matchedSiteId: matchedSite?.id,
       matchDistanceM: matchedSite?.distanceM,
       notes: matchedSite
-        ? `Signature validée sur ${matchedSite.name}`
-        : "Signature hors zone bureau/affectation",
+        ? `${isClockOut ? "Sortie" : "Entrée"} validée sur ${matchedSite.name}`
+        : `${isClockOut ? "Sortie" : "Entrée"} hors zone bureau/affectation`,
     },
     include: {
       matchedSite: {
@@ -132,6 +139,7 @@ export async function POST(request: NextRequest) {
   return NextResponse.json({
     data: record,
     metadata: {
+      action,
       signedAt: signTime.toISOString(),
       locationStatus,
       matchedSiteName: matchedSite?.name ?? null,
