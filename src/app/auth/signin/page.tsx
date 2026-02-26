@@ -28,7 +28,7 @@ export default function SignInPage() {
           <p className="mt-2 text-sm text-black/60 dark:text-white/60">Méthode unique: compte Gmail autorisé.</p>
 
           <button
-            onClick={() => signIn("google", { callbackUrl: "/reports" })}
+            onClick={() => signIn("google", { callbackUrl: "/post-login" })}
             className="mt-6 flex w-full items-center justify-center gap-2 rounded-xl border border-black/15 px-4 py-3 text-sm font-semibold transition hover:bg-black/5 dark:border-white/20 dark:hover:bg-white/10"
           >
             Continuer avec Google

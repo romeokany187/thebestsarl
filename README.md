@@ -101,6 +101,7 @@ http://localhost:3000/api/auth/callback/google
 ```dotenv
 GOOGLE_CLIENT_ID="..."
 GOOGLE_CLIENT_SECRET="..."
+ADMIN_EMAIL="admin@thebestsarl.com"
 ```
 
 En production Vercel, ajouter aussi l'URI:
@@ -132,6 +133,8 @@ GOOGLE_CLIENT_SECRET=<google-client-secret>
 
 - Connexion uniquement via Google (`/auth/signin`)
 - Les utilisateurs Google sont créés automatiquement en base au premier login (rôle initial: `EMPLOYEE`)
+- Si l'email connecté correspond à `ADMIN_EMAIL`, le rôle est automatiquement initialisé/forcé à `ADMIN`
+- Après connexion, l'admin est redirigé vers `/admin` (tableau administrateur)
 
 ## Scripts utiles
 
