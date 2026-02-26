@@ -9,6 +9,46 @@ export const reportSchema = z.object({
   periodEnd: z.coerce.date(),
   status: z.nativeEnum(ReportStatus).optional(),
   authorId: z.string().min(1),
+}).superRefine((value, ctx) => {
+  const start = new Date(value.periodStart);
+  const end = new Date(value.periodEnd);
+  start.setHours(0, 0, 0, 0);
+  end.setHours(0, 0, 0, 0);
+
+  if (end < start) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["periodEnd"],
+      message: "La date de fin doit être après la date de début.",
+    });
+    return;
+  }
+
+  const days = Math.floor((end.getTime() - start.getTime()) / 86400000) + 1;
+
+  if (value.period === "DAILY" && days !== 1) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["periodEnd"],
+      message: "Un rapport journalier doit couvrir exactement 1 jour.",
+    });
+  }
+
+  if (value.period === "WEEKLY" && (days < 5 || days > 7)) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["periodEnd"],
+      message: "Un rapport hebdomadaire doit couvrir entre 5 et 7 jours.",
+    });
+  }
+
+  if (value.period === "MONTHLY" && (days < 28 || days > 31)) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["periodEnd"],
+      message: "Un rapport mensuel doit couvrir entre 28 et 31 jours.",
+    });
+  }
 });
 
 export const attendanceSchema = z.object({

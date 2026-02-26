@@ -3,6 +3,7 @@ import { ApprovalForm } from "@/components/approval-form";
 import { ReportsForm } from "@/components/reports-form";
 import { prisma } from "@/lib/prisma";
 import { requirePageRoles } from "@/lib/rbac";
+import Link from "next/link";
 
 export const dynamic = "force-dynamic";
 
@@ -11,12 +12,12 @@ export default async function ReportsPage() {
 
   const [users, reports] = await Promise.all([
     prisma.user.findMany({
-      select: { id: true, name: true, role: true },
+      include: { team: true },
       orderBy: { name: "asc" },
     }),
     prisma.workerReport.findMany({
       include: {
-        author: { select: { name: true } },
+        author: { select: { name: true, role: true, team: { select: { name: true } } } },
         reviewer: { select: { name: true } },
       },
       orderBy: { createdAt: "desc" },
@@ -45,7 +46,14 @@ export default async function ReportsPage() {
 
       <div className="grid gap-6 lg:grid-cols-[380px,1fr]">
         {canCreateReport ? (
-          <ReportsForm users={authorOptions.map((user) => ({ id: user.id, name: user.name }))} />
+          <ReportsForm
+            users={authorOptions.map((user) => ({
+              id: user.id,
+              name: user.name,
+              role: user.role,
+              service: user.team?.name ?? "Service non défini",
+            }))}
+          />
         ) : (
           <section className="rounded-xl border border-black/10 bg-white p-4 text-sm text-black/70 dark:border-white/10 dark:bg-zinc-900 dark:text-white/70">
             Accès en lecture seule: vous pouvez consulter les rapports mais pas en créer.
@@ -61,8 +69,17 @@ export default async function ReportsPage() {
               </div>
               <p className="mt-2 text-sm text-black/80 dark:text-white/80">{report.content}</p>
               <p className="mt-2 text-xs text-black/60 dark:text-white/60">
-                Auteur: {report.author.name} • Période: {report.period}
+                Auteur: {report.author.name} • Fonction: {report.author.role} • Service: {report.author.team?.name ?? "-"} • Période: {report.period}
               </p>
+              <div className="mt-2">
+                <Link
+                  href={`/reports/${report.id}/print`}
+                  target="_blank"
+                  className="text-xs font-semibold text-black/70 underline underline-offset-2 dark:text-white/70"
+                >
+                  Version imprimable PDF
+                </Link>
+              </div>
               {canApproveReport ? (
                 <ApprovalForm reportId={report.id} managers={managers.map((manager) => ({ id: manager.id, name: manager.name }))} />
               ) : null}
