@@ -1,4 +1,5 @@
 import { AppShell } from "@/components/app-shell";
+import { UserJobTitleAdmin } from "@/components/user-job-title-admin";
 import { WorkSiteAdmin } from "@/components/worksite-admin";
 import { prisma } from "@/lib/prisma";
 import { requirePageRoles } from "@/lib/rbac";
@@ -45,7 +46,7 @@ export default async function AdminPage() {
           <ul className="mt-3 space-y-2 text-sm">
             {users.map((user) => (
               <li key={user.id} className="rounded-md border border-black/10 px-3 py-2 dark:border-white/10">
-                {user.name} • {user.role} • {user.team?.name ?? "Sans équipe"}
+                {user.name} • {user.role} • {user.jobTitle} • {user.team?.name ?? "Sans équipe"}
               </li>
             ))}
           </ul>
@@ -84,6 +85,19 @@ export default async function AdminPage() {
           </ul>
         </div>
       </div>
+
+      <section className="mt-6">
+        <UserJobTitleAdmin
+          users={users.map((user) => ({
+            id: user.id,
+            name: user.name,
+            email: user.email,
+            role: user.role,
+            jobTitle: user.jobTitle,
+            teamName: user.team?.name ?? "Sans équipe",
+          }))}
+        />
+      </section>
 
       <section className="mt-6">
         <WorkSiteAdmin sites={sites} />
