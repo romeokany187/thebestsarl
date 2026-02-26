@@ -2,6 +2,7 @@ import Link from "next/link";
 import type { AppRole } from "@/lib/rbac";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/auth";
+import { LogoutButton } from "@/components/logout-button";
 
 const links = [
   { href: "/", label: "Dashboard", roles: ["ADMIN", "MANAGER", "ACCOUNTANT"] as AppRole[] },
@@ -124,14 +125,7 @@ export async function AppShell({
                   <p className="text-[11px] leading-tight text-black/60 dark:text-white/60">{session.user.email}</p>
                 </div>
               ) : null}
-              {session?.user?.email ? (
-                <Link
-                  href="/api/auth/signout?callbackUrl=/"
-                  className="rounded-md border border-black/15 px-3 py-1.5 text-xs font-semibold hover:bg-black/5 dark:border-white/20 dark:hover:bg-white/10"
-                >
-                  Déconnexion
-                </Link>
-              ) : null}
+              {session?.user?.email ? <LogoutButton /> : null}
             </div>
 
             <nav className="mt-4 flex gap-2 overflow-x-auto pb-1 md:hidden">
