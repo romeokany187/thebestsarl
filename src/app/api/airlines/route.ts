@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { z } from "zod";
 import { requireApiRoles } from "@/lib/rbac";
 import { CommissionMode, TravelClass } from "@prisma/client";
+import { ensureAirlineCatalog } from "@/lib/airline-catalog";
 
 export const dynamic = "force-dynamic";
 
@@ -24,6 +25,8 @@ export async function GET() {
   if (access.error) {
     return access.error;
   }
+
+  await ensureAirlineCatalog(prisma);
 
   const airlines = await prisma.airline.findMany({
     include: { commissionRules: { where: { isActive: true } } },

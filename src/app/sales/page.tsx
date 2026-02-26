@@ -4,6 +4,7 @@ import { TicketForm } from "@/components/ticket-form";
 import { calculateTicketMetrics } from "@/lib/kpi";
 import { prisma } from "@/lib/prisma";
 import { requirePageRoles } from "@/lib/rbac";
+import { ensureAirlineCatalog } from "@/lib/airline-catalog";
 
 export const dynamic = "force-dynamic";
 
@@ -25,6 +26,8 @@ export default async function SalesPage() {
       ? "Accès commercial personnel: création et suivi de vos ventes."
       : "Accès commercial étendu: création et suivi des ventes de l'agence."
     : "Accès financier lecture seule: consultation des ventes et commissions.";
+
+  await ensureAirlineCatalog(prisma);
 
   const [users, airlines, tickets] = await Promise.all([
     prisma.user.findMany({
