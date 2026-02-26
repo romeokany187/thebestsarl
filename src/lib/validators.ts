@@ -93,12 +93,14 @@ export const ticketSchema = z.object({
   travelClass: z.nativeEnum(TravelClass),
   travelDate: z.coerce.date(),
   amount: z.number().positive(),
+  baseFareAmount: z.number().positive().optional(),
   currency: z.string().min(3).max(3),
   airlineId: z.string().min(1),
   sellerId: z.string().min(1),
   saleNature: z.nativeEnum(SaleNature),
   paymentStatus: z.nativeEnum(PaymentStatus),
   payerName: z.string().max(120).optional(),
+  agencyMarkupPercent: z.number().min(0).max(100).optional(),
   notes: z.string().max(500).optional(),
 });
 

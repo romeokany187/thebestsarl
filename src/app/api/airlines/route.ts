@@ -16,6 +16,7 @@ const airlineSchema = z.object({
   commissionMode: z.nativeEnum(CommissionMode).default("IMMEDIATE"),
   systemRatePercent: z.number().min(0).max(100).default(0),
   markupRatePercent: z.number().min(0).max(100).default(0),
+  defaultBaseFareRatio: z.number().min(0.2).max(0.95).default(0.6),
   depositStockTargetAmount: z.number().positive().optional(),
   batchCommissionAmount: z.number().positive().optional(),
 });
@@ -61,6 +62,7 @@ export async function POST(request: NextRequest) {
           commissionMode: parsed.data.commissionMode,
           systemRatePercent: parsed.data.systemRatePercent,
           markupRatePercent: parsed.data.markupRatePercent,
+          defaultBaseFareRatio: parsed.data.defaultBaseFareRatio,
           depositStockTargetAmount: parsed.data.depositStockTargetAmount,
           batchCommissionAmount: parsed.data.batchCommissionAmount,
           startsAt: new Date(),

@@ -83,6 +83,11 @@ enum CommissionMode {
   MARKUP_ONLY
 }
 
+enum CommissionCalculationStatus {
+  ESTIMATED
+  FINAL
+}
+
 model Team {
   id        String   @id @default(cuid())
   name      String   @unique
@@ -187,6 +192,7 @@ model CommissionRule {
   commissionMode CommissionMode @default(IMMEDIATE)
   systemRatePercent Float @default(0)
   markupRatePercent Float @default(0)
+  defaultBaseFareRatio Float @default(0.6)
   depositStockTargetAmount Float?
   depositStockConsumedAmount Float @default(0)
   batchCommissionAmount Float?
@@ -206,6 +212,7 @@ model TicketSale {
   travelDate         DateTime
   soldAt             DateTime      @default(now())
   amount             Float
+  baseFareAmount     Float?
   currency           String        @default("EUR")
   airlineId          String
   airline            Airline       @relation(fields: [airlineId], references: [id])
@@ -214,6 +221,9 @@ model TicketSale {
   saleNature         SaleNature    @default(CASH)
   paymentStatus      PaymentStatus @default(UNPAID)
   payerName          String?
+  agencyMarkupPercent Float        @default(0)
+  commissionBaseAmount Float       @default(0)
+  commissionCalculationStatus CommissionCalculationStatus @default(ESTIMATED)
   commissionRateUsed Float
   commissionAmount   Float         @default(0)
   commissionModeApplied CommissionMode @default(IMMEDIATE)

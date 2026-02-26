@@ -129,6 +129,7 @@ export default async function SalesPage() {
                 <th className="px-3 py-2 text-left">Code billet (PNR)</th>
                 <th className="px-3 py-2 text-left">Itinéraire</th>
                 <th className="px-3 py-2 text-left">Prix</th>
+                <th className="px-3 py-2 text-left">BaseFare</th>
                 <th className="px-3 py-2 text-left">Commission</th>
                 <th className="px-3 py-2 text-left">Nature vente</th>
                 <th className="px-3 py-2 text-left">Statut</th>
@@ -146,7 +147,13 @@ export default async function SalesPage() {
                     <td className="px-3 py-2">{ticket.ticketNumber}</td>
                     <td className="px-3 py-2">{ticket.route}</td>
                     <td className="px-3 py-2">{ticket.amount.toFixed(2)} {ticket.currency}</td>
-                    <td className="px-3 py-2">{commissionAmount.toFixed(2)} {ticket.currency}</td>
+                    <td className="px-3 py-2">{(ticket.baseFareAmount ?? ticket.commissionBaseAmount).toFixed(2)} {ticket.currency}</td>
+                    <td className="px-3 py-2">
+                      {commissionAmount.toFixed(2)} {ticket.currency}
+                      <span className="ml-1 text-xs text-black/60 dark:text-white/60">
+                        {ticket.commissionCalculationStatus === "ESTIMATED" ? "(estimée)" : "(définitive)"}
+                      </span>
+                    </td>
                     <td className="px-3 py-2">{saleNatureLabel(ticket.saleNature)}</td>
                     <td className="px-3 py-2">{paymentLabel(ticket.paymentStatus)}</td>
                     <td className="px-3 py-2">{ticket.payerName ?? "-"}</td>

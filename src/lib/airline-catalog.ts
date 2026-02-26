@@ -7,6 +7,7 @@ type CatalogRule = {
   commissionMode: CommissionMode;
   systemRatePercent: number;
   markupRatePercent: number;
+  defaultBaseFareRatio: number;
   depositStockTargetAmount?: number;
   batchCommissionAmount?: number;
 };
@@ -17,7 +18,7 @@ type CatalogAirline = {
   rules: CatalogRule[];
 };
 
-const STARTS_AT = new Date("2026-01-01");
+const STARTS_AT = new Date();
 
 const IMMEDIATE_DEFAULT: CatalogRule = {
   ratePercent: 7,
@@ -25,6 +26,7 @@ const IMMEDIATE_DEFAULT: CatalogRule = {
   commissionMode: CommissionMode.IMMEDIATE,
   systemRatePercent: 7,
   markupRatePercent: 0,
+  defaultBaseFareRatio: 0.6,
 };
 
 export const AIRLINE_CATALOG: CatalogAirline[] = [
@@ -38,6 +40,7 @@ export const AIRLINE_CATALOG: CatalogAirline[] = [
         commissionMode: CommissionMode.AFTER_DEPOSIT,
         systemRatePercent: 0,
         markupRatePercent: 0,
+        defaultBaseFareRatio: 1,
         depositStockTargetAmount: 10000,
         batchCommissionAmount: 650,
       },
@@ -48,12 +51,13 @@ export const AIRLINE_CATALOG: CatalogAirline[] = [
     name: "Air Congo",
     rules: [
       {
-        ratePercent: 8,
+        ratePercent: 5,
         routePattern: "BZV-*",
         travelClass: TravelClass.ECONOMY,
         commissionMode: CommissionMode.IMMEDIATE,
-        systemRatePercent: 8,
+        systemRatePercent: 5,
         markupRatePercent: 0,
+        defaultBaseFareRatio: 0.62,
       },
     ],
   },
@@ -62,11 +66,12 @@ export const AIRLINE_CATALOG: CatalogAirline[] = [
     name: "Mont Gabaon",
     rules: [
       {
-        ratePercent: 9,
+        ratePercent: 5,
         routePattern: "*",
         commissionMode: CommissionMode.IMMEDIATE,
-        systemRatePercent: 9,
+        systemRatePercent: 5,
         markupRatePercent: 0,
+        defaultBaseFareRatio: 0.62,
       },
     ],
   },
@@ -80,6 +85,7 @@ export const AIRLINE_CATALOG: CatalogAirline[] = [
         commissionMode: CommissionMode.MARKUP_ONLY,
         systemRatePercent: 0,
         markupRatePercent: 6,
+        defaultBaseFareRatio: 0.55,
       },
     ],
   },
@@ -88,11 +94,12 @@ export const AIRLINE_CATALOG: CatalogAirline[] = [
     name: "Ethiopian Airlines",
     rules: [
       {
-        ratePercent: 6,
+        ratePercent: 5,
         routePattern: "*",
         commissionMode: CommissionMode.SYSTEM_PLUS_MARKUP,
-        systemRatePercent: 6,
-        markupRatePercent: 3,
+        systemRatePercent: 5,
+        markupRatePercent: 0,
+        defaultBaseFareRatio: 0.55,
       },
     ],
   },
@@ -106,6 +113,7 @@ export const AIRLINE_CATALOG: CatalogAirline[] = [
         commissionMode: CommissionMode.SYSTEM_PLUS_MARKUP,
         systemRatePercent: 5,
         markupRatePercent: 2,
+        defaultBaseFareRatio: 0.55,
       },
     ],
   },
@@ -119,6 +127,7 @@ export const AIRLINE_CATALOG: CatalogAirline[] = [
         commissionMode: CommissionMode.MARKUP_ONLY,
         systemRatePercent: 0,
         markupRatePercent: 5,
+        defaultBaseFareRatio: 0.55,
       },
     ],
   },
@@ -132,6 +141,7 @@ export const AIRLINE_CATALOG: CatalogAirline[] = [
         commissionMode: CommissionMode.MARKUP_ONLY,
         systemRatePercent: 0,
         markupRatePercent: 5,
+        defaultBaseFareRatio: 0.55,
       },
     ],
   },
@@ -145,6 +155,7 @@ export const AIRLINE_CATALOG: CatalogAirline[] = [
         commissionMode: CommissionMode.IMMEDIATE,
         systemRatePercent: 7.5,
         markupRatePercent: 0,
+        defaultBaseFareRatio: 0.6,
       },
     ],
   },
@@ -158,6 +169,7 @@ export const AIRLINE_CATALOG: CatalogAirline[] = [
         commissionMode: CommissionMode.MARKUP_ONLY,
         systemRatePercent: 0,
         markupRatePercent: 5,
+        defaultBaseFareRatio: 0.55,
       },
     ],
   },
@@ -171,6 +183,7 @@ export const AIRLINE_CATALOG: CatalogAirline[] = [
         commissionMode: CommissionMode.MARKUP_ONLY,
         systemRatePercent: 0,
         markupRatePercent: 5,
+        defaultBaseFareRatio: 0.55,
       },
     ],
   },
@@ -184,6 +197,7 @@ export const AIRLINE_CATALOG: CatalogAirline[] = [
         commissionMode: CommissionMode.MARKUP_ONLY,
         systemRatePercent: 0,
         markupRatePercent: 5,
+        defaultBaseFareRatio: 0.55,
       },
     ],
   },
@@ -213,6 +227,7 @@ function isSameRule(
     markupRatePercent: number;
     depositStockTargetAmount: number | null;
     batchCommissionAmount: number | null;
+    defaultBaseFareRatio: number;
   },
   rule: CatalogRule,
 ) {
@@ -224,6 +239,7 @@ function isSameRule(
     && existing.markupRatePercent === rule.markupRatePercent
     && existing.depositStockTargetAmount === (rule.depositStockTargetAmount ?? null)
     && existing.batchCommissionAmount === (rule.batchCommissionAmount ?? null)
+    && existing.defaultBaseFareRatio === rule.defaultBaseFareRatio
   );
 }
 
@@ -251,6 +267,7 @@ export async function ensureAirlineCatalog(prisma: PrismaClient) {
         markupRatePercent: true,
         depositStockTargetAmount: true,
         batchCommissionAmount: true,
+        defaultBaseFareRatio: true,
       },
     });
 
@@ -269,6 +286,7 @@ export async function ensureAirlineCatalog(prisma: PrismaClient) {
           commissionMode: rule.commissionMode,
           systemRatePercent: rule.systemRatePercent,
           markupRatePercent: rule.markupRatePercent,
+          defaultBaseFareRatio: rule.defaultBaseFareRatio,
           depositStockTargetAmount: rule.depositStockTargetAmount,
           batchCommissionAmount: rule.batchCommissionAmount,
           startsAt: STARTS_AT,

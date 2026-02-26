@@ -8,6 +8,7 @@ type RuleLike = Pick<
   | "commissionMode"
   | "systemRatePercent"
   | "markupRatePercent"
+  | "defaultBaseFareRatio"
   | "ratePercent"
   | "depositStockTargetAmount"
   | "depositStockConsumedAmount"
@@ -60,12 +61,19 @@ export function pickCommissionRule(rules: RuleLike[], route: string, travelClass
     return null;
   }
 
-  return eligible.sort((a, b) => ruleScore(b) - ruleScore(a))[0] ?? null;
+  return eligible
+    .sort((a, b) => {
+      const scoreDiff = ruleScore(b) - ruleScore(a);
+      if (scoreDiff !== 0) {
+        return scoreDiff;
+      }
+      return b.startsAt.getTime() - a.startsAt.getTime();
+    })[0] ?? null;
 }
 
-export function computeCommissionAmount(amount: number, rule: RuleLike) {
+export function computeCommissionAmount(amount: number, rule: RuleLike, extraMarkupPercent = 0) {
   const systemRate = rule.systemRatePercent > 0 ? rule.systemRatePercent : rule.ratePercent;
-  const markupRate = rule.markupRatePercent;
+  const markupRate = rule.markupRatePercent + Math.max(0, extraMarkupPercent);
 
   if (rule.commissionMode === CommissionMode.AFTER_DEPOSIT) {
     const targetAmount = rule.depositStockTargetAmount ?? 0;

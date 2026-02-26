@@ -23,12 +23,14 @@ export function TicketForm({
       travelClass: formData.get("travelClass"),
       travelDate: formData.get("travelDate"),
       amount: Number(formData.get("amount")),
+      baseFareAmount: formData.get("baseFareAmount") ? Number(formData.get("baseFareAmount")) : undefined,
       currency: formData.get("currency"),
       airlineId: formData.get("airlineId"),
       sellerId: formData.get("sellerId"),
       saleNature: formData.get("saleNature"),
       paymentStatus: formData.get("paymentStatus"),
       payerName: (formData.get("payerName") || "") as string,
+      agencyMarkupPercent: formData.get("agencyMarkupPercent") ? Number(formData.get("agencyMarkupPercent")) : undefined,
       notes: formData.get("notes") || undefined,
     };
 
@@ -74,7 +76,11 @@ export function TicketForm({
       </div>
       <div className="grid gap-3 sm:grid-cols-2">
         <input name="amount" type="number" step="0.01" min="0" required placeholder="Montant" className="rounded-md border px-3 py-2" />
+        <input name="baseFareAmount" type="number" step="0.01" min="0" placeholder="BaseFare (optionnel)" className="rounded-md border px-3 py-2" />
+      </div>
+      <div className="grid gap-3 sm:grid-cols-2">
         <input name="currency" defaultValue="EUR" required className="rounded-md border px-3 py-2" />
+        <input name="agencyMarkupPercent" type="number" step="0.01" min="0" max="100" defaultValue="0" placeholder="Majoration agence (%)" className="rounded-md border px-3 py-2" />
       </div>
       <div className="grid gap-3 sm:grid-cols-2">
         <select name="airlineId" required className="rounded-md border px-3 py-2">
