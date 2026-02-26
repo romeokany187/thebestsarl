@@ -10,6 +10,26 @@ export function AttendanceForm({ users, role }: { users: UserOption[]; role: App
   const [isSigning, setIsSigning] = useState(false);
   const [hasClockIn, setHasClockIn] = useState(false);
   const [hasClockOut, setHasClockOut] = useState(false);
+  const [clockIn, setClockIn] = useState<string | null>(null);
+  const [clockOut, setClockOut] = useState<string | null>(null);
+  const [latenessMins, setLatenessMins] = useState<number>(0);
+  const [overtimeMins, setOvertimeMins] = useState<number>(0);
+
+  function applyTodayStatus(data?: {
+    hasClockIn?: boolean;
+    hasClockOut?: boolean;
+    clockIn?: string | null;
+    clockOut?: string | null;
+    latenessMins?: number;
+    overtimeMins?: number;
+  }) {
+    setHasClockIn(Boolean(data?.hasClockIn));
+    setHasClockOut(Boolean(data?.hasClockOut));
+    setClockIn(data?.clockIn ?? null);
+    setClockOut(data?.clockOut ?? null);
+    setLatenessMins(data?.latenessMins ?? 0);
+    setOvertimeMins(data?.overtimeMins ?? 0);
+  }
 
   useEffect(() => {
     let isMounted = true;
@@ -25,8 +45,7 @@ export function AttendanceForm({ users, role }: { users: UserOption[]; role: App
         return;
       }
 
-      setHasClockIn(Boolean(result?.data?.hasClockIn));
-      setHasClockOut(Boolean(result?.data?.hasClockOut));
+      applyTodayStatus(result?.data);
     }
 
     loadTodayStatus();
@@ -75,14 +94,12 @@ export function AttendanceForm({ users, role }: { users: UserOption[]; role: App
         setStatus(
           `${action === "CLOCK_IN" ? "Entrée" : "Sortie"} signée à ${signedAt} (${locationLabel}).`,
         );
-        if (action === "CLOCK_IN") {
-          setHasClockIn(true);
-        }
-        if (action === "CLOCK_OUT") {
-          setHasClockOut(true);
+        const refreshResponse = await fetch("/api/attendance/sign", { cache: "no-store" });
+        if (refreshResponse.ok) {
+          const refreshPayload = await refreshResponse.json();
+          applyTodayStatus(refreshPayload?.data);
         }
         setIsSigning(false);
-        window.location.reload();
       },
       () => {
         setStatus("Impossible de récupérer votre position.");
@@ -125,6 +142,12 @@ export function AttendanceForm({ users, role }: { users: UserOption[]; role: App
         <p className="text-xs text-black/60 dark:text-white/60">
           Toutes les données sont récupérées automatiquement: date, heure et localisation.
         </p>
+        <div className="rounded-lg border border-black/10 bg-black/5 px-3 py-2 text-xs dark:border-white/10 dark:bg-white/5">
+          <p>Entrée: {clockIn ? new Date(clockIn).toLocaleTimeString() : "Non signée"}</p>
+          <p>Sortie: {clockOut ? new Date(clockOut).toLocaleTimeString() : "Non signée"}</p>
+          <p>Retard: {latenessMins} min</p>
+          <p>Heures supp: {overtimeMins} min</p>
+        </div>
         <p className="text-xs text-black/60 dark:text-white/60">{status}</p>
       </section>
     );

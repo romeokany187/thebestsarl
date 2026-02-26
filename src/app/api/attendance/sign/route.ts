@@ -35,7 +35,7 @@ function computeLatenessMinutes(signTime: Date) {
 
 function computeOvertimeMinutes(signTime: Date) {
   const officeEnd = new Date(signTime);
-  officeEnd.setHours(18, 0, 0, 0);
+  officeEnd.setHours(17, 0, 0, 0);
   const deltaMins = Math.round((signTime.getTime() - officeEnd.getTime()) / 60000);
   return Math.max(0, deltaMins);
 }
