@@ -2,13 +2,21 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { z } from "zod";
 import { requireApiRoles } from "@/lib/rbac";
+import { CommissionMode, TravelClass } from "@prisma/client";
 
 export const dynamic = "force-dynamic";
 
 const airlineSchema = z.object({
   code: z.string().min(2).max(4).toUpperCase(),
   name: z.string().min(2),
-  ratePercent: z.number().min(0).max(100),
+  ratePercent: z.number().min(0).max(100).default(0),
+  routePattern: z.string().min(1).default("*"),
+  travelClass: z.nativeEnum(TravelClass).optional(),
+  commissionMode: z.nativeEnum(CommissionMode).default("IMMEDIATE"),
+  systemRatePercent: z.number().min(0).max(100).default(0),
+  markupRatePercent: z.number().min(0).max(100).default(0),
+  depositStockTargetAmount: z.number().positive().optional(),
+  batchCommissionAmount: z.number().positive().optional(),
 });
 
 export async function GET() {
@@ -45,6 +53,13 @@ export async function POST(request: NextRequest) {
       commissionRules: {
         create: {
           ratePercent: parsed.data.ratePercent,
+          routePattern: parsed.data.routePattern,
+          travelClass: parsed.data.travelClass,
+          commissionMode: parsed.data.commissionMode,
+          systemRatePercent: parsed.data.systemRatePercent,
+          markupRatePercent: parsed.data.markupRatePercent,
+          depositStockTargetAmount: parsed.data.depositStockTargetAmount,
+          batchCommissionAmount: parsed.data.batchCommissionAmount,
           startsAt: new Date(),
           isActive: true,
         },

@@ -3,7 +3,7 @@ import { PaymentStatus, TicketSale } from "@prisma/client";
 export function calculateTicketMetrics(tickets: TicketSale[]) {
   const totalSales = tickets.reduce((acc, ticket) => acc + ticket.amount, 0);
   const grossCommission = tickets.reduce(
-    (acc, ticket) => acc + ticket.amount * (ticket.commissionRateUsed / 100),
+    (acc, ticket) => acc + (ticket.commissionAmount ?? ticket.amount * (ticket.commissionRateUsed / 100)),
     0,
   );
 

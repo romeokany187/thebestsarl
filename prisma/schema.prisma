@@ -64,6 +64,25 @@ enum PaymentStatus {
   PARTIAL
 }
 
+enum TravelClass {
+  ECONOMY
+  PREMIUM_ECONOMY
+  BUSINESS
+  FIRST
+}
+
+enum SaleNature {
+  CASH
+  CREDIT
+}
+
+enum CommissionMode {
+  IMMEDIATE
+  AFTER_DEPOSIT
+  SYSTEM_PLUS_MARKUP
+  MARKUP_ONLY
+}
+
 model Team {
   id        String   @id @default(cuid())
   name      String   @unique
@@ -163,6 +182,14 @@ model CommissionRule {
   airlineId   String
   airline     Airline  @relation(fields: [airlineId], references: [id])
   ratePercent Float
+  routePattern String  @default("*")
+  travelClass  TravelClass?
+  commissionMode CommissionMode @default(IMMEDIATE)
+  systemRatePercent Float @default(0)
+  markupRatePercent Float @default(0)
+  depositStockTargetAmount Float?
+  depositStockConsumedAmount Float @default(0)
+  batchCommissionAmount Float?
   startsAt    DateTime
   endsAt      DateTime?
   isActive    Boolean  @default(true)
@@ -175,6 +202,7 @@ model TicketSale {
   ticketNumber       String        @unique
   customerName       String
   route              String
+  travelClass        TravelClass   @default(ECONOMY)
   travelDate         DateTime
   soldAt             DateTime      @default(now())
   amount             Float
@@ -183,8 +211,12 @@ model TicketSale {
   airline            Airline       @relation(fields: [airlineId], references: [id])
   sellerId           String
   seller             User          @relation("TicketSeller", fields: [sellerId], references: [id])
+  saleNature         SaleNature    @default(CASH)
   paymentStatus      PaymentStatus @default(UNPAID)
+  payerName          String?
   commissionRateUsed Float
+  commissionAmount   Float         @default(0)
+  commissionModeApplied CommissionMode @default(IMMEDIATE)
   notes              String?
   payments           Payment[]
   createdAt          DateTime      @default(now())

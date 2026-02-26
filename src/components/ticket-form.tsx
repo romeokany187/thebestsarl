@@ -3,7 +3,7 @@
 import { useState } from "react";
 
 type UserOption = { id: string; name: string };
-type AirlineOption = { id: string; name: string; code: string; defaultRate: number };
+type AirlineOption = { id: string; name: string; code: string };
 
 export function TicketForm({
   users,
@@ -20,13 +20,15 @@ export function TicketForm({
       ticketNumber: formData.get("ticketNumber"),
       customerName: formData.get("customerName"),
       route: formData.get("route"),
+      travelClass: formData.get("travelClass"),
       travelDate: formData.get("travelDate"),
       amount: Number(formData.get("amount")),
       currency: formData.get("currency"),
       airlineId: formData.get("airlineId"),
       sellerId: formData.get("sellerId"),
+      saleNature: formData.get("saleNature"),
       paymentStatus: formData.get("paymentStatus"),
-      commissionRateUsed: Number(formData.get("commissionRateUsed")),
+      payerName: (formData.get("payerName") || "") as string,
       notes: formData.get("notes") || undefined,
     };
 
@@ -51,12 +53,24 @@ export function TicketForm({
     >
       <h3 className="text-sm font-semibold">Nouvelle vente billet</h3>
       <div className="grid gap-3 sm:grid-cols-2">
-        <input name="ticketNumber" required placeholder="Numéro billet" className="rounded-md border px-3 py-2" />
+        <input name="ticketNumber" required placeholder="Code billet (PNR)" className="rounded-md border px-3 py-2" />
         <input name="customerName" required placeholder="Client" className="rounded-md border px-3 py-2" />
       </div>
       <div className="grid gap-3 sm:grid-cols-2">
-        <input name="route" required placeholder="Trajet (ex: CDG-DKR)" className="rounded-md border px-3 py-2" />
+        <input name="route" required placeholder="Itinéraire (ex: BZV-LFW)" className="rounded-md border px-3 py-2" />
+        <select name="travelClass" defaultValue="ECONOMY" className="rounded-md border px-3 py-2">
+          <option value="ECONOMY">Economy</option>
+          <option value="PREMIUM_ECONOMY">Premium Economy</option>
+          <option value="BUSINESS">Business</option>
+          <option value="FIRST">First</option>
+        </select>
+      </div>
+      <div className="grid gap-3 sm:grid-cols-2">
         <input name="travelDate" type="date" required className="rounded-md border px-3 py-2" />
+        <select name="saleNature" defaultValue="CASH" className="rounded-md border px-3 py-2">
+          <option value="CASH">Cash</option>
+          <option value="CREDIT">Crédit</option>
+        </select>
       </div>
       <div className="grid gap-3 sm:grid-cols-2">
         <input name="amount" type="number" step="0.01" min="0" required placeholder="Montant" className="rounded-md border px-3 py-2" />
@@ -86,7 +100,7 @@ export function TicketForm({
           <option value="PARTIAL">Partiel</option>
           <option value="UNPAID">Non payé</option>
         </select>
-        <input name="commissionRateUsed" type="number" step="0.01" min="0" max="100" defaultValue={airlines[0]?.defaultRate ?? 5} className="rounded-md border px-3 py-2" />
+        <input name="payerName" placeholder="Payant (personne à recouvrer)" className="rounded-md border px-3 py-2" />
       </div>
       <textarea name="notes" placeholder="Notes" className="rounded-md border px-3 py-2" />
       <button className="rounded-md bg-black px-3 py-2 text-white dark:bg-white dark:text-black">Enregistrer</button>

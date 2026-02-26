@@ -1,4 +1,4 @@
-import { PaymentStatus, ReportPeriod, ReportStatus, SiteType } from "@prisma/client";
+import { PaymentStatus, ReportPeriod, ReportStatus, SaleNature, SiteType, TravelClass } from "@prisma/client";
 import { z } from "zod";
 
 export const reportSchema = z.object({
@@ -90,13 +90,15 @@ export const ticketSchema = z.object({
   ticketNumber: z.string().min(3),
   customerName: z.string().min(2),
   route: z.string().min(3),
+  travelClass: z.nativeEnum(TravelClass),
   travelDate: z.coerce.date(),
   amount: z.number().positive(),
   currency: z.string().min(3).max(3),
   airlineId: z.string().min(1),
   sellerId: z.string().min(1),
+  saleNature: z.nativeEnum(SaleNature),
   paymentStatus: z.nativeEnum(PaymentStatus),
-  commissionRateUsed: z.number().min(0).max(100),
+  payerName: z.string().max(120).optional(),
   notes: z.string().max(500).optional(),
 });
 

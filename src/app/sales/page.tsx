@@ -7,6 +7,16 @@ import { requirePageRoles } from "@/lib/rbac";
 
 export const dynamic = "force-dynamic";
 
+function paymentLabel(status: string) {
+  if (status === "PAID") return "Payé";
+  if (status === "UNPAID") return "Non payé";
+  return "Partiel";
+}
+
+function saleNatureLabel(value: string) {
+  return value === "CREDIT" ? "Crédit" : "Cash";
+}
+
 export default async function SalesPage() {
   const { session, role } = await requirePageRoles(["ADMIN", "MANAGER", "EMPLOYEE", "ACCOUNTANT"]);
   const canCreateTicket = role === "ADMIN" || role === "MANAGER" || role === "EMPLOYEE";
@@ -38,13 +48,22 @@ export default async function SalesPage() {
   ]);
 
   const metrics = calculateTicketMetrics(tickets);
+  const caaAirline = airlines.find((airline) => airline.code === "CAA");
+  const caaRule = caaAirline?.commissionRules.find((rule) => rule.commissionMode === "AFTER_DEPOSIT");
+  const caaTargetAmount = caaRule?.depositStockTargetAmount ?? 0;
+  const caaBatchCommission = caaRule?.batchCommissionAmount ?? 0;
+  const caaConsumed = caaRule?.depositStockConsumedAmount ?? 0;
+  const caaLotsReached = caaTargetAmount > 0 ? Math.floor(caaConsumed / caaTargetAmount) : 0;
+  const caaCommissionEarned = caaLotsReached * caaBatchCommission;
+  const caaRemainder = caaTargetAmount > 0 ? caaConsumed % caaTargetAmount : 0;
+  const caaRemainingToNextLot = caaTargetAmount > 0 ? Math.max(0, caaTargetAmount - caaRemainder) : 0;
 
   return (
     <AppShell role={role} accessNote={accessNote}>
       <section className="mb-6">
-        <h1 className="text-2xl font-semibold">Rapport des ventes billets</h1>
+        <h1 className="text-2xl font-semibold">Rapport de vente</h1>
         <p className="text-sm text-black/60 dark:text-white/60">
-          Suivi des ventes, statuts de paiement et commissions nettes par compagnie.
+          Suivi des billets avec commission calculée par compagnie, itinéraire et classe.
         </p>
       </section>
 
@@ -55,6 +74,33 @@ export default async function SalesPage() {
         <KpiCard label="Taux encaissement" value={`${(metrics.paidRatio * 100).toFixed(1)}%`} />
       </div>
 
+      {caaRule ? (
+        <section className="mb-6 rounded-xl border border-black/10 bg-white p-4 text-sm dark:border-white/10 dark:bg-zinc-900">
+          <h2 className="text-base font-semibold">Suivi CAA - paliers commission</h2>
+          <p className="mt-1 text-black/60 dark:text-white/60">
+            Chaque lot de {caaTargetAmount.toFixed(2)} USD vendus déclenche {caaBatchCommission.toFixed(2)} USD de commission.
+          </p>
+          <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <div className="rounded-md border border-black/10 px-3 py-2 dark:border-white/10">
+              <p className="text-xs text-black/60 dark:text-white/60">Cumul ventes CAA</p>
+              <p className="font-semibold">{caaConsumed.toFixed(2)} USD</p>
+            </div>
+            <div className="rounded-md border border-black/10 px-3 py-2 dark:border-white/10">
+              <p className="text-xs text-black/60 dark:text-white/60">Lots atteints</p>
+              <p className="font-semibold">{caaLotsReached}</p>
+            </div>
+            <div className="rounded-md border border-black/10 px-3 py-2 dark:border-white/10">
+              <p className="text-xs text-black/60 dark:text-white/60">Commission cumulée</p>
+              <p className="font-semibold">{caaCommissionEarned.toFixed(2)} USD</p>
+            </div>
+            <div className="rounded-md border border-black/10 px-3 py-2 dark:border-white/10">
+              <p className="text-xs text-black/60 dark:text-white/60">Reste vers prochain lot</p>
+              <p className="font-semibold">{caaRemainingToNextLot.toFixed(2)} USD</p>
+            </div>
+          </div>
+        </section>
+      ) : null}
+
       <div className="grid gap-6 lg:grid-cols-[400px,1fr]">
         {canCreateTicket ? (
           <TicketForm
@@ -63,7 +109,6 @@ export default async function SalesPage() {
               id: airline.id,
               name: airline.name,
               code: airline.code,
-              defaultRate: airline.commissionRules[0]?.ratePercent ?? 5,
             }))}
           />
         ) : (
@@ -76,28 +121,32 @@ export default async function SalesPage() {
           <table className="min-w-full text-sm">
             <thead className="bg-black/5 dark:bg-white/10">
               <tr>
-                <th className="px-3 py-2 text-left">Billet</th>
-                <th className="px-3 py-2 text-left">Client</th>
+                <th className="px-3 py-2 text-left">Émetteur</th>
                 <th className="px-3 py-2 text-left">Compagnie</th>
-                <th className="px-3 py-2 text-left">Montant</th>
-                <th className="px-3 py-2 text-left">Commission nette</th>
-                <th className="px-3 py-2 text-left">Paiement</th>
+                <th className="px-3 py-2 text-left">Code billet (PNR)</th>
+                <th className="px-3 py-2 text-left">Itinéraire</th>
+                <th className="px-3 py-2 text-left">Prix</th>
+                <th className="px-3 py-2 text-left">Commission</th>
+                <th className="px-3 py-2 text-left">Nature vente</th>
+                <th className="px-3 py-2 text-left">Statut</th>
+                <th className="px-3 py-2 text-left">Payant</th>
               </tr>
             </thead>
             <tbody>
               {tickets.map((ticket) => {
-                const received = ticket.payments.reduce((acc, payment) => acc + payment.amount, 0);
-                const ratio = ticket.amount > 0 ? Math.min(1, received / ticket.amount) : 0;
-                const net = ticket.amount * (ticket.commissionRateUsed / 100) * ratio;
+                const commissionAmount = ticket.commissionAmount ?? ticket.amount * (ticket.commissionRateUsed / 100);
 
                 return (
                   <tr key={ticket.id} className="border-t border-black/5 dark:border-white/10">
-                    <td className="px-3 py-2">{ticket.ticketNumber}</td>
-                    <td className="px-3 py-2">{ticket.customerName}</td>
+                    <td className="px-3 py-2">{ticket.seller.name}</td>
                     <td className="px-3 py-2">{ticket.airline.code}</td>
+                    <td className="px-3 py-2">{ticket.ticketNumber}</td>
+                    <td className="px-3 py-2">{ticket.route}</td>
                     <td className="px-3 py-2">{ticket.amount.toFixed(2)} {ticket.currency}</td>
-                    <td className="px-3 py-2">{net.toFixed(2)} {ticket.currency}</td>
-                    <td className="px-3 py-2">{ticket.paymentStatus}</td>
+                    <td className="px-3 py-2">{commissionAmount.toFixed(2)} {ticket.currency}</td>
+                    <td className="px-3 py-2">{saleNatureLabel(ticket.saleNature)}</td>
+                    <td className="px-3 py-2">{paymentLabel(ticket.paymentStatus)}</td>
+                    <td className="px-3 py-2">{ticket.payerName ?? "-"}</td>
                   </tr>
                 );
               })}

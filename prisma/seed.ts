@@ -1,5 +1,5 @@
 import bcrypt from "bcryptjs";
-import { PrismaClient, ReportPeriod, ReportStatus, Role, AttendanceStatus, PaymentStatus, JobTitle } from "@prisma/client";
+import { PrismaClient, ReportPeriod, ReportStatus, Role, AttendanceStatus, PaymentStatus, JobTitle, CommissionMode, TravelClass, SaleNature } from "@prisma/client";
 
 const prisma = new PrismaClient();
 
@@ -71,7 +71,7 @@ async function main() {
     },
   });
 
-  const airline = await prisma.airline.upsert({
+  const airFrance = await prisma.airline.upsert({
     where: { code: "AF" },
     update: {},
     create: {
@@ -80,13 +80,157 @@ async function main() {
     },
   });
 
+  const airCongo = await prisma.airline.upsert({
+    where: { code: "ACG" },
+    update: {},
+    create: {
+      code: "ACG",
+      name: "Air Congo",
+    },
+  });
+
+  const montGabon = await prisma.airline.upsert({
+    where: { code: "MGB" },
+    update: {},
+    create: {
+      code: "MGB",
+      name: "Mont Gabon",
+    },
+  });
+
+  const caa = await prisma.airline.upsert({
+    where: { code: "CAA" },
+    update: {},
+    create: {
+      code: "CAA",
+      name: "CAA",
+    },
+  });
+
+  const ethiopian = await prisma.airline.upsert({
+    where: { code: "ET" },
+    update: {},
+    create: {
+      code: "ET",
+      name: "Ethiopian Airlines",
+    },
+  });
+
+  const kenya = await prisma.airline.upsert({
+    where: { code: "KQ" },
+    update: {},
+    create: {
+      code: "KQ",
+      name: "Kenya Airways",
+    },
+  });
+
+  await Promise.all([
+    prisma.airline.upsert({
+      where: { code: "FST" },
+      update: {},
+      create: { code: "FST", name: "Air Fast" },
+    }),
+    prisma.airline.upsert({
+      where: { code: "UR" },
+      update: {},
+      create: { code: "UR", name: "Uganda Air" },
+    }),
+    prisma.airline.upsert({
+      where: { code: "TC" },
+      update: {},
+      create: { code: "TC", name: "Air Tanzania" },
+    }),
+    prisma.airline.upsert({
+      where: { code: "KP" },
+      update: {},
+      create: { code: "KP", name: "ASKY" },
+    }),
+    prisma.airline.upsert({
+      where: { code: "WB" },
+      update: {},
+      create: { code: "WB", name: "Rwanda Air" },
+    }),
+    prisma.airline.upsert({
+      where: { code: "DKT" },
+      update: {},
+      create: { code: "DKT", name: "Dakota" },
+    }),
+  ]);
+
+  await prisma.airline.update({
+    where: { id: montGabon.id },
+    data: { name: "Mont Gabaon" },
+  }).catch(() => undefined);
+
   await prisma.commissionRule.create({
     data: {
-      airlineId: airline.id,
+      airlineId: airFrance.id,
       ratePercent: 7.5,
+      routePattern: "*",
+      commissionMode: CommissionMode.IMMEDIATE,
+      systemRatePercent: 7.5,
       startsAt: new Date("2026-01-01"),
       isActive: true,
     },
+  }).catch(() => undefined);
+
+  await prisma.commissionRule.createMany({
+    data: [
+      {
+        airlineId: airCongo.id,
+        ratePercent: 8,
+        routePattern: "BZV-*",
+        travelClass: TravelClass.ECONOMY,
+        commissionMode: CommissionMode.IMMEDIATE,
+        systemRatePercent: 8,
+        markupRatePercent: 0,
+        startsAt: new Date("2026-01-01"),
+        isActive: true,
+      },
+      {
+        airlineId: montGabon.id,
+        ratePercent: 9,
+        routePattern: "*",
+        commissionMode: CommissionMode.IMMEDIATE,
+        systemRatePercent: 9,
+        startsAt: new Date("2026-01-01"),
+        isActive: true,
+      },
+      {
+        airlineId: caa.id,
+        ratePercent: 0,
+        routePattern: "*",
+        commissionMode: CommissionMode.AFTER_DEPOSIT,
+        systemRatePercent: 0,
+        depositStockTargetAmount: 10000,
+        depositStockConsumedAmount: 0,
+        batchCommissionAmount: 650,
+        startsAt: new Date("2026-01-01"),
+        isActive: true,
+      },
+      {
+        airlineId: ethiopian.id,
+        ratePercent: 6,
+        routePattern: "*",
+        commissionMode: CommissionMode.SYSTEM_PLUS_MARKUP,
+        systemRatePercent: 6,
+        markupRatePercent: 3,
+        startsAt: new Date("2026-01-01"),
+        isActive: true,
+      },
+      {
+        airlineId: kenya.id,
+        ratePercent: 5,
+        routePattern: "*",
+        commissionMode: CommissionMode.SYSTEM_PLUS_MARKUP,
+        systemRatePercent: 5,
+        markupRatePercent: 2,
+        startsAt: new Date("2026-01-01"),
+        isActive: true,
+      },
+    ],
+    skipDuplicates: true,
   }).catch(() => undefined);
 
   const report = await prisma.workerReport.create({
@@ -154,10 +298,15 @@ async function main() {
       travelDate: new Date("2026-03-15"),
       amount: 980,
       currency: "EUR",
-      airlineId: airline.id,
+      airlineId: airFrance.id,
       sellerId: employee.id,
+      travelClass: TravelClass.ECONOMY,
+      saleNature: SaleNature.CREDIT,
       paymentStatus: PaymentStatus.PARTIAL,
       commissionRateUsed: 7.5,
+      commissionAmount: 73.5,
+      commissionModeApplied: CommissionMode.IMMEDIATE,
+      payerName: "Client Démo",
       notes: "Paiement en deux tranches",
     },
   });
