@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { AppRole } from "@/lib/rbac";
 
 type UserOption = { id: string; name: string };
@@ -8,6 +8,33 @@ type UserOption = { id: string; name: string };
 export function AttendanceForm({ users, role }: { users: UserOption[]; role: AppRole }) {
   const [status, setStatus] = useState<string>("");
   const [isSigning, setIsSigning] = useState(false);
+  const [hasClockIn, setHasClockIn] = useState(false);
+  const [hasClockOut, setHasClockOut] = useState(false);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    async function loadTodayStatus() {
+      const response = await fetch("/api/attendance/sign", { cache: "no-store" });
+      if (!response.ok || !isMounted) {
+        return;
+      }
+
+      const result = await response.json();
+      if (!isMounted) {
+        return;
+      }
+
+      setHasClockIn(Boolean(result?.data?.hasClockIn));
+      setHasClockOut(Boolean(result?.data?.hasClockOut));
+    }
+
+    loadTodayStatus();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   async function sign(action: "CLOCK_IN" | "CLOCK_OUT") {
     if (!navigator.geolocation) {
@@ -34,7 +61,8 @@ export function AttendanceForm({ users, role }: { users: UserOption[]; role: App
         });
 
         if (!response.ok) {
-          setStatus("Signature échouée. Vérifiez vos permissions.");
+          const errorPayload = await response.json().catch(() => null);
+          setStatus(errorPayload?.error ?? "Signature échouée. Vérifiez vos permissions.");
           setIsSigning(false);
           return;
         }
@@ -47,6 +75,12 @@ export function AttendanceForm({ users, role }: { users: UserOption[]; role: App
         setStatus(
           `${action === "CLOCK_IN" ? "Entrée" : "Sortie"} signée à ${signedAt} (${locationLabel}).`,
         );
+        if (action === "CLOCK_IN") {
+          setHasClockIn(true);
+        }
+        if (action === "CLOCK_OUT") {
+          setHasClockOut(true);
+        }
         setIsSigning(false);
         window.location.reload();
       },
@@ -75,11 +109,19 @@ export function AttendanceForm({ users, role }: { users: UserOption[]; role: App
         <button
           type="button"
           onClick={() => sign("CLOCK_OUT")}
-          disabled={isSigning}
+          disabled={isSigning || !hasClockIn || hasClockOut}
           className="rounded-md bg-black px-3 py-2 text-sm font-semibold text-white hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-white dark:text-black"
         >
           {isSigning ? "Traitement..." : "Signer la sortie"}
         </button>
+        {!hasClockIn ? (
+          <p className="text-xs text-black/60 dark:text-white/60">
+            Signe d&apos;abord l&apos;entrée du jour pour débloquer la sortie.
+          </p>
+        ) : null}
+        {hasClockOut ? (
+          <p className="text-xs text-black/60 dark:text-white/60">La sortie du jour est déjà signée.</p>
+        ) : null}
         <p className="text-xs text-black/60 dark:text-white/60">
           Toutes les données sont récupérées automatiquement: date, heure et localisation.
         </p>
