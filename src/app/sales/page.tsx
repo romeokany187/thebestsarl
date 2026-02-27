@@ -122,8 +122,9 @@ export default async function SalesPage() {
           </section>
         )}
 
-        <div className="overflow-hidden rounded-xl border border-black/10 bg-white dark:border-white/10 dark:bg-zinc-900">
-          <table className="min-w-full text-sm">
+        <div className="rounded-xl border border-black/10 bg-white dark:border-white/10 dark:bg-zinc-900">
+          <div className="max-h-[70vh] overflow-auto">
+          <table className="min-w-[1200px] text-sm">
             <thead className="bg-black/5 dark:bg-white/10">
               <tr>
                 <th className="px-3 py-2 text-left">Émetteur</th>
@@ -169,10 +170,17 @@ export default async function SalesPage() {
                         <TicketRowActions
                           ticket={{
                             id: ticket.id,
+                            ticketNumber: ticket.ticketNumber,
+                            airlineId: ticket.airlineId,
+                            sellerId: ticket.sellerId,
                             customerName: ticket.customerName,
                             route: ticket.route,
+                            travelClass: ticket.travelClass,
+                            travelDate: new Date(ticket.travelDate).toISOString().slice(0, 10),
                             amount: ticket.amount,
                             baseFareAmount: ticket.baseFareAmount,
+                            currency: ticket.currency,
+                            saleNature: ticket.saleNature,
                             agencyMarkupAmount: ticket.agencyMarkupAmount,
                             paymentStatus: ticket.paymentStatus,
                             payerName: ticket.payerName,
@@ -186,6 +194,7 @@ export default async function SalesPage() {
               })}
             </tbody>
           </table>
+          </div>
         </div>
       </div>
     </AppShell>

@@ -105,6 +105,9 @@ export const ticketSchema = z.object({
 });
 
 export const ticketUpdateSchema = z.object({
+  ticketNumber: z.string().min(3).optional(),
+  airlineId: z.string().min(1).optional(),
+  sellerId: z.string().min(1).optional(),
   customerName: z.string().min(2).optional(),
   route: z.string().min(3).optional(),
   travelClass: z.nativeEnum(TravelClass).optional(),

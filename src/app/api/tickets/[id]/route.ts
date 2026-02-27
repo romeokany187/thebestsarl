@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { requireApiRoles } from "@/lib/rbac";
 import { ticketUpdateSchema } from "@/lib/validators";
 import { computeCommissionAmount, pickCommissionRule } from "@/lib/commission";
+import { ensureAirlineCatalog } from "@/lib/airline-catalog";
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -26,6 +27,8 @@ export async function PATCH(request: NextRequest, { params }: Params) {
       return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
     }
 
+    await ensureAirlineCatalog(prisma);
+
     const existing = await prisma.ticketSale.findUnique({
       where: { id },
       include: {
@@ -43,9 +46,27 @@ export async function PATCH(request: NextRequest, { params }: Params) {
       return NextResponse.json({ error: "Accès refusé." }, { status: 403 });
     }
 
+    const nextAirlineId = parsed.data.airlineId ?? existing.airlineId;
+    const nextSellerId = parsed.data.sellerId ?? existing.sellerId;
+
+    if (access.role === "EMPLOYEE" && nextSellerId !== access.session.user.id) {
+      return NextResponse.json({ error: "Accès refusé." }, { status: 403 });
+    }
+
+    const targetAirline = await prisma.airline.findUnique({
+      where: { id: nextAirlineId },
+      include: { commissionRules: { where: { isActive: true } } },
+    });
+
+    if (!targetAirline) {
+      return NextResponse.json({ error: "Compagnie introuvable." }, { status: 400 });
+    }
+
     const nextTicket = {
       ...existing,
       ...parsed.data,
+      airlineId: nextAirlineId,
+      sellerId: nextSellerId,
       amount: parsed.data.amount ?? existing.amount,
       route: parsed.data.route ?? existing.route,
       travelClass: parsed.data.travelClass ?? existing.travelClass,
@@ -54,7 +75,7 @@ export async function PATCH(request: NextRequest, { params }: Params) {
     };
 
     const rule = pickCommissionRule(
-      existing.airline.commissionRules,
+      targetAirline.commissionRules,
       nextTicket.route,
       nextTicket.travelClass,
     );
@@ -65,10 +86,10 @@ export async function PATCH(request: NextRequest, { params }: Params) {
       }, { status: 400 });
     }
 
-    const isAirCongo = existing.airline.code === "ACG";
-    const isMontGabaon = existing.airline.code === "MGB";
-    const isEthiopian = existing.airline.code === "ET";
-    const isAirFast = existing.airline.code === "FST";
+    const isAirCongo = targetAirline.code === "ACG";
+    const isMontGabaon = targetAirline.code === "MGB";
+    const isEthiopian = targetAirline.code === "ET";
+    const isAirFast = targetAirline.code === "FST";
     const isAfterDepositMode = rule.commissionMode === CommissionMode.AFTER_DEPOSIT;
 
     if ((isAirCongo || isMontGabaon || isEthiopian) && !nextTicket.baseFareAmount) {
@@ -84,7 +105,7 @@ export async function PATCH(request: NextRequest, { params }: Params) {
     if (!isAfterDepositMode && !nextTicket.baseFareAmount) {
       const airlineHistory = await prisma.ticketSale.findMany({
         where: {
-          airlineId: existing.airlineId,
+          airlineId: nextAirlineId,
           baseFareAmount: { not: null },
           amount: { gt: 0 },
           commissionCalculationStatus: CommissionCalculationStatus.FINAL,
@@ -114,7 +135,7 @@ export async function PATCH(request: NextRequest, { params }: Params) {
     const airFastSaleOrder = isAirFast
       ? await prisma.ticketSale.count({
         where: {
-          airlineId: existing.airlineId,
+          airlineId: targetAirline.id,
           OR: [
             { soldAt: { lt: existing.soldAt } },
             { soldAt: existing.soldAt, id: { lte: existing.id } },
@@ -165,6 +186,8 @@ export async function PATCH(request: NextRequest, { params }: Params) {
       where: { id },
       data: {
         ...parsed.data,
+        airlineId: nextTicket.airlineId,
+        sellerId: nextTicket.sellerId,
         commissionBaseAmount,
         commissionCalculationStatus,
         commissionRateUsed: commission.ratePercent,
