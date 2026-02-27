@@ -101,6 +101,7 @@ export const ticketSchema = z.object({
   paymentStatus: z.nativeEnum(PaymentStatus),
   payerName: z.string().max(120).optional(),
   agencyMarkupPercent: z.number().min(0).max(100).optional(),
+  agencyMarkupAmount: z.number().min(0).optional(),
   notes: z.string().max(500).optional(),
 });
 

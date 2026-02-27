@@ -69,16 +69,18 @@ export async function POST(request: NextRequest) {
     }
 
     const isAirCongo = airline.code === "ACG";
+    const isEthiopian = airline.code === "ET";
 
-    if (isAirCongo && !parsed.data.baseFareAmount) {
+    if ((isAirCongo || isEthiopian) && !parsed.data.baseFareAmount) {
       return NextResponse.json(
-        { error: "Pour Air Congo, le BaseFare est obligatoire pour calculer la commission de 5%." },
+        { error: "Pour Air Congo et Ethiopian, le BaseFare est obligatoire pour calculer la commission." },
         { status: 400 },
       );
     }
 
     const isAfterDepositMode = rule.commissionMode === CommissionMode.AFTER_DEPOSIT;
     const agencyMarkupPercent = parsed.data.agencyMarkupPercent ?? 0;
+    const agencyMarkupAmount = parsed.data.agencyMarkupAmount ?? 0;
     let commissionBaseAmount = parsed.data.baseFareAmount ?? 0;
     let commissionCalculationStatus: CommissionCalculationStatus = CommissionCalculationStatus.FINAL;
     let baseFareAmount = parsed.data.baseFareAmount;
@@ -142,7 +144,15 @@ export async function POST(request: NextRequest) {
         amount: commissionBaseAmount * 0.05,
         modeApplied: CommissionMode.IMMEDIATE,
       }
-      : computeCommissionAmount(commissionInputAmount, rule, agencyMarkupPercent);
+      : isEthiopian
+        ? {
+          ratePercent: commissionBaseAmount > 0
+            ? ((commissionBaseAmount * 0.05 + agencyMarkupAmount) / commissionBaseAmount) * 100
+            : 0,
+          amount: commissionBaseAmount * 0.05 + agencyMarkupAmount,
+          modeApplied: CommissionMode.SYSTEM_PLUS_MARKUP,
+        }
+        : computeCommissionAmount(commissionInputAmount, rule, agencyMarkupPercent);
 
     const ticket = await prisma.$transaction(async (tx) => {
       if (
@@ -165,6 +175,7 @@ export async function POST(request: NextRequest) {
           ...parsed.data,
           baseFareAmount,
           agencyMarkupPercent,
+          agencyMarkupAmount,
           commissionBaseAmount,
           commissionCalculationStatus,
           commissionRateUsed: commission.ratePercent,

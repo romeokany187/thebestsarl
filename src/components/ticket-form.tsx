@@ -18,6 +18,7 @@ export function TicketForm({
 
   const selectedAirline = airlines.find((airline) => airline.id === selectedAirlineId);
   const isAirCongo = selectedAirline?.code === "ACG";
+  const isEthiopian = selectedAirline?.code === "ET";
 
   async function onSubmit(formData: FormData) {
     setStatusType("loading");
@@ -37,6 +38,7 @@ export function TicketForm({
       paymentStatus: formData.get("paymentStatus"),
       payerName: (formData.get("payerName") || "") as string,
       agencyMarkupPercent: formData.get("agencyMarkupPercent") ? Number(formData.get("agencyMarkupPercent")) : undefined,
+      agencyMarkupAmount: formData.get("agencyMarkupAmount") ? Number(formData.get("agencyMarkupAmount")) : undefined,
       notes: formData.get("notes") || undefined,
     };
 
@@ -94,14 +96,18 @@ export function TicketForm({
           type="number"
           step="0.01"
           min="0"
-          required={isAirCongo}
-          placeholder={isAirCongo ? "BaseFare (obligatoire Air Congo)" : "BaseFare (optionnel)"}
+          required={isAirCongo || isEthiopian}
+          placeholder={isAirCongo || isEthiopian ? "BaseFare (obligatoire)" : "BaseFare (optionnel)"}
           className="rounded-md border px-3 py-2"
         />
       </div>
       <div className="grid gap-3 sm:grid-cols-2">
         <input name="currency" defaultValue="USD" required className="rounded-md border px-3 py-2" />
-        <input name="agencyMarkupPercent" type="number" step="0.01" min="0" max="100" defaultValue="0" placeholder="Majoration agence (%)" className="rounded-md border px-3 py-2" />
+        {isEthiopian ? (
+          <input name="agencyMarkupAmount" type="number" step="0.01" min="0" defaultValue="0" placeholder="Majoration Ethiopian (montant)" className="rounded-md border px-3 py-2" />
+        ) : (
+          <input name="agencyMarkupPercent" type="number" step="0.01" min="0" max="100" defaultValue="0" placeholder="Majoration agence (%)" className="rounded-md border px-3 py-2" />
+        )}
       </div>
       <div className="grid gap-3 sm:grid-cols-2">
         <select
@@ -138,6 +144,11 @@ export function TicketForm({
       {isAirCongo ? (
         <p className="text-xs text-black/60 dark:text-white/60">
           Air Congo: commission fixe 5% sur le BaseFare saisi.
+        </p>
+      ) : null}
+      {isEthiopian ? (
+        <p className="text-xs text-black/60 dark:text-white/60">
+          Ethiopian: commission = 5% du BaseFare + majoration (montant).
         </p>
       ) : null}
       <textarea name="notes" placeholder="Notes" className="rounded-md border px-3 py-2" />

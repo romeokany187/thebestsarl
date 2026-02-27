@@ -222,6 +222,7 @@ model TicketSale {
   paymentStatus      PaymentStatus @default(UNPAID)
   payerName          String?
   agencyMarkupPercent Float        @default(0)
+  agencyMarkupAmount Float         @default(0)
   commissionBaseAmount Float       @default(0)
   commissionCalculationStatus CommissionCalculationStatus @default(ESTIMATED)
   commissionRateUsed Float
