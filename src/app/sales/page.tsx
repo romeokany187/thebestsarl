@@ -140,7 +140,8 @@ export default async function SalesPage() {
             <tbody>
               {tickets.map((ticket) => {
                 const commissionAmount = ticket.commissionAmount ?? ticket.amount * (ticket.commissionRateUsed / 100);
-                const netAfterCommission = ticket.amount - commissionAmount;
+                const agencyMarkupAmount = ticket.agencyMarkupAmount ?? 0;
+                const netAfterCommission = ticket.amount + agencyMarkupAmount;
 
                 return (
                   <tr key={ticket.id} className="border-t border-black/5 dark:border-white/10">
