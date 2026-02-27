@@ -104,6 +104,21 @@ export const ticketSchema = z.object({
   notes: z.string().max(500).optional(),
 });
 
+export const ticketUpdateSchema = z.object({
+  customerName: z.string().min(2).optional(),
+  route: z.string().min(3).optional(),
+  travelClass: z.nativeEnum(TravelClass).optional(),
+  travelDate: z.coerce.date().optional(),
+  amount: z.number().positive().optional(),
+  baseFareAmount: z.number().positive().optional(),
+  currency: z.string().min(3).max(3).optional(),
+  saleNature: z.nativeEnum(SaleNature).optional(),
+  paymentStatus: z.nativeEnum(PaymentStatus).optional(),
+  payerName: z.string().max(120).optional(),
+  agencyMarkupAmount: z.number().min(0).optional(),
+  notes: z.string().max(500).optional(),
+});
+
 export const approvalSchema = z.object({
   reportId: z.string().min(1),
   reviewerId: z.string().min(1),

@@ -1,6 +1,7 @@
 import { AppShell } from "@/components/app-shell";
 import { KpiCard } from "@/components/kpi-card";
 import { TicketForm } from "@/components/ticket-form";
+import { TicketRowActions } from "@/components/ticket-row-actions";
 import { calculateTicketMetrics } from "@/lib/kpi";
 import { prisma } from "@/lib/prisma";
 import { requirePageRoles } from "@/lib/rbac";
@@ -21,6 +22,7 @@ function saleNatureLabel(value: string) {
 export default async function SalesPage() {
   const { session, role } = await requirePageRoles(["ADMIN", "MANAGER", "EMPLOYEE", "ACCOUNTANT"]);
   const canCreateTicket = role === "ADMIN" || role === "MANAGER" || role === "EMPLOYEE";
+  const canManageTickets = role === "ADMIN" || role === "EMPLOYEE";
   const accessNote = canCreateTicket
     ? role === "EMPLOYEE"
       ? "Accès commercial personnel: création et suivi de vos ventes."
@@ -135,6 +137,7 @@ export default async function SalesPage() {
                 <th className="px-3 py-2 text-left">Nature vente</th>
                 <th className="px-3 py-2 text-left">Statut</th>
                 <th className="px-3 py-2 text-left">Payant</th>
+                {canManageTickets ? <th className="px-3 py-2 text-left">Actions</th> : null}
               </tr>
             </thead>
             <tbody>
@@ -161,6 +164,23 @@ export default async function SalesPage() {
                     <td className="px-3 py-2">{saleNatureLabel(ticket.saleNature)}</td>
                     <td className="px-3 py-2">{paymentLabel(ticket.paymentStatus)}</td>
                     <td className="px-3 py-2">{ticket.payerName ?? "-"}</td>
+                    {canManageTickets ? (
+                      <td className="px-3 py-2">
+                        <TicketRowActions
+                          ticket={{
+                            id: ticket.id,
+                            customerName: ticket.customerName,
+                            route: ticket.route,
+                            amount: ticket.amount,
+                            baseFareAmount: ticket.baseFareAmount,
+                            agencyMarkupAmount: ticket.agencyMarkupAmount,
+                            paymentStatus: ticket.paymentStatus,
+                            payerName: ticket.payerName,
+                            notes: ticket.notes,
+                          }}
+                        />
+                      </td>
+                    ) : null}
                   </tr>
                 );
               })}
