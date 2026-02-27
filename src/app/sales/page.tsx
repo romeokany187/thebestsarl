@@ -1,8 +1,6 @@
 import { AppShell } from "@/components/app-shell";
-import { KpiCard } from "@/components/kpi-card";
 import { TicketForm } from "@/components/ticket-form";
 import { TicketRowActions } from "@/components/ticket-row-actions";
-import { calculateTicketMetrics } from "@/lib/kpi";
 import { prisma } from "@/lib/prisma";
 import { requirePageRoles } from "@/lib/rbac";
 import { ensureAirlineCatalog } from "@/lib/airline-catalog";
@@ -52,7 +50,6 @@ export default async function SalesPage() {
     }),
   ]);
 
-  const metrics = calculateTicketMetrics(tickets);
   const caaAirline = airlines.find((airline) => airline.code === "CAA");
   const caaRule = caaAirline?.commissionRules.find((rule) => rule.commissionMode === "AFTER_DEPOSIT");
   const airFastAirline = airlines.find((airline) => airline.code === "FST");
@@ -84,13 +81,6 @@ export default async function SalesPage() {
           Suivi des billets avec commission calculée par compagnie, itinéraire et classe.
         </p>
       </section>
-
-      <div className="mb-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <KpiCard label="Ventes totales" value={`${metrics.totalSales.toFixed(2)} USD`} />
-        <KpiCard label="Commission brute" value={`${metrics.grossCommission.toFixed(2)} USD`} />
-        <KpiCard label="Commission nette" value={`${metrics.netCommission.toFixed(2)} USD`} />
-        <KpiCard label="Taux encaissement" value={`${(metrics.paidRatio * 100).toFixed(1)}%`} />
-      </div>
 
       <div className="grid gap-6 lg:grid-cols-[400px,1fr]">
         {canCreateTicket ? (

@@ -1,6 +1,5 @@
 import { AppShell } from "@/components/app-shell";
 import { KpiCard } from "@/components/kpi-card";
-import { calculateTicketMetrics } from "@/lib/kpi";
 import { requirePageRoles } from "@/lib/rbac";
 import { prisma } from "@/lib/prisma";
 
@@ -117,7 +116,10 @@ export default async function TicketsPage({
     take: 250,
   });
 
-  const metrics = calculateTicketMetrics(tickets);
+  const totalCommissions = tickets.reduce(
+    (sum, ticket) => sum + (ticket.commissionAmount ?? ticket.amount * (ticket.commissionRateUsed / 100)),
+    0,
+  );
   const now = new Date();
   const currentMonth = now.toISOString().slice(0, 7);
   const currentDate = now.toISOString().slice(0, 10);
@@ -222,10 +224,7 @@ export default async function TicketsPage({
       </section>
 
       <div className="mb-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <KpiCard label="Ventes totales" value={`${metrics.totalSales.toFixed(2)} USD`} />
-        <KpiCard label="Commission brute" value={`${metrics.grossCommission.toFixed(2)} USD`} />
-        <KpiCard label="Commission nette" value={`${metrics.netCommission.toFixed(2)} USD`} />
-        <KpiCard label="Taux encaissement" value={`${(metrics.paidRatio * 100).toFixed(1)}%`} />
+        <KpiCard label="Commissions totales" value={`${totalCommissions.toFixed(2)} USD`} />
       </div>
 
       <div className="overflow-hidden rounded-2xl border border-black/10 bg-white shadow-sm dark:border-white/10 dark:bg-zinc-900">
