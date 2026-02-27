@@ -200,6 +200,7 @@ export async function POST(request: NextRequest) {
       return tx.ticketSale.create({
         data: {
           ...parsed.data,
+          currency: "USD",
           baseFareAmount,
           agencyMarkupAmount,
           commissionBaseAmount,

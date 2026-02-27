@@ -186,6 +186,7 @@ export async function PATCH(request: NextRequest, { params }: Params) {
       where: { id },
       data: {
         ...parsed.data,
+        currency: "USD",
         airlineId: nextTicket.airlineId,
         sellerId: nextTicket.sellerId,
         commissionBaseAmount,
