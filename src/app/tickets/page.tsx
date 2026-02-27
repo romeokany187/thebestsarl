@@ -93,6 +93,34 @@ function formatCurrency(value: number) {
   return `${value.toFixed(2)} USD`;
 }
 
+function compactDate(value: string) {
+  return value.slice(5);
+}
+
+function sparklinePath(values: number[], width: number, height: number) {
+  if (values.length === 0) return "";
+  const max = Math.max(...values, 1);
+  const min = Math.min(...values, 0);
+  const range = Math.max(max - min, 1);
+
+  return values
+    .map((value, index) => {
+      const x = values.length === 1 ? 0 : (index / (values.length - 1)) * width;
+      const y = height - ((value - min) / range) * height;
+      return `${index === 0 ? "M" : "L"}${x.toFixed(2)} ${y.toFixed(2)}`;
+    })
+    .join(" ");
+}
+
+function detectAgencyFromRoute(route: string) {
+  const normalized = route.toUpperCase();
+  if (normalized.includes("LUBUMBASHI") || normalized.includes("FBM") || normalized.includes("L'SHI")) return "Lubumbashi";
+  if (normalized.includes("KINSHASA") || normalized.includes("FIH") || normalized.includes("N'DJILI")) return "Kinshasa";
+  if (normalized.includes("MBUJIMAYI") || normalized.includes("MJM")) return "Mbujimayi";
+  if (normalized.includes("LUSAKA") || normalized.includes("LUN") || normalized.includes("LUSI")) return "Lusaka/Lusi";
+  return "Autres";
+}
+
 export default async function TicketsPage({
   searchParams,
 }: {
@@ -227,6 +255,41 @@ export default async function TicketsPage({
 
   const maxDailySales = dailyPerformance.reduce((max, point) => Math.max(max, point.sales), 0);
   const maxDailyCommissions = dailyPerformance.reduce((max, point) => Math.max(max, point.commissions), 0);
+
+  const salesCurvePath = sparklinePath(dailyPerformance.map((point) => point.sales), 280, 80);
+  const commissionCurvePath = sparklinePath(dailyPerformance.map((point) => point.commissions), 280, 80);
+  const salesStart = dailyPerformance[0]?.sales ?? 0;
+  const salesEnd = dailyPerformance[dailyPerformance.length - 1]?.sales ?? 0;
+  const salesTrendPercent = salesStart > 0 ? ((salesEnd - salesStart) / salesStart) * 100 : salesEnd > 0 ? 100 : 0;
+  const commissionStart = dailyPerformance[0]?.commissions ?? 0;
+  const commissionEnd = dailyPerformance[dailyPerformance.length - 1]?.commissions ?? 0;
+  const commissionTrendPercent = commissionStart > 0
+    ? ((commissionEnd - commissionStart) / commissionStart) * 100
+    : commissionEnd > 0
+      ? 100
+      : 0;
+
+  const topAirline = salesByAirline[0] ?? null;
+  const topAirlineShare = totalTickets > 0 && topAirline ? (topAirline.tickets / totalTickets) * 100 : 0;
+  const topAirlineBars = salesByAirline.slice(0, 4);
+
+  const agencySales = Array.from(
+    ticketsForMetrics.reduce((map, ticket) => {
+      const key = detectAgencyFromRoute(ticket.route);
+      const existing = map.get(key) ?? { agency: key, tickets: 0, sales: 0, commissions: 0 };
+      const commission = ticket.commissionAmount ?? ticket.amount * (ticket.commissionRateUsed / 100);
+      existing.tickets += 1;
+      existing.sales += ticket.amount;
+      existing.commissions += commission;
+      map.set(key, existing);
+      return map;
+    }, new Map<string, { agency: string; tickets: number; sales: number; commissions: number }>()),
+  ).map((entry) => entry[1]).sort((a, b) => b.sales - a.sales);
+
+  const topAgency = agencySales[0] ?? null;
+  const topAgencyBars = agencySales.slice(0, 4);
+  const maxTopAirlineSales = topAirlineBars.reduce((max, item) => Math.max(max, item.sales), 0);
+  const maxTopAgencySales = topAgencyBars.reduce((max, item) => Math.max(max, item.sales), 0);
 
   const selectedDayTotal = selectedDaySales._sum.amount ?? 0;
   const previousDayTotal = previousDaySales._sum.amount ?? 0;
@@ -379,65 +442,91 @@ export default async function TicketsPage({
       </div>
 
       <section className="mb-6 rounded-2xl border border-black/10 bg-white p-4 dark:border-white/10 dark:bg-zinc-900">
-        <div className="mb-3 flex items-center justify-between">
-          <h2 className="text-sm font-semibold">Résumé des ventes par compagnie</h2>
-          <p className="text-xs text-black/60 dark:text-white/60">Top compagnies sur la période</p>
-        </div>
-        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-          {salesByAirline.slice(0, 8).map((airline) => (
-            <div key={airline.code} className="rounded-xl border border-black/10 p-3 dark:border-white/10">
-              <p className="text-sm font-semibold">{airline.code}</p>
-              <p className="text-xs text-black/60 dark:text-white/60">{airline.name}</p>
-              <p className="mt-2 text-xs">Billets: <span className="font-semibold">{airline.tickets}</span></p>
-              <p className="text-xs">Ventes: <span className="font-semibold">{formatCurrency(airline.sales)}</span></p>
-              <p className="text-xs">Commission: <span className="font-semibold">{formatCurrency(airline.commissions)}</span></p>
-            </div>
-          ))}
-          {salesByAirline.length === 0 ? (
-            <div className="rounded-xl border border-black/10 p-3 text-xs text-black/55 dark:border-white/10 dark:text-white/55">
-              Aucune donnée compagnie pour cette période.
-            </div>
-          ) : null}
-        </div>
-      </section>
-
-      <section className="mb-6 rounded-2xl border border-black/10 bg-white p-4 dark:border-white/10 dark:bg-zinc-900">
         <h2 className="mb-3 text-sm font-semibold">Moniteur de performance</h2>
-        <div className="space-y-3">
-          {dailyPerformance.map((point) => {
-            const salesWidth = maxDailySales > 0 ? (point.sales / maxDailySales) * 100 : 0;
-            const commissionWidth = maxDailyCommissions > 0 ? (point.commissions / maxDailyCommissions) * 100 : 0;
-            return (
-              <div key={point.day} className="rounded-md border border-black/10 p-3 dark:border-white/10">
-                <div className="mb-2 flex items-center justify-between text-xs">
-                  <span className="font-semibold">{point.day}</span>
-                  <span className="text-black/60 dark:text-white/60">{point.tickets} billet(s)</span>
-                </div>
-                <div className="mb-1">
-                  <div className="mb-1 flex items-center justify-between text-[11px]">
-                    <span>Ventes</span>
-                    <span>{formatCurrency(point.sales)}</span>
+        <div className="grid gap-3 md:grid-cols-2">
+          <div className="rounded-xl border border-black/10 p-3 dark:border-white/10">
+            <div className="mb-2 flex items-center justify-between">
+              <p className="text-xs font-semibold uppercase tracking-wide text-black/60 dark:text-white/60">Progression ventes</p>
+              <p className={`text-xs font-semibold ${salesTrendPercent >= 0 ? "text-emerald-600" : "text-red-600"}`}>
+                {salesTrendPercent >= 0 ? "+" : ""}{salesTrendPercent.toFixed(1)}%
+              </p>
+            </div>
+            <p className="text-sm font-semibold">{formatCurrency(salesEnd)}</p>
+            <p className="mb-2 text-[11px] text-black/60 dark:text-white/60">Dernier point • Début {formatCurrency(salesStart)}</p>
+            <svg viewBox="0 0 280 80" className="h-20 w-full">
+              <path d={salesCurvePath} fill="none" stroke="currentColor" strokeWidth="2.2" className="text-black dark:text-white" />
+            </svg>
+            <div className="mt-1 flex justify-between text-[10px] text-black/45 dark:text-white/45">
+              <span>{compactDate(dailyPerformance[0]?.day ?? "")}</span>
+              <span>{compactDate(dailyPerformance[dailyPerformance.length - 1]?.day ?? "")}</span>
+            </div>
+          </div>
+
+          <div className="rounded-xl border border-black/10 p-3 dark:border-white/10">
+            <div className="mb-2 flex items-center justify-between">
+              <p className="text-xs font-semibold uppercase tracking-wide text-black/60 dark:text-white/60">Progression commissions</p>
+              <p className={`text-xs font-semibold ${commissionTrendPercent >= 0 ? "text-emerald-600" : "text-red-600"}`}>
+                {commissionTrendPercent >= 0 ? "+" : ""}{commissionTrendPercent.toFixed(1)}%
+              </p>
+            </div>
+            <p className="text-sm font-semibold">{formatCurrency(commissionEnd)}</p>
+            <p className="mb-2 text-[11px] text-black/60 dark:text-white/60">Dernier point • Début {formatCurrency(commissionStart)}</p>
+            <svg viewBox="0 0 280 80" className="h-20 w-full">
+              <path d={commissionCurvePath} fill="none" stroke="currentColor" strokeWidth="2.2" className="text-black/70 dark:text-white/70" />
+            </svg>
+            <div className="mt-1 flex justify-between text-[10px] text-black/45 dark:text-white/45">
+              <span>{compactDate(dailyPerformance[0]?.day ?? "")}</span>
+              <span>{compactDate(dailyPerformance[dailyPerformance.length - 1]?.day ?? "")}</span>
+            </div>
+          </div>
+
+          <div className="rounded-xl border border-black/10 p-3 dark:border-white/10">
+            <p className="text-xs font-semibold uppercase tracking-wide text-black/60 dark:text-white/60">Compagnie la plus vendue</p>
+            <p className="mt-1 text-sm font-semibold">{topAirline ? `${topAirline.code} • ${topAirline.tickets} billets` : "Aucune donnée"}</p>
+            <p className="mb-2 text-[11px] text-black/60 dark:text-white/60">Part de volume: {topAirlineShare.toFixed(1)}%</p>
+            <div className="space-y-1.5">
+              {topAirlineBars.map((item) => {
+                const widthPercent = maxTopAirlineSales > 0 ? (item.sales / maxTopAirlineSales) * 100 : 0;
+                return (
+                  <div key={item.code}>
+                    <div className="mb-0.5 flex items-center justify-between text-[11px]">
+                      <span>{item.code}</span>
+                      <span>{formatCurrency(item.sales)}</span>
+                    </div>
+                    <div className="h-1.5 rounded-full bg-black/10 dark:bg-white/10">
+                      <div className="h-1.5 rounded-full bg-black dark:bg-white" style={{ width: `${widthPercent}%` }} />
+                    </div>
                   </div>
-                  <div className="h-2 rounded-full bg-black/10 dark:bg-white/10">
-                    <div className="h-2 rounded-full bg-black dark:bg-white" style={{ width: `${salesWidth}%` }} />
+                );
+              })}
+            </div>
+          </div>
+
+          <div className="rounded-xl border border-black/10 p-3 dark:border-white/10">
+            <p className="text-xs font-semibold uppercase tracking-wide text-black/60 dark:text-white/60">Agence la plus performante</p>
+            <p className="mt-1 text-sm font-semibold">{topAgency ? `${topAgency.agency} • ${topAgency.tickets} billets` : "Aucune donnée"}</p>
+            <p className="mb-2 text-[11px] text-black/60 dark:text-white/60">Calcul basé sur la route du billet</p>
+            <div className="space-y-1.5">
+              {topAgencyBars.map((item) => {
+                const widthPercent = maxTopAgencySales > 0 ? (item.sales / maxTopAgencySales) * 100 : 0;
+                return (
+                  <div key={item.agency}>
+                    <div className="mb-0.5 flex items-center justify-between text-[11px]">
+                      <span>{item.agency}</span>
+                      <span>{formatCurrency(item.sales)}</span>
+                    </div>
+                    <div className="h-1.5 rounded-full bg-black/10 dark:bg-white/10">
+                      <div className="h-1.5 rounded-full bg-black/70 dark:bg-white/70" style={{ width: `${widthPercent}%` }} />
+                    </div>
                   </div>
-                </div>
-                <div>
-                  <div className="mb-1 flex items-center justify-between text-[11px]">
-                    <span>Commissions</span>
-                    <span>{formatCurrency(point.commissions)}</span>
-                  </div>
-                  <div className="h-2 rounded-full bg-black/10 dark:bg-white/10">
-                    <div className="h-2 rounded-full bg-black/40 dark:bg-white/50" style={{ width: `${commissionWidth}%` }} />
-                  </div>
-                </div>
-              </div>
-            );
-          })}
-          {dailyPerformance.length === 0 ? (
-            <p className="text-xs text-black/55 dark:text-white/55">Aucune performance à afficher pour cette période.</p>
-          ) : null}
+                );
+              })}
+            </div>
+          </div>
         </div>
+        {dailyPerformance.length === 0 ? (
+          <p className="mt-3 text-xs text-black/55 dark:text-white/55">Aucune performance à afficher pour cette période.</p>
+        ) : null}
       </section>
 
       {(caaRule || airFastAirline) ? (
