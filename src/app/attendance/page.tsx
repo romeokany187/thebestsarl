@@ -14,22 +14,15 @@ export default async function AttendancePage() {
       : "Accès gestion: vous pouvez saisir et suivre les présences de l'équipe."
     : "Accès lecture seule: consultation des présences uniquement.";
 
-  const [users, records] = await Promise.all([
-    prisma.user.findMany({
-      where: role === "EMPLOYEE" ? { id: session.user.id } : undefined,
-      select: { id: true, name: true },
-      orderBy: { name: "asc" },
-    }),
-    prisma.attendance.findMany({
-      where: role === "EMPLOYEE" ? { userId: session.user.id } : undefined,
-      include: {
-        user: { select: { name: true } },
-        matchedSite: { select: { name: true, type: true } },
-      },
-      orderBy: { date: "desc" },
-      take: 50,
-    }),
-  ]);
+  const records = await prisma.attendance.findMany({
+    where: role === "EMPLOYEE" ? { userId: session.user.id } : undefined,
+    include: {
+      user: { select: { name: true } },
+      matchedSite: { select: { name: true, type: true } },
+    },
+    orderBy: { date: "desc" },
+    take: 50,
+  });
 
   return (
     <AppShell role={role} accessNote={accessNote}>
@@ -42,7 +35,7 @@ export default async function AttendancePage() {
 
       <div className="grid gap-6 lg:grid-cols-[380px,1fr]">
         {canManageAttendance ? (
-          <AttendanceForm users={users} role={role} />
+          <AttendanceForm role={role} />
         ) : (
           <section className="rounded-xl border border-black/10 bg-white p-4 text-sm text-black/70 dark:border-white/10 dark:bg-zinc-900 dark:text-white/70">
             Accès en lecture seule: vous pouvez consulter les présences mais pas les modifier.
