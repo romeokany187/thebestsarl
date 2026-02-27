@@ -146,25 +146,14 @@ export default async function TicketsPage({
     0,
   ));
 
-  const [ticketsForMetrics, tableTickets, airlineTracking, selectedDaySales, previousDaySales] = await Promise.all([
+  const [ticketsForMetrics, airlineTracking, selectedDaySales, previousDaySales] = await Promise.all([
     prisma.ticketSale.findMany({
       where: whereClause,
       include: {
         airline: true,
         seller: { select: { name: true } },
-        payments: true,
       },
       orderBy: { soldAt: "desc" },
-    }),
-    prisma.ticketSale.findMany({
-      where: whereClause,
-      include: {
-        airline: true,
-        seller: { select: { name: true } },
-        payments: true,
-      },
-      orderBy: { soldAt: "desc" },
-      take: 120,
     }),
     prisma.airline.findMany({
       where: { code: { in: ["CAA", "FST"] } },
@@ -474,56 +463,9 @@ export default async function TicketsPage({
         </section>
       ) : null}
 
-      <div className="overflow-hidden rounded-2xl border border-black/10 bg-white shadow-sm dark:border-white/10 dark:bg-zinc-900">
-        <div className="overflow-x-auto">
-          <table className="min-w-full text-sm">
-            <thead className="bg-black/5 dark:bg-white/10">
-              <tr>
-                <th className="px-4 py-3 text-left font-semibold">Date vente</th>
-                <th className="px-4 py-3 text-left font-semibold">Billet</th>
-                <th className="px-4 py-3 text-left font-semibold">Client</th>
-                <th className="px-4 py-3 text-left font-semibold">Vendeur</th>
-                <th className="px-4 py-3 text-left font-semibold">Compagnie</th>
-                <th className="px-4 py-3 text-left font-semibold">Montant</th>
-                <th className="px-4 py-3 text-left font-semibold">Commission</th>
-                <th className="px-4 py-3 text-left font-semibold">Reçu</th>
-                <th className="px-4 py-3 text-left font-semibold">Statut</th>
-              </tr>
-            </thead>
-            <tbody>
-              {tableTickets.map((ticket) => {
-                const paidAmount = ticket.payments.reduce((sum, item) => sum + item.amount, 0);
-                const commissionAmount = ticket.commissionAmount ?? ticket.amount * (ticket.commissionRateUsed / 100);
-
-                return (
-                  <tr key={ticket.id} className="border-t border-black/5 dark:border-white/10">
-                    <td className="px-4 py-3">{new Date(ticket.soldAt).toISOString().slice(0, 10)}</td>
-                    <td className="px-4 py-3 font-medium">{ticket.ticketNumber}</td>
-                    <td className="px-4 py-3">{ticket.customerName}</td>
-                    <td className="px-4 py-3">{ticket.seller.name}</td>
-                    <td className="px-4 py-3">{ticket.airline.code}</td>
-                    <td className="px-4 py-3">{ticket.amount.toFixed(2)} {ticket.currency}</td>
-                    <td className="px-4 py-3">{commissionAmount.toFixed(2)} {ticket.currency}</td>
-                    <td className="px-4 py-3">{paidAmount.toFixed(2)} {ticket.currency}</td>
-                    <td className="px-4 py-3">
-                      <span className="rounded-full bg-black/5 px-2.5 py-1 text-xs font-semibold dark:bg-white/10">
-                        {ticket.paymentStatus}
-                      </span>
-                    </td>
-                  </tr>
-                );
-              })}
-              {tableTickets.length === 0 ? (
-                <tr>
-                  <td colSpan={9} className="px-4 py-8 text-center text-sm text-black/55 dark:text-white/55">
-                    Aucun billet trouvé pour cette période.
-                  </td>
-                </tr>
-              ) : null}
-            </tbody>
-          </table>
-        </div>
-      </div>
+      <section className="rounded-2xl border border-black/10 bg-white p-4 text-sm text-black/70 dark:border-white/10 dark:bg-zinc-900 dark:text-white/70">
+        Le tableau détaillé des billets est disponible dans la page ventes. Cette page présente uniquement la vue synthétique et l&apos;export PDF.
+      </section>
     </AppShell>
   );
 }
