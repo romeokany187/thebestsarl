@@ -303,7 +303,7 @@ async function main() {
       route: "CDG-DKR",
       travelDate: new Date("2026-03-15"),
       amount: 980,
-      currency: "EUR",
+      currency: "USD",
       airlineId: airFrance.id,
       sellerId: employee.id,
       travelClass: TravelClass.ECONOMY,

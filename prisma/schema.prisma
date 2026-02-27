@@ -213,7 +213,7 @@ model TicketSale {
   soldAt             DateTime      @default(now())
   amount             Float
   baseFareAmount     Float?
-  currency           String        @default("EUR")
+  currency           String        @default("USD")
   airlineId          String
   airline            Airline       @relation(fields: [airlineId], references: [id])
   sellerId           String

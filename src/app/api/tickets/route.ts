@@ -5,6 +5,7 @@ import { calculateTicketMetrics } from "@/lib/kpi";
 import { requireApiRoles } from "@/lib/rbac";
 import { computeCommissionAmount, pickCommissionRule } from "@/lib/commission";
 import { CommissionCalculationStatus, CommissionMode } from "@prisma/client";
+import { ensureAirlineCatalog } from "@/lib/airline-catalog";
 
 function clamp(value: number, min: number, max: number) {
   return Math.max(min, Math.min(max, value));
@@ -45,6 +46,8 @@ export async function POST(request: NextRequest) {
   if (!parsed.success) {
     return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
   }
+
+  await ensureAirlineCatalog(prisma);
 
   const airline = await prisma.airline.findUnique({
     where: { id: parsed.data.airlineId },

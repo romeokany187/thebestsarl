@@ -52,8 +52,7 @@ export const AIRLINE_CATALOG: CatalogAirline[] = [
     rules: [
       {
         ratePercent: 5,
-        routePattern: "BZV-*",
-        travelClass: TravelClass.ECONOMY,
+        routePattern: "*",
         commissionMode: CommissionMode.IMMEDIATE,
         systemRatePercent: 5,
         markupRatePercent: 0,

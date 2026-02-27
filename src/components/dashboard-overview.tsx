@@ -185,7 +185,7 @@ export function DashboardOverview() {
             <KpiCard label="Utilisateurs" value={String(data.usersSummary.total)} hint={`A:${data.usersSummary.admin} • M:${data.usersSummary.manager} • E:${data.usersSummary.employee} • C:${data.usersSummary.accountant}`} />
             <KpiCard label="Présences" value={String(data.attendance.totalRecords)} hint={`Absences: ${data.attendance.absent} • Retards: ${data.attendance.lateCount}`} />
             <KpiCard label="Rapports" value={String(data.reports.total)} hint={`Soumis: ${data.reports.submitted} • Approuvés: ${data.reports.approved}`} />
-            <KpiCard label="Ventes" value={`${data.sales.totalSales.toFixed(2)} EUR`} hint={`Commission nette: ${data.sales.netCommission.toFixed(2)} EUR`} />
+            <KpiCard label="Ventes" value={`${data.sales.totalSales.toFixed(2)} USD`} hint={`Commission nette: ${data.sales.netCommission.toFixed(2)} USD`} />
           </div>
 
           <div className="grid gap-6 lg:grid-cols-2">
@@ -220,7 +220,7 @@ export function DashboardOverview() {
                 <div key={freq.period} className="rounded-lg border border-black/10 px-3 py-3 dark:border-white/10">
                   <p className="text-xs font-semibold text-black/55 dark:text-white/55">{freq.period}</p>
                   <p className="mt-1 text-sm">Rapports: {freq.reports}</p>
-                  <p className="text-sm">Ventes: {freq.sales.toFixed(2)} EUR</p>
+                  <p className="text-sm">Ventes: {freq.sales.toFixed(2)} USD</p>
                 </div>
               ))}
             </div>
@@ -255,7 +255,7 @@ export function DashboardOverview() {
                     <td className="px-3 py-2">{row.reports}</td>
                     <td className="px-3 py-2">{row.approvedReports}</td>
                     <td className="px-3 py-2">{row.tickets}</td>
-                    <td className="px-3 py-2">{row.salesAmount.toFixed(2)} EUR</td>
+                    <td className="px-3 py-2">{row.salesAmount.toFixed(2)} USD</td>
                   </tr>
                 ))}
               </tbody>

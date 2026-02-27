@@ -71,9 +71,9 @@ export default async function SalesPage() {
       </section>
 
       <div className="mb-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <KpiCard label="Ventes totales" value={`${metrics.totalSales.toFixed(2)} EUR`} />
-        <KpiCard label="Commission brute" value={`${metrics.grossCommission.toFixed(2)} EUR`} />
-        <KpiCard label="Commission nette" value={`${metrics.netCommission.toFixed(2)} EUR`} />
+        <KpiCard label="Ventes totales" value={`${metrics.totalSales.toFixed(2)} USD`} />
+        <KpiCard label="Commission brute" value={`${metrics.grossCommission.toFixed(2)} USD`} />
+        <KpiCard label="Commission nette" value={`${metrics.netCommission.toFixed(2)} USD`} />
         <KpiCard label="Taux encaissement" value={`${(metrics.paidRatio * 100).toFixed(1)}%`} />
       </div>
 

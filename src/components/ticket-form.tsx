@@ -96,7 +96,7 @@ export function TicketForm({
         />
       </div>
       <div className="grid gap-3 sm:grid-cols-2">
-        <input name="currency" defaultValue="EUR" required className="rounded-md border px-3 py-2" />
+        <input name="currency" defaultValue="USD" required className="rounded-md border px-3 py-2" />
         <input name="agencyMarkupPercent" type="number" step="0.01" min="0" max="100" defaultValue="0" placeholder="Majoration agence (%)" className="rounded-md border px-3 py-2" />
       </div>
       <div className="grid gap-3 sm:grid-cols-2">
