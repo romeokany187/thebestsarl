@@ -7,6 +7,30 @@ import { ensureAirlineCatalog } from "@/lib/airline-catalog";
 
 export const dynamic = "force-dynamic";
 
+type SearchParams = {
+  startDate?: string;
+  endDate?: string;
+};
+
+function rangeFromSearch(params: SearchParams) {
+  const now = new Date();
+  const defaultDay = now.toISOString().slice(0, 10);
+  const startRaw = params.startDate ?? defaultDay;
+  const endRaw = params.endDate ?? startRaw;
+
+  const start = new Date(`${startRaw}T00:00:00.000Z`);
+  const endInclusive = new Date(`${endRaw}T00:00:00.000Z`);
+  const endExclusive = new Date(endInclusive);
+  endExclusive.setUTCDate(endExclusive.getUTCDate() + 1);
+
+  return {
+    start,
+    endExclusive,
+    startRaw,
+    endRaw,
+  };
+}
+
 function paymentLabel(status: string) {
   if (status === "PAID") return "Payé";
   if (status === "UNPAID") return "Non payé";
@@ -17,7 +41,13 @@ function saleNatureLabel(value: string) {
   return value === "CREDIT" ? "Crédit" : "Cash";
 }
 
-export default async function SalesPage() {
+export default async function SalesPage({
+  searchParams,
+}: {
+  searchParams?: Promise<SearchParams>;
+}) {
+  const resolvedSearchParams = (await searchParams) ?? {};
+  const dateRange = rangeFromSearch(resolvedSearchParams);
   const { session, role } = await requirePageRoles(["ADMIN", "MANAGER", "EMPLOYEE", "ACCOUNTANT"]);
   const canCreateTicket = role === "ADMIN" || role === "MANAGER" || role === "EMPLOYEE";
   const canManageTickets = role === "ADMIN" || role === "EMPLOYEE";
@@ -43,10 +73,16 @@ export default async function SalesPage() {
       orderBy: { name: "asc" },
     }),
     prisma.ticketSale.findMany({
-      where: role === "EMPLOYEE" ? { sellerId: session.user.id } : undefined,
+      where: {
+        ...(role === "EMPLOYEE" ? { sellerId: session.user.id } : {}),
+        soldAt: {
+          gte: dateRange.start,
+          lt: dateRange.endExclusive,
+        },
+      },
       include: { airline: true, seller: { select: { name: true } }, payments: true },
       orderBy: { soldAt: "desc" },
-      take: 50,
+      take: 200,
     }),
   ]);
 
@@ -80,6 +116,30 @@ export default async function SalesPage() {
         <p className="text-sm text-black/60 dark:text-white/60">
           Suivi des billets avec commission calculée par compagnie, itinéraire et classe.
         </p>
+      </section>
+
+      <section className="mb-6 rounded-xl border border-black/10 bg-white p-4 dark:border-white/10 dark:bg-zinc-900">
+        <form method="GET" className="grid gap-3 sm:grid-cols-3 sm:items-end">
+          <div>
+            <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-black/60 dark:text-white/60">Du</label>
+            <input
+              type="date"
+              name="startDate"
+              defaultValue={dateRange.startRaw}
+              className="w-full rounded-md border border-black/15 bg-white px-3 py-2 text-sm dark:border-white/15 dark:bg-zinc-900"
+            />
+          </div>
+          <div>
+            <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-black/60 dark:text-white/60">Au</label>
+            <input
+              type="date"
+              name="endDate"
+              defaultValue={dateRange.endRaw}
+              className="w-full rounded-md border border-black/15 bg-white px-3 py-2 text-sm dark:border-white/15 dark:bg-zinc-900"
+            />
+          </div>
+          <button type="submit" className="rounded-md bg-black px-4 py-2 text-sm font-semibold text-white dark:bg-white dark:text-black">Rechercher</button>
+        </form>
       </section>
 
       <div className="grid gap-6 lg:grid-cols-[400px,1fr]">

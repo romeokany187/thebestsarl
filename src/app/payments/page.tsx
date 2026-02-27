@@ -8,6 +8,8 @@ import { prisma } from "@/lib/prisma";
 type ReportMode = "date" | "month" | "year" | "semester";
 
 type SearchParams = {
+  startDate?: string;
+  endDate?: string;
   mode?: string;
   date?: string;
   month?: string;
@@ -26,9 +28,25 @@ function parseYear(value?: string) {
 
 function dateRangeFromParams(params: SearchParams) {
   const now = new Date();
+  const defaultDay = now.toISOString().slice(0, 10);
+
+  if (params.startDate || params.endDate) {
+    const startRaw = params.startDate ?? defaultDay;
+    const endRaw = params.endDate ?? startRaw;
+    const start = new Date(`${startRaw}T00:00:00.000Z`);
+    const end = new Date(`${endRaw}T00:00:00.000Z`);
+    end.setUTCDate(end.getUTCDate() + 1);
+    return {
+      mode: "date" as ReportMode,
+      start,
+      end,
+      label: `Rapport du ${startRaw} au ${endRaw}`,
+    };
+  }
+
   const mode = (["date", "month", "year", "semester"].includes(params.mode ?? "")
     ? params.mode
-    : "month") as ReportMode;
+    : "date") as ReportMode;
 
   if (mode === "date") {
     const rawDate = params.date;
@@ -101,9 +119,9 @@ export default async function PaymentsPage({
   const range = dateRangeFromParams(resolvedSearchParams);
 
   const now = new Date();
-  const currentMonth = now.toISOString().slice(0, 7);
   const currentDate = now.toISOString().slice(0, 10);
-  const currentYear = String(now.getUTCFullYear());
+  const currentStartDate = resolvedSearchParams.startDate ?? currentDate;
+  const currentEndDate = resolvedSearchParams.endDate ?? currentStartDate;
   const selectedAirlineId = resolvedSearchParams.airlineId && resolvedSearchParams.airlineId !== "ALL"
     ? resolvedSearchParams.airlineId
     : undefined;
@@ -189,42 +207,17 @@ export default async function PaymentsPage({
       </section>
 
       <section className="mb-6 rounded-2xl border border-black/10 bg-white p-4 dark:border-white/10 dark:bg-zinc-900">
-        <form method="GET" className="grid gap-3 lg:grid-cols-7 lg:items-end">
-          <div className="lg:col-span-2">
-            <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-black/60 dark:text-white/60">Type de période</label>
-            <select
-              name="mode"
-              defaultValue={range.mode}
-              className="w-full rounded-md border border-black/15 bg-white px-3 py-2 text-sm dark:border-white/15 dark:bg-zinc-900"
-            >
-              <option value="date">Date donnée</option>
-              <option value="month">Mois donné</option>
-              <option value="year">Année donnée</option>
-              <option value="semester">Semestre donné</option>
-            </select>
+        <form method="GET" className="grid gap-3 lg:grid-cols-4 lg:items-end">
+          <input type="hidden" name="mode" value="date" />
+
+          <div>
+            <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-black/60 dark:text-white/60">Du</label>
+            <input type="date" name="startDate" defaultValue={currentStartDate} className="w-full rounded-md border border-black/15 bg-white px-3 py-2 text-sm dark:border-white/15 dark:bg-zinc-900" />
           </div>
 
           <div>
-            <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-black/60 dark:text-white/60">Date</label>
-            <input type="date" name="date" defaultValue={resolvedSearchParams.date ?? currentDate} className="w-full rounded-md border border-black/15 bg-white px-3 py-2 text-sm dark:border-white/15 dark:bg-zinc-900" />
-          </div>
-
-          <div>
-            <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-black/60 dark:text-white/60">Mois</label>
-            <input type="month" name="month" defaultValue={resolvedSearchParams.month ?? currentMonth} className="w-full rounded-md border border-black/15 bg-white px-3 py-2 text-sm dark:border-white/15 dark:bg-zinc-900" />
-          </div>
-
-          <div>
-            <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-black/60 dark:text-white/60">Année</label>
-            <input type="number" min={2000} max={2100} name="year" defaultValue={resolvedSearchParams.year ?? currentYear} className="w-full rounded-md border border-black/15 bg-white px-3 py-2 text-sm dark:border-white/15 dark:bg-zinc-900" />
-          </div>
-
-          <div className="grid grid-cols-2 gap-2">
-            <select name="semester" defaultValue={resolvedSearchParams.semester === "2" ? "2" : "1"} className="rounded-md border border-black/15 bg-white px-3 py-2 text-sm dark:border-white/15 dark:bg-zinc-900">
-              <option value="1">S1</option>
-              <option value="2">S2</option>
-            </select>
-            <input type="number" min={2000} max={2100} name="semesterYear" defaultValue={resolvedSearchParams.semesterYear ?? currentYear} className="rounded-md border border-black/15 bg-white px-3 py-2 text-sm dark:border-white/15 dark:bg-zinc-900" />
+            <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-black/60 dark:text-white/60">Au</label>
+            <input type="date" name="endDate" defaultValue={currentEndDate} className="w-full rounded-md border border-black/15 bg-white px-3 py-2 text-sm dark:border-white/15 dark:bg-zinc-900" />
           </div>
 
           <div>

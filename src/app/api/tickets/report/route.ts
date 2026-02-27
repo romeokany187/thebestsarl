@@ -17,9 +17,22 @@ function parseYear(value: string | null) {
 
 function dateRangeFromParams(params: URLSearchParams) {
   const now = new Date();
+  const defaultDay = now.toISOString().slice(0, 10);
+  const startDate = params.get("startDate");
+  const endDate = params.get("endDate");
+
+  if (startDate || endDate) {
+    const startRaw = startDate ?? defaultDay;
+    const endRaw = endDate ?? startRaw;
+    const start = new Date(`${startRaw}T00:00:00.000Z`);
+    const end = new Date(`${endRaw}T00:00:00.000Z`);
+    end.setUTCDate(end.getUTCDate() + 1);
+    return { mode: "date" as ReportMode, start, end, label: `Rapport du ${startRaw} au ${endRaw}` };
+  }
+
   const mode = (["date", "month", "year", "semester"].includes(params.get("mode") ?? "")
     ? params.get("mode")
-    : "month") as ReportMode;
+    : "date") as ReportMode;
 
   if (mode === "date") {
     const rawDate = params.get("date");
