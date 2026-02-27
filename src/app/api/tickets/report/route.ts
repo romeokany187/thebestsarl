@@ -66,113 +66,41 @@ function formatMoney(value: number) {
   return `${value.toFixed(2)} USD`;
 }
 
-function drawPageFrame(page: PDFPage) {
-  const { width, height } = page.getSize();
-  page.drawRectangle({
-    x: 18,
-    y: 18,
-    width: width - 36,
-    height: height - 36,
-    borderColor: rgb(0.12, 0.12, 0.12),
-    borderWidth: 1,
+function drawFooter(page: PDFPage, fontRegular: PDFFont, reportTitle: string) {
+  const { width } = page.getSize();
+  page.drawText("THE BEST SARL", {
+    x: 26,
+    y: 24,
+    size: 9,
+    font: fontRegular,
+    color: rgb(0.2, 0.2, 0.2),
+  });
+
+  const rightTextWidth = fontRegular.widthOfTextAtSize(reportTitle, 9);
+  page.drawText(reportTitle, {
+    x: width - rightTextWidth - 26,
+    y: 24,
+    size: 9,
+    font: fontRegular,
+    color: rgb(0.2, 0.2, 0.2),
   });
 }
 
-function drawHeader(page: PDFPage, fontBold: PDFFont, fontRegular: PDFFont, title: string, subtitle: string) {
-  const { width, height } = page.getSize();
-  page.drawRectangle({
-    x: 18,
-    y: height - 92,
-    width: width - 36,
-    height: 74,
-    color: rgb(0.96, 0.96, 0.96),
-    borderColor: rgb(0.15, 0.15, 0.15),
-    borderWidth: 1,
-  });
-
-  page.drawText("THE BEST SARL", {
-    x: 30,
-    y: height - 44,
-    size: 16,
-    font: fontBold,
-    color: rgb(0.07, 0.07, 0.07),
-  });
-
-  page.drawText("Agence de voyage & ventes billets", {
-    x: 30,
-    y: height - 60,
-    size: 9,
-    font: fontRegular,
-    color: rgb(0.22, 0.22, 0.22),
-  });
-
-  page.drawText(title, {
-    x: width - 330,
-    y: height - 44,
-    size: 12,
+function drawTopInfo(page: PDFPage, fontBold: PDFFont, fontRegular: PDFFont, subtitle: string) {
+  page.drawText("RAPPORT DE VENTES BILLETS", {
+    x: 26,
+    y: 560,
+    size: 13,
     font: fontBold,
     color: rgb(0.08, 0.08, 0.08),
   });
 
   page.drawText(subtitle, {
-    x: width - 330,
-    y: height - 60,
+    x: 26,
+    y: 545,
     size: 9,
     font: fontRegular,
-    color: rgb(0.28, 0.28, 0.28),
-  });
-}
-
-function drawFooter(page: PDFPage, fontRegular: PDFFont, generatedBy: string) {
-  const { width } = page.getSize();
-  const generatedAt = new Date().toISOString().slice(0, 19).replace("T", " ");
-
-  page.drawText(`Généré le ${generatedAt} UTC`, {
-    x: 30,
-    y: 26,
-    size: 8,
-    font: fontRegular,
-    color: rgb(0.35, 0.35, 0.35),
-  });
-
-  page.drawText(`Utilisateur: ${generatedBy}`, {
-    x: width - 210,
-    y: 26,
-    size: 8,
-    font: fontRegular,
-    color: rgb(0.35, 0.35, 0.35),
-  });
-}
-
-function drawSummaryBox(page: PDFPage, fontBold: PDFFont, fontRegular: PDFFont, lines: string[]) {
-  const { width, height } = page.getSize();
-  const boxY = height - 142;
-  page.drawRectangle({
-    x: 18,
-    y: boxY,
-    width: width - 36,
-    height: 42,
-    color: rgb(0.985, 0.985, 0.985),
-    borderColor: rgb(0.8, 0.8, 0.8),
-    borderWidth: 1,
-  });
-
-  page.drawText("Récapitulatif", {
-    x: 30,
-    y: boxY + 27,
-    size: 9,
-    font: fontBold,
-    color: rgb(0.12, 0.12, 0.12),
-  });
-
-  lines.forEach((line, index) => {
-    page.drawText(line, {
-      x: 30,
-      y: boxY + 14 - index * 10,
-      size: 8,
-      font: fontRegular,
-      color: rgb(0.2, 0.2, 0.2),
-    });
+    color: rgb(0.32, 0.32, 0.32),
   });
 }
 
@@ -204,88 +132,62 @@ export async function GET(request: NextRequest) {
   const fontRegular = await pdf.embedFont(StandardFonts.Helvetica);
   const fontBold = await pdf.embedFont(StandardFonts.HelveticaBold);
 
-  const headers = [
-    "Date",
-    "Émetteur",
-    "Compagnie",
-    "PNR",
-    "Itinéraire",
-    "Prix",
-    "BaseFare",
-    "Commission",
-    "Nature",
-    "Statut",
-    "Payant",
-  ];
+  const periodLabel = `${range.label} • ${range.start.toISOString().slice(0, 10)} au ${new Date(range.end.getTime() - 1).toISOString().slice(0, 10)}`;
 
   if (range.mode === "date") {
+    const reportTitle = "Rapport Journalier";
     let page = pdf.addPage([842, 595]);
-    drawPageFrame(page);
-    drawHeader(page, fontBold, fontRegular, "Rapport Journalier", `${range.label}`);
+    drawTopInfo(page, fontBold, fontRegular, periodLabel);
+    drawFooter(page, fontRegular, reportTitle);
 
-    const totalSales = tickets.reduce((sum, ticket) => sum + ticket.amount, 0);
-    const totalCommissions = tickets.reduce(
-      (sum, ticket) => sum + (ticket.commissionAmount ?? ticket.amount * (ticket.commissionRateUsed / 100)),
-      0,
-    );
+    const headers = ["Date", "Émetteur", "Compagnie", "PNR", "Itinéraire", "Prix", "BaseFare", "Commission", "Nature", "Statut", "Payant"];
+    const headerX = [26, 84, 160, 218, 278, 386, 454, 518, 578, 640, 708];
 
-    drawSummaryBox(page, fontBold, fontRegular, [
-      `Billets: ${tickets.length}`,
-      `Ventes: ${formatMoney(totalSales)} • Commissions: ${formatMoney(totalCommissions)}`,
-    ]);
-
-    let y = 424;
-    const headerX = [24, 80, 153, 210, 272, 385, 450, 510, 570, 632, 700];
-
-    page.drawRectangle({
-      x: 20,
-      y: y - 4,
-      width: 804,
-      height: 16,
-      color: rgb(0.92, 0.92, 0.92),
-      borderColor: rgb(0.7, 0.7, 0.7),
-      borderWidth: 0.7,
-    });
-
+    let y = 520;
     headers.forEach((header, index) => {
-      page.drawText(header, { x: headerX[index], y, size: 7.5, font: fontBold, color: rgb(0.1, 0.1, 0.1) });
+      page.drawText(header, {
+        x: headerX[index],
+        y,
+        size: 7.5,
+        font: fontBold,
+        color: rgb(0.1, 0.1, 0.1),
+      });
     });
-    y -= 14;
+    page.drawLine({
+      start: { x: 26, y: y - 3 },
+      end: { x: 816, y: y - 3 },
+      thickness: 0.8,
+      color: rgb(0.75, 0.75, 0.75),
+    });
+    y -= 16;
 
     const ensureSpace = () => {
-      if (y < 48) {
+      if (y < 70) {
         page = pdf.addPage([842, 595]);
-        drawPageFrame(page);
-        drawHeader(page, fontBold, fontRegular, "Rapport Journalier", `${range.label} (suite)`);
-        drawFooter(page, fontRegular, access.session.user.name ?? access.session.user.email ?? "Utilisateur");
-        y = 424;
-        page.drawRectangle({
-          x: 20,
-          y: y - 4,
-          width: 804,
-          height: 16,
-          color: rgb(0.92, 0.92, 0.92),
-          borderColor: rgb(0.7, 0.7, 0.7),
-          borderWidth: 0.7,
-        });
+        drawTopInfo(page, fontBold, fontRegular, `${periodLabel} (suite)`);
+        drawFooter(page, fontRegular, reportTitle);
+        y = 520;
         headers.forEach((header, index) => {
-          page.drawText(header, { x: headerX[index], y, size: 7.5, font: fontBold, color: rgb(0.1, 0.1, 0.1) });
+          page.drawText(header, {
+            x: headerX[index],
+            y,
+            size: 7.5,
+            font: fontBold,
+            color: rgb(0.1, 0.1, 0.1),
+          });
         });
-        y -= 14;
+        page.drawLine({
+          start: { x: 26, y: y - 3 },
+          end: { x: 816, y: y - 3 },
+          thickness: 0.8,
+          color: rgb(0.75, 0.75, 0.75),
+        });
+        y -= 16;
       }
     };
 
-    tickets.forEach((ticket, rowIndex) => {
+    tickets.forEach((ticket) => {
       ensureSpace();
-
-      page.drawRectangle({
-        x: 20,
-        y: y - 2,
-        width: 804,
-        height: 11,
-        color: rowIndex % 2 === 0 ? rgb(0.985, 0.985, 0.985) : rgb(1, 1, 1),
-      });
-
       const commission = ticket.commissionAmount ?? ticket.amount * (ticket.commissionRateUsed / 100);
       const row = [
         new Date(ticket.soldAt).toISOString().slice(0, 10),
@@ -300,48 +202,52 @@ export async function GET(request: NextRequest) {
         ticket.paymentStatus,
         (ticket.payerName ?? "-").slice(0, 10),
       ];
+
       row.forEach((value, index) => {
         page.drawText(String(value), {
           x: headerX[index],
           y,
-          size: 6.8,
+          size: 8,
           font: fontRegular,
-          color: rgb(0.13, 0.13, 0.13),
+          color: rgb(0.14, 0.14, 0.14),
         });
       });
-      y -= 10;
+
+      y -= 13;
     });
 
-    if (y > 62) {
-      page.drawRectangle({
-        x: 20,
-        y: y - 8,
-        width: 804,
-        height: 20,
-        color: rgb(0.94, 0.94, 0.94),
-        borderColor: rgb(0.75, 0.75, 0.75),
-        borderWidth: 0.8,
-      });
-      page.drawText(`TOTAL JOURNALIER • Billets: ${tickets.length} • Ventes: ${formatMoney(totalSales)} • Commissions: ${formatMoney(totalCommissions)}`, {
-        x: 28,
-        y,
-        size: 9,
-        font: fontBold,
-        color: rgb(0.08, 0.08, 0.08),
-      });
+    const totalSales = tickets.reduce((sum, ticket) => sum + ticket.amount, 0);
+    const totalCommissions = tickets.reduce(
+      (sum, ticket) => sum + (ticket.commissionAmount ?? ticket.amount * (ticket.commissionRateUsed / 100)),
+      0,
+    );
+
+    if (y < 90) {
+      page = pdf.addPage([842, 595]);
+      drawTopInfo(page, fontBold, fontRegular, `${periodLabel} (totaux)`);
+      drawFooter(page, fontRegular, reportTitle);
+      y = 520;
     }
 
-    drawFooter(page, fontRegular, access.session.user.name ?? access.session.user.email ?? "Utilisateur");
+    y -= 14;
+    page.drawLine({
+      start: { x: 26, y: y + 10 },
+      end: { x: 816, y: y + 10 },
+      thickness: 1,
+      color: rgb(0.55, 0.55, 0.55),
+    });
+    page.drawText(`TOTAL JOURNALIER  •  Billets: ${tickets.length}  •  Ventes: ${formatMoney(totalSales)}  •  Commissions: ${formatMoney(totalCommissions)}`, {
+      x: 26,
+      y,
+      size: 10,
+      font: fontBold,
+      color: rgb(0.08, 0.08, 0.08),
+    });
   } else {
+    const reportTitle = "Rapport Synthèse";
     let page = pdf.addPage([842, 595]);
-    drawPageFrame(page);
-    drawHeader(
-      page,
-      fontBold,
-      fontRegular,
-      "Rapport Synthèse",
-      `${range.label} • ${range.start.toISOString().slice(0, 10)} → ${new Date(range.end.getTime() - 1).toISOString().slice(0, 10)}`,
-    );
+    drawTopInfo(page, fontBold, fontRegular, periodLabel);
+    drawFooter(page, fontRegular, reportTitle);
 
     const grouped = Array.from(
       tickets.reduce((map, ticket) => {
@@ -361,134 +267,135 @@ export async function GET(request: NextRequest) {
         map.set(key, existing);
         return map;
       }, new Map<string, { day: string; airline: string; tickets: number; sales: number; commissions: number }>()),
-    ).map((item) => item[1]).sort((a, b) => a.day.localeCompare(b.day) || a.airline.localeCompare(b.airline));
+    ).map((entry) => entry[1]).sort((a, b) => a.day.localeCompare(b.day) || a.airline.localeCompare(b.airline));
+
+    const dailyTotals = new Map<string, { tickets: number; sales: number; commissions: number }>();
+    grouped.forEach((item) => {
+      const existing = dailyTotals.get(item.day) ?? { tickets: 0, sales: 0, commissions: 0 };
+      existing.tickets += item.tickets;
+      existing.sales += item.sales;
+      existing.commissions += item.commissions;
+      dailyTotals.set(item.day, existing);
+    });
+
+    const headers = ["Jour", "Compagnie", "Billets", "Ventes", "Commissions"];
+    const headerX = [26, 190, 360, 455, 585];
+
+    let y = 520;
+    headers.forEach((header, index) => {
+      page.drawText(header, {
+        x: headerX[index],
+        y,
+        size: 8,
+        font: fontBold,
+        color: rgb(0.1, 0.1, 0.1),
+      });
+    });
+    page.drawLine({
+      start: { x: 26, y: y - 3 },
+      end: { x: 816, y: y - 3 },
+      thickness: 0.8,
+      color: rgb(0.75, 0.75, 0.75),
+    });
+    y -= 16;
+
+    const ensureSpace = () => {
+      if (y < 80) {
+        page = pdf.addPage([842, 595]);
+        drawTopInfo(page, fontBold, fontRegular, `${periodLabel} (suite)`);
+        drawFooter(page, fontRegular, reportTitle);
+        y = 520;
+        headers.forEach((header, index) => {
+          page.drawText(header, {
+            x: headerX[index],
+            y,
+            size: 8,
+            font: fontBold,
+            color: rgb(0.1, 0.1, 0.1),
+          });
+        });
+        page.drawLine({
+          start: { x: 26, y: y - 3 },
+          end: { x: 816, y: y - 3 },
+          thickness: 0.8,
+          color: rgb(0.75, 0.75, 0.75),
+        });
+        y -= 16;
+      }
+    };
+
+    let currentDay = "";
+    grouped.forEach((item) => {
+      if (currentDay && currentDay !== item.day) {
+        const dayTotal = dailyTotals.get(currentDay)!;
+        ensureSpace();
+        page.drawText(`Sous-total ${currentDay}`, {
+          x: 26,
+          y,
+          size: 8,
+          font: fontBold,
+          color: rgb(0.12, 0.12, 0.12),
+        });
+        page.drawText(String(dayTotal.tickets), { x: 360, y, size: 8, font: fontBold, color: rgb(0.12, 0.12, 0.12) });
+        page.drawText(formatMoney(dayTotal.sales), { x: 455, y, size: 8, font: fontBold, color: rgb(0.12, 0.12, 0.12) });
+        page.drawText(formatMoney(dayTotal.commissions), { x: 585, y, size: 8, font: fontBold, color: rgb(0.12, 0.12, 0.12) });
+        y -= 14;
+      }
+
+      currentDay = item.day;
+      ensureSpace();
+      page.drawText(item.day, { x: 26, y, size: 8.5, font: fontRegular, color: rgb(0.16, 0.16, 0.16) });
+      page.drawText(item.airline, { x: 190, y, size: 8.5, font: fontRegular, color: rgb(0.16, 0.16, 0.16) });
+      page.drawText(String(item.tickets), { x: 360, y, size: 8.5, font: fontRegular, color: rgb(0.16, 0.16, 0.16) });
+      page.drawText(formatMoney(item.sales), { x: 455, y, size: 8.5, font: fontRegular, color: rgb(0.16, 0.16, 0.16) });
+      page.drawText(formatMoney(item.commissions), { x: 585, y, size: 8.5, font: fontRegular, color: rgb(0.16, 0.16, 0.16) });
+      y -= 13;
+    });
+
+    if (currentDay) {
+      const dayTotal = dailyTotals.get(currentDay)!;
+      ensureSpace();
+      page.drawText(`Sous-total ${currentDay}`, {
+        x: 26,
+        y,
+        size: 8,
+        font: fontBold,
+        color: rgb(0.12, 0.12, 0.12),
+      });
+      page.drawText(String(dayTotal.tickets), { x: 360, y, size: 8, font: fontBold, color: rgb(0.12, 0.12, 0.12) });
+      page.drawText(formatMoney(dayTotal.sales), { x: 455, y, size: 8, font: fontBold, color: rgb(0.12, 0.12, 0.12) });
+      page.drawText(formatMoney(dayTotal.commissions), { x: 585, y, size: 8, font: fontBold, color: rgb(0.12, 0.12, 0.12) });
+      y -= 18;
+    }
 
     const grandTickets = grouped.reduce((sum, item) => sum + item.tickets, 0);
     const grandSales = grouped.reduce((sum, item) => sum + item.sales, 0);
     const grandCommissions = grouped.reduce((sum, item) => sum + item.commissions, 0);
 
-    drawSummaryBox(page, fontBold, fontRegular, [
-      `Lignes agrégées: ${grouped.length} • Billets: ${grandTickets}`,
-      `Ventes: ${formatMoney(grandSales)} • Commissions: ${formatMoney(grandCommissions)}`,
-    ]);
-
-    let y = 424;
-    const headerX = [30, 160, 320, 410, 540];
-    page.drawRectangle({
-      x: 20,
-      y: y - 4,
-      width: 804,
-      height: 16,
-      color: rgb(0.92, 0.92, 0.92),
-      borderColor: rgb(0.7, 0.7, 0.7),
-      borderWidth: 0.7,
-    });
-    ["Jour", "Compagnie", "Billets", "Ventes", "Commissions"].forEach((header, index) => {
-      page.drawText(header, { x: headerX[index], y, size: 8, font: fontBold, color: rgb(0.1, 0.1, 0.1) });
-    });
-    y -= 14;
-
-    const dailyTotals = new Map<string, { tickets: number; sales: number; commissions: number }>();
-    grouped.forEach((item) => {
-      const current = dailyTotals.get(item.day) ?? { tickets: 0, sales: 0, commissions: 0 };
-      current.tickets += item.tickets;
-      current.sales += item.sales;
-      current.commissions += item.commissions;
-      dailyTotals.set(item.day, current);
-    });
-
-    const ensureSpace = () => {
-      if (y < 48) {
-        page = pdf.addPage([842, 595]);
-        drawPageFrame(page);
-        drawHeader(page, fontBold, fontRegular, "Rapport Synthèse", `${range.label} (suite)`);
-        drawFooter(page, fontRegular, access.session.user.name ?? access.session.user.email ?? "Utilisateur");
-        y = 424;
-        page.drawRectangle({
-          x: 20,
-          y: y - 4,
-          width: 804,
-          height: 16,
-          color: rgb(0.92, 0.92, 0.92),
-          borderColor: rgb(0.7, 0.7, 0.7),
-          borderWidth: 0.7,
-        });
-        ["Jour", "Compagnie", "Billets", "Ventes", "Commissions"].forEach((header, index) => {
-          page.drawText(header, { x: headerX[index], y, size: 8, font: fontBold, color: rgb(0.1, 0.1, 0.1) });
-        });
-        y -= 14;
-      }
-    };
-
-    let currentDay = "";
-    grouped.forEach((item, rowIndex) => {
-      if (currentDay && currentDay !== item.day) {
-        const total = dailyTotals.get(currentDay)!;
-        ensureSpace();
-        page.drawRectangle({
-          x: 20,
-          y: y - 2,
-          width: 804,
-          height: 11,
-          color: rgb(0.94, 0.94, 0.94),
-        });
-        page.drawText(`Sous-total ${currentDay}`, { x: 30, y, size: 7.5, font: fontBold });
-        page.drawText(String(total.tickets), { x: 320, y, size: 7.5, font: fontBold });
-        page.drawText(formatMoney(total.sales), { x: 410, y, size: 7.5, font: fontBold });
-        page.drawText(formatMoney(total.commissions), { x: 540, y, size: 7.5, font: fontBold });
-        y -= 12;
-      }
-
-      currentDay = item.day;
-      ensureSpace();
-      page.drawRectangle({
-        x: 20,
-        y: y - 2,
-        width: 804,
-        height: 11,
-        color: rowIndex % 2 === 0 ? rgb(0.985, 0.985, 0.985) : rgb(1, 1, 1),
-      });
-      page.drawText(item.day, { x: 30, y, size: 7.5, font: fontRegular });
-      page.drawText(item.airline, { x: 160, y, size: 7.5, font: fontRegular });
-      page.drawText(String(item.tickets), { x: 320, y, size: 7.5, font: fontRegular });
-      page.drawText(formatMoney(item.sales), { x: 410, y, size: 7.5, font: fontRegular });
-      page.drawText(formatMoney(item.commissions), { x: 540, y, size: 7.5, font: fontRegular });
-      y -= 10;
-    });
-
-    if (currentDay) {
-      const total = dailyTotals.get(currentDay)!;
-      ensureSpace();
-      page.drawRectangle({
-        x: 20,
-        y: y - 2,
-        width: 804,
-        height: 11,
-        color: rgb(0.94, 0.94, 0.94),
-      });
-      page.drawText(`Sous-total ${currentDay}`, { x: 30, y, size: 7.5, font: fontBold });
-      page.drawText(String(total.tickets), { x: 320, y, size: 7.5, font: fontBold });
-      page.drawText(formatMoney(total.sales), { x: 410, y, size: 7.5, font: fontBold });
-      page.drawText(formatMoney(total.commissions), { x: 540, y, size: 7.5, font: fontBold });
-      y -= 14;
+    if (y < 95) {
+      page = pdf.addPage([842, 595]);
+      drawTopInfo(page, fontBold, fontRegular, `${periodLabel} (totaux)`);
+      drawFooter(page, fontRegular, reportTitle);
+      y = 520;
     }
 
-    ensureSpace();
-    page.drawRectangle({
-      x: 20,
-      y: y - 6,
-      width: 804,
-      height: 18,
-      color: rgb(0.9, 0.9, 0.9),
-      borderColor: rgb(0.65, 0.65, 0.65),
-      borderWidth: 0.8,
+    page.drawLine({
+      start: { x: 26, y: y + 12 },
+      end: { x: 816, y: y + 12 },
+      thickness: 1,
+      color: rgb(0.55, 0.55, 0.55),
     });
-    page.drawText("TOTAL GÉNÉRAL", { x: 30, y, size: 9.5, font: fontBold });
-    page.drawText(String(grandTickets), { x: 320, y, size: 9.5, font: fontBold });
-    page.drawText(formatMoney(grandSales), { x: 410, y, size: 9.5, font: fontBold });
-    page.drawText(formatMoney(grandCommissions), { x: 540, y, size: 9.5, font: fontBold });
 
-    drawFooter(page, fontRegular, access.session.user.name ?? access.session.user.email ?? "Utilisateur");
+    page.drawText("TOTAL GÉNÉRAL", {
+      x: 26,
+      y,
+      size: 10,
+      font: fontBold,
+      color: rgb(0.08, 0.08, 0.08),
+    });
+    page.drawText(String(grandTickets), { x: 360, y, size: 10, font: fontBold, color: rgb(0.08, 0.08, 0.08) });
+    page.drawText(formatMoney(grandSales), { x: 455, y, size: 10, font: fontBold, color: rgb(0.08, 0.08, 0.08) });
+    page.drawText(formatMoney(grandCommissions), { x: 585, y, size: 10, font: fontBold, color: rgb(0.08, 0.08, 0.08) });
   }
 
   const bytes = await pdf.save();
