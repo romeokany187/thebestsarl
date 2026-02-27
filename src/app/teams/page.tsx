@@ -10,6 +10,13 @@ function containsAny(value: string, terms: string[]) {
   return terms.some((term) => normalized.includes(term));
 }
 
+function roleLabel(role: string) {
+  if (role === "ADMIN") return "Admin";
+  if (role === "MANAGER") return "Manager";
+  if (role === "ACCOUNTANT") return "Comptable";
+  return "Agent";
+}
+
 export default async function TeamsPage() {
   const { role } = await requirePageRoles(["ADMIN", "MANAGER", "ACCOUNTANT"]);
 
@@ -71,27 +78,42 @@ export default async function TeamsPage() {
 
         <div className="mt-4 grid gap-4 lg:grid-cols-3">
           <article className="rounded-xl border border-black/10 p-4 dark:border-white/10">
-            <p className="text-xs font-semibold uppercase tracking-wide text-black/60 dark:text-white/60">Direction générale</p>
+            <div className="flex items-center justify-between">
+              <p className="text-xs font-semibold uppercase tracking-wide text-black/60 dark:text-white/60">Direction générale</p>
+              <span className="rounded-full border border-black/15 bg-black/5 px-2 py-0.5 text-[10px] font-semibold dark:border-white/20 dark:bg-white/10">DG</span>
+            </div>
             <p className="mt-2 text-sm font-semibold">{headOffice?.name ?? "Agence de Kinshasa (Direction Générale)"}</p>
           </article>
 
           <article className="rounded-xl border border-black/10 p-4 dark:border-white/10">
-            <p className="text-xs font-semibold uppercase tracking-wide text-black/60 dark:text-white/60">Succursales</p>
-            <ul className="mt-2 space-y-1 text-sm">
+            <div className="flex items-center justify-between">
+              <p className="text-xs font-semibold uppercase tracking-wide text-black/60 dark:text-white/60">Succursales</p>
+              <span className="rounded-full border border-black/15 bg-black/5 px-2 py-0.5 text-[10px] font-semibold dark:border-white/20 dark:bg-white/10">Agence</span>
+            </div>
+            <ul className="mt-2 space-y-2 text-sm">
               {(branches.length > 0
                 ? branches.map((branch) => branch.name)
                 : ["Agence de Mbujimayi", "Agence de Lubumbashi"]
               ).map((branch) => (
-                <li key={branch}>• {branch}</li>
+                <li key={branch} className="flex items-center justify-between rounded-md border border-black/10 px-2 py-1 dark:border-white/10">
+                  <span>{branch}</span>
+                  <span className="rounded-full border border-black/15 bg-black/5 px-2 py-0.5 text-[10px] font-semibold dark:border-white/20 dark:bg-white/10">Succursale</span>
+                </li>
               ))}
             </ul>
           </article>
 
           <article className="rounded-xl border border-black/10 p-4 dark:border-white/10">
-            <p className="text-xs font-semibold uppercase tracking-wide text-black/60 dark:text-white/60">Partenaires</p>
-            <ul className="mt-2 space-y-1 text-sm">
+            <div className="flex items-center justify-between">
+              <p className="text-xs font-semibold uppercase tracking-wide text-black/60 dark:text-white/60">Partenaires</p>
+              <span className="rounded-full border border-black/15 bg-black/5 px-2 py-0.5 text-[10px] font-semibold dark:border-white/20 dark:bg-white/10">Externe</span>
+            </div>
+            <ul className="mt-2 space-y-2 text-sm">
               {displayedPartners.map((partner) => (
-                <li key={partner}>• {partner}</li>
+                <li key={partner} className="flex items-center justify-between rounded-md border border-black/10 px-2 py-1 dark:border-white/10">
+                  <span>{partner}</span>
+                  <span className="rounded-full border border-black/15 bg-black/5 px-2 py-0.5 text-[10px] font-semibold dark:border-white/20 dark:bg-white/10">Partenaire</span>
+                </li>
               ))}
             </ul>
           </article>
@@ -115,13 +137,20 @@ export default async function TeamsPage() {
       <div className="grid gap-4 lg:grid-cols-2">
         {teams.map((team) => (
           <article key={team.id} className="rounded-2xl border border-black/10 bg-white p-5 shadow-sm dark:border-white/10 dark:bg-zinc-900">
-            <h2 className="text-lg font-semibold">{team.name}</h2>
-            <p className="mt-1 text-xs text-black/60 dark:text-white/60">{team.users.length} membre(s)</p>
+            <div className="flex items-center justify-between gap-2">
+              <h2 className="text-lg font-semibold">{team.name}</h2>
+              <span className="rounded-full border border-black/15 bg-black/5 px-2 py-0.5 text-[10px] font-semibold dark:border-white/20 dark:bg-white/10">
+                {team.users.length} membre(s)
+              </span>
+            </div>
             <ul className="mt-4 space-y-2 text-sm">
               {team.users.map((user) => (
                 <li key={user.id} className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-black/10 px-3 py-2 dark:border-white/10">
                   <span className="font-medium">{user.name}</span>
-                  <span className="text-xs text-black/60 dark:text-white/60">{user.role} • {user.email}</span>
+                  <span className="inline-flex items-center gap-1 text-xs text-black/60 dark:text-white/60">
+                    <span className="rounded-full border border-black/15 bg-black/5 px-2 py-0.5 text-[10px] font-semibold dark:border-white/20 dark:bg-white/10">{roleLabel(user.role)}</span>
+                    <span>• {user.email}</span>
+                  </span>
                 </li>
               ))}
             </ul>
