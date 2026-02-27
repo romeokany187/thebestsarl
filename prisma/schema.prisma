@@ -49,6 +49,7 @@ enum AttendanceStatus {
 enum SiteType {
   OFFICE
   ASSIGNMENT
+  PARTNER
 }
 
 enum PresenceLocationStatus {

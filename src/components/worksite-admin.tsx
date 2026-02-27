@@ -5,12 +5,18 @@ import { useState } from "react";
 type Site = {
   id: string;
   name: string;
-  type: "OFFICE" | "ASSIGNMENT";
+  type: "OFFICE" | "ASSIGNMENT" | "PARTNER";
   latitude: number;
   longitude: number;
   radiusMeters: number;
   isActive: boolean;
 };
+
+function siteTypeLabel(type: Site["type"]) {
+  if (type === "OFFICE") return "Agence/Bureau";
+  if (type === "PARTNER") return "Partenaire";
+  return "Lieu d'affectation";
+}
 
 export function WorkSiteAdmin({ sites }: { sites: Site[] }) {
   const [status, setStatus] = useState("");
@@ -63,11 +69,12 @@ export function WorkSiteAdmin({ sites }: { sites: Site[] }) {
   return (
     <div className="space-y-4">
       <section className="rounded-xl border border-black/10 bg-white p-4 dark:border-white/10 dark:bg-zinc-900">
-        <h2 className="text-lg font-semibold">Ajouter un lieu d&apos;affectation</h2>
+        <h2 className="text-lg font-semibold">Ajouter une agence ou un partenaire</h2>
         <form action={createSite} className="mt-3 grid gap-3 md:grid-cols-2">
-          <input name="name" required placeholder="Nom du lieu" className="rounded-md border px-3 py-2" />
+          <input name="name" required placeholder="Nom de l'agence ou du partenaire" className="rounded-md border px-3 py-2" />
           <select name="type" defaultValue="OFFICE" className="rounded-md border px-3 py-2">
-            <option value="OFFICE">Bureau</option>
+            <option value="OFFICE">Agence / Bureau</option>
+            <option value="PARTNER">Partenaire</option>
             <option value="ASSIGNMENT">Lieu d&apos;affectation</option>
           </select>
           <input name="latitude" type="number" step="0.000001" required placeholder="Latitude" className="rounded-md border px-3 py-2" />
@@ -84,7 +91,7 @@ export function WorkSiteAdmin({ sites }: { sites: Site[] }) {
             <div key={site.id} className="rounded-md border border-black/10 p-3 dark:border-white/10">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <p className="font-semibold">{site.name}</p>
-                <span className="text-xs text-black/60 dark:text-white/60">{site.type}</span>
+                <span className="text-xs text-black/60 dark:text-white/60">{siteTypeLabel(site.type)}</span>
               </div>
               <p className="mt-1 text-xs text-black/60 dark:text-white/60">
                 {site.latitude.toFixed(6)}, {site.longitude.toFixed(6)} • Rayon {site.radiusMeters}m
