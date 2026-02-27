@@ -314,10 +314,10 @@ export default async function TicketsPage({
       </section>
 
       <div className="mb-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <KpiCard label="Total ventes" value={`${totalSales.toFixed(2)} USD`} />
-        <KpiCard label="Commissions totales" value={`${totalCommissions.toFixed(2)} USD`} />
+        <KpiCard label="Ventes totales" value={`${totalSales.toFixed(2)} USD`} />
+        <KpiCard label="Commissions" value={`${totalCommissions.toFixed(2)} USD`} />
         <KpiCard
-          label="Progression vs jour précédent"
+          label="Marge de progression"
           value={dayProgressLabel}
           hint={`J: ${selectedDayTotal.toFixed(2)} USD • J-1: ${previousDayTotal.toFixed(2)} USD`}
         />
