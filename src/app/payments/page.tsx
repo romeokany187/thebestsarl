@@ -5,18 +5,130 @@ import { PaymentEntryForm } from "@/components/payment-entry-form";
 import { requirePageRoles } from "@/lib/rbac";
 import { prisma } from "@/lib/prisma";
 
+type ReportMode = "date" | "month" | "year" | "semester";
+
+type SearchParams = {
+  mode?: string;
+  date?: string;
+  month?: string;
+  year?: string;
+  semester?: string;
+  semesterYear?: string;
+  airlineId?: string;
+};
+
+function parseYear(value?: string) {
+  if (!value) return null;
+  const parsed = Number.parseInt(value, 10);
+  if (!Number.isFinite(parsed) || parsed < 2000 || parsed > 2100) return null;
+  return parsed;
+}
+
+function dateRangeFromParams(params: SearchParams) {
+  const now = new Date();
+  const mode = (["date", "month", "year", "semester"].includes(params.mode ?? "")
+    ? params.mode
+    : "month") as ReportMode;
+
+  if (mode === "date") {
+    const rawDate = params.date;
+    const date = rawDate ? new Date(`${rawDate}T00:00:00.000Z`) : now;
+    const year = date.getUTCFullYear();
+    const month = date.getUTCMonth();
+    const day = date.getUTCDate();
+    const start = new Date(Date.UTC(year, month, day, 0, 0, 0, 0));
+    const end = new Date(Date.UTC(year, month, day + 1, 0, 0, 0, 0));
+    return {
+      mode,
+      start,
+      end,
+      label: `Rapport du ${start.toISOString().slice(0, 10)}`,
+    };
+  }
+
+  if (mode === "year") {
+    const year = parseYear(params.year) ?? now.getUTCFullYear();
+    const start = new Date(Date.UTC(year, 0, 1, 0, 0, 0, 0));
+    const end = new Date(Date.UTC(year + 1, 0, 1, 0, 0, 0, 0));
+    return {
+      mode,
+      start,
+      end,
+      label: `Rapport annuel ${year}`,
+    };
+  }
+
+  if (mode === "semester") {
+    const semester = params.semester === "2" ? 2 : 1;
+    const year = parseYear(params.semesterYear) ?? now.getUTCFullYear();
+    const startMonth = semester === 1 ? 0 : 6;
+    const endMonth = semester === 1 ? 6 : 12;
+    const start = new Date(Date.UTC(year, startMonth, 1, 0, 0, 0, 0));
+    const end = new Date(Date.UTC(year, endMonth, 1, 0, 0, 0, 0));
+    return {
+      mode,
+      start,
+      end,
+      label: `Rapport S${semester} ${year}`,
+    };
+  }
+
+  const rawMonth = params.month;
+  const monthMatch = rawMonth?.match(/^(\d{4})-(\d{2})$/);
+  const year = monthMatch ? Number.parseInt(monthMatch[1], 10) : now.getUTCFullYear();
+  const month = monthMatch ? Number.parseInt(monthMatch[2], 10) - 1 : now.getUTCMonth();
+  const safeMonth = Math.min(11, Math.max(0, month));
+  const start = new Date(Date.UTC(year, safeMonth, 1, 0, 0, 0, 0));
+  const end = new Date(Date.UTC(year, safeMonth + 1, 1, 0, 0, 0, 0));
+
+  return {
+    mode,
+    start,
+    end,
+    label: `Rapport mensuel ${start.toISOString().slice(0, 7)}`,
+  };
+}
+
 export const dynamic = "force-dynamic";
 
-export default async function PaymentsPage() {
+export default async function PaymentsPage({
+  searchParams,
+}: {
+  searchParams?: Promise<SearchParams>;
+}) {
   const { role } = await requirePageRoles(["ADMIN", "MANAGER", "ACCOUNTANT"]);
+  const resolvedSearchParams = (await searchParams) ?? {};
+  const range = dateRangeFromParams(resolvedSearchParams);
 
-  const [tickets, payments] = await Promise.all([
+  const now = new Date();
+  const currentMonth = now.toISOString().slice(0, 7);
+  const currentDate = now.toISOString().slice(0, 10);
+  const currentYear = String(now.getUTCFullYear());
+  const selectedAirlineId = resolvedSearchParams.airlineId && resolvedSearchParams.airlineId !== "ALL"
+    ? resolvedSearchParams.airlineId
+    : undefined;
+
+  const [airlines, tickets, payments] = await Promise.all([
+    prisma.airline.findMany({
+      select: { id: true, code: true, name: true },
+      orderBy: { name: "asc" },
+    }),
     prisma.ticketSale.findMany({
+      where: {
+        soldAt: { gte: range.start, lt: range.end },
+        ...(selectedAirlineId ? { airlineId: selectedAirlineId } : {}),
+      },
       include: { airline: true, payments: true },
       orderBy: { soldAt: "desc" },
-      take: 300,
+      take: 800,
     }),
     prisma.payment.findMany({
+      where: {
+        ticket: {
+          soldAt: { gte: range.start, lt: range.end },
+          ...(selectedAirlineId ? { airlineId: selectedAirlineId } : {}),
+        },
+      },
       include: {
         ticket: {
           select: {
@@ -29,7 +141,7 @@ export default async function PaymentsPage() {
         },
       },
       orderBy: { paidAt: "desc" },
-      take: 150,
+      take: 250,
     }),
   ]);
 
@@ -76,13 +188,69 @@ export default async function PaymentsPage() {
         <p className="text-sm text-black/60 dark:text-white/60">Pilotage financier des billets vendus et des paiements reçus (USD).</p>
       </section>
 
+      <section className="mb-6 rounded-2xl border border-black/10 bg-white p-4 dark:border-white/10 dark:bg-zinc-900">
+        <form method="GET" className="grid gap-3 lg:grid-cols-7 lg:items-end">
+          <div className="lg:col-span-2">
+            <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-black/60 dark:text-white/60">Type de période</label>
+            <select
+              name="mode"
+              defaultValue={range.mode}
+              className="w-full rounded-md border border-black/15 bg-white px-3 py-2 text-sm dark:border-white/15 dark:bg-zinc-900"
+            >
+              <option value="date">Date donnée</option>
+              <option value="month">Mois donné</option>
+              <option value="year">Année donnée</option>
+              <option value="semester">Semestre donné</option>
+            </select>
+          </div>
+
+          <div>
+            <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-black/60 dark:text-white/60">Date</label>
+            <input type="date" name="date" defaultValue={resolvedSearchParams.date ?? currentDate} className="w-full rounded-md border border-black/15 bg-white px-3 py-2 text-sm dark:border-white/15 dark:bg-zinc-900" />
+          </div>
+
+          <div>
+            <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-black/60 dark:text-white/60">Mois</label>
+            <input type="month" name="month" defaultValue={resolvedSearchParams.month ?? currentMonth} className="w-full rounded-md border border-black/15 bg-white px-3 py-2 text-sm dark:border-white/15 dark:bg-zinc-900" />
+          </div>
+
+          <div>
+            <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-black/60 dark:text-white/60">Année</label>
+            <input type="number" min={2000} max={2100} name="year" defaultValue={resolvedSearchParams.year ?? currentYear} className="w-full rounded-md border border-black/15 bg-white px-3 py-2 text-sm dark:border-white/15 dark:bg-zinc-900" />
+          </div>
+
+          <div className="grid grid-cols-2 gap-2">
+            <select name="semester" defaultValue={resolvedSearchParams.semester === "2" ? "2" : "1"} className="rounded-md border border-black/15 bg-white px-3 py-2 text-sm dark:border-white/15 dark:bg-zinc-900">
+              <option value="1">S1</option>
+              <option value="2">S2</option>
+            </select>
+            <input type="number" min={2000} max={2100} name="semesterYear" defaultValue={resolvedSearchParams.semesterYear ?? currentYear} className="rounded-md border border-black/15 bg-white px-3 py-2 text-sm dark:border-white/15 dark:bg-zinc-900" />
+          </div>
+
+          <div>
+            <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-black/60 dark:text-white/60">Compagnie</label>
+            <select name="airlineId" defaultValue={resolvedSearchParams.airlineId ?? "ALL"} className="w-full rounded-md border border-black/15 bg-white px-3 py-2 text-sm dark:border-white/15 dark:bg-zinc-900">
+              <option value="ALL">Toutes compagnies</option>
+              {airlines.map((airline) => (
+                <option key={airline.id} value={airline.id}>{airline.code} - {airline.name}</option>
+              ))}
+            </select>
+          </div>
+
+          <button type="submit" className="rounded-md bg-black px-4 py-2 text-sm font-semibold text-white dark:bg-white dark:text-black">Filtrer</button>
+        </form>
+        <p className="mt-3 text-xs text-black/60 dark:text-white/60">
+          {range.label} • Période du {range.start.toISOString().slice(0, 10)} au {new Date(range.end.getTime() - 1).toISOString().slice(0, 10)}
+        </p>
+      </section>
+
       <PaymentEntryForm tickets={paymentTickets} />
 
       <div className="mb-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <KpiCard label="Total facturé" value={`${totalTicketAmount.toFixed(2)} USD`} />
         <KpiCard label="Total encaissé" value={`${totalPaid.toFixed(2)} USD`} />
         <KpiCard label="Total créance" value={`${receivables.toFixed(2)} USD`} />
-        <KpiCard label="Total collecté" value={`${collectedTotal.toFixed(2)} USD`} />
+        <KpiCard label="Totaux collectés" value={`${collectedTotal.toFixed(2)} USD`} />
       </div>
 
       <div className="mb-6 overflow-hidden rounded-2xl border border-black/10 bg-white shadow-sm dark:border-white/10 dark:bg-zinc-900">
@@ -99,7 +267,7 @@ export default async function PaymentsPage() {
               </tr>
             </thead>
             <tbody>
-              {ticketsWithComputedStatus.slice(0, 120).map((ticket) => (
+              {ticketsWithComputedStatus.slice(0, 140).map((ticket) => (
                 <tr key={ticket.id} className="border-t border-black/5 dark:border-white/10">
                   <td className="px-4 py-3 font-medium">{ticket.ticketNumber}</td>
                   <td className="px-4 py-3">{ticket.customerName}</td>
@@ -113,6 +281,13 @@ export default async function PaymentsPage() {
                   </td>
                 </tr>
               ))}
+              {ticketsWithComputedStatus.length === 0 ? (
+                <tr>
+                  <td colSpan={6} className="px-4 py-8 text-center text-sm text-black/55 dark:text-white/55">
+                    Aucun billet trouvé pour ce filtre.
+                  </td>
+                </tr>
+              ) : null}
             </tbody>
           </table>
         </div>
@@ -144,6 +319,13 @@ export default async function PaymentsPage() {
                   <td className="px-4 py-3">{payment.ticket.paymentStatus}</td>
                 </tr>
               ))}
+              {payments.length === 0 ? (
+                <tr>
+                  <td colSpan={7} className="px-4 py-8 text-center text-sm text-black/55 dark:text-white/55">
+                    Aucun paiement trouvé pour ce filtre.
+                  </td>
+                </tr>
+              ) : null}
             </tbody>
           </table>
         </div>
