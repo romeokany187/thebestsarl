@@ -122,8 +122,8 @@ export default async function SalesPage() {
           </section>
         )}
 
-        <div className="rounded-xl border border-black/10 bg-white dark:border-white/10 dark:bg-zinc-900">
-          <div className="max-h-[70vh] overflow-auto">
+        <div className="overflow-hidden rounded-xl border border-black/10 bg-white dark:border-white/10 dark:bg-zinc-900">
+          <div className="h-[70vh] w-full overflow-scroll overscroll-contain">
           <table className="min-w-[1200px] text-sm">
             <thead className="bg-black/5 dark:bg-white/10">
               <tr>
