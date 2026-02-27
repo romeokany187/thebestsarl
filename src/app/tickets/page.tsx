@@ -2,6 +2,7 @@ import { AppShell } from "@/components/app-shell";
 import { KpiCard } from "@/components/kpi-card";
 import { requirePageRoles } from "@/lib/rbac";
 import { prisma } from "@/lib/prisma";
+import { ensureAirlineCatalog } from "@/lib/airline-catalog";
 
 export const dynamic = "force-dynamic";
 
@@ -95,35 +96,124 @@ export default async function TicketsPage({
 }) {
   const resolvedSearchParams = (await searchParams) ?? {};
   const range = dateRangeFromParams(resolvedSearchParams);
+  const now = new Date();
+  const currentMonth = now.toISOString().slice(0, 7);
+  const currentDate = now.toISOString().slice(0, 10);
+  const currentYear = String(now.getUTCFullYear());
   const { session, role } = await requirePageRoles(["ADMIN", "MANAGER", "EMPLOYEE", "ACCOUNTANT"]);
+  const roleTicketFilter = role === "EMPLOYEE" ? { sellerId: session.user.id } : {};
+
+  await ensureAirlineCatalog(prisma);
 
   const whereClause = {
-    ...(role === "EMPLOYEE" ? { sellerId: session.user.id } : {}),
+    ...roleTicketFilter,
     soldAt: {
       gte: range.start,
       lt: range.end,
     },
   };
 
-  const tickets = await prisma.ticketSale.findMany({
-    where: whereClause,
-    include: {
-      airline: true,
-      seller: { select: { name: true } },
-      payments: true,
-    },
-    orderBy: { soldAt: "desc" },
-    take: 250,
-  });
+  const selectedDay = new Date(range.end.getTime() - 1);
+  const selectedDayStart = new Date(Date.UTC(
+    selectedDay.getUTCFullYear(),
+    selectedDay.getUTCMonth(),
+    selectedDay.getUTCDate(),
+    0,
+    0,
+    0,
+    0,
+  ));
+  const selectedDayEnd = new Date(Date.UTC(
+    selectedDay.getUTCFullYear(),
+    selectedDay.getUTCMonth(),
+    selectedDay.getUTCDate() + 1,
+    0,
+    0,
+    0,
+    0,
+  ));
+  const previousDayStart = new Date(Date.UTC(
+    selectedDay.getUTCFullYear(),
+    selectedDay.getUTCMonth(),
+    selectedDay.getUTCDate() - 1,
+    0,
+    0,
+    0,
+    0,
+  ));
 
+  const [tickets, airlineTracking, selectedDaySales, previousDaySales] = await Promise.all([
+    prisma.ticketSale.findMany({
+      where: whereClause,
+      include: {
+        airline: true,
+        seller: { select: { name: true } },
+        payments: true,
+      },
+      orderBy: { soldAt: "desc" },
+      take: 250,
+    }),
+    prisma.airline.findMany({
+      where: { code: { in: ["CAA", "FST"] } },
+      include: { commissionRules: { where: { isActive: true } } },
+    }),
+    prisma.ticketSale.aggregate({
+      where: {
+        ...roleTicketFilter,
+        soldAt: {
+          gte: selectedDayStart,
+          lt: selectedDayEnd,
+        },
+      },
+      _sum: { amount: true },
+    }),
+    prisma.ticketSale.aggregate({
+      where: {
+        ...roleTicketFilter,
+        soldAt: {
+          gte: previousDayStart,
+          lt: selectedDayStart,
+        },
+      },
+      _sum: { amount: true },
+    }),
+  ]);
+
+  const totalSales = tickets.reduce((sum, ticket) => sum + ticket.amount, 0);
   const totalCommissions = tickets.reduce(
     (sum, ticket) => sum + (ticket.commissionAmount ?? ticket.amount * (ticket.commissionRateUsed / 100)),
     0,
   );
-  const now = new Date();
-  const currentMonth = now.toISOString().slice(0, 7);
-  const currentDate = now.toISOString().slice(0, 10);
-  const currentYear = String(now.getUTCFullYear());
+  const selectedDayTotal = selectedDaySales._sum.amount ?? 0;
+  const previousDayTotal = previousDaySales._sum.amount ?? 0;
+  const dayProgressPercent = previousDayTotal > 0
+    ? ((selectedDayTotal - previousDayTotal) / previousDayTotal) * 100
+    : selectedDayTotal > 0
+      ? 100
+      : 0;
+  const dayProgressLabel = `${dayProgressPercent >= 0 ? "+" : ""}${dayProgressPercent.toFixed(1)}%`;
+
+  const caaAirline = airlineTracking.find((airline) => airline.code === "CAA");
+  const caaRule = caaAirline?.commissionRules.find((rule) => rule.commissionMode === "AFTER_DEPOSIT");
+  const caaTargetAmount = caaRule?.depositStockTargetAmount ?? 0;
+  const caaBatchCommission = caaRule?.batchCommissionAmount ?? 0;
+  const caaConsumed = caaRule?.depositStockConsumedAmount ?? 0;
+  const caaLotsReached = caaTargetAmount > 0 ? Math.floor(caaConsumed / caaTargetAmount) : 0;
+  const caaCommissionEarned = caaLotsReached * caaBatchCommission;
+  const caaRemainder = caaTargetAmount > 0 ? caaConsumed % caaTargetAmount : 0;
+  const caaRemainingToNextLot = caaTargetAmount > 0 ? Math.max(0, caaTargetAmount - caaRemainder) : 0;
+
+  const airFastAirline = airlineTracking.find((airline) => airline.code === "FST");
+  const airFastTicketCount = airFastAirline
+    ? await prisma.ticketSale.count({
+      where: {
+        airlineId: airFastAirline.id,
+        ...roleTicketFilter,
+      },
+    })
+    : 0;
+  const airFastNextBonusIn = airFastAirline ? 13 - (airFastTicketCount % 13 || 13) : 0;
+  const airFastBonusReached = airFastAirline ? Math.floor(airFastTicketCount / 13) : 0;
 
   const accessNote =
     role === "EMPLOYEE"
@@ -224,8 +314,37 @@ export default async function TicketsPage({
       </section>
 
       <div className="mb-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <KpiCard label="Total ventes" value={`${totalSales.toFixed(2)} USD`} />
         <KpiCard label="Commissions totales" value={`${totalCommissions.toFixed(2)} USD`} />
+        <KpiCard
+          label="Progression vs jour précédent"
+          value={dayProgressLabel}
+          hint={`J: ${selectedDayTotal.toFixed(2)} USD • J-1: ${previousDayTotal.toFixed(2)} USD`}
+        />
       </div>
+
+      {(caaRule || airFastAirline) ? (
+        <section className="mb-6 rounded-2xl border border-black/10 bg-white p-3 text-xs dark:border-white/10 dark:bg-zinc-900">
+          <div className="grid gap-2 sm:grid-cols-2">
+            {caaRule ? (
+              <div className="rounded-md border border-black/10 px-3 py-2 dark:border-white/10">
+                <p className="font-semibold">Suivi CAA</p>
+                <p className="text-black/60 dark:text-white/60">
+                  Cumul: {caaConsumed.toFixed(2)} USD • Lots: {caaLotsReached} • Commission: {caaCommissionEarned.toFixed(2)} USD • Reste: {caaRemainingToNextLot.toFixed(2)} USD
+                </p>
+              </div>
+            ) : null}
+            {airFastAirline ? (
+              <div className="rounded-md border border-black/10 px-3 py-2 dark:border-white/10">
+                <p className="font-semibold">Suivi Air Fast</p>
+                <p className="text-black/60 dark:text-white/60">
+                  Billets vendus: {airFastTicketCount} • Bonus gagnés: {airFastBonusReached} • Prochain bonus dans: {airFastNextBonusIn} billet(s)
+                </p>
+              </div>
+            ) : null}
+          </div>
+        </section>
+      ) : null}
 
       <div className="overflow-hidden rounded-2xl border border-black/10 bg-white shadow-sm dark:border-white/10 dark:bg-zinc-900">
         <div className="overflow-x-auto">
