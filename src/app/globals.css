@@ -42,3 +42,53 @@ body {
 .motif-float {
   animation: floatSoft 7s ease-in-out infinite;
 }
+
+.tickets-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(24, 28, 37, 0.45) rgba(24, 28, 37, 0.12);
+}
+
+.tickets-scroll::-webkit-scrollbar {
+  width: 11px;
+  height: 11px;
+}
+
+.tickets-scroll::-webkit-scrollbar-track {
+  background: rgba(24, 28, 37, 0.1);
+  border-radius: 9999px;
+}
+
+.tickets-scroll::-webkit-scrollbar-thumb {
+  background: linear-gradient(180deg, rgba(24, 28, 37, 0.55), rgba(24, 28, 37, 0.35));
+  border: 2px solid transparent;
+  background-clip: padding-box;
+  border-radius: 9999px;
+}
+
+.tickets-scroll::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(180deg, rgba(24, 28, 37, 0.75), rgba(24, 28, 37, 0.55));
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+
+@media (prefers-color-scheme: dark) {
+  .tickets-scroll {
+    scrollbar-color: rgba(236, 239, 247, 0.38) rgba(236, 239, 247, 0.12);
+  }
+
+  .tickets-scroll::-webkit-scrollbar-track {
+    background: rgba(236, 239, 247, 0.08);
+  }
+
+  .tickets-scroll::-webkit-scrollbar-thumb {
+    background: linear-gradient(180deg, rgba(236, 239, 247, 0.45), rgba(236, 239, 247, 0.28));
+    border: 2px solid transparent;
+    background-clip: padding-box;
+  }
+
+  .tickets-scroll::-webkit-scrollbar-thumb:hover {
+    background: linear-gradient(180deg, rgba(236, 239, 247, 0.62), rgba(236, 239, 247, 0.42));
+    border: 2px solid transparent;
+    background-clip: padding-box;
+  }
+}
