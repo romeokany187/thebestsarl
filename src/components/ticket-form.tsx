@@ -37,7 +37,6 @@ export function TicketForm({
       saleNature: formData.get("saleNature"),
       paymentStatus: formData.get("paymentStatus"),
       payerName: (formData.get("payerName") || "") as string,
-      agencyMarkupPercent: formData.get("agencyMarkupPercent") ? Number(formData.get("agencyMarkupPercent")) : undefined,
       agencyMarkupAmount: formData.get("agencyMarkupAmount") ? Number(formData.get("agencyMarkupAmount")) : undefined,
       notes: formData.get("notes") || undefined,
     };
@@ -103,11 +102,7 @@ export function TicketForm({
       </div>
       <div className="grid gap-3 sm:grid-cols-2">
         <input name="currency" defaultValue="USD" required className="rounded-md border px-3 py-2" />
-        {isEthiopian ? (
-          <input name="agencyMarkupAmount" type="number" step="0.01" min="0" defaultValue="0" placeholder="Majoration Ethiopian (montant)" className="rounded-md border px-3 py-2" />
-        ) : (
-          <input name="agencyMarkupPercent" type="number" step="0.01" min="0" max="100" defaultValue="0" placeholder="Majoration agence (%)" className="rounded-md border px-3 py-2" />
-        )}
+        <input name="agencyMarkupAmount" type="number" step="0.01" min="0" defaultValue="0" placeholder="Majoration agence (montant USD)" className="rounded-md border px-3 py-2" />
       </div>
       <div className="grid gap-3 sm:grid-cols-2">
         <select

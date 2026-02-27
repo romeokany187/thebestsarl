@@ -79,7 +79,6 @@ export async function POST(request: NextRequest) {
     }
 
     const isAfterDepositMode = rule.commissionMode === CommissionMode.AFTER_DEPOSIT;
-    const agencyMarkupPercent = parsed.data.agencyMarkupPercent ?? 0;
     const agencyMarkupAmount = parsed.data.agencyMarkupAmount ?? 0;
     let commissionBaseAmount = parsed.data.baseFareAmount ?? 0;
     let commissionCalculationStatus: CommissionCalculationStatus = CommissionCalculationStatus.FINAL;
@@ -138,7 +137,7 @@ export async function POST(request: NextRequest) {
     }
 
     const commissionInputAmount = isAfterDepositMode ? parsed.data.amount : commissionBaseAmount;
-    const commission = isAirCongo
+    const baseCommission = isAirCongo
       ? {
         ratePercent: 5,
         amount: commissionBaseAmount * 0.05,
@@ -152,7 +151,17 @@ export async function POST(request: NextRequest) {
           amount: commissionBaseAmount * 0.05 + agencyMarkupAmount,
           modeApplied: CommissionMode.SYSTEM_PLUS_MARKUP,
         }
-        : computeCommissionAmount(commissionInputAmount, rule, agencyMarkupPercent);
+        : computeCommissionAmount(commissionInputAmount, rule, 0);
+
+    const commission = (isAfterDepositMode || isAirCongo)
+      ? baseCommission
+      : {
+        ...baseCommission,
+        amount: baseCommission.amount + agencyMarkupAmount,
+        ratePercent: commissionBaseAmount > 0
+          ? ((baseCommission.amount + agencyMarkupAmount) / commissionBaseAmount) * 100
+          : 0,
+      };
 
     const ticket = await prisma.$transaction(async (tx) => {
       if (
@@ -174,7 +183,6 @@ export async function POST(request: NextRequest) {
         data: {
           ...parsed.data,
           baseFareAmount,
-          agencyMarkupPercent,
           agencyMarkupAmount,
           commissionBaseAmount,
           commissionCalculationStatus,
