@@ -89,6 +89,10 @@ function dateRangeFromParams(params: SearchParams) {
   };
 }
 
+function formatCurrency(value: number) {
+  return `${value.toFixed(2)} USD`;
+}
+
 export default async function TicketsPage({
   searchParams,
 }: {
@@ -142,7 +146,7 @@ export default async function TicketsPage({
     0,
   ));
 
-  const [tickets, airlineTracking, selectedDaySales, previousDaySales] = await Promise.all([
+  const [ticketsForMetrics, tableTickets, airlineTracking, selectedDaySales, previousDaySales] = await Promise.all([
     prisma.ticketSale.findMany({
       where: whereClause,
       include: {
@@ -151,7 +155,16 @@ export default async function TicketsPage({
         payments: true,
       },
       orderBy: { soldAt: "desc" },
-      take: 250,
+    }),
+    prisma.ticketSale.findMany({
+      where: whereClause,
+      include: {
+        airline: true,
+        seller: { select: { name: true } },
+        payments: true,
+      },
+      orderBy: { soldAt: "desc" },
+      take: 120,
     }),
     prisma.airline.findMany({
       where: { code: { in: ["CAA", "FST"] } },
@@ -179,11 +192,53 @@ export default async function TicketsPage({
     }),
   ]);
 
-  const totalSales = tickets.reduce((sum, ticket) => sum + ticket.amount, 0);
-  const totalCommissions = tickets.reduce(
+  const totalSales = ticketsForMetrics.reduce((sum, ticket) => sum + ticket.amount, 0);
+  const totalCommissions = ticketsForMetrics.reduce(
     (sum, ticket) => sum + (ticket.commissionAmount ?? ticket.amount * (ticket.commissionRateUsed / 100)),
     0,
   );
+  const totalTickets = ticketsForMetrics.length;
+
+  const salesByAirline = Array.from(
+    ticketsForMetrics.reduce((map, ticket) => {
+      const key = ticket.airline.code;
+      const commission = ticket.commissionAmount ?? ticket.amount * (ticket.commissionRateUsed / 100);
+      const existing = map.get(key) ?? {
+        code: ticket.airline.code,
+        name: ticket.airline.name,
+        tickets: 0,
+        sales: 0,
+        commissions: 0,
+      };
+      existing.tickets += 1;
+      existing.sales += ticket.amount;
+      existing.commissions += commission;
+      map.set(key, existing);
+      return map;
+    }, new Map<string, { code: string; name: string; tickets: number; sales: number; commissions: number }>()),
+  ).sort((a, b) => b[1].sales - a[1].sales).map((item) => item[1]);
+
+  const dailyPerformance = Array.from(
+    ticketsForMetrics.reduce((map, ticket) => {
+      const key = new Date(ticket.soldAt).toISOString().slice(0, 10);
+      const commission = ticket.commissionAmount ?? ticket.amount * (ticket.commissionRateUsed / 100);
+      const existing = map.get(key) ?? {
+        day: key,
+        sales: 0,
+        commissions: 0,
+        tickets: 0,
+      };
+      existing.sales += ticket.amount;
+      existing.commissions += commission;
+      existing.tickets += 1;
+      map.set(key, existing);
+      return map;
+    }, new Map<string, { day: string; sales: number; commissions: number; tickets: number }>()),
+  ).sort((a, b) => a[0].localeCompare(b[0])).map((item) => item[1]);
+
+  const maxDailySales = dailyPerformance.reduce((max, point) => Math.max(max, point.sales), 0);
+  const maxDailyCommissions = dailyPerformance.reduce((max, point) => Math.max(max, point.commissions), 0);
+
   const selectedDayTotal = selectedDaySales._sum.amount ?? 0;
   const previousDayTotal = previousDaySales._sum.amount ?? 0;
   const dayProgressPercent = previousDayTotal > 0
@@ -300,12 +355,22 @@ export default async function TicketsPage({
             </div>
           </div>
 
-          <button
-            type="submit"
-            className="rounded-md bg-black px-4 py-2 text-sm font-semibold text-white dark:bg-white dark:text-black"
-          >
-            Tirer le rapport
-          </button>
+          <div className="flex gap-2">
+            <button
+              type="submit"
+              className="rounded-md bg-black px-4 py-2 text-sm font-semibold text-white dark:bg-white dark:text-black"
+            >
+              Afficher
+            </button>
+            <button
+              type="submit"
+              formAction="/api/tickets/report"
+              formTarget="_blank"
+              className="rounded-md border border-black/15 bg-white px-4 py-2 text-sm font-semibold dark:border-white/15 dark:bg-zinc-900"
+            >
+              Tirer PDF
+            </button>
+          </div>
         </form>
 
         <p className="mt-3 text-xs text-black/60 dark:text-white/60">
@@ -314,6 +379,7 @@ export default async function TicketsPage({
       </section>
 
       <div className="mb-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <KpiCard label="Billets vendus" value={String(totalTickets)} />
         <KpiCard label="Ventes totales" value={`${totalSales.toFixed(2)} USD`} />
         <KpiCard label="Commissions" value={`${totalCommissions.toFixed(2)} USD`} />
         <KpiCard
@@ -322,6 +388,68 @@ export default async function TicketsPage({
           hint={`J: ${selectedDayTotal.toFixed(2)} USD • J-1: ${previousDayTotal.toFixed(2)} USD`}
         />
       </div>
+
+      <section className="mb-6 rounded-2xl border border-black/10 bg-white p-4 dark:border-white/10 dark:bg-zinc-900">
+        <div className="mb-3 flex items-center justify-between">
+          <h2 className="text-sm font-semibold">Résumé des ventes par compagnie</h2>
+          <p className="text-xs text-black/60 dark:text-white/60">Top compagnies sur la période</p>
+        </div>
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          {salesByAirline.slice(0, 8).map((airline) => (
+            <div key={airline.code} className="rounded-xl border border-black/10 p-3 dark:border-white/10">
+              <p className="text-sm font-semibold">{airline.code}</p>
+              <p className="text-xs text-black/60 dark:text-white/60">{airline.name}</p>
+              <p className="mt-2 text-xs">Billets: <span className="font-semibold">{airline.tickets}</span></p>
+              <p className="text-xs">Ventes: <span className="font-semibold">{formatCurrency(airline.sales)}</span></p>
+              <p className="text-xs">Commission: <span className="font-semibold">{formatCurrency(airline.commissions)}</span></p>
+            </div>
+          ))}
+          {salesByAirline.length === 0 ? (
+            <div className="rounded-xl border border-black/10 p-3 text-xs text-black/55 dark:border-white/10 dark:text-white/55">
+              Aucune donnée compagnie pour cette période.
+            </div>
+          ) : null}
+        </div>
+      </section>
+
+      <section className="mb-6 rounded-2xl border border-black/10 bg-white p-4 dark:border-white/10 dark:bg-zinc-900">
+        <h2 className="mb-3 text-sm font-semibold">Moniteur de performance</h2>
+        <div className="space-y-3">
+          {dailyPerformance.map((point) => {
+            const salesWidth = maxDailySales > 0 ? (point.sales / maxDailySales) * 100 : 0;
+            const commissionWidth = maxDailyCommissions > 0 ? (point.commissions / maxDailyCommissions) * 100 : 0;
+            return (
+              <div key={point.day} className="rounded-md border border-black/10 p-3 dark:border-white/10">
+                <div className="mb-2 flex items-center justify-between text-xs">
+                  <span className="font-semibold">{point.day}</span>
+                  <span className="text-black/60 dark:text-white/60">{point.tickets} billet(s)</span>
+                </div>
+                <div className="mb-1">
+                  <div className="mb-1 flex items-center justify-between text-[11px]">
+                    <span>Ventes</span>
+                    <span>{formatCurrency(point.sales)}</span>
+                  </div>
+                  <div className="h-2 rounded-full bg-black/10 dark:bg-white/10">
+                    <div className="h-2 rounded-full bg-black dark:bg-white" style={{ width: `${salesWidth}%` }} />
+                  </div>
+                </div>
+                <div>
+                  <div className="mb-1 flex items-center justify-between text-[11px]">
+                    <span>Commissions</span>
+                    <span>{formatCurrency(point.commissions)}</span>
+                  </div>
+                  <div className="h-2 rounded-full bg-black/10 dark:bg-white/10">
+                    <div className="h-2 rounded-full bg-black/40 dark:bg-white/50" style={{ width: `${commissionWidth}%` }} />
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+          {dailyPerformance.length === 0 ? (
+            <p className="text-xs text-black/55 dark:text-white/55">Aucune performance à afficher pour cette période.</p>
+          ) : null}
+        </div>
+      </section>
 
       {(caaRule || airFastAirline) ? (
         <section className="mb-6 rounded-2xl border border-black/10 bg-white p-3 text-xs dark:border-white/10 dark:bg-zinc-900">
@@ -363,7 +491,7 @@ export default async function TicketsPage({
               </tr>
             </thead>
             <tbody>
-              {tickets.map((ticket) => {
+              {tableTickets.map((ticket) => {
                 const paidAmount = ticket.payments.reduce((sum, item) => sum + item.amount, 0);
                 const commissionAmount = ticket.commissionAmount ?? ticket.amount * (ticket.commissionRateUsed / 100);
 
@@ -385,7 +513,7 @@ export default async function TicketsPage({
                   </tr>
                 );
               })}
-              {tickets.length === 0 ? (
+              {tableTickets.length === 0 ? (
                 <tr>
                   <td colSpan={9} className="px-4 py-8 text-center text-sm text-black/55 dark:text-white/55">
                     Aucun billet trouvé pour cette période.
