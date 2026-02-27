@@ -13,12 +13,14 @@ export function TicketForm({
   airlines: AirlineOption[];
 }) {
   const [status, setStatus] = useState<string>("");
+  const [statusType, setStatusType] = useState<"idle" | "success" | "error" | "loading">("idle");
   const [selectedAirlineId, setSelectedAirlineId] = useState<string>("");
 
   const selectedAirline = airlines.find((airline) => airline.id === selectedAirlineId);
   const isAirCongo = selectedAirline?.code === "ACG";
 
   async function onSubmit(formData: FormData) {
+    setStatusType("loading");
     setStatus("Enregistrement...");
     const payload = {
       ticketNumber: formData.get("ticketNumber"),
@@ -45,9 +47,11 @@ export function TicketForm({
     });
 
     if (response.ok) {
+      setStatusType("success");
       setStatus("Vente enregistrée.");
     } else {
       const errorPayload = await response.json().catch(() => null);
+      setStatusType("error");
       setStatus(errorPayload?.error ?? "Erreur de validation.");
     }
     if (response.ok) {
@@ -138,7 +142,20 @@ export function TicketForm({
       ) : null}
       <textarea name="notes" placeholder="Notes" className="rounded-md border px-3 py-2" />
       <button className="rounded-md bg-black px-3 py-2 text-white dark:bg-white dark:text-black">Enregistrer</button>
-      <p className="text-xs text-black/60 dark:text-white/60">{status}</p>
+      {status ? (
+        <p
+          aria-live="polite"
+          className={`rounded-md px-2 py-1 text-xs ${
+            statusType === "error"
+              ? "bg-red-50 text-red-700 dark:bg-red-950/40 dark:text-red-300"
+              : statusType === "success"
+                ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300"
+                : "text-black/60 dark:text-white/60"
+          }`}
+        >
+          {status}
+        </p>
+      ) : null}
     </form>
   );
 }
