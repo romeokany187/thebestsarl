@@ -55,6 +55,7 @@ export default async function SalesPage() {
   const metrics = calculateTicketMetrics(tickets);
   const caaAirline = airlines.find((airline) => airline.code === "CAA");
   const caaRule = caaAirline?.commissionRules.find((rule) => rule.commissionMode === "AFTER_DEPOSIT");
+  const airFastAirline = airlines.find((airline) => airline.code === "FST");
   const caaTargetAmount = caaRule?.depositStockTargetAmount ?? 0;
   const caaBatchCommission = caaRule?.batchCommissionAmount ?? 0;
   const caaConsumed = caaRule?.depositStockConsumedAmount ?? 0;
@@ -62,6 +63,18 @@ export default async function SalesPage() {
   const caaCommissionEarned = caaLotsReached * caaBatchCommission;
   const caaRemainder = caaTargetAmount > 0 ? caaConsumed % caaTargetAmount : 0;
   const caaRemainingToNextLot = caaTargetAmount > 0 ? Math.max(0, caaTargetAmount - caaRemainder) : 0;
+  const airFastTicketCount = airFastAirline
+    ? await prisma.ticketSale.count({
+      where: {
+        airlineId: airFastAirline.id,
+        ...(role === "EMPLOYEE" ? { sellerId: session.user.id } : {}),
+      },
+    })
+    : 0;
+  const airFastNextBonusIn = airFastAirline
+    ? (13 - (airFastTicketCount % 13 || 13))
+    : 0;
+  const airFastBonusReached = airFastAirline ? Math.floor(airFastTicketCount / 13) : 0;
 
   return (
     <AppShell role={role} accessNote={accessNote}>
@@ -78,33 +91,6 @@ export default async function SalesPage() {
         <KpiCard label="Commission nette" value={`${metrics.netCommission.toFixed(2)} USD`} />
         <KpiCard label="Taux encaissement" value={`${(metrics.paidRatio * 100).toFixed(1)}%`} />
       </div>
-
-      {caaRule ? (
-        <section className="mb-6 rounded-xl border border-black/10 bg-white p-4 text-sm dark:border-white/10 dark:bg-zinc-900">
-          <h2 className="text-base font-semibold">Suivi CAA - paliers commission</h2>
-          <p className="mt-1 text-black/60 dark:text-white/60">
-            Chaque lot de {caaTargetAmount.toFixed(2)} USD vendus déclenche {caaBatchCommission.toFixed(2)} USD de commission.
-          </p>
-          <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            <div className="rounded-md border border-black/10 px-3 py-2 dark:border-white/10">
-              <p className="text-xs text-black/60 dark:text-white/60">Cumul ventes CAA</p>
-              <p className="font-semibold">{caaConsumed.toFixed(2)} USD</p>
-            </div>
-            <div className="rounded-md border border-black/10 px-3 py-2 dark:border-white/10">
-              <p className="text-xs text-black/60 dark:text-white/60">Lots atteints</p>
-              <p className="font-semibold">{caaLotsReached}</p>
-            </div>
-            <div className="rounded-md border border-black/10 px-3 py-2 dark:border-white/10">
-              <p className="text-xs text-black/60 dark:text-white/60">Commission cumulée</p>
-              <p className="font-semibold">{caaCommissionEarned.toFixed(2)} USD</p>
-            </div>
-            <div className="rounded-md border border-black/10 px-3 py-2 dark:border-white/10">
-              <p className="text-xs text-black/60 dark:text-white/60">Reste vers prochain lot</p>
-              <p className="font-semibold">{caaRemainingToNextLot.toFixed(2)} USD</p>
-            </div>
-          </div>
-        </section>
-      ) : null}
 
       <div className="grid gap-6 lg:grid-cols-[400px,1fr]">
         {canCreateTicket ? (
@@ -123,6 +109,28 @@ export default async function SalesPage() {
         )}
 
         <div className="overflow-hidden rounded-xl border border-black/10 bg-white dark:border-white/10 dark:bg-zinc-900">
+          {(caaRule || airFastAirline) ? (
+            <div className="border-b border-black/10 p-3 text-xs dark:border-white/10">
+              <div className="grid gap-2 sm:grid-cols-2">
+                {caaRule ? (
+                  <div className="rounded-md border border-black/10 px-3 py-2 dark:border-white/10">
+                    <p className="font-semibold">Suivi CAA</p>
+                    <p className="text-black/60 dark:text-white/60">
+                      Cumul: {caaConsumed.toFixed(2)} USD • Lots: {caaLotsReached} • Commission: {caaCommissionEarned.toFixed(2)} USD • Reste: {caaRemainingToNextLot.toFixed(2)} USD
+                    </p>
+                  </div>
+                ) : null}
+                {airFastAirline ? (
+                  <div className="rounded-md border border-black/10 px-3 py-2 dark:border-white/10">
+                    <p className="font-semibold">Suivi Air Fast</p>
+                    <p className="text-black/60 dark:text-white/60">
+                      Billets vendus: {airFastTicketCount} • Bonus gagnés: {airFastBonusReached} • Prochain bonus dans: {airFastNextBonusIn} billet(s)
+                    </p>
+                  </div>
+                ) : null}
+              </div>
+            </div>
+          ) : null}
           <div className="tickets-scroll h-[70vh] w-full overflow-scroll overscroll-contain">
           <table className="min-w-[1200px] text-sm">
             <thead className="bg-black/5 dark:bg-white/10">
