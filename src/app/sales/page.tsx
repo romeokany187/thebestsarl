@@ -131,6 +131,7 @@ export default async function SalesPage() {
                 <th className="px-3 py-2 text-left">Prix</th>
                 <th className="px-3 py-2 text-left">BaseFare</th>
                 <th className="px-3 py-2 text-left">Commission</th>
+                <th className="px-3 py-2 text-left">Net après déduction</th>
                 <th className="px-3 py-2 text-left">Nature vente</th>
                 <th className="px-3 py-2 text-left">Statut</th>
                 <th className="px-3 py-2 text-left">Payant</th>
@@ -139,6 +140,7 @@ export default async function SalesPage() {
             <tbody>
               {tickets.map((ticket) => {
                 const commissionAmount = ticket.commissionAmount ?? ticket.amount * (ticket.commissionRateUsed / 100);
+                const netAfterCommission = ticket.amount - commissionAmount;
 
                 return (
                   <tr key={ticket.id} className="border-t border-black/5 dark:border-white/10">
@@ -154,6 +156,7 @@ export default async function SalesPage() {
                         {ticket.commissionCalculationStatus === "ESTIMATED" ? "(estimée)" : "(définitive)"}
                       </span>
                     </td>
+                    <td className="px-3 py-2">{netAfterCommission.toFixed(2)} {ticket.currency}</td>
                     <td className="px-3 py-2">{saleNatureLabel(ticket.saleNature)}</td>
                     <td className="px-3 py-2">{paymentLabel(ticket.paymentStatus)}</td>
                     <td className="px-3 py-2">{ticket.payerName ?? "-"}</td>

@@ -13,6 +13,10 @@ export function TicketForm({
   airlines: AirlineOption[];
 }) {
   const [status, setStatus] = useState<string>("");
+  const [selectedAirlineId, setSelectedAirlineId] = useState<string>("");
+
+  const selectedAirline = airlines.find((airline) => airline.id === selectedAirlineId);
+  const isAirCongo = selectedAirline?.code === "ACG";
 
   async function onSubmit(formData: FormData) {
     setStatus("Enregistrement...");
@@ -40,7 +44,12 @@ export function TicketForm({
       body: JSON.stringify(payload),
     });
 
-    setStatus(response.ok ? "Vente enregistrée." : "Erreur de validation.");
+    if (response.ok) {
+      setStatus("Vente enregistrée.");
+    } else {
+      const errorPayload = await response.json().catch(() => null);
+      setStatus(errorPayload?.error ?? "Erreur de validation.");
+    }
     if (response.ok) {
       window.location.reload();
     }
@@ -76,14 +85,28 @@ export function TicketForm({
       </div>
       <div className="grid gap-3 sm:grid-cols-2">
         <input name="amount" type="number" step="0.01" min="0" required placeholder="Montant" className="rounded-md border px-3 py-2" />
-        <input name="baseFareAmount" type="number" step="0.01" min="0" placeholder="BaseFare (optionnel)" className="rounded-md border px-3 py-2" />
+        <input
+          name="baseFareAmount"
+          type="number"
+          step="0.01"
+          min="0"
+          required={isAirCongo}
+          placeholder={isAirCongo ? "BaseFare (obligatoire Air Congo)" : "BaseFare (optionnel)"}
+          className="rounded-md border px-3 py-2"
+        />
       </div>
       <div className="grid gap-3 sm:grid-cols-2">
         <input name="currency" defaultValue="EUR" required className="rounded-md border px-3 py-2" />
         <input name="agencyMarkupPercent" type="number" step="0.01" min="0" max="100" defaultValue="0" placeholder="Majoration agence (%)" className="rounded-md border px-3 py-2" />
       </div>
       <div className="grid gap-3 sm:grid-cols-2">
-        <select name="airlineId" required className="rounded-md border px-3 py-2">
+        <select
+          name="airlineId"
+          required
+          value={selectedAirlineId}
+          onChange={(event) => setSelectedAirlineId(event.target.value)}
+          className="rounded-md border px-3 py-2"
+        >
           <option value="">Compagnie</option>
           {airlines.map((airline) => (
             <option key={airline.id} value={airline.id}>
@@ -108,6 +131,11 @@ export function TicketForm({
         </select>
         <input name="payerName" placeholder="Payant (personne à recouvrer)" className="rounded-md border px-3 py-2" />
       </div>
+      {isAirCongo ? (
+        <p className="text-xs text-black/60 dark:text-white/60">
+          Air Congo: commission fixe 5% sur le BaseFare saisi.
+        </p>
+      ) : null}
       <textarea name="notes" placeholder="Notes" className="rounded-md border px-3 py-2" />
       <button className="rounded-md bg-black px-3 py-2 text-white dark:bg-white dark:text-black">Enregistrer</button>
       <p className="text-xs text-black/60 dark:text-white/60">{status}</p>

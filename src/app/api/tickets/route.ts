@@ -63,6 +63,15 @@ export async function POST(request: NextRequest) {
     }, { status: 400 });
   }
 
+  const isAirCongo = airline.code === "ACG";
+
+  if (isAirCongo && !parsed.data.baseFareAmount) {
+    return NextResponse.json(
+      { error: "Pour Air Congo, le BaseFare est obligatoire pour calculer la commission de 5%." },
+      { status: 400 },
+    );
+  }
+
   const isAfterDepositMode = rule.commissionMode === CommissionMode.AFTER_DEPOSIT;
   const agencyMarkupPercent = parsed.data.agencyMarkupPercent ?? 0;
   let commissionBaseAmount = parsed.data.baseFareAmount ?? 0;
@@ -122,7 +131,13 @@ export async function POST(request: NextRequest) {
   }
 
   const commissionInputAmount = isAfterDepositMode ? parsed.data.amount : commissionBaseAmount;
-  const commission = computeCommissionAmount(commissionInputAmount, rule, agencyMarkupPercent);
+  const commission = isAirCongo
+    ? {
+      ratePercent: 5,
+      amount: commissionBaseAmount * 0.05,
+      modeApplied: CommissionMode.IMMEDIATE,
+    }
+    : computeCommissionAmount(commissionInputAmount, rule, agencyMarkupPercent);
 
   const ticket = await prisma.$transaction(async (tx) => {
     if (
