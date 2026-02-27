@@ -18,7 +18,9 @@ export function TicketForm({
 
   const selectedAirline = airlines.find((airline) => airline.id === selectedAirlineId);
   const isAirCongo = selectedAirline?.code === "ACG";
+  const isMontGabaon = selectedAirline?.code === "MGB";
   const isEthiopian = selectedAirline?.code === "ET";
+  const isAirFast = selectedAirline?.code === "FST";
 
   async function onSubmit(formData: FormData) {
     setStatusType("loading");
@@ -95,8 +97,8 @@ export function TicketForm({
           type="number"
           step="0.01"
           min="0"
-          required={isAirCongo || isEthiopian}
-          placeholder={isAirCongo || isEthiopian ? "BaseFare (obligatoire)" : "BaseFare (optionnel)"}
+          required={isAirCongo || isMontGabaon || isEthiopian}
+          placeholder={isAirCongo || isMontGabaon || isEthiopian ? "BaseFare (obligatoire)" : "BaseFare (optionnel)"}
           className="rounded-md border px-3 py-2"
         />
       </div>
@@ -141,9 +143,19 @@ export function TicketForm({
           Air Congo: commission fixe 5% sur le BaseFare saisi.
         </p>
       ) : null}
+      {isMontGabaon ? (
+        <p className="text-xs text-black/60 dark:text-white/60">
+          Mont Gabaon: commission fixe 9% sur le BaseFare saisi.
+        </p>
+      ) : null}
       {isEthiopian ? (
         <p className="text-xs text-black/60 dark:text-white/60">
           Ethiopian: commission = 5% du BaseFare + majoration (montant).
+        </p>
+      ) : null}
+      {isAirFast ? (
+        <p className="text-xs text-black/60 dark:text-white/60">
+          Air Fast: après 12 billets vendus, le 13ème est compté comme commission.
         </p>
       ) : null}
       <textarea name="notes" placeholder="Notes" className="rounded-md border px-3 py-2" />

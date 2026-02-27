@@ -18,6 +18,21 @@ type Props = {
 
 export function TicketRowActions({ ticket }: Props) {
   const [status, setStatus] = useState<string>("");
+  const [editing, setEditing] = useState(false);
+  const [form, setForm] = useState({
+    customerName: ticket.customerName,
+    route: ticket.route,
+    amount: String(ticket.amount),
+    baseFareAmount: ticket.baseFareAmount ? String(ticket.baseFareAmount) : "",
+    agencyMarkupAmount: String(ticket.agencyMarkupAmount ?? 0),
+    paymentStatus: ticket.paymentStatus,
+    payerName: ticket.payerName ?? "",
+    notes: ticket.notes ?? "",
+  });
+
+  function updateField<K extends keyof typeof form>(key: K, value: (typeof form)[K]) {
+    setForm((prev) => ({ ...prev, [key]: value }));
+  }
 
   async function deleteTicket() {
     const ok = window.confirm("Supprimer ce billet ?");
@@ -38,39 +53,34 @@ export function TicketRowActions({ ticket }: Props) {
   }
 
   async function editTicket() {
-    const customerName = window.prompt("Client", ticket.customerName);
-    if (customerName === null) return;
+    const amount = Number(form.amount);
+    const markup = Number(form.agencyMarkupAmount);
+    const baseFare = form.baseFareAmount.trim() ? Number(form.baseFareAmount) : undefined;
 
-    const route = window.prompt("Itinéraire", ticket.route);
-    if (route === null) return;
+    if (!Number.isFinite(amount) || amount <= 0) {
+      setStatus("Montant billet invalide.");
+      return;
+    }
 
-    const amountRaw = window.prompt("Montant billet", String(ticket.amount));
-    if (amountRaw === null) return;
+    if (!Number.isFinite(markup) || markup < 0) {
+      setStatus("Majoration invalide.");
+      return;
+    }
 
-    const baseFareRaw = window.prompt("BaseFare (laisser vide si non modifié)", ticket.baseFareAmount ? String(ticket.baseFareAmount) : "");
-    if (baseFareRaw === null) return;
-
-    const markupRaw = window.prompt("Majoration agence (montant)", String(ticket.agencyMarkupAmount ?? 0));
-    if (markupRaw === null) return;
-
-    const paymentStatus = window.prompt("Statut paiement: PAID | UNPAID | PARTIAL", ticket.paymentStatus);
-    if (paymentStatus === null) return;
-
-    const payerName = window.prompt("Payant", ticket.payerName ?? "");
-    if (payerName === null) return;
-
-    const notes = window.prompt("Notes", ticket.notes ?? "");
-    if (notes === null) return;
+    if (baseFare !== undefined && (!Number.isFinite(baseFare) || baseFare <= 0)) {
+      setStatus("BaseFare invalide.");
+      return;
+    }
 
     const payload = {
-      customerName,
-      route,
-      amount: Number(amountRaw),
-      ...(baseFareRaw.trim() ? { baseFareAmount: Number(baseFareRaw) } : {}),
-      agencyMarkupAmount: Number(markupRaw),
-      paymentStatus,
-      payerName,
-      notes,
+      customerName: form.customerName,
+      route: form.route,
+      amount,
+      ...(baseFare !== undefined ? { baseFareAmount: baseFare } : {}),
+      agencyMarkupAmount: markup,
+      paymentStatus: form.paymentStatus,
+      payerName: form.payerName,
+      notes: form.notes,
     };
 
     setStatus("Mise à jour...");
@@ -87,6 +97,7 @@ export function TicketRowActions({ ticket }: Props) {
     }
 
     setStatus("Billet modifié.");
+    setEditing(false);
     window.location.reload();
   }
 
@@ -95,10 +106,10 @@ export function TicketRowActions({ ticket }: Props) {
       <div className="flex gap-2">
         <button
           type="button"
-          onClick={editTicket}
+          onClick={() => setEditing((value) => !value)}
           className="rounded-md border border-black/15 px-2 py-1 text-xs hover:bg-black/5 dark:border-white/20 dark:hover:bg-white/10"
         >
-          Modifier
+          {editing ? "Fermer" : "Modifier"}
         </button>
         <button
           type="button"
@@ -108,6 +119,81 @@ export function TicketRowActions({ ticket }: Props) {
           Supprimer
         </button>
       </div>
+      {editing ? (
+        <div className="grid gap-2 rounded-md border border-black/10 p-2 text-xs dark:border-white/10">
+          <input
+            value={form.customerName}
+            onChange={(event) => updateField("customerName", event.target.value)}
+            placeholder="Client"
+            className="rounded-md border px-2 py-1"
+          />
+          <input
+            value={form.route}
+            onChange={(event) => updateField("route", event.target.value)}
+            placeholder="Itinéraire"
+            className="rounded-md border px-2 py-1"
+          />
+          <div className="grid grid-cols-2 gap-2">
+            <input
+              value={form.amount}
+              onChange={(event) => updateField("amount", event.target.value)}
+              type="number"
+              step="0.01"
+              min="0"
+              placeholder="Montant"
+              className="rounded-md border px-2 py-1"
+            />
+            <input
+              value={form.baseFareAmount}
+              onChange={(event) => updateField("baseFareAmount", event.target.value)}
+              type="number"
+              step="0.01"
+              min="0"
+              placeholder="BaseFare"
+              className="rounded-md border px-2 py-1"
+            />
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            <input
+              value={form.agencyMarkupAmount}
+              onChange={(event) => updateField("agencyMarkupAmount", event.target.value)}
+              type="number"
+              step="0.01"
+              min="0"
+              placeholder="Majoration"
+              className="rounded-md border px-2 py-1"
+            />
+            <select
+              value={form.paymentStatus}
+              onChange={(event) => updateField("paymentStatus", event.target.value as Props["ticket"]["paymentStatus"])}
+              className="rounded-md border px-2 py-1"
+            >
+              <option value="PAID">PAID</option>
+              <option value="PARTIAL">PARTIAL</option>
+              <option value="UNPAID">UNPAID</option>
+            </select>
+          </div>
+          <input
+            value={form.payerName}
+            onChange={(event) => updateField("payerName", event.target.value)}
+            placeholder="Payant"
+            className="rounded-md border px-2 py-1"
+          />
+          <textarea
+            value={form.notes}
+            onChange={(event) => updateField("notes", event.target.value)}
+            placeholder="Notes"
+            className="rounded-md border px-2 py-1"
+          />
+          <button
+            type="button"
+            onClick={editTicket}
+            className="rounded-md bg-black px-2 py-1 text-xs font-semibold text-white dark:bg-white dark:text-black"
+          >
+            Enregistrer la modification
+          </button>
+        </div>
+      ) : null}
       {status ? <p className="text-[10px] text-black/55 dark:text-white/55">{status}</p> : null}
     </div>
   );

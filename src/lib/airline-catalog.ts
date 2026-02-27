@@ -21,10 +21,10 @@ type CatalogAirline = {
 const STARTS_AT = new Date();
 
 const IMMEDIATE_DEFAULT: CatalogRule = {
-  ratePercent: 7,
+  ratePercent: 0,
   routePattern: "*",
-  commissionMode: CommissionMode.IMMEDIATE,
-  systemRatePercent: 7,
+  commissionMode: CommissionMode.MARKUP_ONLY,
+  systemRatePercent: 0,
   markupRatePercent: 0,
   defaultBaseFareRatio: 0.6,
 };
@@ -65,10 +65,10 @@ export const AIRLINE_CATALOG: CatalogAirline[] = [
     name: "Mont Gabaon",
     rules: [
       {
-        ratePercent: 5,
+        ratePercent: 9,
         routePattern: "*",
         commissionMode: CommissionMode.IMMEDIATE,
-        systemRatePercent: 5,
+        systemRatePercent: 9,
         markupRatePercent: 0,
         defaultBaseFareRatio: 0.62,
       },
@@ -81,9 +81,9 @@ export const AIRLINE_CATALOG: CatalogAirline[] = [
       {
         ratePercent: 0,
         routePattern: "*",
-        commissionMode: CommissionMode.MARKUP_ONLY,
+        commissionMode: CommissionMode.IMMEDIATE,
         systemRatePercent: 0,
-        markupRatePercent: 6,
+        markupRatePercent: 0,
         defaultBaseFareRatio: 0.55,
       },
     ],
@@ -107,11 +107,11 @@ export const AIRLINE_CATALOG: CatalogAirline[] = [
     name: "Kenya Airways",
     rules: [
       {
-        ratePercent: 5,
+        ratePercent: 0,
         routePattern: "*",
-        commissionMode: CommissionMode.SYSTEM_PLUS_MARKUP,
-        systemRatePercent: 5,
-        markupRatePercent: 2,
+        commissionMode: CommissionMode.MARKUP_ONLY,
+        systemRatePercent: 0,
+        markupRatePercent: 0,
         defaultBaseFareRatio: 0.55,
       },
     ],
@@ -149,10 +149,10 @@ export const AIRLINE_CATALOG: CatalogAirline[] = [
     name: "Air France",
     rules: [
       {
-        ratePercent: 7.5,
+        ratePercent: 0,
         routePattern: "*",
-        commissionMode: CommissionMode.IMMEDIATE,
-        systemRatePercent: 7.5,
+        commissionMode: CommissionMode.MARKUP_ONLY,
+        systemRatePercent: 0,
         markupRatePercent: 0,
         defaultBaseFareRatio: 0.6,
       },

@@ -69,11 +69,13 @@ export async function POST(request: NextRequest) {
     }
 
     const isAirCongo = airline.code === "ACG";
+    const isMontGabaon = airline.code === "MGB";
     const isEthiopian = airline.code === "ET";
+    const isAirFast = airline.code === "FST";
 
-    if ((isAirCongo || isEthiopian) && !parsed.data.baseFareAmount) {
+    if ((isAirCongo || isMontGabaon || isEthiopian) && !parsed.data.baseFareAmount) {
       return NextResponse.json(
-        { error: "Pour Air Congo et Ethiopian, le BaseFare est obligatoire pour calculer la commission." },
+        { error: "Pour Air Congo, Mont Gabaon et Ethiopian, le BaseFare est obligatoire pour calculer la commission." },
         { status: 400 },
       );
     }
@@ -137,12 +139,22 @@ export async function POST(request: NextRequest) {
     }
 
     const commissionInputAmount = isAfterDepositMode ? parsed.data.amount : commissionBaseAmount;
+    const nextAirFastSaleNumber = isAirFast
+      ? (await prisma.ticketSale.count({ where: { airlineId: parsed.data.airlineId } })) + 1
+      : 0;
+
     const baseCommission = isAirCongo
       ? {
         ratePercent: 5,
         amount: commissionBaseAmount * 0.05,
         modeApplied: CommissionMode.IMMEDIATE,
       }
+      : isMontGabaon
+        ? {
+          ratePercent: 9,
+          amount: commissionBaseAmount * 0.09,
+          modeApplied: CommissionMode.IMMEDIATE,
+        }
       : isEthiopian
         ? {
           ratePercent: commissionBaseAmount > 0
@@ -151,9 +163,15 @@ export async function POST(request: NextRequest) {
           amount: commissionBaseAmount * 0.05 + agencyMarkupAmount,
           modeApplied: CommissionMode.SYSTEM_PLUS_MARKUP,
         }
+        : isAirFast
+          ? {
+            ratePercent: nextAirFastSaleNumber % 13 === 0 ? 100 : 0,
+            amount: nextAirFastSaleNumber % 13 === 0 ? parsed.data.amount : 0,
+            modeApplied: CommissionMode.IMMEDIATE,
+          }
         : computeCommissionAmount(commissionInputAmount, rule, 0);
 
-    const commission = (isAfterDepositMode || isAirCongo)
+    const commission = (isAfterDepositMode || isAirCongo || isMontGabaon || isEthiopian || isAirFast)
       ? baseCommission
       : {
         ...baseCommission,
