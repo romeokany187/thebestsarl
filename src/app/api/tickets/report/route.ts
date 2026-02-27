@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { PDFDocument, PDFFont, PDFPage, StandardFonts, rgb } from "pdf-lib";
+import { PDFDocument, PDFFont, PDFImage, PDFPage, StandardFonts, rgb } from "pdf-lib";
 import fontkit from "@pdf-lib/fontkit";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
@@ -69,14 +69,41 @@ function formatMoney(value: number) {
   return `${value.toFixed(2)} USD`;
 }
 
-function drawFooter(page: PDFPage, fontRegular: PDFFont, reportTitle: string) {
+async function readFirstExistingFile(candidates: string[]) {
+  for (const candidate of candidates) {
+    try {
+      const bytes = await readFile(path.join(process.cwd(), candidate));
+      return { bytes, path: candidate };
+    } catch {
+      continue;
+    }
+  }
+  return null;
+}
+
+async function embedOptionalImage(pdf: PDFDocument, candidates: string[]) {
+  const file = await readFirstExistingFile(candidates);
+  if (!file) return null;
+
+  const lower = file.path.toLowerCase();
+  if (lower.endsWith(".png")) {
+    return pdf.embedPng(file.bytes);
+  }
+  if (lower.endsWith(".jpg") || lower.endsWith(".jpeg")) {
+    return pdf.embedJpg(file.bytes);
+  }
+
+  return null;
+}
+
+function drawFooter(page: PDFPage, fontRegular: PDFFont, reportTitle: string, generatedBy: string) {
   const { width } = page.getSize();
-  page.drawText("THE BEST SARL", {
+  page.drawText(`Imprimé par: ${generatedBy}`, {
     x: 26,
     y: 24,
     size: 9,
     font: fontRegular,
-    color: rgb(0.2, 0.2, 0.2),
+    color: rgb(0.25, 0.25, 0.25),
   });
 
   const rightTextWidth = fontRegular.widthOfTextAtSize(reportTitle, 9);
@@ -85,26 +112,90 @@ function drawFooter(page: PDFPage, fontRegular: PDFFont, reportTitle: string) {
     y: 24,
     size: 9,
     font: fontRegular,
-    color: rgb(0.2, 0.2, 0.2),
+    color: rgb(0.25, 0.25, 0.25),
   });
 }
 
-function drawTopInfo(page: PDFPage, fontBold: PDFFont, fontRegular: PDFFont, subtitle: string) {
-  page.drawText("RAPPORT DE VENTES BILLETS", {
-    x: 26,
+function drawTopInfo(
+  page: PDFPage,
+  fontBold: PDFFont,
+  fontRegular: PDFFont,
+  subtitle: string,
+  logoImage: PDFImage | null,
+) {
+  if (logoImage) {
+    const scaled = logoImage.scale(0.14);
+    page.drawImage(logoImage, {
+      x: 26,
+      y: 534,
+      width: scaled.width,
+      height: scaled.height,
+    });
+  }
+
+  const titleX = logoImage ? 106 : 26;
+
+  page.drawText("THE BEST SARL", {
+    x: titleX,
     y: 560,
-    size: 13,
+    size: 14,
     font: fontBold,
     color: rgb(0.08, 0.08, 0.08),
   });
 
-  page.drawText(subtitle, {
-    x: 26,
+  page.drawText("RAPPORT DE VENTES BILLETS", {
+    x: titleX,
     y: 545,
     size: 9,
+    font: fontBold,
+    color: rgb(0.22, 0.22, 0.22),
+  });
+
+  page.drawText(subtitle, {
+    x: titleX,
+    y: 532,
+    size: 8.5,
     font: fontRegular,
     color: rgb(0.32, 0.32, 0.32),
   });
+
+  page.drawLine({
+    start: { x: 26, y: 522 },
+    end: { x: 816, y: 522 },
+    thickness: 0.8,
+    color: rgb(0.75, 0.75, 0.75),
+  });
+}
+
+function drawSignature(page: PDFPage, signatureImage: PDFImage | null, fontRegular: PDFFont) {
+  const { width } = page.getSize();
+  const baseX = width - 220;
+  const baseY = 46;
+
+  page.drawText("Signature", {
+    x: baseX,
+    y: baseY + 24,
+    size: 8,
+    font: fontRegular,
+    color: rgb(0.3, 0.3, 0.3),
+  });
+
+  page.drawLine({
+    start: { x: baseX, y: baseY + 18 },
+    end: { x: width - 36, y: baseY + 18 },
+    thickness: 0.8,
+    color: rgb(0.72, 0.72, 0.72),
+  });
+
+  if (signatureImage) {
+    const scaled = signatureImage.scale(0.2);
+    page.drawImage(signatureImage, {
+      x: baseX + 2,
+      y: baseY,
+      width: Math.min(scaled.width, 170),
+      height: Math.min(scaled.height, 34),
+    });
+  }
 }
 
 export async function GET(request: NextRequest) {
@@ -148,17 +239,36 @@ export async function GET(request: NextRequest) {
   }
 
   const periodLabel = `${range.label} • ${range.start.toISOString().slice(0, 10)} au ${new Date(range.end.getTime() - 1).toISOString().slice(0, 10)}`;
+  const logoImage = await embedOptionalImage(pdf, [
+    "public/branding/logo.png",
+    "public/branding/logo.jpg",
+    "public/branding/logo.jpeg",
+    "public/logo.png",
+    "public/logo.jpg",
+    "public/logo.jpeg",
+  ]);
+  const signatureImage = await embedOptionalImage(pdf, [
+    "public/branding/signature.png",
+    "public/branding/signature.jpg",
+    "public/branding/signature.jpeg",
+    "public/signature.png",
+    "public/signature.jpg",
+    "public/signature.jpeg",
+  ]);
+  const generatedBy = access.session.user.name ?? access.session.user.email ?? "Compte inconnu";
+  const generatedByWithRole = `${generatedBy} (${access.role})`;
 
   if (range.mode === "date") {
     const reportTitle = "Rapport Journalier";
     let page = pdf.addPage([842, 595]);
-    drawTopInfo(page, fontBold, fontRegular, periodLabel);
-    drawFooter(page, fontRegular, reportTitle);
+    drawTopInfo(page, fontBold, fontRegular, periodLabel, logoImage);
+    drawFooter(page, fontRegular, reportTitle, generatedByWithRole);
+    drawSignature(page, signatureImage, fontRegular);
 
     const headers = ["Date", "Émetteur", "Compagnie", "PNR", "Itinéraire", "Prix", "BaseFare", "Commission", "Nature", "Statut", "Payant"];
     const headerX = [26, 84, 160, 218, 278, 386, 454, 518, 578, 640, 708];
 
-    let y = 520;
+    let y = 504;
     headers.forEach((header, index) => {
       page.drawText(header, {
         x: headerX[index],
@@ -179,9 +289,10 @@ export async function GET(request: NextRequest) {
     const ensureSpace = () => {
       if (y < 70) {
         page = pdf.addPage([842, 595]);
-        drawTopInfo(page, fontBold, fontRegular, `${periodLabel} (suite)`);
-        drawFooter(page, fontRegular, reportTitle);
-        y = 520;
+        drawTopInfo(page, fontBold, fontRegular, `${periodLabel} (suite)`, logoImage);
+        drawFooter(page, fontRegular, reportTitle, generatedByWithRole);
+        drawSignature(page, signatureImage, fontRegular);
+        y = 504;
         headers.forEach((header, index) => {
           page.drawText(header, {
             x: headerX[index],
@@ -239,9 +350,10 @@ export async function GET(request: NextRequest) {
 
     if (y < 90) {
       page = pdf.addPage([842, 595]);
-      drawTopInfo(page, fontBold, fontRegular, `${periodLabel} (totaux)`);
-      drawFooter(page, fontRegular, reportTitle);
-      y = 520;
+      drawTopInfo(page, fontBold, fontRegular, `${periodLabel} (totaux)`, logoImage);
+      drawFooter(page, fontRegular, reportTitle, generatedByWithRole);
+      drawSignature(page, signatureImage, fontRegular);
+      y = 504;
     }
 
     y -= 14;
@@ -261,8 +373,9 @@ export async function GET(request: NextRequest) {
   } else {
     const reportTitle = "Rapport Synthèse";
     let page = pdf.addPage([842, 595]);
-    drawTopInfo(page, fontBold, fontRegular, periodLabel);
-    drawFooter(page, fontRegular, reportTitle);
+    drawTopInfo(page, fontBold, fontRegular, periodLabel, logoImage);
+    drawFooter(page, fontRegular, reportTitle, generatedByWithRole);
+    drawSignature(page, signatureImage, fontRegular);
 
     const grouped = Array.from(
       tickets.reduce((map, ticket) => {
@@ -296,7 +409,7 @@ export async function GET(request: NextRequest) {
     const headers = ["Jour", "Compagnie", "Billets", "Ventes", "Commissions"];
     const headerX = [26, 190, 360, 455, 585];
 
-    let y = 520;
+    let y = 504;
     headers.forEach((header, index) => {
       page.drawText(header, {
         x: headerX[index],
@@ -317,9 +430,10 @@ export async function GET(request: NextRequest) {
     const ensureSpace = () => {
       if (y < 80) {
         page = pdf.addPage([842, 595]);
-        drawTopInfo(page, fontBold, fontRegular, `${periodLabel} (suite)`);
-        drawFooter(page, fontRegular, reportTitle);
-        y = 520;
+        drawTopInfo(page, fontBold, fontRegular, `${periodLabel} (suite)`, logoImage);
+        drawFooter(page, fontRegular, reportTitle, generatedByWithRole);
+        drawSignature(page, signatureImage, fontRegular);
+        y = 504;
         headers.forEach((header, index) => {
           page.drawText(header, {
             x: headerX[index],
@@ -389,9 +503,10 @@ export async function GET(request: NextRequest) {
 
     if (y < 95) {
       page = pdf.addPage([842, 595]);
-      drawTopInfo(page, fontBold, fontRegular, `${periodLabel} (totaux)`);
-      drawFooter(page, fontRegular, reportTitle);
-      y = 520;
+      drawTopInfo(page, fontBold, fontRegular, `${periodLabel} (totaux)`, logoImage);
+      drawFooter(page, fontRegular, reportTitle, generatedByWithRole);
+      drawSignature(page, signatureImage, fontRegular);
+      y = 504;
     }
 
     page.drawLine({
