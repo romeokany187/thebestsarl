@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { PDFDocument, PDFFont, PDFPage, StandardFonts, rgb } from "pdf-lib";
+import fontkit from "@pdf-lib/fontkit";
+import { readFile } from "node:fs/promises";
+import path from "node:path";
 import { prisma } from "@/lib/prisma";
 import { requireApiRoles } from "@/lib/rbac";
 
@@ -129,8 +132,20 @@ export async function GET(request: NextRequest) {
   });
 
   const pdf = await PDFDocument.create();
-  const fontRegular = await pdf.embedFont(StandardFonts.Helvetica);
-  const fontBold = await pdf.embedFont(StandardFonts.HelveticaBold);
+  pdf.registerFontkit(fontkit);
+
+  let fontRegular: PDFFont;
+  let fontBold: PDFFont;
+
+  try {
+    const regularBytes = await readFile(path.join(process.cwd(), "public/fonts/Montserrat-Regular.ttf"));
+    const boldBytes = await readFile(path.join(process.cwd(), "public/fonts/Montserrat-Bold.ttf"));
+    fontRegular = await pdf.embedFont(regularBytes);
+    fontBold = await pdf.embedFont(boldBytes);
+  } catch {
+    fontRegular = await pdf.embedFont(StandardFonts.Helvetica);
+    fontBold = await pdf.embedFont(StandardFonts.HelveticaBold);
+  }
 
   const periodLabel = `${range.label} • ${range.start.toISOString().slice(0, 10)} au ${new Date(range.end.getTime() - 1).toISOString().slice(0, 10)}`;
 
