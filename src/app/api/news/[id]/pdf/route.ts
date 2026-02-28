@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { PDFDocument, PDFFont, PDFImage, PDFPage, StandardFonts, rgb } from "pdf-lib";
+import { PDFDocument, PDFFont, PDFImage, PDFPage, rgb } from "pdf-lib";
 import fontkit from "@pdf-lib/fontkit";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
@@ -258,8 +258,10 @@ export async function GET(_request: NextRequest, context: RouteContext) {
     fontRegular = await pdf.embedFont(regularBytes);
     fontBold = await pdf.embedFont(boldBytes);
   } catch {
-    fontRegular = await pdf.embedFont(StandardFonts.Helvetica);
-    fontBold = await pdf.embedFont(StandardFonts.HelveticaBold);
+    return NextResponse.json(
+      { error: "Police Montserrat introuvable. Vérifiez public/fonts/Montserrat-Regular.ttf et Montserrat-Bold.ttf." },
+      { status: 500 },
+    );
   }
 
   const logoImage = await embedOptionalImage(pdf, [

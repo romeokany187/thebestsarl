@@ -105,6 +105,7 @@ export default async function ReportPrintPage({ params }: PageProps) {
           .print-card { box-shadow: none !important; border-color: #ffffff !important; }
         }
         .print-card { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+        .print-card, .print-card * { font-family: 'Montserrat', Arial, sans-serif !important; }
       `}</style>
 
       <div className="mx-auto w-full max-w-4xl bg-white px-8 py-6 print-card" style={{ fontFamily: "Montserrat, Arial, sans-serif" }}>
