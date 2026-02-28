@@ -71,6 +71,23 @@ async function main() {
     },
   });
 
+  const procurementOfficer = await prisma.user.upsert({
+    where: { email: "appro@thebestsarl.com" },
+    update: {
+      jobTitle: JobTitle.APPROVISIONNEMENT_MARKETING,
+      role: Role.EMPLOYEE,
+      teamId: opsTeam.id,
+    },
+    create: {
+      name: "Chargé Approvisionnement",
+      email: "appro@thebestsarl.com",
+      passwordHash,
+      role: Role.EMPLOYEE,
+      jobTitle: JobTitle.APPROVISIONNEMENT_MARKETING,
+      teamId: opsTeam.id,
+    },
+  });
+
   const airFrance = await prisma.airline.upsert({
     where: { code: "AF" },
     update: {},
@@ -335,6 +352,215 @@ async function main() {
       payload: { users: [admin.email, manager.email, employee.email, accountant.email] },
     },
   });
+
+  const approvedNeed = await prisma.needRequest.findFirst({
+    where: {
+      requesterId: procurementOfficer.id,
+      title: "Achat consommables bureau T1",
+    },
+  });
+
+  const approvedNeedRequest = approvedNeed
+    ? await prisma.needRequest.update({
+        where: { id: approvedNeed.id },
+        data: {
+          category: "Fournitures de bureau",
+          details: "Ramettes A4, stylos, chemises cartonnées, classeurs.",
+          quantity: 40,
+          unit: "lot",
+          status: "APPROVED",
+          reviewedById: admin.id,
+          reviewComment: "Besoin validé pour continuité des opérations.",
+          submittedAt: approvedNeed.submittedAt ?? new Date(),
+          reviewedAt: new Date(),
+          approvedAt: new Date(),
+          sealedAt: new Date(),
+        },
+      })
+    : await prisma.needRequest.create({
+        data: {
+          title: "Achat consommables bureau T1",
+          category: "Fournitures de bureau",
+          details: "Ramettes A4, stylos, chemises cartonnées, classeurs.",
+          quantity: 40,
+          unit: "lot",
+          status: "APPROVED",
+          requesterId: procurementOfficer.id,
+          reviewedById: admin.id,
+          reviewComment: "Besoin validé pour continuité des opérations.",
+          submittedAt: new Date(),
+          reviewedAt: new Date(),
+          approvedAt: new Date(),
+          sealedAt: new Date(),
+        },
+      });
+
+  const pendingNeed = await prisma.needRequest.findFirst({
+    where: {
+      requesterId: procurementOfficer.id,
+      title: "Renouvellement kits imprimante",
+    },
+  });
+
+  if (!pendingNeed) {
+    await prisma.needRequest.create({
+      data: {
+        title: "Renouvellement kits imprimante",
+        category: "Consommables IT",
+        details: "Toners et tambours pour imprimantes administration et caisse.",
+        quantity: 12,
+        unit: "pièce",
+        status: "SUBMITTED",
+        requesterId: procurementOfficer.id,
+        submittedAt: new Date(),
+      },
+    });
+  }
+
+  const paperStock = await prisma.stockItem.upsert({
+    where: {
+      name_category_unit: {
+        name: "Ramette A4",
+        category: "Fournitures de bureau",
+        unit: "paquet",
+      },
+    },
+    update: {},
+    create: {
+      name: "Ramette A4",
+      category: "Fournitures de bureau",
+      unit: "paquet",
+      currentQuantity: 0,
+    },
+  });
+
+  const markerStock = await prisma.stockItem.upsert({
+    where: {
+      name_category_unit: {
+        name: "Marqueur tableau",
+        category: "Fournitures de bureau",
+        unit: "pièce",
+      },
+    },
+    update: {},
+    create: {
+      name: "Marqueur tableau",
+      category: "Fournitures de bureau",
+      unit: "pièce",
+      currentQuantity: 0,
+    },
+  });
+
+  const initialPaperIn = await prisma.stockMovement.findFirst({
+    where: {
+      stockItemId: paperStock.id,
+      movementType: "IN",
+      referenceDoc: "BL-APPRO-001",
+    },
+  });
+
+  if (!initialPaperIn) {
+    await prisma.stockMovement.create({
+      data: {
+        stockItemId: paperStock.id,
+        movementType: "IN",
+        quantity: 80,
+        justification: "Réception achat validé consommables bureau T1",
+        referenceDoc: "BL-APPRO-001",
+        performedById: procurementOfficer.id,
+        needRequestId: approvedNeedRequest.id,
+      },
+    });
+  }
+
+  const paperOut = await prisma.stockMovement.findFirst({
+    where: {
+      stockItemId: paperStock.id,
+      movementType: "OUT",
+      referenceDoc: "BS-ADMIN-002",
+    },
+  });
+
+  if (!paperOut) {
+    await prisma.stockMovement.create({
+      data: {
+        stockItemId: paperStock.id,
+        movementType: "OUT",
+        quantity: 15,
+        justification: "Sortie pour impression dossiers administratifs",
+        referenceDoc: "BS-ADMIN-002",
+        performedById: procurementOfficer.id,
+      },
+    });
+  }
+
+  const markerIn = await prisma.stockMovement.findFirst({
+    where: {
+      stockItemId: markerStock.id,
+      movementType: "IN",
+      referenceDoc: "BL-APPRO-003",
+    },
+  });
+
+  if (!markerIn) {
+    await prisma.stockMovement.create({
+      data: {
+        stockItemId: markerStock.id,
+        movementType: "IN",
+        quantity: 30,
+        justification: "Entrée stock marqueurs pour salles de briefing",
+        referenceDoc: "BL-APPRO-003",
+        performedById: procurementOfficer.id,
+        needRequestId: approvedNeedRequest.id,
+      },
+    });
+  }
+
+  const markerOut = await prisma.stockMovement.findFirst({
+    where: {
+      stockItemId: markerStock.id,
+      movementType: "OUT",
+      referenceDoc: "BS-FORM-001",
+    },
+  });
+
+  if (!markerOut) {
+    await prisma.stockMovement.create({
+      data: {
+        stockItemId: markerStock.id,
+        movementType: "OUT",
+        quantity: 6,
+        justification: "Dotation kits formation commerciale",
+        referenceDoc: "BS-FORM-001",
+        performedById: procurementOfficer.id,
+      },
+    });
+  }
+
+  const groupedStock = await prisma.stockMovement.groupBy({
+    by: ["stockItemId", "movementType"],
+    _sum: { quantity: true },
+  });
+
+  const stockTotals = new Map<string, { inQty: number; outQty: number }>();
+  groupedStock.forEach((row) => {
+    const current = stockTotals.get(row.stockItemId) ?? { inQty: 0, outQty: 0 };
+    if (row.movementType === "IN") {
+      current.inQty = row._sum.quantity ?? 0;
+    } else {
+      current.outQty = row._sum.quantity ?? 0;
+    }
+    stockTotals.set(row.stockItemId, current);
+  });
+
+  for (const [stockItemId, values] of stockTotals.entries()) {
+    await prisma.stockItem.update({
+      where: { id: stockItemId },
+      data: {
+        currentQuantity: Math.max(values.inQty - values.outQty, 0),
+      },
+    });
+  }
 
   console.log("Seed completed");
 }
