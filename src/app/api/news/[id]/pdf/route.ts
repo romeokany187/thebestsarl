@@ -57,19 +57,26 @@ function drawHeader(logo: PDFImage | null, page: PDFPage, titleFont: PDFFont, te
     color: BRAND_TEXT,
   });
 
-  page.drawText("DIRECTION GÉNÉRALE", {
+  page.drawText("COMMUNIQUÉ OFFICIEL", {
     x: 165,
     y: height - 72,
     size: 10,
-    font: titleFont,
+    font: textFont,
     color: BRAND_TEXT,
   });
 
-  page.drawText("COMMUNIQUÉ OFFICIEL", {
+  page.drawText("Direction Générale", {
     x: 165,
     y: height - 86,
     size: 9,
-    font: textFont,
+    font: titleFont,
+    color: rgb(0.35, 0.35, 0.35),
+  });
+
+  page.drawLine({
+    start: { x: 165, y: height - 88 },
+    end: { x: 245, y: height - 88 },
+    thickness: 0.7,
     color: rgb(0.35, 0.35, 0.35),
   });
 
@@ -154,7 +161,7 @@ function drawReferenceBox(page: PDFPage, fontBold: PDFFont, fontRegular: PDFFont
   });
 }
 
-function drawSignature(page: PDFPage, logoImage: PDFImage | null, signatureImage: PDFImage | null, fontRegular: PDFFont) {
+function drawSignature(page: PDFPage, signatureImage: PDFImage | null, fontRegular: PDFFont) {
   const { width } = page.getSize();
 
   page.drawLine({
@@ -172,21 +179,11 @@ function drawSignature(page: PDFPage, logoImage: PDFImage | null, signatureImage
     color: BRAND_TEXT,
   });
 
-  if (logoImage) {
-    const scaled = logoImage.scale(0.2);
-    page.drawImage(logoImage, {
-      x: 44,
-      y: 66,
-      width: Math.min(130, scaled.width),
-      height: Math.min(48, scaled.height),
-    });
-  }
-
   if (signatureImage) {
     const scaled = signatureImage.scale(0.32);
     page.drawImage(signatureImage, {
-      x: width - 224,
-      y: 72,
+      x: width - 214,
+      y: 66,
       width: Math.min(180, scaled.width),
       height: Math.min(44, scaled.height),
     });
@@ -196,13 +193,13 @@ function drawSignature(page: PDFPage, logoImage: PDFImage | null, signatureImage
 function drawStamp(page: PDFPage, stampImage: PDFImage | null) {
   if (!stampImage) return;
   const { width } = page.getSize();
-  const scaled = stampImage.scale(0.24);
+  const scaled = stampImage.scale(0.22);
 
   page.drawImage(stampImage, {
-    x: width - 206,
-    y: 26,
-    width: Math.min(82, scaled.width),
-    height: Math.min(82, scaled.height),
+    x: width - 310,
+    y: 48,
+    width: Math.min(76, scaled.width),
+    height: Math.min(76, scaled.height),
     opacity: 0.92,
   });
 }
@@ -370,7 +367,7 @@ export async function GET(_request: NextRequest, context: RouteContext) {
     y -= line ? 15 : 10;
   }
 
-  drawSignature(page, logoImage, signatureImage, fontRegular);
+  drawSignature(page, signatureImage, fontRegular);
   drawStamp(page, stampImage);
 
   const pages = pdf.getPages();
