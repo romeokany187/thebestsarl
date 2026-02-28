@@ -284,7 +284,13 @@ export function ProcurementHub({
                   rel="noreferrer"
                   className="inline-flex rounded-md border border-black/20 px-2.5 py-1 text-[11px] font-semibold hover:bg-black/5 dark:border-white/20 dark:hover:bg-white/10"
                 >
-                  {need.status === "APPROVED" ? "Imprimer PDF scellé" : "Imprimer PDF (non scellé)"}
+                  Lire PDF
+                </a>
+                <a
+                  href={`/api/procurement/needs/${need.id}/pdf?download=1`}
+                  className="inline-flex rounded-md border border-black/20 px-2.5 py-1 text-[11px] font-semibold hover:bg-black/5 dark:border-white/20 dark:hover:bg-white/10"
+                >
+                  Télécharger PDF
                 </a>
                 <span className="text-[11px] text-black/55 dark:text-white/55">
                   {need.status === "APPROVED" ? "Preuve d'approbation incluse" : "Le document sera marqué non scellé"}

@@ -38,11 +38,12 @@ function formatDate(value: Date | null | undefined) {
   }).format(value);
 }
 
-export async function GET(_request: NextRequest, context: RouteContext) {
+export async function GET(request: NextRequest, context: RouteContext) {
   const access = await requireApiRoles(["ADMIN", "MANAGER", "EMPLOYEE", "ACCOUNTANT"]);
   if (access.error) return access.error;
 
   const { id } = await context.params;
+  const shouldDownload = request.nextUrl.searchParams.get("download") === "1";
 
   const need = await prisma.needRequest.findUnique({
     where: { id },
@@ -293,7 +294,7 @@ export async function GET(_request: NextRequest, context: RouteContext) {
     status: 200,
     headers: {
       "Content-Type": "application/pdf",
-      "Content-Disposition": `inline; filename="etat-besoin-${id}.pdf"`,
+      "Content-Disposition": `${shouldDownload ? "attachment" : "inline"}; filename="etat-besoin-${id}.pdf"`,
       "Cache-Control": "no-store",
     },
   });
