@@ -171,10 +171,10 @@ function drawSignature(page: PDFPage, signatureImage: PDFImage | null) {
   const { width } = page.getSize();
 
   if (signatureImage) {
-    const fitted = getContainedSize(signatureImage, 420, 170, true);
+    const fitted = getContainedSize(signatureImage, 520, 230, true);
     page.drawImage(signatureImage, {
-      x: Math.min(width - fitted.width - 22, 342),
-      y: 34,
+      x: Math.min(width - fitted.width - 16, 300),
+      y: 22,
       width: fitted.width,
       height: fitted.height,
     });
