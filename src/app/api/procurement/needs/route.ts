@@ -12,7 +12,6 @@ export async function GET(request: NextRequest) {
   const needs = await prisma.needRequest.findMany({
     where: {
       ...(status ? { status: status as never } : {}),
-      ...(access.role === "EMPLOYEE" ? { requesterId: access.session.user.id } : {}),
     },
     include: {
       requester: { select: { id: true, name: true, jobTitle: true, role: true } },

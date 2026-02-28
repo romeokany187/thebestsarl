@@ -57,10 +57,6 @@ export async function GET(request: NextRequest, context: RouteContext) {
     return NextResponse.json({ error: "État de besoin introuvable." }, { status: 404 });
   }
 
-  if (access.role === "EMPLOYEE" && need.requesterId !== access.session.user.id) {
-    return NextResponse.json({ error: "Accès refusé." }, { status: 403 });
-  }
-
   const pdf = await PDFDocument.create();
   pdf.registerFontkit(fontkit);
   const page = pdf.addPage([595, 842]);

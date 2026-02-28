@@ -279,6 +279,12 @@ export function ProcurementHub({
               </p>
               <div className="mt-2 flex flex-wrap items-center gap-2">
                 <a
+                  href={`/approvisionnement/${need.id}`}
+                  className="inline-flex rounded-md border border-black/20 px-2.5 py-1 text-[11px] font-semibold hover:bg-black/5 dark:border-white/20 dark:hover:bg-white/10"
+                >
+                  Lire l&apos;état
+                </a>
+                <a
                   href={`/api/procurement/needs/${need.id}/pdf`}
                   target="_blank"
                   rel="noreferrer"

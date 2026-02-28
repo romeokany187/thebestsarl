@@ -15,7 +15,6 @@ export default async function ApprovisionnementPage() {
 
   const [needs, stockItems, movements] = await Promise.all([
     prisma.needRequest.findMany({
-      where: role === "EMPLOYEE" ? { requesterId: session.user.id } : {},
       include: {
         requester: { select: { id: true, name: true, jobTitle: true } },
         reviewedBy: { select: { id: true, name: true } },
