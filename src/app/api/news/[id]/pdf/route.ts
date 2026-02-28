@@ -357,10 +357,11 @@ export async function GET(_request: NextRequest, context: RouteContext) {
     y -= line ? 15 : 10;
   }
 
-  drawSignature(page, signatureImage);
-  drawStamp(page, stampImage);
-
   const pages = pdf.getPages();
+  const lastPage = pages[pages.length - 1];
+  drawSignature(lastPage, signatureImage);
+  drawStamp(lastPage, stampImage);
+
   pages.forEach((pdfPage, index) => {
     drawPageNumber(pdfPage, fontRegular, index + 1, pages.length);
   });
