@@ -169,9 +169,9 @@ export default async function ReportPrintPage({ params }: PageProps) {
             <p className="mt-1 text-sm text-zinc-900">Validation et visa officiel</p>
           </div>
           <div className="min-h-24 text-right">
-            <div className="ml-auto flex w-full max-w-[300px] items-end justify-end gap-4">
-              {signaturePath ? <Image src={signaturePath} alt="Signature" width={200} height={52} className="h-[52px] w-auto" /> : null}
-              {stampPath ? <Image src={stampPath} alt="Cachet" width={74} height={74} className="h-[74px] w-[74px] opacity-95" /> : null}
+            <div className="ml-auto flex w-full max-w-[450px] items-end justify-end gap-2">
+              {stampPath ? <Image src={stampPath} alt="Cachet" width={110} height={110} className="h-[110px] w-[110px] opacity-95" /> : null}
+              {signaturePath ? <Image src={signaturePath} alt="Signature" width={360} height={140} className="h-[140px] w-auto" /> : null}
             </div>
           </div>
         </section>
