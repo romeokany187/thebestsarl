@@ -6,6 +6,7 @@ type TeamOption = {
   id: string;
   name: string;
   kind: "AGENCE" | "PARTENAIRE";
+  createdAt: string;
 };
 
 type UserRole = "ADMIN" | "MANAGER" | "EMPLOYEE" | "ACCOUNTANT";
@@ -50,10 +51,12 @@ export function TeamAssignmentAdmin({
   users,
   teams,
   actorRole,
+  actorTeamName,
 }: {
   users: UserRow[];
   teams: TeamOption[];
   actorRole: UserRole;
+  actorTeamName?: string | null;
 }) {
   const [rows, setRows] = useState(users);
   const [status, setStatus] = useState("");
@@ -77,7 +80,13 @@ export function TeamAssignmentAdmin({
     [rows, selectedTeamId],
   );
 
-  const canManageSelectedTeam = actorRole === "ADMIN" || actorRole === "MANAGER";
+  const isManagerOfSelectedTeam = actorRole === "MANAGER" && selectedTeam?.name === actorTeamName;
+  const canManageSelectedTeam = actorRole === "ADMIN" || isManagerOfSelectedTeam;
+
+  const currentLeader = useMemo(
+    () => teamMembers.find((member) => member.role === "MANAGER") ?? null,
+    [teamMembers],
+  );
 
   function applyUpdatedUser(payloadUser: {
     id: string;
@@ -265,6 +274,14 @@ export function TeamAssignmentAdmin({
 
       {selectedTeam ? (
         <div className="mt-4 rounded-xl border border-black/10 p-4 dark:border-white/10">
+          <div className="mb-4 rounded-lg border border-black/10 bg-black/5 p-3 text-xs dark:border-white/10 dark:bg-white/5">
+            <p className="font-semibold">Infos du groupe</p>
+            <p className="mt-1 text-black/70 dark:text-white/70">Type: {selectedTeam.kind === "PARTENAIRE" ? "Partenaire" : "Agence"}</p>
+            <p className="text-black/70 dark:text-white/70">Créé le: {new Date(selectedTeam.createdAt).toLocaleDateString()}</p>
+            <p className="text-black/70 dark:text-white/70">Chef actuel: {currentLeader ? `${currentLeader.name} (${currentLeader.email})` : "Aucun chef nommé"}</p>
+            <p className="text-black/70 dark:text-white/70">Collaborateurs: {teamMembers.length}</p>
+          </div>
+
           <div className="mb-3 flex items-center justify-between">
             <h3 className="text-sm font-semibold">{selectedTeam.name} — Membres</h3>
             <span className="rounded-full border border-black/15 bg-black/5 px-2 py-0.5 text-[10px] font-semibold dark:border-white/20 dark:bg-white/10">
@@ -303,6 +320,10 @@ export function TeamAssignmentAdmin({
               Affecter à cette équipe
             </button>
           </div>
+
+          {!canManageSelectedTeam ? (
+            <p className="mb-3 text-xs text-amber-600">Vous ne pouvez gérer que votre propre équipe.</p>
+          ) : null}
 
           <ul className="space-y-2">
             {teamMembers.length > 0 ? (

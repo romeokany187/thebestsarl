@@ -19,7 +19,7 @@ function roleLabel(role: string) {
 }
 
 export default async function TeamsPage() {
-  const { role } = await requirePageRoles(["ADMIN", "MANAGER", "ACCOUNTANT"]);
+  const { role, session } = await requirePageRoles(["ADMIN", "MANAGER", "ACCOUNTANT"]);
 
   const [sites, users] = await Promise.all([
     prisma.workSite.findMany({
@@ -103,6 +103,7 @@ export default async function TeamsPage() {
     id: team.id,
     name: team.name,
     kind: team.kind,
+    createdAt: team.createdAt.toISOString(),
   }));
 
   const organizationCards = organizationTeams.map((team) => {
@@ -185,6 +186,7 @@ export default async function TeamsPage() {
           }))}
           teams={assignmentTargets}
           actorRole={role}
+          actorTeamName={session.user.teamName ?? null}
         />
       </section>
 
