@@ -6,6 +6,9 @@ import path from "node:path";
 import { prisma } from "@/lib/prisma";
 import { requireApiRoles } from "@/lib/rbac";
 
+const PAGE_WIDTH = 595;
+const PAGE_HEIGHT = 842;
+
 type RouteContext = {
   params: Promise<{ id: string }>;
 };
@@ -36,48 +39,99 @@ function drawHeader(logo: PDFImage | null, page: PDFPage, titleFont: PDFFont, te
   const { width, height } = page.getSize();
 
   if (logo) {
-    const scaled = logo.scale(0.18);
+    const scaled = logo.scale(0.14);
     page.drawImage(logo, {
-      x: 48,
-      y: height - 92,
-      width: Math.min(110, scaled.width),
-      height: Math.min(50, scaled.height),
+      x: 38,
+      y: height - 88,
+      width: Math.min(90, scaled.width),
+      height: Math.min(44, scaled.height),
     });
   }
 
   page.drawText("THE BEST SARL", {
-    x: 170,
-    y: height - 56,
+    x: 140,
+    y: height - 50,
     size: 16,
     font: titleFont,
     color: rgb(0.1, 0.1, 0.1),
   });
 
   page.drawText("DIRECTION GÉNÉRALE", {
-    x: 170,
-    y: height - 76,
+    x: 140,
+    y: height - 70,
     size: 11,
     font: titleFont,
     color: rgb(0.2, 0.2, 0.2),
   });
 
   page.drawText("COMMUNIQUÉ OFFICIEL", {
-    x: 170,
-    y: height - 92,
+    x: 140,
+    y: height - 86,
     size: 9,
     font: textFont,
     color: rgb(0.3, 0.3, 0.3),
   });
 
   page.drawLine({
-    start: { x: 48, y: height - 105 },
-    end: { x: width - 48, y: height - 105 },
+    start: { x: 38, y: height - 100 },
+    end: { x: width - 38, y: height - 100 },
     thickness: 1,
     color: rgb(0.78, 0.78, 0.78),
   });
 }
 
-function wrapText(text: string, maxChars = 108) {
+function drawFooter(page: PDFPage, fontRegular: PDFFont, printedBy: string) {
+  const { width } = page.getSize();
+
+  page.drawText(`Document officiel - Direction Générale`, {
+    x: 38,
+    y: 26,
+    size: 8.5,
+    font: fontRegular,
+    color: rgb(0.4, 0.4, 0.4),
+  });
+
+  const rightText = `Imprimé par: ${printedBy}`;
+  const rightWidth = fontRegular.widthOfTextAtSize(rightText, 8.5);
+  page.drawText(rightText, {
+    x: width - rightWidth - 38,
+    y: 26,
+    size: 8.5,
+    font: fontRegular,
+    color: rgb(0.4, 0.4, 0.4),
+  });
+}
+
+function drawSignature(page: PDFPage, signatureImage: PDFImage | null, fontRegular: PDFFont) {
+  const { width } = page.getSize();
+
+  page.drawLine({
+    start: { x: width - 230, y: 116 },
+    end: { x: width - 40, y: 116 },
+    thickness: 0.8,
+    color: rgb(0.78, 0.78, 0.78),
+  });
+
+  page.drawText("Signé: Direction Générale", {
+    x: width - 228,
+    y: 126,
+    size: 9,
+    font: fontRegular,
+    color: rgb(0.35, 0.35, 0.35),
+  });
+
+  if (signatureImage) {
+    const scaled = signatureImage.scale(0.2);
+    page.drawImage(signatureImage, {
+      x: width - 222,
+      y: 76,
+      width: Math.min(170, scaled.width),
+      height: Math.min(36, scaled.height),
+    });
+  }
+}
+
+function wrapText(text: string, maxChars = 84) {
   const lines: string[] = [];
   const paragraphs = text.split("\n");
 
@@ -162,74 +216,61 @@ export async function GET(_request: NextRequest, context: RouteContext) {
     "public/signature.jpeg",
   ]);
 
-  const page = pdf.addPage([842, 595]);
-  const { width, height } = page.getSize();
+  const printedBy = access.session.user.name ?? access.session.user.email ?? "Utilisateur";
+  const lines = wrapText(post.content);
+  const baseMetaText = `Publié le ${new Date(post.createdAt).toLocaleString()} • ${post.author.name}`;
 
+  let page = pdf.addPage([PAGE_WIDTH, PAGE_HEIGHT]);
   drawHeader(logoImage, page, fontBold, fontRegular);
+  drawFooter(page, fontRegular, printedBy);
 
+  let y = PAGE_HEIGHT - 136;
   page.drawText(post.title, {
-    x: 48,
-    y: height - 140,
-    size: 18,
+    x: 38,
+    y,
+    size: 16,
     font: fontBold,
     color: rgb(0.05, 0.05, 0.05),
   });
 
-  const metaText = `Publié le ${new Date(post.createdAt).toLocaleString()} • ${post.author.name}`;
-  page.drawText(metaText, {
-    x: 48,
-    y: height - 160,
-    size: 10,
+  y -= 20;
+  page.drawText(baseMetaText, {
+    x: 38,
+    y,
+    size: 9.5,
     font: fontRegular,
     color: rgb(0.35, 0.35, 0.35),
   });
 
-  const lines = wrapText(post.content, 110);
-  let y = height - 190;
+  y -= 26;
   for (const line of lines) {
-    if (y < 120) break;
+    if (y < 140) {
+      page = pdf.addPage([PAGE_WIDTH, PAGE_HEIGHT]);
+      drawHeader(logoImage, page, fontBold, fontRegular);
+      drawFooter(page, fontRegular, printedBy);
+
+      page.drawText(`Suite du communiqué: ${post.title}`, {
+        x: 38,
+        y: PAGE_HEIGHT - 136,
+        size: 12,
+        font: fontBold,
+        color: rgb(0.15, 0.15, 0.15),
+      });
+
+      y = PAGE_HEIGHT - 168;
+    }
+
     page.drawText(line, {
-      x: 48,
+      x: 38,
       y,
-      size: 11,
+      size: 10.5,
       font: fontRegular,
       color: rgb(0.12, 0.12, 0.12),
     });
-    y -= 16;
+    y -= line ? 15 : 10;
   }
 
-  page.drawLine({
-    start: { x: width - 280, y: 132 },
-    end: { x: width - 56, y: 132 },
-    thickness: 0.8,
-    color: rgb(0.78, 0.78, 0.78),
-  });
-
-  page.drawText("Signé: Direction Générale", {
-    x: width - 278,
-    y: 142,
-    size: 9,
-    font: fontRegular,
-    color: rgb(0.35, 0.35, 0.35),
-  });
-
-  if (signatureImage) {
-    const scaled = signatureImage.scale(0.2);
-    page.drawImage(signatureImage, {
-      x: width - 270,
-      y: 92,
-      width: Math.min(180, scaled.width),
-      height: Math.min(40, scaled.height),
-    });
-  }
-
-  page.drawText("Document officiel - Direction Générale", {
-    x: 48,
-    y: 36,
-    size: 8.5,
-    font: fontRegular,
-    color: rgb(0.4, 0.4, 0.4),
-  });
+  drawSignature(page, signatureImage, fontRegular);
 
   const pdfBytes = await pdf.save();
   return new NextResponse(Buffer.from(pdfBytes), {
