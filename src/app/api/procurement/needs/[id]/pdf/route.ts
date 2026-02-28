@@ -286,7 +286,8 @@ export async function GET(request: NextRequest, context: RouteContext) {
   });
 
   const bytes = await pdf.save();
-  return new NextResponse(bytes, {
+  const body = Buffer.from(bytes);
+  return new NextResponse(body, {
     status: 200,
     headers: {
       "Content-Type": "application/pdf",
