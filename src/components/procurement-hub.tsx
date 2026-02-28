@@ -12,6 +12,8 @@ type NeedItem = {
   details: string;
   quantity: number;
   unit: string;
+  estimatedAmount?: number | null;
+  currency?: string | null;
   status: NeedStatus;
   requester: { id: string; name: string; jobTitle: string };
   reviewedBy?: { id: string; name: string } | null;
@@ -118,6 +120,10 @@ export function ProcurementHub({
         details: String(formData.get("details") ?? ""),
         quantity: Number(formData.get("quantity") ?? 0),
         unit: String(formData.get("unit") ?? ""),
+        estimatedAmount: String(formData.get("estimatedAmount") ?? "").trim()
+          ? Number(formData.get("estimatedAmount"))
+          : undefined,
+        currency: String(formData.get("currency") ?? "XAF").trim() || "XAF",
       }),
     });
 
@@ -212,7 +218,12 @@ export function ProcurementHub({
                 <input name="quantity" type="number" min="0.01" step="0.01" required placeholder="Quantité" className="rounded-md border px-3 py-2 text-sm" />
                 <input name="unit" required placeholder="Unité" className="rounded-md border px-3 py-2 text-sm" />
               </div>
-              <textarea name="details" required rows={4} placeholder="Détails du besoin" className="rounded-md border px-3 py-2 text-sm" />
+              <div className="grid grid-cols-[1fr,100px] gap-2">
+                <input name="estimatedAmount" type="number" min="0" step="0.01" placeholder="Montant estimatif" className="rounded-md border px-3 py-2 text-sm" />
+                <input name="currency" defaultValue="XAF" maxLength={3} placeholder="Devise" className="rounded-md border px-3 py-2 text-sm uppercase" />
+              </div>
+              <textarea name="details" required rows={5} placeholder="Articles demandés (une ligne par article, ex: 1) Classeur A4 - 15 pièces - Prix unitaire estimé...)" className="rounded-md border px-3 py-2 text-sm" />
+              <p className="text-[11px] text-black/55 dark:text-white/55">Tu peux mettre plusieurs articles dans un seul état de besoin, une ligne par article.</p>
               <button className="rounded-md bg-black px-3 py-2 text-sm font-semibold text-white dark:bg-white dark:text-black">Émettre</button>
             </form>
           ) : (
@@ -271,6 +282,11 @@ export function ProcurementHub({
               <p className="mt-1 text-xs text-black/70 dark:text-white/70">
                 {need.category} • {need.quantity} {need.unit} • Demandeur: {need.requester.name}
               </p>
+              {typeof need.estimatedAmount === "number" ? (
+                <p className="mt-1 text-xs font-semibold text-black dark:text-white">
+                  Montant estimatif: {new Intl.NumberFormat("fr-FR").format(need.estimatedAmount)} {need.currency ?? "XAF"}
+                </p>
+              ) : null}
               <p className="mt-1 whitespace-pre-wrap text-xs text-black/65 dark:text-white/65">{need.details}</p>
               <p className="mt-1 text-[11px] text-black/55 dark:text-white/55">
                 Créé le {new Date(need.createdAt).toLocaleString()}

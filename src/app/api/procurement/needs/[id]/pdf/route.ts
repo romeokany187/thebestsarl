@@ -95,6 +95,7 @@ export async function GET(request: NextRequest, context: RouteContext) {
   ]);
 
   const brandBlue = rgb(0.07, 0.2, 0.47);
+  const black = rgb(0, 0, 0);
 
   if (logo) {
     const logoScaled = logo.scale(0.26);
@@ -132,23 +133,24 @@ export async function GET(request: NextRequest, context: RouteContext) {
   page.drawText(`Réf: EDB-${need.id.slice(0, 8).toUpperCase()}`, {
     x: 38,
     y: 712,
-    size: 10,
+    size: 10.5,
     font: regularFont,
-    color: rgb(0.2, 0.2, 0.2),
+    color: black,
   });
 
   page.drawText(`Statut: ${need.status}`, {
-    x: 400,
+    x: 378,
     y: 712,
-    size: 10,
+    size: 10.5,
     font: boldFont,
-    color: need.status === "APPROVED" ? rgb(0.07, 0.5, 0.23) : rgb(0.48, 0.38, 0.05),
+    color: need.status === "APPROVED" ? rgb(0.05, 0.38, 0.15) : rgb(0.35, 0.24, 0.02),
   });
 
   const details = [
     ["Objet", need.title],
     ["Catégorie", need.category],
     ["Quantité", `${need.quantity} ${need.unit}`],
+    ["Montant estimatif", typeof need.estimatedAmount === "number" ? `${new Intl.NumberFormat("fr-FR").format(need.estimatedAmount)} ${need.currency ?? "XAF"}` : "-"] ,
     ["Demandeur", `${need.requester.name} (${need.requester.jobTitle})`],
     ["Soumis le", formatDate(need.submittedAt)],
     ["Validé par", need.reviewedBy?.name ?? "-"],
@@ -160,26 +162,26 @@ export async function GET(request: NextRequest, context: RouteContext) {
     page.drawText(`${label}:`, {
       x: 38,
       y,
-      size: 10,
+      size: 10.5,
       font: boldFont,
-      color: rgb(0.18, 0.18, 0.18),
+      color: black,
     });
     page.drawText(value, {
       x: 165,
       y,
-      size: 10,
+      size: 10.5,
       font: regularFont,
-      color: rgb(0.22, 0.22, 0.22),
+      color: black,
     });
-    y -= 22;
+    y -= 20;
   }
 
-  page.drawText("Détails du besoin:", {
+  page.drawText("Articles demandés:", {
     x: 38,
-    y: 520,
-    size: 10,
+    y: 512,
+    size: 10.5,
     font: boldFont,
-    color: rgb(0.18, 0.18, 0.18),
+    color: black,
   });
 
   const wrapText = (text: string, maxChars = 92) => {
@@ -199,90 +201,111 @@ export async function GET(request: NextRequest, context: RouteContext) {
     return lines;
   };
 
-  const lines = wrapText(need.details || "-");
-  let detailY = 500;
-  lines.slice(0, 12).forEach((line) => {
+  const rawLines = (need.details || "-").split("\n").map((line) => line.trim()).filter(Boolean);
+  const normalized = rawLines.length > 0 ? rawLines.map((line) => (line.startsWith("-") || line.startsWith("•") ? line : `• ${line}`)) : ["• -"];
+  const lines = normalized.flatMap((line) => wrapText(line, 90));
+  let detailY = 492;
+  lines.slice(0, 14).forEach((line) => {
     page.drawText(line, {
       x: 38,
       y: detailY,
-      size: 10,
+      size: 10.5,
       font: regularFont,
-      color: rgb(0.25, 0.25, 0.25),
+      color: black,
     });
-    detailY -= 16;
+    detailY -= 15;
   });
 
+  const validationTop = Math.min(Math.max(detailY - 14, 220), 360);
+
   page.drawLine({
-    start: { x: 38, y: 230 },
-    end: { x: 557, y: 230 },
+    start: { x: 38, y: validationTop },
+    end: { x: 557, y: validationTop },
     thickness: 0.8,
-    color: rgb(0.86, 0.86, 0.86),
+    color: rgb(0.8, 0.8, 0.8),
   });
 
   page.drawText("Validation Direction / Finance", {
     x: 38,
-    y: 210,
-    size: 10,
+    y: validationTop - 18,
+    size: 10.5,
     font: boldFont,
-    color: rgb(0.22, 0.22, 0.22),
+    color: black,
   });
 
   page.drawText(
     need.reviewComment?.trim() ? `Commentaire: ${need.reviewComment}` : "Commentaire: -",
     {
       x: 38,
-      y: 192,
-      size: 9,
+      y: validationTop - 36,
+      size: 9.8,
       font: regularFont,
-      color: rgb(0.3, 0.3, 0.3),
+      color: black,
     },
   );
 
   if (need.status === "APPROVED" && need.sealedAt) {
     if (signature) {
-      const sigScale = signature.scale(0.27);
+      const sigScale = signature.scale(0.34);
       page.drawImage(signature, {
-        x: 360,
-        y: 96,
-        width: Math.min(160, sigScale.width),
-        height: Math.min(80, sigScale.height),
+        x: 408,
+        y: 70,
+        width: Math.min(175, sigScale.width),
+        height: Math.min(95, sigScale.height),
       });
     }
 
     if (stamp) {
-      const stampScale = stamp.scale(0.3);
+      const stampScale = stamp.scale(0.34);
       page.drawImage(stamp, {
-        x: 300,
-        y: 78,
-        width: Math.min(120, stampScale.width),
-        height: Math.min(120, stampScale.height),
+        x: 328,
+        y: 36,
+        width: Math.min(138, stampScale.width),
+        height: Math.min(138, stampScale.height),
         opacity: 0.95,
       });
     }
 
     page.drawText(`Document scellé le ${formatDate(need.sealedAt)}`, {
       x: 38,
-      y: 136,
-      size: 9,
+      y: 112,
+      size: 9.8,
       font: boldFont,
       color: rgb(0.07, 0.42, 0.2),
     });
   } else {
     page.drawText("Document non scellé (en attente d'approbation).", {
       x: 38,
-      y: 136,
-      size: 9,
+      y: 112,
+      size: 9.8,
       font: regularFont,
       color: rgb(0.58, 0.45, 0.08),
     });
   }
 
-  page.drawText(`Imprimé par: ${access.session.user.name} • ${formatDate(new Date())}`, {
+  page.drawLine({
+    start: { x: 38, y: 22 },
+    end: { x: 557, y: 22 },
+    thickness: 0.6,
+    color: rgb(0.83, 0.83, 0.83),
+  });
+
+  page.drawText(`Page 1/1 • Imprimé le ${formatDate(new Date())}`, {
     x: 38,
-    y: 26,
-    size: 8,
+    y: 12,
+    size: 8.2,
     font: regularFont,
-    color: rgb(0.44, 0.44, 0.44),
+    color: rgb(0.25, 0.25, 0.25),
+  });
+
+  const byText = `Par ${access.session.user.name}`;
+  const byWidth = regularFont.widthOfTextAtSize(byText, 8.2);
+  page.drawText(byText, {
+    x: 557 - byWidth,
+    y: 12,
+    size: 8.2,
+    font: regularFont,
+    color: rgb(0.25, 0.25, 0.25),
   });
 
   const bytes = await pdf.save();

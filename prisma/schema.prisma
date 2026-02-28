@@ -310,6 +310,8 @@ model NeedRequest {
   details        String
   quantity       Float
   unit           String
+  estimatedAmount Float?
+  currency       String?           @default("XAF")
   status         NeedRequestStatus @default(SUBMITTED)
   requesterId    String
   requester      User              @relation("NeedRequester", fields: [requesterId], references: [id])

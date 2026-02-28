@@ -143,6 +143,8 @@ export const needRequestSchema = z.object({
   details: z.string().min(10).max(4000),
   quantity: z.number().positive(),
   unit: z.string().min(1).max(20),
+  estimatedAmount: z.number().nonnegative().optional(),
+  currency: z.string().min(3).max(3).optional(),
 });
 
 export const needApprovalSchema = z.object({

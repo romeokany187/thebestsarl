@@ -86,9 +86,18 @@ export default async function NeedReadPage(context: PageContext) {
         </div>
 
         <section className="mt-4">
-          <h3 className="font-semibold">Détails</h3>
+          <h3 className="font-semibold">Articles demandés</h3>
           <p className="mt-1 whitespace-pre-wrap text-black/75 dark:text-white/75">{need.details}</p>
         </section>
+
+        {typeof need.estimatedAmount === "number" ? (
+          <section className="mt-4">
+            <h3 className="font-semibold">Montant estimatif</h3>
+            <p className="mt-1 text-black/80 dark:text-white/80">
+              {new Intl.NumberFormat("fr-FR").format(need.estimatedAmount)} {need.currency ?? "XAF"}
+            </p>
+          </section>
+        ) : null}
 
         <section className="mt-4">
           <h3 className="font-semibold">Commentaire Direction / Finance</h3>

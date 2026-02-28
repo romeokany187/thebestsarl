@@ -50,6 +50,7 @@ export async function POST(request: NextRequest) {
   const need = await prisma.needRequest.create({
     data: {
       ...parsed.data,
+      currency: parsed.data.currency?.toUpperCase() ?? "XAF",
       status: "SUBMITTED",
       requesterId: me.id,
       submittedAt: new Date(),
