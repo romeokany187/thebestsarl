@@ -90,7 +90,6 @@ export async function GET(request: NextRequest, context: RouteContext) {
     return NextResponse.json({ error: "Polices Montserrat introuvables sur le serveur." }, { status: 500 });
   }
 
-  const regularFont = await pdf.embedFont(montserratRegular);
   const boldFont = await pdf.embedFont(montserratBold);
 
   const logo = await embedOptionalImage(pdf, [
@@ -98,11 +97,6 @@ export async function GET(request: NextRequest, context: RouteContext) {
     "public/branding/logo thebest.png",
     "public/logo.png",
     "public/branding/logo.png",
-  ]);
-
-  const signature = await embedOptionalImage(pdf, [
-    "public/signature.png",
-    "public/branding/signature.png",
   ]);
 
   const stamp = await embedOptionalImage(pdf, [
@@ -135,7 +129,7 @@ export async function GET(request: NextRequest, context: RouteContext) {
     x: 220,
     y: 765,
     size: 10,
-    font: regularFont,
+    font: boldFont,
     color: brandBlue,
   });
 
@@ -232,7 +226,7 @@ export async function GET(request: NextRequest, context: RouteContext) {
     detailY -= 15;
   });
 
-  const validationTop = Math.min(Math.max(detailY - 12, 248), 400);
+  const validationTop = 174;
 
   page.drawLine({
     start: { x: 38, y: validationTop },
@@ -260,23 +254,13 @@ export async function GET(request: NextRequest, context: RouteContext) {
     },
   );
 
-  const sealAnchorY = Math.max(validationTop - 152, 62);
+  const sealAnchorY = 44;
 
   if (need.status === "APPROVED" && need.sealedAt) {
-    if (signature) {
-      const signatureSize = getContainedSize(signature, 210, 85, true);
-      page.drawImage(signature, {
-        x: 380,
-        y: sealAnchorY + 28,
-        width: signatureSize.width,
-        height: signatureSize.height,
-      });
-    }
-
     if (stamp) {
-      const stampSize = getContainedSize(stamp, 132, 132, true);
+      const stampSize = getContainedSize(stamp, 128, 128, true);
       page.drawImage(stamp, {
-        x: 314,
+        x: 384,
         y: sealAnchorY,
         width: stampSize.width,
         height: stampSize.height,
@@ -286,7 +270,7 @@ export async function GET(request: NextRequest, context: RouteContext) {
 
     page.drawText(`Document scellé le ${formatDate(need.sealedAt)}`, {
       x: 38,
-      y: sealAnchorY + 40,
+      y: 96,
       size: 9.8,
       font: boldFont,
       color: rgb(0.07, 0.42, 0.2),
@@ -294,7 +278,7 @@ export async function GET(request: NextRequest, context: RouteContext) {
   } else {
     page.drawText("Document non scellé (en attente d'approbation).", {
       x: 38,
-      y: sealAnchorY + 40,
+      y: 96,
       size: 9.8,
       font: boldFont,
       color: rgb(0.58, 0.45, 0.08),
