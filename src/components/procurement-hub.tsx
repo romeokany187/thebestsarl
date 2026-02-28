@@ -277,6 +277,22 @@ export function ProcurementHub({
                 {need.approvedAt ? ` • Approuvé le ${new Date(need.approvedAt).toLocaleString()}` : ""}
                 {need.sealedAt ? " • Document scellé" : ""}
               </p>
+              <div className="mt-2">
+                {need.status === "APPROVED" ? (
+                  <a
+                    href={`/api/procurement/needs/${need.id}/pdf`}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex rounded-md border border-black/20 px-2.5 py-1 text-[11px] font-semibold hover:bg-black/5 dark:border-white/20 dark:hover:bg-white/10"
+                  >
+                    Imprimer PDF scellé
+                  </a>
+                ) : (
+                  <p className="text-[11px] text-black/55 dark:text-white/55">
+                    Le PDF scellé est disponible après approbation.
+                  </p>
+                )}
+              </div>
             </article>
           )) : (
             <p className="text-sm text-black/60 dark:text-white/60">Aucun état de besoin pour le moment.</p>
