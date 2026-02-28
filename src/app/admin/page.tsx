@@ -1,4 +1,5 @@
 import { AppShell } from "@/components/app-shell";
+import { AdminSeedDemoButton } from "@/components/admin-seed-demo-button";
 import { UserJobTitleAdmin } from "@/components/user-job-title-admin";
 import { WorkSiteAdmin } from "@/components/worksite-admin";
 import { prisma } from "@/lib/prisma";
@@ -38,6 +39,10 @@ export default async function AdminPage() {
         <p className="text-sm text-black/60 dark:text-white/60">
           Référentiel des utilisateurs, équipes, compagnies et règles de commission.
         </p>
+      </section>
+
+      <section className="mb-6">
+        <AdminSeedDemoButton />
       </section>
 
       <div className="grid gap-6 lg:grid-cols-2">
