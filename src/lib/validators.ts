@@ -136,3 +136,28 @@ export const approvalSchema = z.object({
   reviewerComment: z.string().max(500).optional(),
   status: z.enum(["APPROVED", "REJECTED"]),
 });
+
+export const needRequestSchema = z.object({
+  title: z.string().min(3).max(180),
+  category: z.string().min(2).max(80),
+  details: z.string().min(10).max(4000),
+  quantity: z.number().positive(),
+  unit: z.string().min(1).max(20),
+});
+
+export const needApprovalSchema = z.object({
+  needRequestId: z.string().min(1),
+  status: z.enum(["APPROVED", "REJECTED"]),
+  reviewComment: z.string().max(500).optional(),
+});
+
+export const stockMovementSchema = z.object({
+  itemName: z.string().min(2).max(120),
+  category: z.string().min(2).max(80),
+  unit: z.string().min(1).max(20),
+  movementType: z.enum(["IN", "OUT"]),
+  quantity: z.number().positive(),
+  justification: z.string().min(5).max(500),
+  referenceDoc: z.string().min(2).max(180),
+  needRequestId: z.string().optional(),
+});

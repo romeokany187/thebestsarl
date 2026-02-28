@@ -94,6 +94,18 @@ enum CommissionCalculationStatus {
   FINAL
 }
 
+enum NeedRequestStatus {
+  DRAFT
+  SUBMITTED
+  APPROVED
+  REJECTED
+}
+
+enum StockMovementType {
+  IN
+  OUT
+}
+
 model Team {
   id        String   @id @default(cuid())
   name      String   @unique
@@ -119,6 +131,9 @@ model User {
   logs          AuditLog[]
   notifications UserNotification[]
   newsPosts     NewsPost[]    @relation("NewsAuthor")
+  needRequests  NeedRequest[] @relation("NeedRequester")
+  needReviews   NeedRequest[] @relation("NeedReviewer")
+  stockMovements StockMovement[] @relation("StockMovementActor")
   createdAt     DateTime      @default(now())
   updatedAt     DateTime      @updatedAt
 }
@@ -286,4 +301,55 @@ model AuditLog {
   entityId   String
   payload    Json?
   createdAt  DateTime @default(now())
+}
+
+model NeedRequest {
+  id             String            @id @default(cuid())
+  title          String
+  category       String
+  details        String
+  quantity       Float
+  unit           String
+  status         NeedRequestStatus @default(SUBMITTED)
+  requesterId    String
+  requester      User              @relation("NeedRequester", fields: [requesterId], references: [id])
+  reviewedById   String?
+  reviewedBy     User?             @relation("NeedReviewer", fields: [reviewedById], references: [id])
+  reviewComment  String?
+  submittedAt    DateTime?
+  reviewedAt     DateTime?
+  approvedAt     DateTime?
+  sealedAt       DateTime?
+  stockMovements StockMovement[]
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
+}
+
+model StockItem {
+  id             String          @id @default(cuid())
+  name           String
+  category       String
+  unit           String
+  currentQuantity Float          @default(0)
+  reorderLevel   Float?
+  movements      StockMovement[]
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+
+  @@unique([name, category, unit])
+}
+
+model StockMovement {
+  id             String            @id @default(cuid())
+  stockItemId    String
+  stockItem      StockItem         @relation(fields: [stockItemId], references: [id])
+  movementType   StockMovementType
+  quantity       Float
+  justification  String
+  referenceDoc   String
+  performedById  String
+  performedBy    User              @relation("StockMovementActor", fields: [performedById], references: [id])
+  needRequestId  String?
+  needRequest    NeedRequest?      @relation(fields: [needRequestId], references: [id])
+  createdAt      DateTime          @default(now())
 }
