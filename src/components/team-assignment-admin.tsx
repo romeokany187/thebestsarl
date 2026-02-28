@@ -8,6 +8,8 @@ type TeamOption = {
   kind: "AGENCE" | "PARTENAIRE";
 };
 
+type UserRole = "ADMIN" | "MANAGER" | "EMPLOYEE" | "ACCOUNTANT";
+
 type JobTitle =
   | "COMMERCIAL"
   | "COMPTABLE"
@@ -31,47 +33,82 @@ type UserRow = {
   id: string;
   name: string;
   email: string;
-  role: string;
+  role: UserRole;
   teamId: string | null;
   teamName: string;
   jobTitle: JobTitle;
 };
 
-export function TeamAssignmentAdmin({ users, teams }: { users: UserRow[]; teams: TeamOption[] }) {
+function roleLabel(role: UserRole) {
+  if (role === "ADMIN") return "Admin";
+  if (role === "MANAGER") return "Chef";
+  if (role === "ACCOUNTANT") return "Comptable";
+  return "Collaborateur";
+}
+
+export function TeamAssignmentAdmin({
+  users,
+  teams,
+  actorRole,
+}: {
+  users: UserRow[];
+  teams: TeamOption[];
+  actorRole: UserRole;
+}) {
   const [rows, setRows] = useState(users);
   const [status, setStatus] = useState("");
+  const [selectedTeamId, setSelectedTeamId] = useState(teams[0]?.id ?? "");
+  const [selectedUserId, setSelectedUserId] = useState("");
+  const [selectedJobTitle, setSelectedJobTitle] = useState<JobTitle>("AGENT_TERRAIN");
+  const [newTeamName, setNewTeamName] = useState("");
+  const [newTeamKind, setNewTeamKind] = useState<"AGENCE" | "PARTENAIRE">("AGENCE");
   const [savingId, setSavingId] = useState("");
+  const [creatingTeam, setCreatingTeam] = useState(false);
 
-  const hasChanges = useMemo(
-    () => rows.some((row, index) => row.teamId !== users[index]?.teamId || row.jobTitle !== users[index]?.jobTitle),
-    [rows, users],
+  const selectedTeam = teams.find((team) => team.id === selectedTeamId) ?? null;
+
+  const teamMembers = useMemo(
+    () => rows.filter((row) => row.teamId === selectedTeamId),
+    [rows, selectedTeamId],
   );
 
-  function updateTeam(userId: string, nextTeamId: string) {
-    setRows((prev) => prev.map((row) => (row.id === userId
+  const assignableUsers = useMemo(
+    () => rows.filter((row) => row.teamId !== selectedTeamId),
+    [rows, selectedTeamId],
+  );
+
+  const canManageSelectedTeam = actorRole === "ADMIN" || actorRole === "MANAGER";
+
+  function applyUpdatedUser(payloadUser: {
+    id: string;
+    role: UserRole;
+    jobTitle: JobTitle;
+    team: { id: string; name: string } | null;
+  }) {
+    setRows((prev) => prev.map((row) => (row.id === payloadUser.id
       ? {
         ...row,
-        teamId: nextTeamId === "NONE" ? null : nextTeamId,
-        teamName: nextTeamId === "NONE" ? "Sans équipe" : (teams.find((team) => team.id === nextTeamId)?.name ?? row.teamName),
+        role: payloadUser.role,
+        jobTitle: payloadUser.jobTitle,
+        teamId: payloadUser.team?.id ?? null,
+        teamName: payloadUser.team?.name ?? "Sans équipe",
       }
       : row)));
   }
 
-  function updateJobTitle(userId: string, nextJobTitle: JobTitle) {
-    setRows((prev) => prev.map((row) => (row.id === userId ? { ...row, jobTitle: nextJobTitle } : row)));
-  }
+  async function assignToSelectedTeam() {
+    if (!selectedTeamId || !selectedUserId) {
+      setStatus("Sélectionnez une équipe et un collaborateur.");
+      return;
+    }
 
-  async function saveOne(userId: string) {
-    const row = rows.find((item) => item.id === userId);
-    if (!row) return;
+    setSavingId(selectedUserId);
+    setStatus("Affectation du collaborateur...");
 
-    setSavingId(userId);
-    setStatus("Mise à jour de l'affectation...");
-
-    const response = await fetch(`/api/users/${userId}`, {
+    const response = await fetch(`/api/users/${selectedUserId}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ teamId: row.teamId, jobTitle: row.jobTitle }),
+      body: JSON.stringify({ teamId: selectedTeamId, jobTitle: selectedJobTitle }),
     });
 
     const payload = await response.json().catch(() => null);
@@ -82,78 +119,235 @@ export function TeamAssignmentAdmin({ users, teams }: { users: UserRow[]; teams:
       return;
     }
 
-    setStatus(`Affectation et fonction mises à jour pour ${row.name}.`);
+    if (payload?.data) applyUpdatedUser(payload.data);
+
+    setStatus("Collaborateur affecté avec succès.");
+    setSelectedUserId("");
     setSavingId("");
+  }
+
+  async function unassignFromTeam(userId: string, currentJobTitle: JobTitle) {
+    setSavingId(userId);
+    setStatus("Désaffectation en cours...");
+
+    const response = await fetch(`/api/users/${userId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ teamId: null, jobTitle: currentJobTitle }),
+    });
+
+    const payload = await response.json().catch(() => null);
+
+    if (!response.ok) {
+      setStatus(payload?.error ?? "Échec de la désaffectation.");
+      setSavingId("");
+      return;
+    }
+
+    if (payload?.data) applyUpdatedUser(payload.data);
+
+    setStatus("Collaborateur désaffecté.");
+    setSavingId("");
+  }
+
+  async function switchLeaderRole(userId: string, makeLeader: boolean, currentJobTitle: JobTitle, currentTeamId: string | null) {
+    if (actorRole !== "ADMIN") {
+      setStatus("Seul un administrateur peut changer le chef d'équipe.");
+      return;
+    }
+
+    setSavingId(userId);
+    setStatus(makeLeader ? "Nomination du chef..." : "Retrait des privilèges chef...");
+
+    const response = await fetch(`/api/users/${userId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        teamId: currentTeamId,
+        jobTitle: currentJobTitle,
+        role: makeLeader ? "MANAGER" : "EMPLOYEE",
+      }),
+    });
+
+    const payload = await response.json().catch(() => null);
+
+    if (!response.ok) {
+      setStatus(payload?.error ?? "Échec de mise à jour du chef.");
+      setSavingId("");
+      return;
+    }
+
+    if (payload?.data) applyUpdatedUser(payload.data);
+
+    setStatus(makeLeader ? "Chef d'équipe mis à jour." : "Chef d'équipe retiré.");
+    setSavingId("");
+  }
+
+  async function createTeam() {
+    if (!newTeamName.trim()) {
+      setStatus("Donnez un nom à l'équipe.");
+      return;
+    }
+
+    setCreatingTeam(true);
+    setStatus("Création de l'équipe...");
+
+    const response = await fetch("/api/teams", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: newTeamName.trim(), kind: newTeamKind }),
+    });
+
+    const payload = await response.json().catch(() => null);
+
+    if (!response.ok) {
+      setStatus(payload?.error ?? "Impossible de créer l'équipe.");
+      setCreatingTeam(false);
+      return;
+    }
+
+    setStatus("Équipe créée. Recharge la page pour la gérer.");
+    setNewTeamName("");
+    setCreatingTeam(false);
   }
 
   return (
     <section className="rounded-xl border border-black/10 bg-white p-4 dark:border-white/10 dark:bg-zinc-900">
-      <h2 className="text-lg font-semibold">Affectation des collaborateurs aux agences/partenaires</h2>
+      <h2 className="text-lg font-semibold">Gestion des groupes (agences & partenaires)</h2>
       <p className="text-xs text-black/60 dark:text-white/60">
-        Assignez chaque collaborateur à une agence ou un partenaire, puis définissez sa fonction.
+        Cliquez sur une équipe pour afficher ses membres, puis affectez, désaffectez ou gérez le chef d'équipe.
       </p>
 
-      <div className="mt-4 overflow-hidden rounded-lg border border-black/10 dark:border-white/10">
-        <table className="min-w-full text-sm">
-          <thead className="bg-black/5 dark:bg-white/10">
-            <tr>
-              <th className="px-3 py-2 text-left">Agent</th>
-              <th className="px-3 py-2 text-left">Email</th>
-              <th className="px-3 py-2 text-left">Rôle</th>
-              <th className="px-3 py-2 text-left">Équipe</th>
-              <th className="px-3 py-2 text-left">Fonction</th>
-              <th className="px-3 py-2 text-left">Action</th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((user) => (
-              <tr key={user.id} className="border-t border-black/5 dark:border-white/10">
-                <td className="px-3 py-2">{user.name}</td>
-                <td className="px-3 py-2">{user.email}</td>
-                <td className="px-3 py-2">{user.role}</td>
-                <td className="px-3 py-2">
-                  <select
-                    className="w-full rounded-md border px-2 py-1.5"
-                    value={user.teamId ?? "NONE"}
-                    onChange={(event) => updateTeam(user.id, event.target.value)}
-                  >
-                    <option value="NONE">Sans équipe</option>
-                    {teams.map((team) => (
-                      <option key={team.id} value={team.id}>{team.name} ({team.kind})</option>
-                    ))}
-                  </select>
-                </td>
-                <td className="px-3 py-2">
-                  <select
-                    className="w-full rounded-md border px-2 py-1.5"
-                    value={user.jobTitle}
-                    onChange={(event) => updateJobTitle(user.id, event.target.value as JobTitle)}
-                  >
-                    {jobOptions.map((option) => (
-                      <option key={option.value} value={option.value}>{option.label}</option>
-                    ))}
-                  </select>
-                </td>
-                <td className="px-3 py-2">
-                  <button
-                    type="button"
-                    onClick={() => saveOne(user.id)}
-                    disabled={savingId === user.id}
-                    className="rounded-md border border-black/15 px-3 py-1.5 text-xs font-semibold hover:bg-black/5 disabled:cursor-not-allowed disabled:opacity-60 dark:border-white/20 dark:hover:bg-white/10"
-                  >
-                    {savingId === user.id ? "Sauvegarde..." : "Affecter"}
-                  </button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+      <div className="mt-4 grid gap-3 lg:grid-cols-3">
+        {teams.map((team) => (
+          <button
+            key={team.id}
+            type="button"
+            onClick={() => setSelectedTeamId(team.id)}
+            className={`rounded-xl border px-3 py-2 text-left text-sm ${team.id === selectedTeamId
+              ? "border-black bg-black/5 dark:border-white dark:bg-white/10"
+              : "border-black/10 hover:bg-black/5 dark:border-white/10 dark:hover:bg-white/10"
+            }`}
+          >
+            <p className="font-semibold">{team.name}</p>
+            <p className="text-[11px] text-black/60 dark:text-white/60">{team.kind}</p>
+          </button>
+        ))}
       </div>
 
-      <p className="mt-2 text-xs text-black/60 dark:text-white/60">
-        {hasChanges ? "Des changements sont en attente." : "Aucun changement en attente."}
-        {status ? ` ${status}` : ""}
-      </p>
+      <div className="mt-4 rounded-xl border border-black/10 p-3 dark:border-white/10">
+        <h3 className="text-sm font-semibold">Créer une équipe</h3>
+        <div className="mt-2 grid gap-2 md:grid-cols-4">
+          <input
+            value={newTeamName}
+            onChange={(event) => setNewTeamName(event.target.value)}
+            placeholder="Nom de l'agence/partenaire"
+            className="rounded-md border border-black/15 px-3 py-2 text-sm dark:border-white/20"
+          />
+          <select
+            value={newTeamKind}
+            onChange={(event) => setNewTeamKind(event.target.value as "AGENCE" | "PARTENAIRE")}
+            className="rounded-md border border-black/15 px-3 py-2 text-sm dark:border-white/20"
+          >
+            <option value="AGENCE">Agence</option>
+            <option value="PARTENAIRE">Partenaire</option>
+          </select>
+          <button
+            type="button"
+            onClick={createTeam}
+            disabled={creatingTeam || actorRole === "ACCOUNTANT"}
+            className="rounded-md bg-black px-3 py-2 text-xs font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50 dark:bg-white dark:text-black"
+          >
+            {creatingTeam ? "Création..." : "Créer équipe"}
+          </button>
+        </div>
+      </div>
+
+      {selectedTeam ? (
+        <div className="mt-4 rounded-xl border border-black/10 p-4 dark:border-white/10">
+          <div className="mb-3 flex items-center justify-between">
+            <h3 className="text-sm font-semibold">{selectedTeam.name} — Membres</h3>
+            <span className="rounded-full border border-black/15 bg-black/5 px-2 py-0.5 text-[10px] font-semibold dark:border-white/20 dark:bg-white/10">
+              {teamMembers.length} membre(s)
+            </span>
+          </div>
+
+          <div className="mb-4 grid gap-2 lg:grid-cols-4">
+            <select
+              value={selectedUserId}
+              onChange={(event) => setSelectedUserId(event.target.value)}
+              className="rounded-md border border-black/15 px-3 py-2 text-sm dark:border-white/20"
+            >
+              <option value="">Choisir un collaborateur</option>
+              {assignableUsers.map((user) => (
+                <option key={user.id} value={user.id}>{user.name} ({user.teamName})</option>
+              ))}
+            </select>
+
+            <select
+              value={selectedJobTitle}
+              onChange={(event) => setSelectedJobTitle(event.target.value as JobTitle)}
+              className="rounded-md border border-black/15 px-3 py-2 text-sm dark:border-white/20"
+            >
+              {jobOptions.map((option) => (
+                <option key={option.value} value={option.value}>{option.label}</option>
+              ))}
+            </select>
+
+            <button
+              type="button"
+              onClick={assignToSelectedTeam}
+              disabled={!canManageSelectedTeam || !selectedUserId || savingId === selectedUserId}
+              className="rounded-md border border-black/15 px-3 py-2 text-xs font-semibold hover:bg-black/5 disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/20 dark:hover:bg-white/10"
+            >
+              Affecter à cette équipe
+            </button>
+          </div>
+
+          <ul className="space-y-2">
+            {teamMembers.length > 0 ? (
+              teamMembers.map((user) => (
+                <li key={user.id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-black/10 px-3 py-2 text-sm dark:border-white/10">
+                  <div>
+                    <p className="font-semibold">{user.name}</p>
+                    <p className="text-xs text-black/60 dark:text-white/60">{user.email}</p>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="rounded-full border border-black/15 bg-black/5 px-2 py-0.5 text-[10px] font-semibold dark:border-white/20 dark:bg-white/10">
+                      {roleLabel(user.role)}
+                    </span>
+                    <span className="rounded-full border border-black/15 bg-black/5 px-2 py-0.5 text-[10px] font-semibold dark:border-white/20 dark:bg-white/10">
+                      {jobOptions.find((option) => option.value === user.jobTitle)?.label ?? user.jobTitle}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => unassignFromTeam(user.id, user.jobTitle)}
+                      disabled={!canManageSelectedTeam || savingId === user.id}
+                      className="rounded-md border border-black/15 px-2.5 py-1 text-[11px] font-semibold hover:bg-black/5 disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/20 dark:hover:bg-white/10"
+                    >
+                      Désaffecter
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => switchLeaderRole(user.id, user.role !== "MANAGER", user.jobTitle, user.teamId)}
+                      disabled={actorRole !== "ADMIN" || savingId === user.id}
+                      className="rounded-md border border-black/15 px-2.5 py-1 text-[11px] font-semibold hover:bg-black/5 disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/20 dark:hover:bg-white/10"
+                    >
+                      {user.role === "MANAGER" ? "Retirer chef" : "Nommer chef"}
+                    </button>
+                  </div>
+                </li>
+              ))
+            ) : (
+              <li className="rounded-lg border border-dashed border-black/20 px-3 py-2 text-xs text-black/55 dark:border-white/20 dark:text-white/55">
+                Aucun membre dans cette équipe.
+              </li>
+            )}
+          </ul>
+        </div>
+      ) : null}
+
+      <p className="mt-3 text-xs text-black/60 dark:text-white/60">{status}</p>
     </section>
   );
 }

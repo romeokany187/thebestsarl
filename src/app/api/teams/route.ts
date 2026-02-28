@@ -1,10 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
+import { TeamKind } from "@prisma/client";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { requireApiRoles } from "@/lib/rbac";
 
 const teamCreateSchema = z.object({
   name: z.string().min(2).max(120),
+  kind: z.nativeEnum(TeamKind).default(TeamKind.AGENCE),
 });
 
 export async function GET() {
@@ -40,7 +42,7 @@ export async function POST(request: NextRequest) {
   }
 
   const team = await prisma.team.create({
-    data: { name: parsed.data.name },
+    data: { name: parsed.data.name, kind: parsed.data.kind },
     include: {
       users: {
         select: { id: true, name: true, role: true },

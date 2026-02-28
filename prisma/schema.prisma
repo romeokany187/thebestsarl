@@ -52,6 +52,11 @@ enum SiteType {
   PARTNER
 }
 
+enum TeamKind {
+  AGENCE
+  PARTENAIRE
+}
+
 enum PresenceLocationStatus {
   OFFICE
   ASSIGNMENT
@@ -92,6 +97,7 @@ enum CommissionCalculationStatus {
 model Team {
   id        String   @id @default(cuid())
   name      String   @unique
+  kind      TeamKind @default(AGENCE)
   users     User[]
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

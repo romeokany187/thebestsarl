@@ -42,20 +42,34 @@ export default async function TeamsPage() {
   ]);
 
   const organizationSites = sites.filter((site) => site.type === "OFFICE" || site.type === "PARTNER");
+  const partnerNames = organizationSites.filter((site) => site.type === "PARTNER").map((site) => site.name);
+  const agencyNames = organizationSites.filter((site) => site.type === "OFFICE").map((site) => site.name);
 
   if (organizationSites.length > 0) {
     await prisma.team.createMany({
-      data: organizationSites.map((site) => ({ name: site.name })),
+      data: organizationSites.map((site) => ({
+        name: site.name,
+        kind: site.type === "PARTNER" ? "PARTENAIRE" : "AGENCE",
+      })),
       skipDuplicates: true,
     });
+
+    if (partnerNames.length > 0) {
+      await prisma.team.updateMany({
+        where: { name: { in: partnerNames } },
+        data: { kind: "PARTENAIRE" },
+      });
+    }
+
+    if (agencyNames.length > 0) {
+      await prisma.team.updateMany({
+        where: { name: { in: agencyNames } },
+        data: { kind: "AGENCE" },
+      });
+    }
   }
 
   const organizationTeams = await prisma.team.findMany({
-    where: {
-      name: {
-        in: organizationSites.map((site) => site.name),
-      },
-    },
     include: {
       users: {
         select: {
@@ -69,8 +83,6 @@ export default async function TeamsPage() {
     },
     orderBy: { name: "asc" },
   });
-
-  const teamByName = new Map(organizationTeams.map((team) => [team.name, team]));
 
   const headOffice = sites.find((site) =>
     site.type === "OFFICE" && containsAny(site.name, ["KINSHASA", "DIRECTION", "DG"]),
@@ -87,25 +99,18 @@ export default async function TeamsPage() {
     ? partners.map((partner) => partner.name)
     : fallbackPartners;
 
-  const assignmentTargets = organizationSites
-    .map((site) => {
-      const linkedTeam = teamByName.get(site.name);
-      if (!linkedTeam) return null;
-      return {
-        id: linkedTeam.id,
-        name: site.name,
-        kind: site.type === "PARTNER" ? "PARTENAIRE" as const : "AGENCE" as const,
-      };
-    })
-    .filter((target): target is { id: string; name: string; kind: "AGENCE" | "PARTENAIRE" } => Boolean(target));
+  const assignmentTargets = organizationTeams.map((team) => ({
+    id: team.id,
+    name: team.name,
+    kind: team.kind,
+  }));
 
-  const organizationCards = organizationSites.map((site) => {
-    const linkedTeam = teamByName.get(site.name);
+  const organizationCards = organizationTeams.map((team) => {
     return {
-      id: site.id,
-      name: site.name,
-      kind: site.type === "PARTNER" ? "Partenaire" : "Agence",
-      collaborators: linkedTeam?.users ?? [],
+      id: team.id,
+      name: team.name,
+      kind: team.kind === "PARTENAIRE" ? "Partenaire" : "Agence",
+      collaborators: team.users,
     };
   });
 
@@ -179,6 +184,7 @@ export default async function TeamsPage() {
             teamName: user.team?.name ?? "Sans équipe",
           }))}
           teams={assignmentTargets}
+          actorRole={role}
         />
       </section>
 

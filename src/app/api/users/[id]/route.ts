@@ -1,4 +1,4 @@
-import { JobTitle } from "@prisma/client";
+import { JobTitle, Role } from "@prisma/client";
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
@@ -7,7 +7,8 @@ import { requireApiRoles } from "@/lib/rbac";
 const userUpdateSchema = z.object({
   jobTitle: z.nativeEnum(JobTitle).optional(),
   teamId: z.string().min(1).nullable().optional(),
-}).refine((value) => value.jobTitle !== undefined || value.teamId !== undefined, {
+  role: z.nativeEnum(Role).optional(),
+}).refine((value) => value.jobTitle !== undefined || value.teamId !== undefined || value.role !== undefined, {
   message: "Aucune donnée à mettre à jour.",
 });
 
@@ -29,11 +30,16 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
     return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
   }
 
+  if (access.role !== "ADMIN" && parsed.data.role !== undefined) {
+    return NextResponse.json({ error: "Seul un administrateur peut changer le rôle." }, { status: 403 });
+  }
+
   const existing = await prisma.user.findUnique({
     where: { id },
     select: {
       id: true,
       name: true,
+      role: true,
       teamId: true,
       team: { select: { id: true, name: true } },
       jobTitle: true,
@@ -41,6 +47,32 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
   });
   if (!existing) {
     return NextResponse.json({ error: "Utilisateur introuvable." }, { status: 404 });
+  }
+
+  if (access.role === "MANAGER") {
+    const actor = await prisma.user.findUnique({
+      where: { id: access.session.user.id },
+      select: { id: true, teamId: true },
+    });
+
+    if (!actor?.teamId) {
+      return NextResponse.json({ error: "Chef d'équipe sans équipe associée." }, { status: 403 });
+    }
+
+    const requestedTeamId = parsed.data.teamId === undefined ? existing.teamId : parsed.data.teamId;
+    const targetInManagerTeam = existing.teamId === actor.teamId;
+    const targetUnassigned = existing.teamId === null;
+    const movingToManagerTeam = requestedTeamId === actor.teamId;
+    const removingFromManagerTeam = targetInManagerTeam && requestedTeamId === null;
+
+    const managerCanTarget = targetInManagerTeam || (targetUnassigned && movingToManagerTeam);
+    if (!managerCanTarget) {
+      return NextResponse.json({ error: "Vous pouvez gérer uniquement les membres de votre équipe." }, { status: 403 });
+    }
+
+    if (!movingToManagerTeam && !removingFromManagerTeam) {
+      return NextResponse.json({ error: "Un chef d'équipe ne peut gérer que son équipe." }, { status: 403 });
+    }
   }
 
   if (parsed.data.teamId) {
@@ -56,6 +88,7 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
       data: {
         ...(parsed.data.jobTitle !== undefined ? { jobTitle: parsed.data.jobTitle } : {}),
         ...(parsed.data.teamId !== undefined ? { teamId: parsed.data.teamId } : {}),
+        ...(parsed.data.role !== undefined ? { role: parsed.data.role } : {}),
       },
       select: {
         id: true,
@@ -69,25 +102,35 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
 
     const teamChanged = parsed.data.teamId !== undefined && parsed.data.teamId !== existing.teamId;
     const jobChanged = parsed.data.jobTitle !== undefined && parsed.data.jobTitle !== existing.jobTitle;
+    const roleChanged = parsed.data.role !== undefined && parsed.data.role !== existing.role;
 
-    if (teamChanged || jobChanged) {
+    if (teamChanged || jobChanged || roleChanged) {
       const title = "Nouvelle affectation";
       const fromTeam = existing.team?.name ?? "Sans équipe";
       const toTeam = user.team?.name ?? "Sans équipe";
       const fromJob = existing.jobTitle;
       const toJob = user.jobTitle;
+      const fromRole = existing.role;
+      const toRole = user.role;
+      const messageParts: string[] = [];
+
+      if (teamChanged) messageParts.push(`Équipe ${fromTeam} → ${toTeam}`);
+      if (jobChanged) messageParts.push(`Fonction ${fromJob} → ${toJob}`);
+      if (roleChanged) messageParts.push(`Rôle ${fromRole} → ${toRole}`);
 
       await tx.userNotification.create({
         data: {
           userId: user.id,
           title,
           type: "ASSIGNMENT",
-          message: `Votre affectation a été mise à jour: Équipe ${fromTeam} → ${toTeam}; Fonction ${fromJob} → ${toJob}.`,
+          message: `Votre affectation a été mise à jour: ${messageParts.join("; ")}.`,
           metadata: {
             fromTeam,
             toTeam,
             fromJob,
             toJob,
+            fromRole,
+            toRole,
             changedBy: access.session.user.id,
           },
         },
