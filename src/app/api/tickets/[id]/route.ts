@@ -5,6 +5,7 @@ import { requireApiRoles } from "@/lib/rbac";
 import { ticketUpdateSchema } from "@/lib/validators";
 import { computeCommissionAmount, pickCommissionRule } from "@/lib/commission";
 import { ensureAirlineCatalog } from "@/lib/airline-catalog";
+import { canSellTickets } from "@/lib/assignment";
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -16,6 +17,10 @@ export async function PATCH(request: NextRequest, { params }: Params) {
   const access = await requireApiRoles(["ADMIN", "EMPLOYEE"]);
   if (access.error) {
     return access.error;
+  }
+
+  if (access.role === "EMPLOYEE" && !canSellTickets(access.session.user.jobTitle ?? "")) {
+    return NextResponse.json({ error: "Fonction non autorisée pour modifier des billets." }, { status: 403 });
   }
 
   try {
@@ -216,6 +221,10 @@ export async function DELETE(_request: NextRequest, { params }: Params) {
   const access = await requireApiRoles(["ADMIN", "EMPLOYEE"]);
   if (access.error) {
     return access.error;
+  }
+
+  if (access.role === "EMPLOYEE" && !canSellTickets(access.session.user.jobTitle ?? "")) {
+    return NextResponse.json({ error: "Fonction non autorisée pour supprimer des billets." }, { status: 403 });
   }
 
   try {

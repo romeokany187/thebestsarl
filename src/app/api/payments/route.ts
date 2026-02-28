@@ -3,6 +3,7 @@ import { PaymentStatus, Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { requireApiRoles } from "@/lib/rbac";
 import { paymentCreateSchema } from "@/lib/validators";
+import { canProcessPayments } from "@/lib/assignment";
 
 function computePaymentStatus(totalDue: number, totalPaid: number): PaymentStatus {
   if (totalPaid <= 0) return PaymentStatus.UNPAID;
@@ -11,8 +12,16 @@ function computePaymentStatus(totalDue: number, totalPaid: number): PaymentStatu
 }
 
 export async function POST(request: NextRequest) {
-  const access = await requireApiRoles(["ADMIN", "MANAGER", "ACCOUNTANT"]);
+  const access = await requireApiRoles(["ADMIN", "MANAGER", "ACCOUNTANT", "EMPLOYEE"]);
   if (access.error) return access.error;
+
+  if (
+    access.role !== "ADMIN"
+    && access.role !== "MANAGER"
+    && !canProcessPayments(access.session.user.jobTitle ?? "")
+  ) {
+    return NextResponse.json({ error: "Fonction non autorisée pour enregistrer des paiements." }, { status: 403 });
+  }
 
   try {
     const body = await request.json();

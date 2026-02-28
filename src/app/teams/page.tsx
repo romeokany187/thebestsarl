@@ -39,6 +39,7 @@ export default async function TeamsPage() {
         name: true,
         email: true,
         role: true,
+        jobTitle: true,
         teamId: true,
         team: { select: { name: true } },
       },
@@ -127,6 +128,7 @@ export default async function TeamsPage() {
             name: user.name,
             email: user.email,
             role: user.role,
+            jobTitle: user.jobTitle,
             teamId: user.teamId,
             teamName: user.team?.name ?? "Sans équipe",
           }))}

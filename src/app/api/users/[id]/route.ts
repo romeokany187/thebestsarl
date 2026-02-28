@@ -29,7 +29,16 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
     return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
   }
 
-  const existing = await prisma.user.findUnique({ where: { id }, select: { id: true } });
+  const existing = await prisma.user.findUnique({
+    where: { id },
+    select: {
+      id: true,
+      name: true,
+      teamId: true,
+      team: { select: { id: true, name: true } },
+      jobTitle: true,
+    },
+  });
   if (!existing) {
     return NextResponse.json({ error: "Utilisateur introuvable." }, { status: 404 });
   }
@@ -41,20 +50,51 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
     }
   }
 
-  const updated = await prisma.user.update({
-    where: { id },
-    data: {
-      ...(parsed.data.jobTitle !== undefined ? { jobTitle: parsed.data.jobTitle } : {}),
-      ...(parsed.data.teamId !== undefined ? { teamId: parsed.data.teamId } : {}),
-    },
-    select: {
-      id: true,
-      name: true,
-      email: true,
-      role: true,
-      jobTitle: true,
-      team: { select: { id: true, name: true } },
-    },
+  const updated = await prisma.$transaction(async (tx) => {
+    const user = await tx.user.update({
+      where: { id },
+      data: {
+        ...(parsed.data.jobTitle !== undefined ? { jobTitle: parsed.data.jobTitle } : {}),
+        ...(parsed.data.teamId !== undefined ? { teamId: parsed.data.teamId } : {}),
+      },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        role: true,
+        jobTitle: true,
+        team: { select: { id: true, name: true } },
+      },
+    });
+
+    const teamChanged = parsed.data.teamId !== undefined && parsed.data.teamId !== existing.teamId;
+    const jobChanged = parsed.data.jobTitle !== undefined && parsed.data.jobTitle !== existing.jobTitle;
+
+    if (teamChanged || jobChanged) {
+      const title = "Nouvelle affectation";
+      const fromTeam = existing.team?.name ?? "Sans équipe";
+      const toTeam = user.team?.name ?? "Sans équipe";
+      const fromJob = existing.jobTitle;
+      const toJob = user.jobTitle;
+
+      await tx.userNotification.create({
+        data: {
+          userId: user.id,
+          title,
+          type: "ASSIGNMENT",
+          message: `Votre affectation a été mise à jour: Équipe ${fromTeam} → ${toTeam}; Fonction ${fromJob} → ${toJob}.`,
+          metadata: {
+            fromTeam,
+            toTeam,
+            fromJob,
+            toJob,
+            changedBy: access.session.user.id,
+          },
+        },
+      });
+    }
+
+    return user;
   });
 
   return NextResponse.json({ data: updated });

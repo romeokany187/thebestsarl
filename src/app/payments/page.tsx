@@ -2,8 +2,10 @@ import { PaymentStatus } from "@prisma/client";
 import { AppShell } from "@/components/app-shell";
 import { KpiCard } from "@/components/kpi-card";
 import { PaymentEntryForm } from "@/components/payment-entry-form";
+import { canProcessPayments } from "@/lib/assignment";
 import { requirePageRoles } from "@/lib/rbac";
 import { prisma } from "@/lib/prisma";
+import { redirect } from "next/navigation";
 
 type ReportMode = "date" | "month" | "year" | "semester";
 
@@ -114,7 +116,13 @@ export default async function PaymentsPage({
 }: {
   searchParams?: Promise<SearchParams>;
 }) {
-  const { role } = await requirePageRoles(["ADMIN", "MANAGER", "ACCOUNTANT"]);
+  const { role, session } = await requirePageRoles(["ADMIN", "MANAGER", "ACCOUNTANT", "EMPLOYEE"]);
+  if (
+    role === "EMPLOYEE"
+    && !canProcessPayments(session.user.jobTitle ?? "")
+  ) {
+    redirect("/");
+  }
   const resolvedSearchParams = (await searchParams) ?? {};
   const range = dateRangeFromParams(resolvedSearchParams);
 

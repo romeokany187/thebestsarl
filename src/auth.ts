@@ -58,13 +58,15 @@ export const authOptions: NextAuthOptions = {
       if (token.email) {
         const dbUser = await prisma.user.findUnique({
           where: { email: token.email },
-          select: { id: true, name: true, role: true },
+          select: { id: true, name: true, role: true, jobTitle: true, team: { select: { name: true } } },
         });
 
         if (dbUser) {
           token.sub = dbUser.id;
           token.name = dbUser.name;
           token.role = dbUser.role;
+          token.jobTitle = dbUser.jobTitle;
+          token.teamName = dbUser.team?.name ?? null;
         }
       }
 
@@ -74,6 +76,8 @@ export const authOptions: NextAuthOptions = {
       if (session.user) {
         session.user.id = token.sub ?? "";
         session.user.role = token.role as string;
+        session.user.jobTitle = token.jobTitle as string;
+        session.user.teamName = (token.teamName as string | null) ?? null;
         session.user.name = token.name ?? session.user.name;
         session.user.email = token.email ?? session.user.email;
       }

@@ -111,8 +111,21 @@ model User {
   attendances   Attendance[]
   ticketsSold   TicketSale[]  @relation("TicketSeller")
   logs          AuditLog[]
+  notifications UserNotification[]
   createdAt     DateTime      @default(now())
   updatedAt     DateTime      @updatedAt
+}
+
+model UserNotification {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  title     String
+  message   String
+  type      String   @default("INFO")
+  isRead    Boolean  @default(false)
+  metadata  Json?
+  createdAt DateTime @default(now())
 }
 
 model WorkerReport {

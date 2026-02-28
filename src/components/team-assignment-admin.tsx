@@ -7,6 +7,25 @@ type TeamOption = {
   name: string;
 };
 
+type JobTitle =
+  | "COMMERCIAL"
+  | "COMPTABLE"
+  | "CAISSIERE"
+  | "RELATION_PUBLIQUE"
+  | "APPROVISIONNEMENT_MARKETING"
+  | "AGENT_TERRAIN"
+  | "DIRECTION_GENERALE";
+
+const jobOptions: Array<{ value: JobTitle; label: string }> = [
+  { value: "COMMERCIAL", label: "Commercial" },
+  { value: "COMPTABLE", label: "Comptable" },
+  { value: "CAISSIERE", label: "Caissière" },
+  { value: "RELATION_PUBLIQUE", label: "Relation publique" },
+  { value: "APPROVISIONNEMENT_MARKETING", label: "Approvisionnement marketing" },
+  { value: "AGENT_TERRAIN", label: "Agent de terrain" },
+  { value: "DIRECTION_GENERALE", label: "Direction générale" },
+];
+
 type UserRow = {
   id: string;
   name: string;
@@ -14,6 +33,7 @@ type UserRow = {
   role: string;
   teamId: string | null;
   teamName: string;
+  jobTitle: JobTitle;
 };
 
 export function TeamAssignmentAdmin({ users, teams }: { users: UserRow[]; teams: TeamOption[] }) {
@@ -24,7 +44,7 @@ export function TeamAssignmentAdmin({ users, teams }: { users: UserRow[]; teams:
   const [creating, setCreating] = useState(false);
 
   const hasChanges = useMemo(
-    () => rows.some((row, index) => row.teamId !== users[index]?.teamId),
+    () => rows.some((row, index) => row.teamId !== users[index]?.teamId || row.jobTitle !== users[index]?.jobTitle),
     [rows, users],
   );
 
@@ -38,6 +58,10 @@ export function TeamAssignmentAdmin({ users, teams }: { users: UserRow[]; teams:
       : row)));
   }
 
+  function updateJobTitle(userId: string, nextJobTitle: JobTitle) {
+    setRows((prev) => prev.map((row) => (row.id === userId ? { ...row, jobTitle: nextJobTitle } : row)));
+  }
+
   async function saveOne(userId: string) {
     const row = rows.find((item) => item.id === userId);
     if (!row) return;
@@ -48,7 +72,7 @@ export function TeamAssignmentAdmin({ users, teams }: { users: UserRow[]; teams:
     const response = await fetch(`/api/users/${userId}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ teamId: row.teamId }),
+      body: JSON.stringify({ teamId: row.teamId, jobTitle: row.jobTitle }),
     });
 
     const payload = await response.json().catch(() => null);
@@ -59,7 +83,7 @@ export function TeamAssignmentAdmin({ users, teams }: { users: UserRow[]; teams:
       return;
     }
 
-    setStatus(`Affectation mise à jour pour ${row.name}.`);
+    setStatus(`Affectation et fonction mises à jour pour ${row.name}.`);
     setSavingId("");
   }
 
@@ -123,6 +147,7 @@ export function TeamAssignmentAdmin({ users, teams }: { users: UserRow[]; teams:
               <th className="px-3 py-2 text-left">Email</th>
               <th className="px-3 py-2 text-left">Rôle</th>
               <th className="px-3 py-2 text-left">Équipe</th>
+              <th className="px-3 py-2 text-left">Fonction</th>
               <th className="px-3 py-2 text-left">Action</th>
             </tr>
           </thead>
@@ -145,6 +170,17 @@ export function TeamAssignmentAdmin({ users, teams }: { users: UserRow[]; teams:
                   </select>
                 </td>
                 <td className="px-3 py-2">
+                  <select
+                    className="w-full rounded-md border px-2 py-1.5"
+                    value={user.jobTitle}
+                    onChange={(event) => updateJobTitle(user.id, event.target.value as JobTitle)}
+                  >
+                    {jobOptions.map((option) => (
+                      <option key={option.value} value={option.value}>{option.label}</option>
+                    ))}
+                  </select>
+                </td>
+                <td className="px-3 py-2">
                   <button
                     type="button"
                     onClick={() => saveOne(user.id)}
@@ -160,7 +196,10 @@ export function TeamAssignmentAdmin({ users, teams }: { users: UserRow[]; teams:
         </table>
       </div>
 
-      <p className="mt-2 text-xs text-black/60 dark:text-white/60">{hasChanges ? "Des changements sont en attente." : status}</p>
+      <p className="mt-2 text-xs text-black/60 dark:text-white/60">
+        {hasChanges ? "Des changements sont en attente." : "Aucun changement en attente."}
+        {status ? ` ${status}` : ""}
+      </p>
     </section>
   );
 }

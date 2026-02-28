@@ -7,6 +7,7 @@ import { computeCommissionAmount, pickCommissionRule } from "@/lib/commission";
 import { CommissionCalculationStatus, CommissionMode } from "@prisma/client";
 import { ensureAirlineCatalog } from "@/lib/airline-catalog";
 import { Prisma } from "@prisma/client";
+import { canSellTickets } from "@/lib/assignment";
 
 function clamp(value: number, min: number, max: number) {
   return Math.max(min, Math.min(max, value));
@@ -39,6 +40,10 @@ export async function POST(request: NextRequest) {
   const access = await requireApiRoles(["ADMIN", "MANAGER", "EMPLOYEE"]);
   if (access.error) {
     return access.error;
+  }
+
+  if (access.role === "EMPLOYEE" && !canSellTickets(access.session.user.jobTitle ?? "")) {
+    return NextResponse.json({ error: "Fonction non autorisée pour l'encodage des billets." }, { status: 403 });
   }
 
   try {
