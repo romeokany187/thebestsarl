@@ -1,10 +1,11 @@
 "use client";
 
-import { FormEvent, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 
 type TeamOption = {
   id: string;
   name: string;
+  kind: "AGENCE" | "PARTENAIRE";
 };
 
 type JobTitle =
@@ -38,10 +39,8 @@ type UserRow = {
 
 export function TeamAssignmentAdmin({ users, teams }: { users: UserRow[]; teams: TeamOption[] }) {
   const [rows, setRows] = useState(users);
-  const [newTeamName, setNewTeamName] = useState("");
   const [status, setStatus] = useState("");
   const [savingId, setSavingId] = useState("");
-  const [creating, setCreating] = useState(false);
 
   const hasChanges = useMemo(
     () => rows.some((row, index) => row.teamId !== users[index]?.teamId || row.jobTitle !== users[index]?.jobTitle),
@@ -87,57 +86,12 @@ export function TeamAssignmentAdmin({ users, teams }: { users: UserRow[]; teams:
     setSavingId("");
   }
 
-  async function createTeam(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (!newTeamName.trim()) {
-      setStatus("Saisissez un nom d'équipe.");
-      return;
-    }
-
-    setCreating(true);
-    setStatus("Création de l'équipe...");
-
-    const response = await fetch("/api/teams", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name: newTeamName.trim() }),
-    });
-
-    const payload = await response.json().catch(() => null);
-
-    if (!response.ok) {
-      setStatus(payload?.error ?? "Impossible de créer l'équipe.");
-      setCreating(false);
-      return;
-    }
-
-    setStatus("Équipe créée. Recharge la page pour l'utiliser dans les affectations.");
-    setNewTeamName("");
-    setCreating(false);
-  }
-
   return (
     <section className="rounded-xl border border-black/10 bg-white p-4 dark:border-white/10 dark:bg-zinc-900">
-      <h2 className="text-lg font-semibold">Affectation des agents aux équipes</h2>
+      <h2 className="text-lg font-semibold">Affectation des collaborateurs aux agences/partenaires</h2>
       <p className="text-xs text-black/60 dark:text-white/60">
-        Assignez ou désaffectez un agent d'une équipe opérationnelle.
+        Assignez chaque collaborateur à une agence ou un partenaire, puis définissez sa fonction.
       </p>
-
-      <form onSubmit={createTeam} className="mt-3 flex flex-wrap gap-2">
-        <input
-          value={newTeamName}
-          onChange={(event) => setNewTeamName(event.target.value)}
-          placeholder="Nouvelle équipe"
-          className="rounded-md border border-black/15 px-3 py-2 text-sm dark:border-white/20"
-        />
-        <button
-          type="submit"
-          disabled={creating}
-          className="rounded-md bg-black px-3 py-2 text-xs font-semibold text-white dark:bg-white dark:text-black"
-        >
-          {creating ? "Création..." : "Créer équipe"}
-        </button>
-      </form>
 
       <div className="mt-4 overflow-hidden rounded-lg border border-black/10 dark:border-white/10">
         <table className="min-w-full text-sm">
@@ -165,7 +119,7 @@ export function TeamAssignmentAdmin({ users, teams }: { users: UserRow[]; teams:
                   >
                     <option value="NONE">Sans équipe</option>
                     {teams.map((team) => (
-                      <option key={team.id} value={team.id}>{team.name}</option>
+                      <option key={team.id} value={team.id}>{team.name} ({team.kind})</option>
                     ))}
                   </select>
                 </td>

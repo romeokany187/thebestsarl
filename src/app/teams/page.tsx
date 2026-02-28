@@ -1,5 +1,6 @@
 import { AppShell } from "@/components/app-shell";
 import { TeamAssignmentAdmin } from "@/components/team-assignment-admin";
+import { jobTitleLabel } from "@/lib/assignment";
 import { requirePageRoles } from "@/lib/rbac";
 import { prisma } from "@/lib/prisma";
 
@@ -20,15 +21,7 @@ function roleLabel(role: string) {
 export default async function TeamsPage() {
   const { role } = await requirePageRoles(["ADMIN", "MANAGER", "ACCOUNTANT"]);
 
-  const [teams, sites, users] = await Promise.all([
-    prisma.team.findMany({
-      include: {
-        users: {
-          select: { id: true, name: true, role: true, email: true },
-        },
-      },
-      orderBy: { name: "asc" },
-    }),
+  const [sites, users] = await Promise.all([
     prisma.workSite.findMany({
       where: { isActive: true },
       orderBy: { createdAt: "asc" },
@@ -43,10 +36,41 @@ export default async function TeamsPage() {
         teamId: true,
         team: { select: { name: true } },
       },
-      where: { role: { in: ["EMPLOYEE", "MANAGER", "ADMIN"] } },
+      where: { role: { in: ["EMPLOYEE", "MANAGER", "ADMIN", "ACCOUNTANT"] } },
       orderBy: { name: "asc" },
     }),
   ]);
+
+  const organizationSites = sites.filter((site) => site.type === "OFFICE" || site.type === "PARTNER");
+
+  if (organizationSites.length > 0) {
+    await prisma.team.createMany({
+      data: organizationSites.map((site) => ({ name: site.name })),
+      skipDuplicates: true,
+    });
+  }
+
+  const organizationTeams = await prisma.team.findMany({
+    where: {
+      name: {
+        in: organizationSites.map((site) => site.name),
+      },
+    },
+    include: {
+      users: {
+        select: {
+          id: true,
+          name: true,
+          role: true,
+          email: true,
+          jobTitle: true,
+        },
+      },
+    },
+    orderBy: { name: "asc" },
+  });
+
+  const teamByName = new Map(organizationTeams.map((team) => [team.name, team]));
 
   const headOffice = sites.find((site) =>
     site.type === "OFFICE" && containsAny(site.name, ["KINSHASA", "DIRECTION", "DG"]),
@@ -62,6 +86,28 @@ export default async function TeamsPage() {
   const displayedPartners = partners.length > 0
     ? partners.map((partner) => partner.name)
     : fallbackPartners;
+
+  const assignmentTargets = organizationSites
+    .map((site) => {
+      const linkedTeam = teamByName.get(site.name);
+      if (!linkedTeam) return null;
+      return {
+        id: linkedTeam.id,
+        name: site.name,
+        kind: site.type === "PARTNER" ? "PARTENAIRE" as const : "AGENCE" as const,
+      };
+    })
+    .filter((target): target is { id: string; name: string; kind: "AGENCE" | "PARTENAIRE" } => Boolean(target));
+
+  const organizationCards = organizationSites.map((site) => {
+    const linkedTeam = teamByName.get(site.name);
+    return {
+      id: site.id,
+      name: site.name,
+      kind: site.type === "PARTNER" ? "Partenaire" : "Agence",
+      collaborators: linkedTeam?.users ?? [],
+    };
+  });
 
   return (
     <AppShell
@@ -132,29 +178,36 @@ export default async function TeamsPage() {
             teamId: user.teamId,
             teamName: user.team?.name ?? "Sans équipe",
           }))}
-          teams={teams.map((team) => ({ id: team.id, name: team.name }))}
+          teams={assignmentTargets}
         />
       </section>
 
       <div className="grid gap-4 lg:grid-cols-2">
-        {teams.map((team) => (
-          <article key={team.id} className="rounded-2xl border border-black/10 bg-white p-5 shadow-sm dark:border-white/10 dark:bg-zinc-900">
+        {organizationCards.map((entry) => (
+          <article key={entry.id} className="rounded-2xl border border-black/10 bg-white p-5 shadow-sm dark:border-white/10 dark:bg-zinc-900">
             <div className="flex items-center justify-between gap-2">
-              <h2 className="text-lg font-semibold">{team.name}</h2>
+              <h2 className="text-lg font-semibold">{entry.name}</h2>
               <span className="rounded-full border border-black/15 bg-black/5 px-2 py-0.5 text-[10px] font-semibold dark:border-white/20 dark:bg-white/10">
-                {team.users.length} membre(s)
+                {entry.kind} • {entry.collaborators.length} collaborateur(s)
               </span>
             </div>
             <ul className="mt-4 space-y-2 text-sm">
-              {team.users.map((user) => (
-                <li key={user.id} className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-black/10 px-3 py-2 dark:border-white/10">
-                  <span className="font-medium">{user.name}</span>
-                  <span className="inline-flex items-center gap-1 text-xs text-black/60 dark:text-white/60">
-                    <span className="rounded-full border border-black/15 bg-black/5 px-2 py-0.5 text-[10px] font-semibold dark:border-white/20 dark:bg-white/10">{roleLabel(user.role)}</span>
-                    <span>• {user.email}</span>
-                  </span>
+              {entry.collaborators.length > 0 ? (
+                entry.collaborators.map((user) => (
+                  <li key={user.id} className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-black/10 px-3 py-2 dark:border-white/10">
+                    <span className="font-medium">{user.name}</span>
+                    <span className="inline-flex items-center gap-1 text-xs text-black/60 dark:text-white/60">
+                      <span className="rounded-full border border-black/15 bg-black/5 px-2 py-0.5 text-[10px] font-semibold dark:border-white/20 dark:bg-white/10">{jobTitleLabel(user.jobTitle)}</span>
+                      <span className="rounded-full border border-black/15 bg-black/5 px-2 py-0.5 text-[10px] font-semibold dark:border-white/20 dark:bg-white/10">{roleLabel(user.role)}</span>
+                      <span>• {user.email}</span>
+                    </span>
+                  </li>
+                ))
+              ) : (
+                <li className="rounded-xl border border-dashed border-black/15 px-3 py-2 text-xs text-black/55 dark:border-white/20 dark:text-white/55">
+                  Aucun collaborateur affecté.
                 </li>
-              ))}
+              )}
             </ul>
           </article>
         ))}
