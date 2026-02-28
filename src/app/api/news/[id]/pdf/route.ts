@@ -154,31 +154,41 @@ function drawReferenceBox(page: PDFPage, fontBold: PDFFont, fontRegular: PDFFont
   });
 }
 
-function drawSignature(page: PDFPage, signatureImage: PDFImage | null, fontRegular: PDFFont) {
+function drawSignature(page: PDFPage, logoImage: PDFImage | null, signatureImage: PDFImage | null, fontRegular: PDFFont) {
   const { width } = page.getSize();
 
   page.drawLine({
-    start: { x: width - 230, y: 116 },
-    end: { x: width - 40, y: 116 },
+    start: { x: 38, y: 116 },
+    end: { x: width - 38, y: 116 },
     thickness: 0.8,
     color: rgb(0.78, 0.78, 0.78),
   });
 
-  page.drawText("Signé: Direction Générale", {
-    x: width - 226,
+  page.drawText("Validation officielle", {
+    x: 38,
     y: 128,
     size: 9,
     font: fontRegular,
     color: BRAND_TEXT,
   });
 
+  if (logoImage) {
+    const scaled = logoImage.scale(0.2);
+    page.drawImage(logoImage, {
+      x: 44,
+      y: 66,
+      width: Math.min(130, scaled.width),
+      height: Math.min(48, scaled.height),
+    });
+  }
+
   if (signatureImage) {
-    const scaled = signatureImage.scale(0.24);
+    const scaled = signatureImage.scale(0.32);
     page.drawImage(signatureImage, {
       x: width - 224,
-      y: 88,
-      width: Math.min(170, scaled.width),
-      height: Math.min(32, scaled.height),
+      y: 72,
+      width: Math.min(180, scaled.width),
+      height: Math.min(44, scaled.height),
     });
   }
 }
@@ -360,7 +370,7 @@ export async function GET(_request: NextRequest, context: RouteContext) {
     y -= line ? 15 : 10;
   }
 
-  drawSignature(page, signatureImage, fontRegular);
+  drawSignature(page, logoImage, signatureImage, fontRegular);
   drawStamp(page, stampImage);
 
   const pages = pdf.getPages();
