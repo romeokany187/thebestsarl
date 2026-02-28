@@ -174,29 +174,14 @@ function drawReferenceBox(page: PDFPage, fontBold: PDFFont, fontRegular: PDFFont
   });
 }
 
-function drawSignature(page: PDFPage, signatureImage: PDFImage | null, fontRegular: PDFFont) {
+function drawSignature(page: PDFPage, signatureImage: PDFImage | null) {
   const { width } = page.getSize();
 
-  page.drawText("Le Directeur Général", {
-    x: width - 252,
-    y: 34,
-    size: 11,
-    font: fontRegular,
-    color: BRAND_TEXT,
-  });
-
-  page.drawLine({
-    start: { x: width - 252, y: 32 },
-    end: { x: width - 128, y: 32 },
-    thickness: 0.8,
-    color: BRAND_TEXT,
-  });
-
   if (signatureImage) {
-    const fitted = getContainedSize(signatureImage, 280, 96, true);
+    const fitted = getContainedSize(signatureImage, 360, 130, true);
     page.drawImage(signatureImage, {
-      x: width - fitted.width - 56,
-      y: 52,
+      x: width - fitted.width - 44,
+      y: 40,
       width: fitted.width,
       height: fitted.height,
     });
@@ -379,7 +364,7 @@ export async function GET(_request: NextRequest, context: RouteContext) {
     y -= line ? 15 : 10;
   }
 
-  drawSignature(page, signatureImage, fontRegular);
+  drawSignature(page, signatureImage);
   drawStamp(page, stampImage);
 
   const pages = pdf.getPages();
