@@ -38,7 +38,7 @@ const links = [
   },
   {
     href: "/projects",
-    label: "Projets",
+    label: "Nouvelles",
     roles: ["ADMIN", "MANAGER", "EMPLOYEE", "ACCOUNTANT"] as AppRole[],
   },
   {

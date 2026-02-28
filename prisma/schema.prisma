@@ -118,6 +118,7 @@ model User {
   ticketsSold   TicketSale[]  @relation("TicketSeller")
   logs          AuditLog[]
   notifications UserNotification[]
+  newsPosts     NewsPost[]    @relation("NewsAuthor")
   createdAt     DateTime      @default(now())
   updatedAt     DateTime      @updatedAt
 }
@@ -132,6 +133,17 @@ model UserNotification {
   isRead    Boolean  @default(false)
   metadata  Json?
   createdAt DateTime @default(now())
+}
+
+model NewsPost {
+  id          String   @id @default(cuid())
+  title       String
+  content     String
+  isPublished Boolean  @default(true)
+  authorId    String
+  author      User     @relation("NewsAuthor", fields: [authorId], references: [id])
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 }
 
 model WorkerReport {
