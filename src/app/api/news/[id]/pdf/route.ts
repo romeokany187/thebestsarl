@@ -102,6 +102,62 @@ function drawFooter(page: PDFPage, fontRegular: PDFFont, printedBy: string) {
   });
 }
 
+function drawPageNumber(page: PDFPage, fontRegular: PDFFont, index: number, total: number) {
+  const { width } = page.getSize();
+  const text = `Page ${index}/${total}`;
+  const textWidth = fontRegular.widthOfTextAtSize(text, 8.5);
+
+  page.drawText(text, {
+    x: (width - textWidth) / 2,
+    y: 26,
+    size: 8.5,
+    font: fontRegular,
+    color: rgb(0.4, 0.4, 0.4),
+  });
+}
+
+function drawReferenceBox(page: PDFPage, fontBold: PDFFont, fontRegular: PDFFont, postId: string, publishedAt: Date) {
+  const { width, height } = page.getSize();
+  const boxWidth = 180;
+  const boxHeight = 52;
+  const x = width - boxWidth - 38;
+  const y = height - 154;
+
+  page.drawRectangle({
+    x,
+    y,
+    width: boxWidth,
+    height: boxHeight,
+    borderWidth: 0.8,
+    borderColor: rgb(0.8, 0.8, 0.8),
+    color: rgb(0.98, 0.98, 0.98),
+  });
+
+  page.drawText("Référence", {
+    x: x + 8,
+    y: y + boxHeight - 14,
+    size: 8,
+    font: fontBold,
+    color: rgb(0.28, 0.28, 0.28),
+  });
+
+  page.drawText(`DG-${postId.slice(0, 8).toUpperCase()}`, {
+    x: x + 8,
+    y: y + boxHeight - 28,
+    size: 8.5,
+    font: fontRegular,
+    color: rgb(0.2, 0.2, 0.2),
+  });
+
+  page.drawText(`Date: ${publishedAt.toLocaleDateString()}`, {
+    x: x + 8,
+    y: y + 10,
+    size: 8.5,
+    font: fontRegular,
+    color: rgb(0.28, 0.28, 0.28),
+  });
+}
+
 function drawSignature(page: PDFPage, signatureImage: PDFImage | null, fontRegular: PDFFont) {
   const { width } = page.getSize();
 
@@ -131,7 +187,7 @@ function drawSignature(page: PDFPage, signatureImage: PDFImage | null, fontRegul
   }
 }
 
-function wrapText(text: string, maxChars = 84) {
+function wrapText(text: string, font: PDFFont, size: number, maxWidth: number) {
   const lines: string[] = [];
   const paragraphs = text.split("\n");
 
@@ -146,7 +202,8 @@ function wrapText(text: string, maxChars = 84) {
 
     for (const word of words) {
       const candidate = current ? `${current} ${word}` : word;
-      if (candidate.length <= maxChars) {
+      const candidateWidth = font.widthOfTextAtSize(candidate, size);
+      if (candidateWidth <= maxWidth) {
         current = candidate;
       } else {
         if (current) lines.push(current);
@@ -186,8 +243,8 @@ export async function GET(_request: NextRequest, context: RouteContext) {
   const pdf = await PDFDocument.create();
   pdf.registerFontkit(fontkit);
 
-  let fontRegular;
-  let fontBold;
+  let fontRegular: PDFFont;
+  let fontBold: PDFFont;
   try {
     const regularBytes = await readFile(path.join(process.cwd(), "public/fonts/Montserrat-Regular.ttf"));
     const boldBytes = await readFile(path.join(process.cwd(), "public/fonts/Montserrat-Bold.ttf"));
@@ -217,23 +274,26 @@ export async function GET(_request: NextRequest, context: RouteContext) {
   ]);
 
   const printedBy = access.session.user.name ?? access.session.user.email ?? "Utilisateur";
-  const lines = wrapText(post.content);
+  const lines = wrapText(post.content, fontRegular, 10.5, PAGE_WIDTH - 76);
   const baseMetaText = `Publié le ${new Date(post.createdAt).toLocaleString()} • ${post.author.name}`;
+  const subjectText = `Objet: ${post.title}`;
 
   let page = pdf.addPage([PAGE_WIDTH, PAGE_HEIGHT]);
   drawHeader(logoImage, page, fontBold, fontRegular);
   drawFooter(page, fontRegular, printedBy);
+  drawReferenceBox(page, fontBold, fontRegular, post.id, post.createdAt);
 
-  let y = PAGE_HEIGHT - 136;
+  let y = PAGE_HEIGHT - 138;
+  const titleWidth = fontBold.widthOfTextAtSize(post.title, 16);
   page.drawText(post.title, {
-    x: 38,
+    x: Math.max(38, (PAGE_WIDTH - titleWidth) / 2),
     y,
     size: 16,
     font: fontBold,
     color: rgb(0.05, 0.05, 0.05),
   });
 
-  y -= 20;
+  y -= 22;
   page.drawText(baseMetaText, {
     x: 38,
     y,
@@ -242,7 +302,16 @@ export async function GET(_request: NextRequest, context: RouteContext) {
     color: rgb(0.35, 0.35, 0.35),
   });
 
-  y -= 26;
+  y -= 18;
+  page.drawText(subjectText, {
+    x: 38,
+    y,
+    size: 10,
+    font: fontBold,
+    color: rgb(0.2, 0.2, 0.2),
+  });
+
+  y -= 22;
   for (const line of lines) {
     if (y < 140) {
       page = pdf.addPage([PAGE_WIDTH, PAGE_HEIGHT]);
@@ -251,13 +320,13 @@ export async function GET(_request: NextRequest, context: RouteContext) {
 
       page.drawText(`Suite du communiqué: ${post.title}`, {
         x: 38,
-        y: PAGE_HEIGHT - 136,
+        y: PAGE_HEIGHT - 132,
         size: 12,
         font: fontBold,
         color: rgb(0.15, 0.15, 0.15),
       });
 
-      y = PAGE_HEIGHT - 168;
+      y = PAGE_HEIGHT - 160;
     }
 
     page.drawText(line, {
@@ -271,6 +340,11 @@ export async function GET(_request: NextRequest, context: RouteContext) {
   }
 
   drawSignature(page, signatureImage, fontRegular);
+
+  const pages = pdf.getPages();
+  pages.forEach((pdfPage, index) => {
+    drawPageNumber(pdfPage, fontRegular, index + 1, pages.length);
+  });
 
   const pdfBytes = await pdf.save();
   return new NextResponse(Buffer.from(pdfBytes), {
