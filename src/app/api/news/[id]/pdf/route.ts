@@ -53,42 +53,42 @@ function drawHeader(logo: PDFImage | null, page: PDFPage, titleFont: PDFFont, te
   const { width, height } = page.getSize();
 
   if (logo) {
-    const scaled = logo.scale(0.18);
+    const scaled = logo.scale(0.28);
     page.drawImage(logo, {
       x: 38,
-      y: height - 92,
-      width: Math.min(115, scaled.width),
-      height: Math.min(44, scaled.height),
+      y: height - 108,
+      width: Math.min(165, scaled.width),
+      height: Math.min(68, scaled.height),
     });
   }
 
   page.drawText("THE BEST SARL", {
-    x: 165,
-    y: height - 56,
-    size: 14,
+    x: 220,
+    y: height - 54,
+    size: 17,
     font: titleFont,
     color: BRAND_TEXT,
   });
 
   page.drawText("COMMUNIQUÉ OFFICIEL", {
-    x: 165,
-    y: height - 72,
-    size: 10,
+    x: 220,
+    y: height - 74,
+    size: 11,
     font: textFont,
     color: BRAND_TEXT,
   });
 
   page.drawText("Direction Générale", {
-    x: 165,
-    y: height - 86,
-    size: 9,
+    x: 220,
+    y: height - 92,
+    size: 10,
     font: titleFont,
     color: rgb(0.35, 0.35, 0.35),
   });
 
   page.drawLine({
-    start: { x: 165, y: height - 88 },
-    end: { x: 245, y: height - 88 },
+    start: { x: 220, y: height - 94 },
+    end: { x: 312, y: height - 94 },
     thickness: 0.7,
     color: rgb(0.35, 0.35, 0.35),
   });
@@ -103,13 +103,6 @@ function drawHeader(logo: PDFImage | null, page: PDFPage, titleFont: PDFFont, te
 
 function drawFooter(page: PDFPage, fontRegular: PDFFont, printedBy: string) {
   const { width } = page.getSize();
-
-  page.drawLine({
-    start: { x: 38, y: 40 },
-    end: { x: width - 38, y: 40 },
-    thickness: 0.8,
-    color: rgb(0.85, 0.85, 0.85),
-  });
 
   page.drawText(`Document officiel - Direction Générale`, {
     x: 38,
@@ -178,10 +171,10 @@ function drawSignature(page: PDFPage, signatureImage: PDFImage | null) {
   const { width } = page.getSize();
 
   if (signatureImage) {
-    const fitted = getContainedSize(signatureImage, 360, 130, true);
+    const fitted = getContainedSize(signatureImage, 420, 170, true);
     page.drawImage(signatureImage, {
-      x: width - fitted.width - 44,
-      y: 40,
+      x: Math.min(width - fitted.width - 22, 342),
+      y: 34,
       width: fitted.width,
       height: fitted.height,
     });
@@ -190,11 +183,11 @@ function drawSignature(page: PDFPage, signatureImage: PDFImage | null) {
 
 function drawStamp(page: PDFPage, stampImage: PDFImage | null) {
   if (!stampImage) return;
-  const fitted = getContainedSize(stampImage, 98, 98, true);
+  const fitted = getContainedSize(stampImage, 126, 126, true);
 
   page.drawImage(stampImage, {
-    x: 300,
-    y: 44,
+    x: 276,
+    y: 34,
     width: fitted.width,
     height: fitted.height,
     opacity: 0.92,
