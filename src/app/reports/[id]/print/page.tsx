@@ -77,9 +77,9 @@ export default async function ReportPrintPage({ params }: PageProps) {
 
   const lines = renderContentParagraphs(report.content);
   const [logoPath, signaturePath, stampPath] = await Promise.all([
-    findBrandAsset(["branding/logo.png", "branding/logo thebest.png", "logo thebest.png", "logo.png", "logo.jpg"]),
-    findBrandAsset(["branding/signature.png", "signature.png", "signature.jpg"]),
-    findBrandAsset(["branding/cachet.png", "cachet.png", "cachet.jpg"]),
+    findBrandAsset(["logo thebest.png", "logo.png", "logo.jpg", "branding/logo.png", "branding/logo thebest.png"]),
+    findBrandAsset(["signature.png", "signature.jpg", "branding/signature.png"]),
+    findBrandAsset(["cachet.png", "cachet.jpg", "branding/cachet.png"]),
   ]);
 
   return (

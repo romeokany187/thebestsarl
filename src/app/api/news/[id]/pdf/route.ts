@@ -36,6 +36,19 @@ async function embedOptionalImage(pdf: PDFDocument, candidates: string[]) {
   return null;
 }
 
+function getContainedSize(image: PDFImage, maxWidth: number, maxHeight: number, allowUpscale = false) {
+  const base = image.scale(1);
+  let ratio = Math.min(maxWidth / base.width, maxHeight / base.height);
+  if (!allowUpscale) {
+    ratio = Math.min(ratio, 1);
+  }
+
+  return {
+    width: base.width * ratio,
+    height: base.height * ratio,
+  };
+}
+
 function drawHeader(logo: PDFImage | null, page: PDFPage, titleFont: PDFFont, textFont: PDFFont) {
   const { width, height } = page.getSize();
 
@@ -180,26 +193,25 @@ function drawSignature(page: PDFPage, signatureImage: PDFImage | null, fontRegul
   });
 
   if (signatureImage) {
-    const scaled = signatureImage.scale(0.32);
+    const fitted = getContainedSize(signatureImage, 250, 86, true);
     page.drawImage(signatureImage, {
-      x: width - 214,
-      y: 66,
-      width: Math.min(180, scaled.width),
-      height: Math.min(44, scaled.height),
+      x: width - fitted.width - 44,
+      y: 48,
+      width: fitted.width,
+      height: fitted.height,
     });
   }
 }
 
 function drawStamp(page: PDFPage, stampImage: PDFImage | null) {
   if (!stampImage) return;
-  const { width } = page.getSize();
-  const scaled = stampImage.scale(0.22);
+  const fitted = getContainedSize(stampImage, 82, 82, true);
 
   page.drawImage(stampImage, {
-    x: width - 310,
+    x: 44,
     y: 48,
-    width: Math.min(76, scaled.width),
-    height: Math.min(76, scaled.height),
+    width: fitted.width,
+    height: fitted.height,
     opacity: 0.92,
   });
 }
@@ -273,32 +285,32 @@ export async function GET(_request: NextRequest, context: RouteContext) {
   }
 
   const logoImage = await embedOptionalImage(pdf, [
+    "public/logo thebest.png",
+    "public/logo.png",
+    "public/logo.jpg",
+    "public/logo.jpeg",
     "public/branding/logo.png",
     "public/branding/logo thebest.png",
     "public/branding/logo.jpg",
     "public/branding/logo.jpeg",
-    "public/logo.png",
-    "public/logo thebest.png",
-    "public/logo.jpg",
-    "public/logo.jpeg",
   ]);
 
   const signatureImage = await embedOptionalImage(pdf, [
-    "public/branding/signature.png",
-    "public/branding/signature.jpg",
-    "public/branding/signature.jpeg",
     "public/signature.png",
     "public/signature.jpg",
     "public/signature.jpeg",
+    "public/branding/signature.png",
+    "public/branding/signature.jpg",
+    "public/branding/signature.jpeg",
   ]);
 
   const stampImage = await embedOptionalImage(pdf, [
-    "public/branding/cachet.png",
-    "public/branding/cachet.jpg",
-    "public/branding/cachet.jpeg",
     "public/cachet.png",
     "public/cachet.jpg",
     "public/cachet.jpeg",
+    "public/branding/cachet.png",
+    "public/branding/cachet.jpg",
+    "public/branding/cachet.jpeg",
   ]);
 
   const printedBy = access.session.user.name ?? access.session.user.email ?? "Utilisateur";
