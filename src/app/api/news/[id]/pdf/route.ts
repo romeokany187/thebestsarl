@@ -177,26 +177,26 @@ function drawReferenceBox(page: PDFPage, fontBold: PDFFont, fontRegular: PDFFont
 function drawSignature(page: PDFPage, signatureImage: PDFImage | null, fontRegular: PDFFont) {
   const { width } = page.getSize();
 
-  page.drawLine({
-    start: { x: 38, y: 116 },
-    end: { x: width - 38, y: 116 },
-    thickness: 0.8,
-    color: rgb(0.78, 0.78, 0.78),
-  });
-
-  page.drawText("Validation officielle", {
-    x: 38,
-    y: 128,
-    size: 9,
+  page.drawText("Le Directeur Général", {
+    x: width - 252,
+    y: 34,
+    size: 11,
     font: fontRegular,
     color: BRAND_TEXT,
   });
 
+  page.drawLine({
+    start: { x: width - 252, y: 32 },
+    end: { x: width - 128, y: 32 },
+    thickness: 0.8,
+    color: BRAND_TEXT,
+  });
+
   if (signatureImage) {
-    const fitted = getContainedSize(signatureImage, 250, 86, true);
+    const fitted = getContainedSize(signatureImage, 280, 96, true);
     page.drawImage(signatureImage, {
-      x: width - fitted.width - 44,
-      y: 48,
+      x: width - fitted.width - 56,
+      y: 52,
       width: fitted.width,
       height: fitted.height,
     });
@@ -205,11 +205,11 @@ function drawSignature(page: PDFPage, signatureImage: PDFImage | null, fontRegul
 
 function drawStamp(page: PDFPage, stampImage: PDFImage | null) {
   if (!stampImage) return;
-  const fitted = getContainedSize(stampImage, 82, 82, true);
+  const fitted = getContainedSize(stampImage, 98, 98, true);
 
   page.drawImage(stampImage, {
-    x: 44,
-    y: 48,
+    x: 300,
+    y: 44,
     width: fitted.width,
     height: fitted.height,
     opacity: 0.92,
