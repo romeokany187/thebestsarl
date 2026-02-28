@@ -8,8 +8,6 @@ import { requireApiRoles } from "@/lib/rbac";
 
 const PAGE_WIDTH = 595;
 const PAGE_HEIGHT = 842;
-const BRAND_BLUE = rgb(0.08, 0.29, 0.62);
-const BRAND_BLUE_SOFT = rgb(0.9, 0.95, 1);
 const BRAND_TEXT = rgb(0.1, 0.14, 0.2);
 
 type RouteContext = {
@@ -41,63 +39,45 @@ async function embedOptionalImage(pdf: PDFDocument, candidates: string[]) {
 function drawHeader(logo: PDFImage | null, page: PDFPage, titleFont: PDFFont, textFont: PDFFont) {
   const { width, height } = page.getSize();
 
-  page.drawRectangle({
-    x: 0,
-    y: height - 18,
-    width,
-    height: 18,
-    color: BRAND_BLUE,
-  });
-
-  page.drawRectangle({
-    x: 38,
-    y: height - 108,
-    width: width - 76,
-    height: 68,
-    color: rgb(1, 1, 1),
-    borderColor: rgb(0.8, 0.87, 0.98),
-    borderWidth: 1,
-  });
-
   if (logo) {
-    const scaled = logo.scale(0.2);
+    const scaled = logo.scale(0.18);
     page.drawImage(logo, {
-      x: 50,
-      y: height - 96,
-      width: Math.min(120, scaled.width),
-      height: Math.min(50, scaled.height),
+      x: 38,
+      y: height - 92,
+      width: Math.min(115, scaled.width),
+      height: Math.min(44, scaled.height),
     });
   }
 
   page.drawText("THE BEST SARL", {
-    x: 190,
-    y: height - 64,
-    size: 16,
+    x: 165,
+    y: height - 56,
+    size: 14,
     font: titleFont,
-    color: BRAND_BLUE,
+    color: BRAND_TEXT,
   });
 
   page.drawText("DIRECTION GÉNÉRALE", {
-    x: 190,
-    y: height - 82,
-    size: 11,
+    x: 165,
+    y: height - 72,
+    size: 10,
     font: titleFont,
     color: BRAND_TEXT,
   });
 
   page.drawText("COMMUNIQUÉ OFFICIEL", {
-    x: 190,
-    y: height - 96,
+    x: 165,
+    y: height - 86,
     size: 9,
     font: textFont,
-    color: rgb(0.32, 0.39, 0.5),
+    color: rgb(0.35, 0.35, 0.35),
   });
 
   page.drawLine({
-    start: { x: 38, y: height - 100 },
-    end: { x: width - 38, y: height - 100 },
-    thickness: 1.2,
-    color: rgb(0.67, 0.8, 0.95),
+    start: { x: 38, y: height - 104 },
+    end: { x: width - 38, y: height - 104 },
+    thickness: 0.8,
+    color: rgb(0.82, 0.82, 0.82),
   });
 }
 
@@ -108,7 +88,7 @@ function drawFooter(page: PDFPage, fontRegular: PDFFont, printedBy: string) {
     start: { x: 38, y: 40 },
     end: { x: width - 38, y: 40 },
     thickness: 0.8,
-    color: rgb(0.67, 0.8, 0.95),
+    color: rgb(0.85, 0.85, 0.85),
   });
 
   page.drawText(`Document officiel - Direction Générale`, {
@@ -146,40 +126,28 @@ function drawPageNumber(page: PDFPage, fontRegular: PDFFont, index: number, tota
 
 function drawReferenceBox(page: PDFPage, fontBold: PDFFont, fontRegular: PDFFont, postId: string, publishedAt: Date) {
   const { width, height } = page.getSize();
-  const boxWidth = 180;
-  const boxHeight = 52;
-  const x = width - boxWidth - 38;
-  const y = height - 154;
-
-  page.drawRectangle({
-    x,
-    y,
-    width: boxWidth,
-    height: boxHeight,
-    borderWidth: 1,
-    borderColor: rgb(0.67, 0.8, 0.95),
-    color: BRAND_BLUE_SOFT,
-  });
+  const x = width - 206;
+  const y = height - 141;
 
   page.drawText("Référence", {
-    x: x + 8,
-    y: y + boxHeight - 14,
+    x,
+    y,
     size: 8,
     font: fontBold,
-    color: BRAND_BLUE,
+    color: rgb(0.35, 0.35, 0.35),
   });
 
   page.drawText(`DG-${postId.slice(0, 8).toUpperCase()}`, {
-    x: x + 8,
-    y: y + boxHeight - 28,
+    x,
+    y: y - 12,
     size: 8.5,
     font: fontRegular,
     color: rgb(0.2, 0.2, 0.2),
   });
 
   page.drawText(`Date: ${publishedAt.toLocaleDateString()}`, {
-    x: x + 8,
-    y: y + 10,
+    x,
+    y: y - 24,
     size: 8.5,
     font: fontRegular,
     color: rgb(0.28, 0.28, 0.28),
@@ -197,20 +165,20 @@ function drawSignature(page: PDFPage, signatureImage: PDFImage | null, fontRegul
   });
 
   page.drawText("Signé: Direction Générale", {
-    x: width - 228,
-    y: 126,
+    x: width - 226,
+    y: 128,
     size: 9,
     font: fontRegular,
     color: BRAND_TEXT,
   });
 
   if (signatureImage) {
-    const scaled = signatureImage.scale(0.2);
+    const scaled = signatureImage.scale(0.24);
     page.drawImage(signatureImage, {
-      x: width - 222,
-      y: 76,
+      x: width - 224,
+      y: 88,
       width: Math.min(170, scaled.width),
-      height: Math.min(36, scaled.height),
+      height: Math.min(32, scaled.height),
     });
   }
 }
@@ -218,14 +186,14 @@ function drawSignature(page: PDFPage, signatureImage: PDFImage | null, fontRegul
 function drawStamp(page: PDFPage, stampImage: PDFImage | null) {
   if (!stampImage) return;
   const { width } = page.getSize();
-  const scaled = stampImage.scale(0.32);
+  const scaled = stampImage.scale(0.24);
 
   page.drawImage(stampImage, {
-    x: width - 190,
-    y: 58,
-    width: Math.min(95, scaled.width),
-    height: Math.min(95, scaled.height),
-    opacity: 0.88,
+    x: width - 206,
+    y: 26,
+    width: Math.min(82, scaled.width),
+    height: Math.min(82, scaled.height),
+    opacity: 0.92,
   });
 }
 
@@ -341,9 +309,9 @@ export async function GET(_request: NextRequest, context: RouteContext) {
   page.drawText(post.title, {
     x: Math.max(38, (PAGE_WIDTH - titleWidth) / 2),
     y,
-    size: 16,
+    size: 15,
     font: fontBold,
-    color: BRAND_BLUE,
+    color: BRAND_TEXT,
   });
 
   y -= 22;
@@ -352,7 +320,7 @@ export async function GET(_request: NextRequest, context: RouteContext) {
     y,
     size: 9.5,
     font: fontRegular,
-    color: rgb(0.33, 0.39, 0.48),
+    color: rgb(0.35, 0.35, 0.35),
   });
 
   y -= 18;
@@ -376,7 +344,7 @@ export async function GET(_request: NextRequest, context: RouteContext) {
         y: PAGE_HEIGHT - 132,
         size: 12,
         font: fontBold,
-        color: BRAND_BLUE,
+        color: BRAND_TEXT,
       });
 
       y = PAGE_HEIGHT - 160;
