@@ -128,7 +128,7 @@ export async function GET(request: NextRequest, context: RouteContext) {
   page.drawText("ÉTAT DE BESOIN - APPROVISIONNEMENT", {
     x: 220,
     y: 765,
-    size: 10,
+    size: 10.8,
     font: boldFont,
     color: brandBlue,
   });
@@ -172,14 +172,14 @@ export async function GET(request: NextRequest, context: RouteContext) {
     page.drawText(`${label}:`, {
       x: 38,
       y,
-      size: 10.5,
+      size: 11,
       font: boldFont,
       color: black,
     });
     page.drawText(value, {
       x: 165,
       y,
-      size: 10.5,
+      size: 11,
       font: boldFont,
       color: black,
     });
@@ -189,7 +189,7 @@ export async function GET(request: NextRequest, context: RouteContext) {
   page.drawText("Articles demandés:", {
     x: 38,
     y: 512,
-    size: 10.5,
+    size: 11,
     font: boldFont,
     color: black,
   });
@@ -219,14 +219,14 @@ export async function GET(request: NextRequest, context: RouteContext) {
     page.drawText(line, {
       x: 38,
       y: detailY,
-      size: 10.5,
+      size: 11,
       font: boldFont,
       color: black,
     });
     detailY -= 15;
   });
 
-  const validationTop = 174;
+  const validationTop = 132;
 
   page.drawLine({
     start: { x: 38, y: validationTop },
@@ -237,8 +237,8 @@ export async function GET(request: NextRequest, context: RouteContext) {
 
   page.drawText("Validation Direction / Finance", {
     x: 38,
-    y: validationTop - 18,
-    size: 10.5,
+    y: validationTop - 16,
+    size: 11,
     font: boldFont,
     color: black,
   });
@@ -247,20 +247,20 @@ export async function GET(request: NextRequest, context: RouteContext) {
     need.reviewComment?.trim() ? `Commentaire: ${need.reviewComment}` : "Commentaire: -",
     {
       x: 38,
-      y: validationTop - 36,
-      size: 10,
+      y: validationTop - 40,
+      size: 10.8,
       font: boldFont,
       color: black,
     },
   );
 
-  const sealAnchorY = 44;
+  const sealAnchorY = 26;
 
   if (need.status === "APPROVED" && need.sealedAt) {
     if (stamp) {
-      const stampSize = getContainedSize(stamp, 128, 128, true);
+      const stampSize = getContainedSize(stamp, 118, 118, true);
       page.drawImage(stamp, {
-        x: 384,
+        x: 404,
         y: sealAnchorY,
         width: stampSize.width,
         height: stampSize.height,
@@ -270,18 +270,18 @@ export async function GET(request: NextRequest, context: RouteContext) {
 
     page.drawText(`Document scellé le ${formatDate(need.sealedAt)}`, {
       x: 38,
-      y: 96,
-      size: 9.8,
+      y: 84,
+      size: 10.8,
       font: boldFont,
-      color: rgb(0.07, 0.42, 0.2),
+      color: black,
     });
   } else {
     page.drawText("Document non scellé (en attente d'approbation).", {
       x: 38,
-      y: 96,
-      size: 9.8,
+      y: 84,
+      size: 10.8,
       font: boldFont,
-      color: rgb(0.58, 0.45, 0.08),
+      color: black,
     });
   }
 
@@ -295,9 +295,9 @@ export async function GET(request: NextRequest, context: RouteContext) {
   page.drawText(`Page 1/1 • Imprimé le ${formatDate(new Date())}`, {
     x: 38,
     y: 12,
-    size: 8.2,
+    size: 8.8,
     font: boldFont,
-    color: rgb(0.15, 0.15, 0.15),
+    color: black,
   });
 
   const byText = `Par ${access.session.user.name}`;
@@ -305,9 +305,9 @@ export async function GET(request: NextRequest, context: RouteContext) {
   page.drawText(byText, {
     x: PAGE_WIDTH - 38 - byWidth,
     y: 12,
-    size: 8.2,
+    size: 8.8,
     font: boldFont,
-    color: rgb(0.15, 0.15, 0.15),
+    color: black,
   });
 
   const bytes = await pdf.save();
