@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { PDFDocument, rgb } from "pdf-lib";
+import { PDFDocument, PDFImage, rgb } from "pdf-lib";
 import fontkit from "@pdf-lib/fontkit";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
@@ -9,6 +9,9 @@ import { requireApiRoles } from "@/lib/rbac";
 type RouteContext = {
   params: Promise<{ id: string }>;
 };
+
+const PAGE_WIDTH = 595;
+const PAGE_HEIGHT = 842;
 
 async function readFirstExistingFile(candidates: string[]) {
   for (const candidate of candidates) {
@@ -28,6 +31,19 @@ async function embedOptionalImage(pdf: PDFDocument, candidates: string[]) {
   const lower = candidates[0]?.toLowerCase() ?? "";
   if (lower.endsWith(".jpg") || lower.endsWith(".jpeg")) return pdf.embedJpg(bytes);
   return pdf.embedPng(bytes);
+}
+
+function getContainedSize(image: PDFImage, maxWidth: number, maxHeight: number, allowUpscale = false) {
+  const base = image.scale(1);
+  let ratio = Math.min(maxWidth / base.width, maxHeight / base.height);
+  if (!allowUpscale) {
+    ratio = Math.min(ratio, 1);
+  }
+
+  return {
+    width: base.width * ratio,
+    height: base.height * ratio,
+  };
 }
 
 function formatDate(value: Date | null | undefined) {
@@ -59,7 +75,7 @@ export async function GET(request: NextRequest, context: RouteContext) {
 
   const pdf = await PDFDocument.create();
   pdf.registerFontkit(fontkit);
-  const page = pdf.addPage([595, 842]);
+  const page = pdf.addPage([PAGE_WIDTH, PAGE_HEIGHT]);
 
   const montserratRegular = await readFirstExistingFile([
     "public/fonts/Montserrat-Regular.ttf",
@@ -134,7 +150,7 @@ export async function GET(request: NextRequest, context: RouteContext) {
     x: 38,
     y: 712,
     size: 10.5,
-    font: regularFont,
+    font: boldFont,
     color: black,
   });
 
@@ -170,7 +186,7 @@ export async function GET(request: NextRequest, context: RouteContext) {
       x: 165,
       y,
       size: 10.5,
-      font: regularFont,
+      font: boldFont,
       color: black,
     });
     y -= 20;
@@ -210,13 +226,13 @@ export async function GET(request: NextRequest, context: RouteContext) {
       x: 38,
       y: detailY,
       size: 10.5,
-      font: regularFont,
+      font: boldFont,
       color: black,
     });
     detailY -= 15;
   });
 
-  const validationTop = Math.min(Math.max(detailY - 14, 220), 360);
+  const validationTop = Math.min(Math.max(detailY - 12, 248), 400);
 
   page.drawLine({
     start: { x: 38, y: validationTop },
@@ -238,37 +254,39 @@ export async function GET(request: NextRequest, context: RouteContext) {
     {
       x: 38,
       y: validationTop - 36,
-      size: 9.8,
-      font: regularFont,
+      size: 10,
+      font: boldFont,
       color: black,
     },
   );
 
+  const sealAnchorY = Math.max(validationTop - 152, 62);
+
   if (need.status === "APPROVED" && need.sealedAt) {
     if (signature) {
-      const sigScale = signature.scale(0.34);
+      const signatureSize = getContainedSize(signature, 210, 85, true);
       page.drawImage(signature, {
-        x: 408,
-        y: 70,
-        width: Math.min(175, sigScale.width),
-        height: Math.min(95, sigScale.height),
+        x: 380,
+        y: sealAnchorY + 28,
+        width: signatureSize.width,
+        height: signatureSize.height,
       });
     }
 
     if (stamp) {
-      const stampScale = stamp.scale(0.34);
+      const stampSize = getContainedSize(stamp, 132, 132, true);
       page.drawImage(stamp, {
-        x: 328,
-        y: 36,
-        width: Math.min(138, stampScale.width),
-        height: Math.min(138, stampScale.height),
+        x: 314,
+        y: sealAnchorY,
+        width: stampSize.width,
+        height: stampSize.height,
         opacity: 0.95,
       });
     }
 
     page.drawText(`Document scellé le ${formatDate(need.sealedAt)}`, {
       x: 38,
-      y: 112,
+      y: sealAnchorY + 40,
       size: 9.8,
       font: boldFont,
       color: rgb(0.07, 0.42, 0.2),
@@ -276,16 +294,16 @@ export async function GET(request: NextRequest, context: RouteContext) {
   } else {
     page.drawText("Document non scellé (en attente d'approbation).", {
       x: 38,
-      y: 112,
+      y: sealAnchorY + 40,
       size: 9.8,
-      font: regularFont,
+      font: boldFont,
       color: rgb(0.58, 0.45, 0.08),
     });
   }
 
   page.drawLine({
     start: { x: 38, y: 22 },
-    end: { x: 557, y: 22 },
+    end: { x: PAGE_WIDTH - 38, y: 22 },
     thickness: 0.6,
     color: rgb(0.83, 0.83, 0.83),
   });
@@ -294,18 +312,18 @@ export async function GET(request: NextRequest, context: RouteContext) {
     x: 38,
     y: 12,
     size: 8.2,
-    font: regularFont,
-    color: rgb(0.25, 0.25, 0.25),
+    font: boldFont,
+    color: rgb(0.15, 0.15, 0.15),
   });
 
   const byText = `Par ${access.session.user.name}`;
-  const byWidth = regularFont.widthOfTextAtSize(byText, 8.2);
+  const byWidth = boldFont.widthOfTextAtSize(byText, 8.2);
   page.drawText(byText, {
-    x: 557 - byWidth,
+    x: PAGE_WIDTH - 38 - byWidth,
     y: 12,
     size: 8.2,
-    font: regularFont,
-    color: rgb(0.25, 0.25, 0.25),
+    font: boldFont,
+    color: rgb(0.15, 0.15, 0.15),
   });
 
   const bytes = await pdf.save();
