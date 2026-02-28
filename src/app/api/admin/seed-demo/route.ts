@@ -42,6 +42,21 @@ export async function POST() {
     },
   });
 
+  const romeooAccount = await prisma.user.findUnique({
+    where: { email: "romeoo.thebest@gmail.com" },
+    select: { id: true },
+  });
+
+  if (romeooAccount) {
+    await prisma.user.update({
+      where: { id: romeooAccount.id },
+      data: {
+        jobTitle: JobTitle.APPROVISIONNEMENT_MARKETING,
+        teamId: operationsTeam.id,
+      },
+    });
+  }
+
   const now = new Date();
 
   const needApproved = await prisma.needRequest.upsert({
@@ -259,6 +274,7 @@ export async function POST() {
     message: "Données de test Approvisionnement injectées.",
     data: {
       procurementOfficer: procurementOfficer.email,
+      primaryProcurementAccount: romeooAccount ? "romeoo.thebest@gmail.com" : null,
       approvedNeedId: needApproved.id,
       stockItems: [paperStock.name, markerStock.name],
     },

@@ -17,9 +17,23 @@ type RouteContext = {
 };
 
 export async function PATCH(request: NextRequest, context: RouteContext) {
-  const access = await requireApiRoles(["ADMIN", "MANAGER"]);
+  const access = await requireApiRoles(["ADMIN", "MANAGER", "EMPLOYEE", "ACCOUNTANT"]);
   if (access.error) {
     return access.error;
+  }
+
+  const actor = await prisma.user.findUnique({
+    where: { id: access.session.user.id },
+    select: { id: true, role: true, jobTitle: true },
+  });
+
+  if (!actor) {
+    return NextResponse.json({ error: "Utilisateur courant introuvable." }, { status: 404 });
+  }
+
+  const canManageAssignment = actor.role === "ADMIN" || actor.jobTitle === "DIRECTION_GENERALE";
+  if (!canManageAssignment) {
+    return NextResponse.json({ error: "Affectation réservée à l'administrateur ou à la Direction Générale." }, { status: 403 });
   }
 
   const { id } = await context.params;
@@ -30,7 +44,7 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
     return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
   }
 
-  if (access.role !== "ADMIN" && parsed.data.role !== undefined) {
+  if (actor.role !== "ADMIN" && parsed.data.role !== undefined) {
     return NextResponse.json({ error: "Seul un administrateur peut changer le rôle." }, { status: 403 });
   }
 
@@ -47,32 +61,6 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
   });
   if (!existing) {
     return NextResponse.json({ error: "Utilisateur introuvable." }, { status: 404 });
-  }
-
-  if (access.role === "MANAGER") {
-    const actor = await prisma.user.findUnique({
-      where: { id: access.session.user.id },
-      select: { id: true, teamId: true },
-    });
-
-    if (!actor?.teamId) {
-      return NextResponse.json({ error: "Chef d'équipe sans équipe associée." }, { status: 403 });
-    }
-
-    const requestedTeamId = parsed.data.teamId === undefined ? existing.teamId : parsed.data.teamId;
-    const targetInManagerTeam = existing.teamId === actor.teamId;
-    const targetUnassigned = existing.teamId === null;
-    const movingToManagerTeam = requestedTeamId === actor.teamId;
-    const removingFromManagerTeam = targetInManagerTeam && requestedTeamId === null;
-
-    const managerCanTarget = targetInManagerTeam || (targetUnassigned && movingToManagerTeam);
-    if (!managerCanTarget) {
-      return NextResponse.json({ error: "Vous pouvez gérer uniquement les membres de votre équipe." }, { status: 403 });
-    }
-
-    if (!movingToManagerTeam && !removingFromManagerTeam) {
-      return NextResponse.json({ error: "Un chef d'équipe ne peut gérer que son équipe." }, { status: 403 });
-    }
   }
 
   if (parsed.data.teamId) {
@@ -131,7 +119,7 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
             toJob,
             fromRole,
             toRole,
-            changedBy: access.session.user.id,
+            changedBy: actor.id,
           },
         },
       });
