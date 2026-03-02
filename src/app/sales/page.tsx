@@ -87,7 +87,9 @@ export default async function SalesPage({
   ]);
 
   const caaAirline = airlines.find((airline) => airline.code === "CAA");
-  const caaRule = caaAirline?.commissionRules.find((rule) => rule.commissionMode === "AFTER_DEPOSIT");
+  const caaRule = caaAirline?.commissionRules
+    .filter((rule) => rule.isActive && rule.commissionMode === "AFTER_DEPOSIT")
+    .sort((a, b) => b.startsAt.getTime() - a.startsAt.getTime())[0];
   const airFastAirline = airlines.find((airline) => airline.code === "FST");
   const caaTargetAmount = caaRule?.depositStockTargetAmount ?? 0;
   const caaBatchCommission = caaRule?.batchCommissionAmount ?? 0;
@@ -95,7 +97,13 @@ export default async function SalesPage({
   const caaLotsReached = caaTargetAmount > 0 ? Math.floor(caaConsumed / caaTargetAmount) : 0;
   const caaCommissionEarned = caaLotsReached * caaBatchCommission;
   const caaRemainder = caaTargetAmount > 0 ? caaConsumed % caaTargetAmount : 0;
-  const caaRemainingToNextLot = caaTargetAmount > 0 ? Math.max(0, caaTargetAmount - caaRemainder) : 0;
+  const caaRemainingToNextLot = caaTargetAmount > 0
+    ? caaConsumed === 0
+      ? caaTargetAmount
+      : caaRemainder === 0
+        ? 0
+        : Math.max(0, caaTargetAmount - caaRemainder)
+    : 0;
   const airFastTicketCount = airFastAirline
     ? await prisma.ticketSale.count({
       where: {
@@ -182,7 +190,7 @@ export default async function SalesPage({
             </div>
           ) : null}
           <div className="tickets-scroll h-[70vh] w-full overflow-scroll overscroll-contain">
-          <table className="min-w-[1200px] text-sm">
+          <table className="min-w-300 text-sm">
             <thead className="bg-black/5 dark:bg-white/10">
               <tr>
                 <th className="px-3 py-2 text-left">Émetteur</th>
