@@ -56,7 +56,14 @@ function formatDate(value: Date | null | undefined) {
 
 export async function GET(request: NextRequest, context: RouteContext) {
   const access = await requireApiRoles(["ADMIN", "MANAGER", "EMPLOYEE", "ACCOUNTANT"]);
-  if (access.error) return access.error;
+  if (access.error) {
+    if (access.error.status === 401) {
+      const signInUrl = new URL("/auth/signin", request.url);
+      signInUrl.searchParams.set("callbackUrl", `${request.nextUrl.pathname}${request.nextUrl.search}`);
+      return NextResponse.redirect(signInUrl);
+    }
+    return access.error;
+  }
 
   const { id } = await context.params;
   const shouldDownload = request.nextUrl.searchParams.get("download") === "1";
@@ -243,16 +250,21 @@ export async function GET(request: NextRequest, context: RouteContext) {
     color: black,
   });
 
-  page.drawText(
-    need.reviewComment?.trim() ? `Commentaire: ${need.reviewComment}` : "Commentaire: -",
-    {
+  const commentText = need.reviewComment?.trim() ? `Commentaire: ${need.reviewComment}` : "Commentaire: -";
+  const commentLines = wrapText(commentText, 90).slice(0, 4);
+  let commentY = validationTop - 40;
+  commentLines.forEach((line) => {
+    page.drawText(line, {
       x: 38,
-      y: validationTop - 40,
+      y: commentY,
       size: 10.8,
       font: boldFont,
       color: black,
-    },
-  );
+    });
+    commentY -= 16;
+  });
+
+  const sealTextY = Math.max(30, commentY - 22);
 
   const sealAnchorY = 26;
 
@@ -270,7 +282,7 @@ export async function GET(request: NextRequest, context: RouteContext) {
 
     page.drawText(`Document scellé le ${formatDate(need.sealedAt)}`, {
       x: 38,
-      y: 84,
+      y: sealTextY,
       size: 10.8,
       font: boldFont,
       color: black,
@@ -278,7 +290,7 @@ export async function GET(request: NextRequest, context: RouteContext) {
   } else {
     page.drawText("Document non scellé (en attente d'approbation).", {
       x: 38,
-      y: 84,
+      y: sealTextY,
       size: 10.8,
       font: boldFont,
       color: black,
