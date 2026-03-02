@@ -195,7 +195,7 @@ export default async function TicketsPage({
     0,
   ));
 
-  const [ticketsForMetrics, airlineTracking, selectedDaySales, previousDaySales] = await Promise.all([
+  const [ticketsForMetrics, airlineTracking, selectedDaySales, previousDaySales, caaConsumedAggregate] = await Promise.all([
     prisma.ticketSale.findMany({
       where: whereClause,
       include: {
@@ -225,6 +225,13 @@ export default async function TicketsPage({
           gte: previousDayStart,
           lt: selectedDayStart,
         },
+      },
+      _sum: { amount: true },
+    }),
+    prisma.ticketSale.aggregate({
+      where: {
+        ...roleTicketFilter,
+        airline: { code: "CAA" },
       },
       _sum: { amount: true },
     }),
@@ -322,14 +329,22 @@ export default async function TicketsPage({
   const dayProgressLabel = `${dayProgressPercent >= 0 ? "+" : ""}${dayProgressPercent.toFixed(1)}%`;
 
   const caaAirline = airlineTracking.find((airline) => airline.code === "CAA");
-  const caaRule = caaAirline?.commissionRules.find((rule) => rule.commissionMode === "AFTER_DEPOSIT");
+  const caaRule = caaAirline?.commissionRules
+    .filter((rule) => rule.isActive && rule.commissionMode === "AFTER_DEPOSIT")
+    .sort((a, b) => b.startsAt.getTime() - a.startsAt.getTime())[0];
   const caaTargetAmount = caaRule?.depositStockTargetAmount ?? 0;
   const caaBatchCommission = caaRule?.batchCommissionAmount ?? 0;
-  const caaConsumed = caaRule?.depositStockConsumedAmount ?? 0;
+  const caaConsumed = caaConsumedAggregate._sum.amount ?? 0;
   const caaLotsReached = caaTargetAmount > 0 ? Math.floor(caaConsumed / caaTargetAmount) : 0;
   const caaCommissionEarned = caaLotsReached * caaBatchCommission;
   const caaRemainder = caaTargetAmount > 0 ? caaConsumed % caaTargetAmount : 0;
-  const caaRemainingToNextLot = caaTargetAmount > 0 ? Math.max(0, caaTargetAmount - caaRemainder) : 0;
+  const caaRemainingToNextLot = caaTargetAmount > 0
+    ? caaConsumed === 0
+      ? caaTargetAmount
+      : caaRemainder === 0
+        ? 0
+        : Math.max(0, caaTargetAmount - caaRemainder)
+    : 0;
 
   const airFastAirline = airlineTracking.find((airline) => airline.code === "FST");
   const airFastTicketCount = airFastAirline

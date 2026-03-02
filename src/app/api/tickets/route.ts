@@ -86,6 +86,14 @@ export async function POST(request: NextRequest) {
     }
 
     const isAfterDepositMode = rule.commissionMode === CommissionMode.AFTER_DEPOSIT;
+    const consumedBeforeForAfterDeposit = isAfterDepositMode
+      ? (
+        await prisma.ticketSale.aggregate({
+          where: { airlineId: parsed.data.airlineId },
+          _sum: { amount: true },
+        })
+      )._sum.amount ?? 0
+      : 0;
     const agencyMarkupAmount = parsed.data.agencyMarkupAmount ?? 0;
     let commissionBaseAmount = parsed.data.baseFareAmount ?? 0;
     let commissionCalculationStatus: CommissionCalculationStatus = CommissionCalculationStatus.FINAL;
@@ -174,7 +182,13 @@ export async function POST(request: NextRequest) {
             amount: nextAirFastSaleNumber % 13 === 0 ? parsed.data.amount : 0,
             modeApplied: CommissionMode.IMMEDIATE,
           }
-        : computeCommissionAmount(commissionInputAmount, rule, 0);
+        : computeCommissionAmount(
+          commissionInputAmount,
+          isAfterDepositMode
+            ? { ...rule, depositStockConsumedAmount: consumedBeforeForAfterDeposit }
+            : rule,
+          0,
+        );
 
     const commission = (isAfterDepositMode || isAirCongo || isMontGabaon || isEthiopian || isAirFast)
       ? baseCommission
@@ -187,22 +201,7 @@ export async function POST(request: NextRequest) {
       };
 
     const ticket = await prisma.$transaction(async (tx) => {
-      if (
-        isAfterDepositMode
-        && rule.depositStockTargetAmount !== null
-        && rule.depositStockTargetAmount !== undefined
-      ) {
-        await tx.commissionRule.update({
-          where: { id: rule.id },
-          data: {
-            depositStockConsumedAmount: {
-              increment: parsed.data.amount,
-            },
-          },
-        });
-      }
-
-      return tx.ticketSale.create({
+      const created = await tx.ticketSale.create({
         data: {
           ...parsed.data,
           currency: "USD",
@@ -215,6 +214,21 @@ export async function POST(request: NextRequest) {
           commissionModeApplied: commission.modeApplied,
         },
       });
+
+      if (
+        isAfterDepositMode
+        && rule.depositStockTargetAmount !== null
+        && rule.depositStockTargetAmount !== undefined
+      ) {
+        await tx.commissionRule.update({
+          where: { id: rule.id },
+          data: {
+            depositStockConsumedAmount: consumedBeforeForAfterDeposit + parsed.data.amount,
+          },
+        });
+      }
+
+      return created;
     });
 
     return NextResponse.json({ data: ticket }, { status: 201 });

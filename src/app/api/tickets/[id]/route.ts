@@ -96,6 +96,17 @@ export async function PATCH(request: NextRequest, { params }: Params) {
     const isEthiopian = targetAirline.code === "ET";
     const isAirFast = targetAirline.code === "FST";
     const isAfterDepositMode = rule.commissionMode === CommissionMode.AFTER_DEPOSIT;
+    const consumedBeforeForAfterDeposit = isAfterDepositMode
+      ? (
+        await prisma.ticketSale.aggregate({
+          where: {
+            airlineId: nextAirlineId,
+            id: { not: existing.id },
+          },
+          _sum: { amount: true },
+        })
+      )._sum.amount ?? 0
+      : 0;
 
     if ((isAirCongo || isMontGabaon || isEthiopian) && !nextTicket.baseFareAmount) {
       return NextResponse.json(
@@ -175,7 +186,13 @@ export async function PATCH(request: NextRequest, { params }: Params) {
             amount: airFastSaleOrder % 13 === 0 ? nextTicket.amount : 0,
             modeApplied: CommissionMode.IMMEDIATE,
           }
-        : computeCommissionAmount(commissionInputAmount, rule, 0);
+        : computeCommissionAmount(
+          commissionInputAmount,
+          isAfterDepositMode
+            ? { ...rule, depositStockConsumedAmount: consumedBeforeForAfterDeposit }
+            : rule,
+          0,
+        );
 
     const commission = (isAfterDepositMode || isAirCongo || isMontGabaon || isEthiopian || isAirFast)
       ? baseCommission
@@ -187,19 +204,36 @@ export async function PATCH(request: NextRequest, { params }: Params) {
           : 0,
       };
 
-    const updated = await prisma.ticketSale.update({
-      where: { id },
-      data: {
-        ...parsed.data,
-        currency: "USD",
-        airlineId: nextTicket.airlineId,
-        sellerId: nextTicket.sellerId,
-        commissionBaseAmount,
-        commissionCalculationStatus,
-        commissionRateUsed: commission.ratePercent,
-        commissionAmount: commission.amount,
-        commissionModeApplied: commission.modeApplied,
-      },
+    const updated = await prisma.$transaction(async (tx) => {
+      const saved = await tx.ticketSale.update({
+        where: { id },
+        data: {
+          ...parsed.data,
+          currency: "USD",
+          airlineId: nextTicket.airlineId,
+          sellerId: nextTicket.sellerId,
+          commissionBaseAmount,
+          commissionCalculationStatus,
+          commissionRateUsed: commission.ratePercent,
+          commissionAmount: commission.amount,
+          commissionModeApplied: commission.modeApplied,
+        },
+      });
+
+      if (
+        isAfterDepositMode
+        && rule.depositStockTargetAmount !== null
+        && rule.depositStockTargetAmount !== undefined
+      ) {
+        await tx.commissionRule.update({
+          where: { id: rule.id },
+          data: {
+            depositStockConsumedAmount: consumedBeforeForAfterDeposit + nextTicket.amount,
+          },
+        });
+      }
+
+      return saved;
     });
 
     return NextResponse.json({ data: updated });

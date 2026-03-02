@@ -49,6 +49,7 @@ export default async function SalesPage({
   const resolvedSearchParams = (await searchParams) ?? {};
   const dateRange = rangeFromSearch(resolvedSearchParams);
   const { session, role } = await requirePageRoles(["ADMIN", "MANAGER", "EMPLOYEE", "ACCOUNTANT"]);
+  const roleTicketFilter = role === "EMPLOYEE" ? { sellerId: session.user.id } : {};
   const canCreateTicket = role === "ADMIN" || role === "MANAGER" || role === "EMPLOYEE";
   const canManageTickets = role === "ADMIN" || role === "EMPLOYEE";
   const accessNote = canCreateTicket
@@ -93,7 +94,17 @@ export default async function SalesPage({
   const airFastAirline = airlines.find((airline) => airline.code === "FST");
   const caaTargetAmount = caaRule?.depositStockTargetAmount ?? 0;
   const caaBatchCommission = caaRule?.batchCommissionAmount ?? 0;
-  const caaConsumed = caaRule?.depositStockConsumedAmount ?? 0;
+  const caaConsumed = caaAirline
+    ? (
+      await prisma.ticketSale.aggregate({
+        where: {
+          ...roleTicketFilter,
+          airlineId: caaAirline.id,
+        },
+        _sum: { amount: true },
+      })
+    )._sum.amount ?? 0
+    : 0;
   const caaLotsReached = caaTargetAmount > 0 ? Math.floor(caaConsumed / caaTargetAmount) : 0;
   const caaCommissionEarned = caaLotsReached * caaBatchCommission;
   const caaRemainder = caaTargetAmount > 0 ? caaConsumed % caaTargetAmount : 0;
