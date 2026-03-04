@@ -60,7 +60,7 @@ export default async function SalesPage({
 
   await ensureAirlineCatalog(prisma);
 
-  const [users, airlines, tickets] = await Promise.all([
+  const [users, airlines, teams, tickets] = await Promise.all([
     prisma.user.findMany({
       where:
         role === "EMPLOYEE"
@@ -71,6 +71,10 @@ export default async function SalesPage({
     }),
     prisma.airline.findMany({
       include: { commissionRules: { where: { isActive: true } } },
+      orderBy: { name: "asc" },
+    }),
+    prisma.team.findMany({
+      select: { id: true, name: true, kind: true },
       orderBy: { name: "asc" },
     }),
     prisma.ticketSale.findMany({
@@ -169,6 +173,11 @@ export default async function SalesPage({
               id: airline.id,
               name: airline.name,
               code: airline.code,
+            }))}
+            teams={teams.map((team) => ({
+              id: team.id,
+              name: team.name,
+              kind: team.kind,
             }))}
           />
         ) : (
