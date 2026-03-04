@@ -18,6 +18,7 @@ type EditableTicket = {
   baseFareAmount: number | null;
   currency: string;
   saleNature: "CASH" | "CREDIT";
+  agencyMarkupPercent: number;
   agencyMarkupAmount: number;
   paymentStatus: "PAID" | "UNPAID" | "PARTIAL";
   payerName: string | null;
@@ -38,6 +39,7 @@ type FormState = {
   saleNature: "CASH" | "CREDIT";
   paymentStatus: "PAID" | "UNPAID" | "PARTIAL";
   payerName: string;
+  agencyMarkupPercent: string;
   agencyMarkupAmount: string;
   notes: string;
 };
@@ -56,6 +58,7 @@ const EMPTY_FORM: FormState = {
   saleNature: "CASH" as const,
   paymentStatus: "UNPAID" as const,
   payerName: "",
+  agencyMarkupPercent: "0",
   agencyMarkupAmount: "0",
   notes: "",
 };
@@ -95,6 +98,7 @@ export function TicketForm({
         saleNature: ticket.saleNature,
         paymentStatus: ticket.paymentStatus,
         payerName: ticket.payerName ?? "",
+        agencyMarkupPercent: String(ticket.agencyMarkupPercent ?? 0),
         agencyMarkupAmount: String(ticket.agencyMarkupAmount ?? 0),
         notes: ticket.notes ?? "",
       });
@@ -115,7 +119,6 @@ export function TicketForm({
 
   const isAirCongo = selectedAirline?.code === "ACG";
   const isMontGabaon = selectedAirline?.code === "MGB";
-  const isEthiopian = selectedAirline?.code === "ET";
   const isAirFast = selectedAirline?.code === "FST";
 
   function updateField<K extends keyof FormState>(key: K, value: FormState[K]) {
@@ -134,6 +137,7 @@ export function TicketForm({
 
     const amount = Number(form.amount);
     const baseFareAmount = form.baseFareAmount.trim() ? Number(form.baseFareAmount) : undefined;
+    const agencyMarkupPercent = form.agencyMarkupPercent.trim() ? Number(form.agencyMarkupPercent) : 0;
     const agencyMarkupAmount = form.agencyMarkupAmount.trim() ? Number(form.agencyMarkupAmount) : 0;
 
     const payload = {
@@ -150,6 +154,7 @@ export function TicketForm({
       saleNature: form.saleNature,
       paymentStatus: form.paymentStatus,
       payerName: form.payerName,
+      agencyMarkupPercent,
       agencyMarkupAmount,
       notes: form.notes || undefined,
     };
@@ -277,12 +282,23 @@ export function TicketForm({
         />
       </div>
 
-      <div className="grid gap-3 sm:grid-cols-2">
+      <div className="grid gap-3 sm:grid-cols-3">
         <input
           name="currency"
           required
           value={form.currency}
           onChange={(event) => updateField("currency", event.target.value)}
+          className="rounded-md border px-3 py-2"
+        />
+        <input
+          name="agencyMarkupPercent"
+          type="number"
+          step="0.01"
+          min="0"
+          max="100"
+          value={form.agencyMarkupPercent}
+          onChange={(event) => updateField("agencyMarkupPercent", event.target.value)}
+          placeholder="Majoration agence (%)"
           className="rounded-md border px-3 py-2"
         />
         <input
@@ -292,7 +308,7 @@ export function TicketForm({
           min="0"
           value={form.agencyMarkupAmount}
           onChange={(event) => updateField("agencyMarkupAmount", event.target.value)}
-          placeholder="Majoration agence (montant USD)"
+          placeholder="Majoration agence (montant manuel)"
           className="rounded-md border px-3 py-2"
         />
       </div>
@@ -358,14 +374,12 @@ export function TicketForm({
           Mont Gabaon: commission fixe 9% sur le BaseFare saisi.
         </p>
       ) : null}
-      {isEthiopian ? (
-        <p className="text-xs text-black/60 dark:text-white/60">
-          Ethiopian: commission = 5% du BaseFare + majoration (montant).
-        </p>
-      ) : null}
+      <p className="text-xs text-black/60 dark:text-white/60">
+        Règle standard: commission compagnie (%) sur le BaseFare + majoration agence (%) sur le BaseFare.
+      </p>
       {isAirFast ? (
         <p className="text-xs text-black/60 dark:text-white/60">
-          Air Fast: après 12 billets vendus, le 13ème est compté comme commission.
+          Air Fast: bonus spécial conservé (après 12 billets vendus, le 13ème est compté comme commission).
         </p>
       ) : null}
 

@@ -222,6 +222,7 @@ export default async function SalesPage({
               {tickets.map((ticket) => {
                 const commissionAmount = ticket.commissionAmount ?? ticket.amount * (ticket.commissionRateUsed / 100);
                 const agencyMarkupAmount = ticket.agencyMarkupAmount ?? 0;
+                const companyCommissionAmount = Math.max(0, commissionAmount - agencyMarkupAmount);
                 const netAfterCommission = ticket.amount + agencyMarkupAmount;
 
                 return (
@@ -233,7 +234,13 @@ export default async function SalesPage({
                     <td className="px-3 py-2">{ticket.amount.toFixed(2)} {ticket.currency}</td>
                     <td className="px-3 py-2">{(ticket.baseFareAmount ?? ticket.commissionBaseAmount).toFixed(2)} {ticket.currency}</td>
                     <td className="px-3 py-2">
-                      {commissionAmount.toFixed(2)} {ticket.currency}
+                      <span className="font-medium">Total: {commissionAmount.toFixed(2)} {ticket.currency}</span>
+                      <span className="ml-1 text-xs text-black/60 dark:text-white/60">
+                        (Compagnie: {companyCommissionAmount.toFixed(2)} • Majoration: {agencyMarkupAmount.toFixed(2)})
+                      </span>
+                      <span className="ml-1 text-xs text-black/60 dark:text-white/60">
+                        {ticket.agencyMarkupPercent > 0 ? `• Majoration ${ticket.agencyMarkupPercent.toFixed(2)}%` : ""}
+                      </span>
                       <span className="ml-1 text-xs text-black/60 dark:text-white/60">
                         {ticket.commissionCalculationStatus === "ESTIMATED" ? "(estimée)" : "(définitive)"}
                       </span>
@@ -258,6 +265,7 @@ export default async function SalesPage({
                             baseFareAmount: ticket.baseFareAmount,
                             currency: ticket.currency,
                             saleNature: ticket.saleNature,
+                            agencyMarkupPercent: ticket.agencyMarkupPercent,
                             agencyMarkupAmount: ticket.agencyMarkupAmount,
                             paymentStatus: ticket.paymentStatus,
                             payerName: ticket.payerName,

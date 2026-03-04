@@ -100,6 +100,7 @@ export const ticketSchema = z.object({
   saleNature: z.nativeEnum(SaleNature),
   paymentStatus: z.nativeEnum(PaymentStatus),
   payerName: z.string().max(120).optional(),
+  agencyMarkupPercent: z.number().min(0).max(100).optional(),
   agencyMarkupAmount: z.number().min(0).optional(),
   notes: z.string().max(500).optional(),
 });
@@ -118,6 +119,7 @@ export const ticketUpdateSchema = z.object({
   saleNature: z.nativeEnum(SaleNature).optional(),
   paymentStatus: z.nativeEnum(PaymentStatus).optional(),
   payerName: z.string().max(120).optional(),
+  agencyMarkupPercent: z.number().min(0).max(100).optional(),
   agencyMarkupAmount: z.number().min(0).optional(),
   notes: z.string().max(500).optional(),
 });

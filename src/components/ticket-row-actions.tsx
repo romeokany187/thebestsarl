@@ -16,6 +16,7 @@ type Props = {
     baseFareAmount: number | null;
     currency: string;
     saleNature: "CASH" | "CREDIT";
+    agencyMarkupPercent: number;
     agencyMarkupAmount: number;
     paymentStatus: "PAID" | "UNPAID" | "PARTIAL";
     payerName: string | null;

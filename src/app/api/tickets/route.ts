@@ -75,12 +75,11 @@ export async function POST(request: NextRequest) {
 
     const isAirCongo = airline.code === "ACG";
     const isMontGabaon = airline.code === "MGB";
-    const isEthiopian = airline.code === "ET";
     const isAirFast = airline.code === "FST";
 
-    if ((isAirCongo || isMontGabaon || isEthiopian) && !parsed.data.baseFareAmount) {
+    if ((isAirCongo || isMontGabaon) && !parsed.data.baseFareAmount) {
       return NextResponse.json(
-        { error: "Pour Air Congo, Mont Gabaon et Ethiopian, le BaseFare est obligatoire pour calculer la commission." },
+        { error: "Pour Air Congo et Mont Gabaon, le BaseFare est obligatoire pour calculer la commission." },
         { status: 400 },
       );
     }
@@ -94,7 +93,7 @@ export async function POST(request: NextRequest) {
         })
       )._sum.amount ?? 0
       : 0;
-    const agencyMarkupAmount = parsed.data.agencyMarkupAmount ?? 0;
+    const requestedAgencyMarkupPercent = parsed.data.agencyMarkupPercent ?? 0;
     let commissionBaseAmount = parsed.data.baseFareAmount ?? 0;
     let commissionCalculationStatus: CommissionCalculationStatus = CommissionCalculationStatus.FINAL;
     let baseFareAmount = parsed.data.baseFareAmount;
@@ -152,6 +151,7 @@ export async function POST(request: NextRequest) {
     }
 
     const commissionInputAmount = isAfterDepositMode ? parsed.data.amount : commissionBaseAmount;
+    const agencyMarkupAmount = isAfterDepositMode ? (parsed.data.agencyMarkupAmount ?? 0) : commissionBaseAmount * (requestedAgencyMarkupPercent / 100);
     const nextAirFastSaleNumber = isAirFast
       ? (await prisma.ticketSale.count({ where: { airlineId: parsed.data.airlineId } })) + 1
       : 0;
@@ -168,15 +168,7 @@ export async function POST(request: NextRequest) {
           amount: commissionBaseAmount * 0.09,
           modeApplied: CommissionMode.IMMEDIATE,
         }
-      : isEthiopian
-        ? {
-          ratePercent: commissionBaseAmount > 0
-            ? ((commissionBaseAmount * 0.05 + agencyMarkupAmount) / commissionBaseAmount) * 100
-            : 0,
-          amount: commissionBaseAmount * 0.05 + agencyMarkupAmount,
-          modeApplied: CommissionMode.SYSTEM_PLUS_MARKUP,
-        }
-        : isAirFast
+      : isAirFast
           ? {
             ratePercent: nextAirFastSaleNumber % 13 === 0 ? 100 : 0,
             amount: nextAirFastSaleNumber % 13 === 0 ? parsed.data.amount : 0,
@@ -190,7 +182,7 @@ export async function POST(request: NextRequest) {
           0,
         );
 
-    const commission = (isAfterDepositMode || isAirCongo || isMontGabaon || isEthiopian || isAirFast)
+    const commission = (isAfterDepositMode || isAirCongo || isMontGabaon || isAirFast)
       ? baseCommission
       : {
         ...baseCommission,
@@ -206,6 +198,7 @@ export async function POST(request: NextRequest) {
           ...parsed.data,
           currency: "USD",
           baseFareAmount,
+          agencyMarkupPercent: isAfterDepositMode ? 0 : requestedAgencyMarkupPercent,
           agencyMarkupAmount,
           commissionBaseAmount,
           commissionCalculationStatus,
