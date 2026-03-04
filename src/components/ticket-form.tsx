@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 
 type UserOption = { id: string; name: string };
 type AirlineOption = { id: string; name: string; code: string };
+type TeamOption = { id: string; name: string; kind: "AGENCE" | "PARTENAIRE" };
 
 type EditableTicket = {
   id: string;
@@ -66,9 +67,11 @@ const EMPTY_FORM: FormState = {
 export function TicketForm({
   users,
   airlines,
+  teams,
 }: {
   users: UserOption[];
   airlines: AirlineOption[];
+  teams: TeamOption[];
 }) {
   const [status, setStatus] = useState<string>("");
   const [statusType, setStatusType] = useState<"idle" | "success" | "error" | "loading">("idle");
@@ -120,6 +123,40 @@ export function TicketForm({
   const isAirCongo = selectedAirline?.code === "ACG";
   const isMontGabaon = selectedAirline?.code === "MGB";
   const isAirFast = selectedAirline?.code === "FST";
+
+  const clientPayerValue = useMemo(() => {
+    const customer = form.customerName.trim();
+    return customer ? `Client - ${customer}` : "Client - Direct";
+  }, [form.customerName]);
+
+  const agentPayerOptions = useMemo(
+    () => users.map((user) => `Agent - ${user.name}`),
+    [users],
+  );
+
+  const teamPayerOptions = useMemo(
+    () => teams.map((team) => `Équipe - ${team.name}`),
+    [teams],
+  );
+
+  const payerOptions = useMemo(
+    () => [clientPayerValue, ...agentPayerOptions, ...teamPayerOptions],
+    [clientPayerValue, agentPayerOptions, teamPayerOptions],
+  );
+
+  useEffect(() => {
+    setForm((prev) => {
+      if (!prev.payerName) {
+        return { ...prev, payerName: clientPayerValue };
+      }
+
+      if (prev.payerName.startsWith("Client - ") && prev.payerName !== clientPayerValue) {
+        return { ...prev, payerName: clientPayerValue };
+      }
+
+      return prev;
+    });
+  }, [clientPayerValue]);
 
   function updateField<K extends keyof FormState>(key: K, value: FormState[K]) {
     setForm((prev) => ({ ...prev, [key]: value }));
@@ -274,10 +311,10 @@ export function TicketForm({
           type="number"
           step="0.01"
           min="0"
-          required={isAirCongo || isMontGabaon || isEthiopian}
+          required={isAirCongo || isMontGabaon}
           value={form.baseFareAmount}
           onChange={(event) => updateField("baseFareAmount", event.target.value)}
-          placeholder={isAirCongo || isMontGabaon || isEthiopian ? "BaseFare (obligatoire)" : "BaseFare (optionnel)"}
+          placeholder={isAirCongo || isMontGabaon ? "BaseFare (obligatoire)" : "BaseFare (optionnel)"}
           className="rounded-md border px-3 py-2"
         />
       </div>
@@ -355,14 +392,39 @@ export function TicketForm({
           <option value="PARTIAL">Partiel</option>
           <option value="UNPAID">Non payé</option>
         </select>
-        <input
+        <select
           name="payerName"
+          required
           value={form.payerName}
           onChange={(event) => updateField("payerName", event.target.value)}
-          placeholder="Payant (personne à recouvrer)"
           className="rounded-md border px-3 py-2"
-        />
+        >
+          {form.payerName && !payerOptions.includes(form.payerName) ? (
+            <option value={form.payerName}>Historique - {form.payerName}</option>
+          ) : null}
+          <optgroup label="Client">
+            <option value={clientPayerValue}>{clientPayerValue}</option>
+          </optgroup>
+          <optgroup label="Agents de l'agence">
+            {agentPayerOptions.map((option) => (
+              <option key={option} value={option}>
+                {option}
+              </option>
+            ))}
+          </optgroup>
+          <optgroup label="Équipes">
+            {teamPayerOptions.map((option) => (
+              <option key={option} value={option}>
+                {option}
+              </option>
+            ))}
+          </optgroup>
+        </select>
       </div>
+
+      <p className="text-xs text-black/60 dark:text-white/60">
+        Le champ payant est auto-rempli: Client, Agent de l&apos;agence ou Équipe (Lubumbashi/Partenaires selon les équipes disponibles).
+      </p>
 
       {isAirCongo ? (
         <p className="text-xs text-black/60 dark:text-white/60">

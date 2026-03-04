@@ -99,7 +99,7 @@ export const ticketSchema = z.object({
   sellerId: z.string().min(1),
   saleNature: z.nativeEnum(SaleNature),
   paymentStatus: z.nativeEnum(PaymentStatus),
-  payerName: z.string().max(120).optional(),
+  payerName: z.string().min(3).max(120),
   agencyMarkupPercent: z.number().min(0).max(100).optional(),
   agencyMarkupAmount: z.number().min(0).optional(),
   notes: z.string().max(500).optional(),
