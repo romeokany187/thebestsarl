@@ -106,6 +106,20 @@ enum StockMovementType {
   OUT
 }
 
+enum ArchiveFolder {
+  DGI
+  CNSS_ONEM
+  ADMINISTRATIF
+  NOTES_LETTRES_INTERNES
+  FACTURES_RECUS
+  DGRK
+}
+
+enum ArchiveOrigin {
+  MANUAL
+  SYSTEM
+}
+
 model Team {
   id        String   @id @default(cuid())
   name      String   @unique
@@ -134,8 +148,28 @@ model User {
   needRequests  NeedRequest[] @relation("NeedRequester")
   needReviews   NeedRequest[] @relation("NeedReviewer")
   stockMovements StockMovement[] @relation("StockMovementActor")
+  archiveUploads ArchiveDocument[] @relation("ArchiveUploader")
   createdAt     DateTime      @default(now())
   updatedAt     DateTime      @updatedAt
+}
+
+model ArchiveDocument {
+  id               String        @id @default(cuid())
+  sequence         Int           @unique
+  reference        String        @unique
+  folder           ArchiveFolder
+  title            String
+  originalFileName String
+  mimeType         String
+  fileSize         Int
+  fileData         Bytes?
+  externalUrl      String?
+  origin           ArchiveOrigin @default(MANUAL)
+  sourceKey        String?       @unique
+  createdById      String?
+  createdBy        User?         @relation("ArchiveUploader", fields: [createdById], references: [id])
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
 }
 
 model UserNotification {

@@ -1,150 +1,211 @@
 import { AppShell } from "@/components/app-shell";
+import Link from "next/link";
+import { ArchiveFolder } from "@prisma/client";
+import { prisma } from "@/lib/prisma";
+import { ARCHIVE_FOLDERS, archiveFolderLabel, syncSystemArchiveDocuments } from "@/lib/archive";
 import { requirePageRoles } from "@/lib/rbac";
 
 export const dynamic = "force-dynamic";
 
-type ArchiveEntry = {
-  id: string;
-  type: "Lettre" | "Note interne" | "Ordre de mission";
-  title: string;
-  reference: string;
-  department: string;
-  date: string;
-  status: "Validé" | "Brouillon" | "En révision";
+type SearchParams = {
+  folder?: string;
+  uploaded?: string;
 };
 
-const archiveEntries: ArchiveEntry[] = [
-  {
-    id: "ARC-001",
-    type: "Lettre",
-    title: "Lettre de partenariat – Compagnie Air Fast",
-    reference: "LTR/2026/031",
-    department: "Direction Générale",
-    date: "2026-02-20",
-    status: "Validé",
-  },
-  {
-    id: "ARC-002",
-    type: "Note interne",
-    title: "Procédure de validation des paiements billets",
-    reference: "NI/2026/014",
-    department: "Finance",
-    date: "2026-02-18",
-    status: "Validé",
-  },
-  {
-    id: "ARC-003",
-    type: "Ordre de mission",
-    title: "Mission aéroport – suivi opérations clients VIP",
-    reference: "OM/2026/009",
-    department: "Opérations",
-    date: "2026-02-12",
-    status: "En révision",
-  },
-  {
-    id: "ARC-004",
-    type: "Note interne",
-    title: "Rappel règles de présence et pointage",
-    reference: "NI/2026/011",
-    department: "Ressources Humaines",
-    date: "2026-02-03",
-    status: "Validé",
-  },
-  {
-    id: "ARC-005",
-    type: "Lettre",
-    title: "Lettre client – confirmation traitement dossier groupe",
-    reference: "LTR/2026/022",
-    department: "Service Commercial",
-    date: "2026-01-28",
-    status: "Brouillon",
-  },
-  {
-    id: "ARC-006",
-    type: "Ordre de mission",
-    title: "Mission terrain – audit qualité réseau partenaire",
-    reference: "OM/2026/006",
-    department: "Contrôle Qualité",
-    date: "2026-01-21",
-    status: "Validé",
-  },
-];
-
-function statusClassName(status: ArchiveEntry["status"]) {
-  if (status === "Validé") {
-    return "border-emerald-500/25 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300";
+function parseFolder(value?: string): ArchiveFolder {
+  if (
+    value === "DGI"
+    || value === "CNSS_ONEM"
+    || value === "ADMINISTRATIF"
+    || value === "NOTES_LETTRES_INTERNES"
+    || value === "FACTURES_RECUS"
+    || value === "DGRK"
+  ) {
+    return value;
   }
-  if (status === "En révision") {
-    return "border-amber-500/25 bg-amber-500/10 text-amber-700 dark:text-amber-300";
-  }
-  return "border-black/15 bg-black/5 text-black/70 dark:border-white/20 dark:bg-white/10 dark:text-white/70";
+  return "NOTES_LETTRES_INTERNES";
 }
 
-export default async function ArchivesPage() {
+function fileTypeLabel(mimeType: string) {
+  if (mimeType === "application/pdf") return "PDF";
+  if (mimeType.startsWith("image/")) return "Image";
+  return "Fichier";
+}
+
+function sizeLabel(bytes: number) {
+  if (!bytes || bytes <= 0) return "-";
+  const kb = bytes / 1024;
+  if (kb < 1024) return `${kb.toFixed(1)} KB`;
+  return `${(kb / 1024).toFixed(2)} MB`;
+}
+
+export default async function ArchivesPage({
+  searchParams,
+}: {
+  searchParams?: Promise<SearchParams>;
+}) {
   const { role } = await requirePageRoles(["ADMIN", "MANAGER", "EMPLOYEE", "ACCOUNTANT"]);
+  const resolvedSearchParams = (await searchParams) ?? {};
+  const selectedFolder = parseFolder(resolvedSearchParams.folder);
+
+  await syncSystemArchiveDocuments(prisma);
+
+  const [documents, groupedCounts] = await Promise.all([
+    prisma.archiveDocument.findMany({
+      where: { folder: selectedFolder },
+      orderBy: { createdAt: "desc" },
+      take: 300,
+      select: {
+        id: true,
+        reference: true,
+        title: true,
+        originalFileName: true,
+        mimeType: true,
+        fileSize: true,
+        externalUrl: true,
+        origin: true,
+        createdAt: true,
+      },
+    }),
+    prisma.archiveDocument.groupBy({
+      by: ["folder"],
+      _count: { _all: true },
+    }),
+  ]);
+
+  const folderCountMap = new Map<ArchiveFolder, number>(
+    groupedCounts.map((item) => [item.folder, item._count._all]),
+  );
+
+  const totalDocuments = groupedCounts.reduce((sum, item) => sum + item._count._all, 0);
 
   return (
     <AppShell
       role={role}
-      accessNote="Archives d'entreprise: lettres, notes internes et ordres de mission centralisés pour consultation rapide."
+      accessNote="Archives interactives: classement par dossiers, upload PDF/images, référencement automatique global et intégration des documents système."
     >
       <section className="mb-6">
         <h1 className="text-2xl font-semibold tracking-tight">Archives</h1>
         <p className="text-sm text-black/60 dark:text-white/60">
-          Répertoire des documents administratifs et opérationnels de l&apos;entreprise.
+          Gestion type explorateur de fichiers: choisissez un dossier, ajoutez des documents et consultez l&apos;historique référencé.
         </p>
       </section>
 
-      <section className="mb-5 grid gap-4 sm:grid-cols-3">
+      <section className="mb-5 grid gap-4 sm:grid-cols-3 lg:grid-cols-4">
         <article className="rounded-2xl border border-black/10 bg-white p-4 shadow-sm dark:border-white/10 dark:bg-zinc-900">
           <p className="text-xs text-black/60 dark:text-white/60">Total documents</p>
-          <p className="mt-1 text-2xl font-semibold">{archiveEntries.length}</p>
+          <p className="mt-1 text-2xl font-semibold">{totalDocuments}</p>
         </article>
         <article className="rounded-2xl border border-black/10 bg-white p-4 shadow-sm dark:border-white/10 dark:bg-zinc-900">
-          <p className="text-xs text-black/60 dark:text-white/60">Lettres & notes internes</p>
-          <p className="mt-1 text-2xl font-semibold">
-            {archiveEntries.filter((entry) => entry.type !== "Ordre de mission").length}
-          </p>
+          <p className="text-xs text-black/60 dark:text-white/60">Dossier actif</p>
+          <p className="mt-1 text-sm font-semibold">{archiveFolderLabel(selectedFolder)}</p>
         </article>
         <article className="rounded-2xl border border-black/10 bg-white p-4 shadow-sm dark:border-white/10 dark:bg-zinc-900">
-          <p className="text-xs text-black/60 dark:text-white/60">Ordres de mission</p>
-          <p className="mt-1 text-2xl font-semibold">
-            {archiveEntries.filter((entry) => entry.type === "Ordre de mission").length}
-          </p>
+          <p className="text-xs text-black/60 dark:text-white/60">Documents dossier actif</p>
+          <p className="mt-1 text-2xl font-semibold">{documents.length}</p>
         </article>
+        <article className="rounded-2xl border border-black/10 bg-white p-4 shadow-sm dark:border-white/10 dark:bg-zinc-900">
+          <p className="text-xs text-black/60 dark:text-white/60">Référencement</p>
+          <p className="mt-1 text-sm font-semibold">Automatique global</p>
+        </article>
+      </section>
+
+      <section className="mb-6 rounded-2xl border border-black/10 bg-white p-4 shadow-sm dark:border-white/10 dark:bg-zinc-900">
+        <h2 className="mb-3 text-base font-semibold">Classeur de dossiers</h2>
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          {ARCHIVE_FOLDERS.map((folder) => {
+            const isActive = folder.key === selectedFolder;
+            const count = folderCountMap.get(folder.key) ?? 0;
+
+            return (
+              <Link
+                key={folder.key}
+                href={`/archives?folder=${folder.key}`}
+                className={`rounded-xl border p-4 transition ${
+                  isActive
+                    ? "border-black/40 bg-black/5 dark:border-white/40 dark:bg-white/10"
+                    : "border-black/10 hover:bg-black/5 dark:border-white/15 dark:hover:bg-white/10"
+                }`}
+              >
+                <p className="text-lg">📁</p>
+                <p className="mt-1 text-sm font-semibold">{folder.label}</p>
+                <p className="mt-1 text-xs text-black/60 dark:text-white/60">{folder.description}</p>
+                <p className="mt-2 text-xs font-semibold text-black/70 dark:text-white/70">{count} document(s)</p>
+              </Link>
+            );
+          })}
+        </div>
+      </section>
+
+      <section className="mb-6 rounded-2xl border border-black/10 bg-white p-4 shadow-sm dark:border-white/10 dark:bg-zinc-900">
+        <h2 className="mb-3 text-base font-semibold">Ajouter un document dans {archiveFolderLabel(selectedFolder)}</h2>
+        <form action="/api/archives/upload" method="POST" encType="multipart/form-data" className="grid gap-3 sm:grid-cols-[1fr,1fr,auto] sm:items-end">
+          <input type="hidden" name="folder" value={selectedFolder} />
+          <div>
+            <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-black/60 dark:text-white/60">Titre document</label>
+            <input name="title" required minLength={3} className="w-full rounded-md border px-3 py-2 text-sm" placeholder="Ex: Déclaration DGI Février" />
+          </div>
+          <div>
+            <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-black/60 dark:text-white/60">Fichier (PDF/Image)</label>
+            <input name="file" type="file" required accept="application/pdf,image/png,image/jpeg,image/webp,image/gif" className="w-full rounded-md border px-3 py-2 text-sm" />
+          </div>
+          <button className="rounded-md bg-black px-4 py-2 text-sm font-semibold text-white dark:bg-white dark:text-black">Archiver</button>
+        </form>
+        {resolvedSearchParams.uploaded === "1" ? (
+          <p className="mt-3 rounded-md bg-emerald-50 px-3 py-2 text-xs text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300">
+            Document archivé avec succès.
+          </p>
+        ) : null}
       </section>
 
       <section className="overflow-hidden rounded-2xl border border-black/10 bg-white shadow-sm dark:border-white/10 dark:bg-zinc-900">
         <div className="border-b border-black/10 px-4 py-3 dark:border-white/10">
-          <h2 className="text-base font-semibold">Registre des archives</h2>
+          <h2 className="text-base font-semibold">Registre des archives - {archiveFolderLabel(selectedFolder)}</h2>
         </div>
         <div className="overflow-x-auto">
           <table className="min-w-full text-sm">
             <thead className="bg-black/5 dark:bg-white/10">
               <tr>
                 <th className="px-3 py-2 text-left">Référence</th>
-                <th className="px-3 py-2 text-left">Type</th>
                 <th className="px-3 py-2 text-left">Document</th>
-                <th className="px-3 py-2 text-left">Service</th>
+                <th className="px-3 py-2 text-left">Type</th>
+                <th className="px-3 py-2 text-left">Origine</th>
+                <th className="px-3 py-2 text-left">Taille</th>
                 <th className="px-3 py-2 text-left">Date</th>
-                <th className="px-3 py-2 text-left">Statut</th>
+                <th className="px-3 py-2 text-left">Action</th>
               </tr>
             </thead>
             <tbody>
-              {archiveEntries.map((entry) => (
+              {documents.length > 0 ? documents.map((entry) => (
                 <tr key={entry.id} className="border-t border-black/5 dark:border-white/10">
                   <td className="px-3 py-2 font-medium">{entry.reference}</td>
-                  <td className="px-3 py-2">{entry.type}</td>
                   <td className="px-3 py-2">{entry.title}</td>
-                  <td className="px-3 py-2">{entry.department}</td>
-                  <td className="px-3 py-2">{new Date(entry.date).toLocaleDateString("fr-FR")}</td>
+                  <td className="px-3 py-2">{fileTypeLabel(entry.mimeType)}</td>
                   <td className="px-3 py-2">
-                    <span className={`rounded-full border px-2 py-1 text-[11px] font-semibold ${statusClassName(entry.status)}`}>
-                      {entry.status}
+                    <span className="rounded-full border border-black/15 bg-black/5 px-2 py-1 text-[11px] font-semibold dark:border-white/20 dark:bg-white/10">
+                      {entry.origin === "SYSTEM" ? "Système" : "Upload manuel"}
                     </span>
                   </td>
+                  <td className="px-3 py-2">{sizeLabel(entry.fileSize)}</td>
+                  <td className="px-3 py-2">{new Date(entry.createdAt).toLocaleString("fr-FR")}</td>
+                  <td className="px-3 py-2">
+                    <a
+                      href={entry.externalUrl ?? `/api/archives/files/${entry.id}`}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="rounded-md border border-black/15 px-2.5 py-1 text-xs font-semibold hover:bg-black/5 dark:border-white/20 dark:hover:bg-white/10"
+                    >
+                      Ouvrir
+                    </a>
+                  </td>
                 </tr>
-              ))}
+              )) : (
+                <tr className="border-t border-black/5 dark:border-white/10">
+                  <td className="px-3 py-6 text-sm text-black/60 dark:text-white/60" colSpan={7}>
+                    Aucun document dans ce dossier pour le moment.
+                  </td>
+                </tr>
+              )}
             </tbody>
           </table>
         </div>
