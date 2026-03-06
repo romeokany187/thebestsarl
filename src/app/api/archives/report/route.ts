@@ -110,20 +110,21 @@ export async function GET(request: NextRequest) {
   const pdf = await PDFDocument.create();
   const font = await pdf.embedFont(StandardFonts.Helvetica);
   const bold = await pdf.embedFont(StandardFonts.HelveticaBold);
+  const textBlack = rgb(0, 0, 0);
   let page = pdf.addPage([842, 595]);
 
   const drawHeader = (continuation = false) => {
     const title = `THEBEST SARL - Registre Archives PDF${continuation ? " (suite)" : ""}`;
-    page.drawText(title, { x: 24, y: 566, size: 13, font: bold, color: rgb(0.1, 0.1, 0.1) });
-    page.drawText(`Période: ${range.label}`, { x: 24, y: 550, size: 9, font, color: rgb(0.35, 0.35, 0.35) });
-    page.drawText(`Catégorie: ${folder ? archiveFolderLabel(folder) : "Toutes"}`, { x: 280, y: 550, size: 9, font, color: rgb(0.35, 0.35, 0.35) });
-    page.drawText(`Documents: ${documents.length}`, { x: 640, y: 550, size: 9, font, color: rgb(0.35, 0.35, 0.35) });
+    page.drawText(title, { x: 24, y: 566, size: 13, font: bold, color: textBlack });
+    page.drawText(`Période: ${range.label}`, { x: 24, y: 550, size: 9, font, color: textBlack });
+    page.drawText(`Catégorie: ${folder ? archiveFolderLabel(folder) : "Toutes"}`, { x: 280, y: 550, size: 9, font, color: textBlack });
+    page.drawText(`Documents: ${documents.length}`, { x: 640, y: 550, size: 9, font, color: textBlack });
     page.drawLine({ start: { x: 24, y: 544 }, end: { x: 818, y: 544 }, thickness: 0.8, color: rgb(0.82, 0.82, 0.82) });
 
     const headers = ["Référence", "Catégorie", "Document", "Type", "Origine", "Date"];
     const x = [24, 140, 270, 560, 620, 705];
     headers.forEach((header, index) => {
-      page.drawText(header, { x: x[index], y: 528, size: 8, font: bold, color: rgb(0.15, 0.15, 0.15) });
+      page.drawText(header, { x: x[index], y: 528, size: 8, font: bold, color: textBlack });
     });
     page.drawLine({ start: { x: 24, y: 523 }, end: { x: 818, y: 523 }, thickness: 0.6, color: rgb(0.86, 0.86, 0.86) });
   };
@@ -149,7 +150,7 @@ export async function GET(request: NextRequest) {
 
     const x = [24, 140, 270, 560, 620, 705];
     values.forEach((value, index) => {
-      page.drawText(value, { x: x[index], y, size: 8, font, color: rgb(0.2, 0.2, 0.2) });
+      page.drawText(value, { x: x[index], y, size: 8, font, color: textBlack });
     });
 
     y -= 12;

@@ -78,16 +78,17 @@ export async function GET(request: NextRequest) {
   const pdf = await PDFDocument.create();
   const font = await pdf.embedFont(StandardFonts.Helvetica);
   const fontBold = await pdf.embedFont(StandardFonts.HelveticaBold);
+  const textBlack = rgb(0, 0, 0);
   let page = pdf.addPage([842, 595]);
 
   const drawHeader = () => {
-    page.drawText("THEBEST SARL - Rapport des présences", { x: 24, y: 566, size: 13, font: fontBold, color: rgb(0.1, 0.1, 0.1) });
-    page.drawText(range.label, { x: 24, y: 550, size: 9, font, color: rgb(0.35, 0.35, 0.35) });
+    page.drawText("THEBEST SARL - Rapport des présences", { x: 24, y: 566, size: 13, font: fontBold, color: textBlack });
+    page.drawText(range.label, { x: 24, y: 550, size: 9, font, color: textBlack });
     page.drawLine({ start: { x: 24, y: 544 }, end: { x: 818, y: 544 }, thickness: 0.8, color: rgb(0.8, 0.8, 0.8) });
     const headers = ["Date", "Employé", "Statut", "Entrée", "Sortie", "Retard", "Heures supp."];
     const x = [24, 100, 290, 370, 440, 520, 610];
     headers.forEach((header, index) => {
-      page.drawText(header, { x: x[index], y: 528, size: 8, font: fontBold, color: rgb(0.15, 0.15, 0.15) });
+      page.drawText(header, { x: x[index], y: 528, size: 8, font: fontBold, color: textBlack });
     });
     page.drawLine({ start: { x: 24, y: 523 }, end: { x: 818, y: 523 }, thickness: 0.6, color: rgb(0.86, 0.86, 0.86) });
   };
@@ -114,7 +115,7 @@ export async function GET(request: NextRequest) {
     const x = [24, 100, 290, 370, 440, 520, 610];
 
     values.forEach((value, index) => {
-      page.drawText(value, { x: x[index], y, size: 8, font, color: rgb(0.2, 0.2, 0.2) });
+      page.drawText(value, { x: x[index], y, size: 8, font, color: textBlack });
     });
 
     y -= 12;

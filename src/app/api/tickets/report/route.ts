@@ -111,12 +111,13 @@ async function embedOptionalImage(pdf: PDFDocument, candidates: string[]) {
 
 function drawFooter(page: PDFPage, fontRegular: PDFFont, reportTitle: string, generatedBy: string) {
   const { width } = page.getSize();
+  const textBlack = rgb(0, 0, 0);
   page.drawText(`Imprimé par: ${generatedBy}`, {
     x: 26,
     y: 24,
     size: 9,
     font: fontRegular,
-    color: rgb(0.25, 0.25, 0.25),
+    color: textBlack,
   });
 
   const rightTextWidth = fontRegular.widthOfTextAtSize(reportTitle, 9);
@@ -125,7 +126,7 @@ function drawFooter(page: PDFPage, fontRegular: PDFFont, reportTitle: string, ge
     y: 24,
     size: 9,
     font: fontRegular,
-    color: rgb(0.25, 0.25, 0.25),
+    color: textBlack,
   });
 }
 
@@ -136,6 +137,7 @@ function drawTopInfo(
   subtitle: string,
   logoImage: PDFImage | null,
 ) {
+  const textBlack = rgb(0, 0, 0);
   if (logoImage) {
     const scaled = logoImage.scale(0.14);
     page.drawImage(logoImage, {
@@ -153,7 +155,7 @@ function drawTopInfo(
     y: 560,
     size: 14,
     font: fontBold,
-    color: rgb(0.08, 0.08, 0.08),
+    color: textBlack,
   });
 
   page.drawText("RAPPORT DE VENTES BILLETS", {
@@ -161,7 +163,7 @@ function drawTopInfo(
     y: 545,
     size: 9,
     font: fontBold,
-    color: rgb(0.22, 0.22, 0.22),
+    color: textBlack,
   });
 
   page.drawText(subtitle, {
@@ -169,7 +171,7 @@ function drawTopInfo(
     y: 532,
     size: 8.5,
     font: fontRegular,
-    color: rgb(0.32, 0.32, 0.32),
+    color: textBlack,
   });
 
   page.drawLine({
@@ -184,13 +186,14 @@ function drawSignature(page: PDFPage, signatureImage: PDFImage | null, fontRegul
   const { width } = page.getSize();
   const baseX = width - 220;
   const baseY = 46;
+  const textBlack = rgb(0, 0, 0);
 
   page.drawText("Signature", {
     x: baseX,
     y: baseY + 24,
     size: 8,
     font: fontRegular,
-    color: rgb(0.3, 0.3, 0.3),
+    color: textBlack,
   });
 
   page.drawLine({
@@ -240,6 +243,7 @@ export async function GET(request: NextRequest) {
 
   let fontRegular: PDFFont;
   let fontBold: PDFFont;
+  const textBlack = rgb(0, 0, 0);
 
   try {
     const regularBytes = await readFile(path.join(process.cwd(), "public/fonts/Montserrat-Regular.ttf"));
@@ -290,7 +294,7 @@ export async function GET(request: NextRequest) {
         y,
         size: 7.5,
         font: fontBold,
-        color: rgb(0.1, 0.1, 0.1),
+        color: textBlack,
       });
     });
     page.drawLine({
@@ -314,7 +318,7 @@ export async function GET(request: NextRequest) {
             y,
             size: 7.5,
             font: fontBold,
-            color: rgb(0.1, 0.1, 0.1),
+            color: textBlack,
           });
         });
         page.drawLine({
@@ -350,7 +354,7 @@ export async function GET(request: NextRequest) {
           y,
           size: 8,
           font: fontRegular,
-          color: rgb(0.14, 0.14, 0.14),
+          color: textBlack,
         });
       });
 
@@ -383,7 +387,7 @@ export async function GET(request: NextRequest) {
       y,
       size: 10,
       font: fontBold,
-      color: rgb(0.08, 0.08, 0.08),
+      color: textBlack,
     });
   } else {
     const reportTitle = "Rapport Synthèse";
@@ -431,7 +435,7 @@ export async function GET(request: NextRequest) {
         y,
         size: 8,
         font: fontBold,
-        color: rgb(0.1, 0.1, 0.1),
+        color: textBlack,
       });
     });
     page.drawLine({
@@ -455,7 +459,7 @@ export async function GET(request: NextRequest) {
             y,
             size: 8,
             font: fontBold,
-            color: rgb(0.1, 0.1, 0.1),
+            color: textBlack,
           });
         });
         page.drawLine({
@@ -478,21 +482,21 @@ export async function GET(request: NextRequest) {
           y,
           size: 8,
           font: fontBold,
-          color: rgb(0.12, 0.12, 0.12),
+          color: textBlack,
         });
-        page.drawText(String(dayTotal.tickets), { x: 360, y, size: 8, font: fontBold, color: rgb(0.12, 0.12, 0.12) });
-        page.drawText(formatMoney(dayTotal.sales), { x: 455, y, size: 8, font: fontBold, color: rgb(0.12, 0.12, 0.12) });
-        page.drawText(formatMoney(dayTotal.commissions), { x: 585, y, size: 8, font: fontBold, color: rgb(0.12, 0.12, 0.12) });
+        page.drawText(String(dayTotal.tickets), { x: 360, y, size: 8, font: fontBold, color: textBlack });
+        page.drawText(formatMoney(dayTotal.sales), { x: 455, y, size: 8, font: fontBold, color: textBlack });
+        page.drawText(formatMoney(dayTotal.commissions), { x: 585, y, size: 8, font: fontBold, color: textBlack });
         y -= 14;
       }
 
       currentDay = item.day;
       ensureSpace();
-      page.drawText(item.day, { x: 26, y, size: 8.5, font: fontRegular, color: rgb(0.16, 0.16, 0.16) });
-      page.drawText(item.airline, { x: 190, y, size: 8.5, font: fontRegular, color: rgb(0.16, 0.16, 0.16) });
-      page.drawText(String(item.tickets), { x: 360, y, size: 8.5, font: fontRegular, color: rgb(0.16, 0.16, 0.16) });
-      page.drawText(formatMoney(item.sales), { x: 455, y, size: 8.5, font: fontRegular, color: rgb(0.16, 0.16, 0.16) });
-      page.drawText(formatMoney(item.commissions), { x: 585, y, size: 8.5, font: fontRegular, color: rgb(0.16, 0.16, 0.16) });
+      page.drawText(item.day, { x: 26, y, size: 8.5, font: fontRegular, color: textBlack });
+      page.drawText(item.airline, { x: 190, y, size: 8.5, font: fontRegular, color: textBlack });
+      page.drawText(String(item.tickets), { x: 360, y, size: 8.5, font: fontRegular, color: textBlack });
+      page.drawText(formatMoney(item.sales), { x: 455, y, size: 8.5, font: fontRegular, color: textBlack });
+      page.drawText(formatMoney(item.commissions), { x: 585, y, size: 8.5, font: fontRegular, color: textBlack });
       y -= 13;
     });
 
@@ -504,11 +508,11 @@ export async function GET(request: NextRequest) {
         y,
         size: 8,
         font: fontBold,
-        color: rgb(0.12, 0.12, 0.12),
+        color: textBlack,
       });
-      page.drawText(String(dayTotal.tickets), { x: 360, y, size: 8, font: fontBold, color: rgb(0.12, 0.12, 0.12) });
-      page.drawText(formatMoney(dayTotal.sales), { x: 455, y, size: 8, font: fontBold, color: rgb(0.12, 0.12, 0.12) });
-      page.drawText(formatMoney(dayTotal.commissions), { x: 585, y, size: 8, font: fontBold, color: rgb(0.12, 0.12, 0.12) });
+      page.drawText(String(dayTotal.tickets), { x: 360, y, size: 8, font: fontBold, color: textBlack });
+      page.drawText(formatMoney(dayTotal.sales), { x: 455, y, size: 8, font: fontBold, color: textBlack });
+      page.drawText(formatMoney(dayTotal.commissions), { x: 585, y, size: 8, font: fontBold, color: textBlack });
       y -= 18;
     }
 
@@ -536,11 +540,11 @@ export async function GET(request: NextRequest) {
       y,
       size: 10,
       font: fontBold,
-      color: rgb(0.08, 0.08, 0.08),
+      color: textBlack,
     });
-    page.drawText(String(grandTickets), { x: 360, y, size: 10, font: fontBold, color: rgb(0.08, 0.08, 0.08) });
-    page.drawText(formatMoney(grandSales), { x: 455, y, size: 10, font: fontBold, color: rgb(0.08, 0.08, 0.08) });
-    page.drawText(formatMoney(grandCommissions), { x: 585, y, size: 10, font: fontBold, color: rgb(0.08, 0.08, 0.08) });
+    page.drawText(String(grandTickets), { x: 360, y, size: 10, font: fontBold, color: textBlack });
+    page.drawText(formatMoney(grandSales), { x: 455, y, size: 10, font: fontBold, color: textBlack });
+    page.drawText(formatMoney(grandCommissions), { x: 585, y, size: 10, font: fontBold, color: textBlack });
   }
 
   const bytes = await pdf.save();

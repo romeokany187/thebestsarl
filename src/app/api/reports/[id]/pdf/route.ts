@@ -47,6 +47,7 @@ export async function GET(_request: Request, { params }: Params) {
   const pdf = await PDFDocument.create();
   const font = await pdf.embedFont(StandardFonts.Helvetica);
   const fontBold = await pdf.embedFont(StandardFonts.HelveticaBold);
+  const textBlack = rgb(0, 0, 0);
   let page = pdf.addPage([595, 842]);
   const width = page.getWidth();
 
@@ -56,22 +57,22 @@ export async function GET(_request: Request, { params }: Params) {
       y: 804,
       size: 14,
       font: fontBold,
-      color: rgb(0.1, 0.1, 0.1),
+      color: textBlack,
     });
-    page.drawText(`Référence interne: ${report.id}`, { x: 34, y: 788, size: 9, font, color: rgb(0.35, 0.35, 0.35) });
+    page.drawText(`Référence interne: ${report.id}`, { x: 34, y: 788, size: 9, font, color: textBlack });
     page.drawLine({ start: { x: 34, y: 782 }, end: { x: width - 34, y: 782 }, thickness: 0.8, color: rgb(0.82, 0.82, 0.82) });
   };
 
   drawHeader();
 
-  page.drawText(`Titre: ${report.title}`, { x: 34, y: 760, size: 10, font: fontBold, color: rgb(0.12, 0.12, 0.12) });
-  page.drawText(`Période: ${formatPeriodLabel(report.period)}`, { x: 34, y: 744, size: 9, font, color: rgb(0.2, 0.2, 0.2) });
-  page.drawText(`Auteur: ${report.author.name}`, { x: 34, y: 730, size: 9, font, color: rgb(0.2, 0.2, 0.2) });
-  page.drawText(`Service: ${report.author.team?.name ?? "-"}`, { x: 34, y: 716, size: 9, font, color: rgb(0.2, 0.2, 0.2) });
-  page.drawText(`Statut: ${report.status}`, { x: 34, y: 702, size: 9, font, color: rgb(0.2, 0.2, 0.2) });
-  page.drawText(`Validateur: ${report.reviewer?.name ?? "-"}`, { x: 34, y: 688, size: 9, font, color: rgb(0.2, 0.2, 0.2) });
+  page.drawText(`Titre: ${report.title}`, { x: 34, y: 760, size: 10, font: fontBold, color: textBlack });
+  page.drawText(`Période: ${formatPeriodLabel(report.period)}`, { x: 34, y: 744, size: 9, font, color: textBlack });
+  page.drawText(`Auteur: ${report.author.name}`, { x: 34, y: 730, size: 9, font, color: textBlack });
+  page.drawText(`Service: ${report.author.team?.name ?? "-"}`, { x: 34, y: 716, size: 9, font, color: textBlack });
+  page.drawText(`Statut: ${report.status}`, { x: 34, y: 702, size: 9, font, color: textBlack });
+  page.drawText(`Validateur: ${report.reviewer?.name ?? "-"}`, { x: 34, y: 688, size: 9, font, color: textBlack });
 
-  page.drawText("Contenu", { x: 34, y: 666, size: 10, font: fontBold, color: rgb(0.12, 0.12, 0.12) });
+  page.drawText("Contenu", { x: 34, y: 666, size: 10, font: fontBold, color: textBlack });
 
   const lines = splitLines(report.content);
   let y = 648;
@@ -86,7 +87,7 @@ export async function GET(_request: Request, { params }: Params) {
         y = 760;
       }
 
-      page.drawText(chunk, { x: 34, y, size: 9, font, color: rgb(0.16, 0.16, 0.16) });
+      page.drawText(chunk, { x: 34, y, size: 9, font, color: textBlack });
       y -= 14;
     }
 

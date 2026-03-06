@@ -153,7 +153,6 @@ export async function GET(request: NextRequest, context: RouteContext) {
     "public/branding/cachet.png",
   ]);
 
-  const brandBlue = rgb(0.07, 0.2, 0.47);
   const black = rgb(0, 0, 0);
   const quote = parseNeedQuote(need.details);
   const grid = rgb(0.82, 0.82, 0.82);
@@ -174,7 +173,7 @@ export async function GET(request: NextRequest, context: RouteContext) {
       y: 785,
       size: 16,
       font: boldFont,
-      color: brandBlue,
+      color: black,
     });
 
     page.drawText(`ÉTAT DE BESOIN - APPROVISIONNEMENT${continuation ? " (suite)" : ""}`, {
@@ -182,7 +181,7 @@ export async function GET(request: NextRequest, context: RouteContext) {
       y: 765,
       size: 10.8,
       font: regularFont,
-      color: brandBlue,
+      color: black,
     });
 
     page.drawLine({
@@ -269,7 +268,7 @@ export async function GET(request: NextRequest, context: RouteContext) {
     y,
     size: 10.5,
     font: regularFont,
-    color: need.status === "APPROVED" ? rgb(0.05, 0.38, 0.15) : rgb(0.35, 0.24, 0.02),
+    color: black,
   });
   y -= 18;
 

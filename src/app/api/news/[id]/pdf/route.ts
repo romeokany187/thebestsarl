@@ -8,7 +8,7 @@ import { requireApiRoles } from "@/lib/rbac";
 
 const PAGE_WIDTH = 595;
 const PAGE_HEIGHT = 842;
-const BRAND_TEXT = rgb(0.1, 0.14, 0.2);
+const TEXT_BLACK = rgb(0, 0, 0);
 
 type RouteContext = {
   params: Promise<{ id: string }>;
@@ -67,7 +67,7 @@ function drawHeader(logo: PDFImage | null, page: PDFPage, titleFont: PDFFont, te
     y: height - 54,
     size: 17,
     font: titleFont,
-    color: BRAND_TEXT,
+    color: TEXT_BLACK,
   });
 
   page.drawText("COMMUNIQUÉ OFFICIEL", {
@@ -75,7 +75,7 @@ function drawHeader(logo: PDFImage | null, page: PDFPage, titleFont: PDFFont, te
     y: height - 74,
     size: 11,
     font: textFont,
-    color: BRAND_TEXT,
+    color: TEXT_BLACK,
   });
 
   page.drawText("Direction Générale", {
@@ -83,7 +83,7 @@ function drawHeader(logo: PDFImage | null, page: PDFPage, titleFont: PDFFont, te
     y: height - 92,
     size: 10,
     font: titleFont,
-    color: rgb(0.35, 0.35, 0.35),
+    color: TEXT_BLACK,
   });
 
   page.drawLine({
@@ -109,7 +109,7 @@ function drawFooter(page: PDFPage, fontRegular: PDFFont, printedBy: string) {
     y: 26,
     size: 8.5,
     font: fontRegular,
-    color: rgb(0.4, 0.4, 0.4),
+    color: TEXT_BLACK,
   });
 
   const rightText = `Imprimé par: ${printedBy}`;
@@ -119,7 +119,7 @@ function drawFooter(page: PDFPage, fontRegular: PDFFont, printedBy: string) {
     y: 26,
     size: 8.5,
     font: fontRegular,
-    color: rgb(0.4, 0.4, 0.4),
+    color: TEXT_BLACK,
   });
 }
 
@@ -133,7 +133,7 @@ function drawPageNumber(page: PDFPage, fontRegular: PDFFont, index: number, tota
     y: 26,
     size: 8.5,
     font: fontRegular,
-    color: rgb(0.4, 0.4, 0.4),
+    color: TEXT_BLACK,
   });
 }
 
@@ -147,7 +147,7 @@ function drawReferenceBox(page: PDFPage, fontBold: PDFFont, fontRegular: PDFFont
     y,
     size: 8,
     font: fontBold,
-    color: rgb(0.35, 0.35, 0.35),
+    color: TEXT_BLACK,
   });
 
   page.drawText(`DG-${postId.slice(0, 8).toUpperCase()}`, {
@@ -155,7 +155,7 @@ function drawReferenceBox(page: PDFPage, fontBold: PDFFont, fontRegular: PDFFont
     y: y - 12,
     size: 8.5,
     font: fontRegular,
-    color: rgb(0.2, 0.2, 0.2),
+    color: TEXT_BLACK,
   });
 
   page.drawText(`Date: ${publishedAt.toLocaleDateString()}`, {
@@ -163,7 +163,7 @@ function drawReferenceBox(page: PDFPage, fontBold: PDFFont, fontRegular: PDFFont
     y: y - 24,
     size: 8.5,
     font: fontRegular,
-    color: rgb(0.28, 0.28, 0.28),
+    color: TEXT_BLACK,
   });
 }
 
@@ -317,7 +317,7 @@ export async function GET(request: NextRequest, context: RouteContext) {
     y,
     size: 15,
     font: fontBold,
-    color: BRAND_TEXT,
+    color: TEXT_BLACK,
   });
 
   y -= 22;
@@ -326,7 +326,7 @@ export async function GET(request: NextRequest, context: RouteContext) {
     y,
     size: 9.5,
     font: fontRegular,
-    color: rgb(0.35, 0.35, 0.35),
+    color: TEXT_BLACK,
   });
 
   y -= 18;
@@ -335,7 +335,7 @@ export async function GET(request: NextRequest, context: RouteContext) {
     y,
     size: 10,
     font: fontBold,
-    color: BRAND_TEXT,
+    color: TEXT_BLACK,
   });
 
   y -= 22;
@@ -350,7 +350,7 @@ export async function GET(request: NextRequest, context: RouteContext) {
         y: PAGE_HEIGHT - 132,
         size: 12,
         font: fontBold,
-        color: BRAND_TEXT,
+        color: TEXT_BLACK,
       });
 
       y = PAGE_HEIGHT - 160;
@@ -361,7 +361,7 @@ export async function GET(request: NextRequest, context: RouteContext) {
       y,
       size: 10.5,
       font: fontRegular,
-      color: rgb(0.12, 0.12, 0.12),
+      color: TEXT_BLACK,
     });
     y -= line ? 15 : 10;
   }
