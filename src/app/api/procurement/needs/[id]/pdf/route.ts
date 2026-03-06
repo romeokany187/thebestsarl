@@ -329,7 +329,7 @@ export async function GET(request: NextRequest, context: RouteContext) {
 
   let detailY = y;
   drawTableHeader(page, detailY);
-  detailY -= 16;
+  detailY -= 20;
 
   if (quote?.items?.length) {
     const xCols = [CONTENT_LEFT, 68, 185, 365, 418, 484];
@@ -342,26 +342,27 @@ export async function GET(request: NextRequest, context: RouteContext) {
       const designationLines = wrapTextByWidth(item.designation, colWidths.designation, regularFont, 9.2);
       const descriptionLines = wrapTextByWidth(item.description || "-", colWidths.description, regularFont, 9.2);
       const rowLineCount = Math.max(designationLines.length, descriptionLines.length, 1);
-      const rowHeight = rowLineCount * 12 + 14;
+      const rowHeight = Math.max(34, rowLineCount * 13 + 16);
 
       if (detailY - rowHeight < FOOTER_BLOCK_TOP + 8) {
         page = createPage(true);
         detailY = 760;
         drawTableHeader(page, detailY);
-        detailY -= 16;
+        detailY -= 20;
       }
 
-      const rowTopY = detailY - 2;
+      const rowTopY = detailY;
+      const rowTextY = rowTopY - 15;
 
-      page.drawText(String(index + 1), { x: xCols[0], y: rowTopY, size: 9.4, font: regularFont, color: black });
-      page.drawText(String(item.quantity), { x: xCols[3], y: rowTopY, size: 9.4, font: regularFont, color: black });
-      page.drawText(item.unitPrice.toFixed(2), { x: xCols[4], y: rowTopY, size: 9.4, font: regularFont, color: black });
-      page.drawText(item.lineTotal.toFixed(2), { x: xCols[5], y: rowTopY, size: 9.4, font: regularFont, color: black });
+      page.drawText(String(index + 1), { x: xCols[0], y: rowTextY, size: 9.4, font: regularFont, color: black });
+      page.drawText(String(item.quantity), { x: xCols[3], y: rowTextY, size: 9.4, font: regularFont, color: black });
+      page.drawText(item.unitPrice.toFixed(2), { x: xCols[4], y: rowTextY, size: 9.4, font: regularFont, color: black });
+      page.drawText(item.lineTotal.toFixed(2), { x: xCols[5], y: rowTextY, size: 9.4, font: regularFont, color: black });
 
       for (let lineIndex = 0; lineIndex < rowLineCount; lineIndex += 1) {
         const d1 = designationLines[lineIndex] ?? "";
         const d2 = descriptionLines[lineIndex] ?? "";
-        const lineY = rowTopY - (lineIndex * 12);
+        const lineY = rowTextY - (lineIndex * 13);
         if (d1) {
           page.drawText(d1, { x: xCols[1], y: lineY, size: 9.2, font: regularFont, color: black });
         }
@@ -370,30 +371,37 @@ export async function GET(request: NextRequest, context: RouteContext) {
         }
       }
 
-      const separatorY = detailY - rowHeight + 2;
+      const rowBottomY = rowTopY - rowHeight;
       page.drawLine({
-        start: { x: CONTENT_LEFT, y: separatorY },
-        end: { x: CONTENT_RIGHT, y: separatorY },
+        start: { x: CONTENT_LEFT, y: rowBottomY },
+        end: { x: CONTENT_RIGHT, y: rowBottomY },
         thickness: 0.3,
         color: rgb(0.87, 0.87, 0.87),
       });
 
-      detailY -= rowHeight;
+      detailY = rowBottomY;
     }
 
-    if (detailY < FOOTER_BLOCK_TOP + 20) {
+    if (detailY < FOOTER_BLOCK_TOP + 52) {
       page = createPage(true);
       detailY = 760;
     }
 
+    page.drawLine({
+      start: { x: CONTENT_LEFT, y: detailY - 10 },
+      end: { x: CONTENT_RIGHT, y: detailY - 10 },
+      thickness: 0.7,
+      color: grid,
+    });
+
     page.drawText(`Total général: ${quote.totalGeneral.toFixed(2)} ${need.currency ?? "XAF"}`, {
       x: 330,
-      y: detailY,
+      y: detailY - 22,
       size: 10.8,
       font: boldFont,
       color: black,
     });
-    detailY -= 20;
+    detailY -= 36;
   } else {
     const rawLines = (need.details || "-").split("\n").map((line) => line.trim()).filter(Boolean);
     const normalized = rawLines.length > 0 ? rawLines.map((line) => (line.startsWith("-") || line.startsWith("•") ? line : `• ${line}`)) : ["• -"];
