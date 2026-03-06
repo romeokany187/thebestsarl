@@ -16,6 +16,7 @@ const PAGE_HEIGHT = 842;
 const CONTENT_LEFT = 38;
 const CONTENT_RIGHT = 557;
 const FOOTER_Y = 14;
+const FOOTER_BLOCK_TOP = 176;
 
 async function readFirstExistingFile(candidates: string[]) {
   for (const candidate of candidates) {
@@ -341,24 +342,26 @@ export async function GET(request: NextRequest, context: RouteContext) {
       const designationLines = wrapTextByWidth(item.designation, colWidths.designation, regularFont, 9.2);
       const descriptionLines = wrapTextByWidth(item.description || "-", colWidths.description, regularFont, 9.2);
       const rowLineCount = Math.max(designationLines.length, descriptionLines.length, 1);
-      const rowHeight = rowLineCount * 11 + 7;
+      const rowHeight = rowLineCount * 12 + 14;
 
-      if (detailY - rowHeight < 130) {
+      if (detailY - rowHeight < FOOTER_BLOCK_TOP + 8) {
         page = createPage(true);
         detailY = 760;
         drawTableHeader(page, detailY);
         detailY -= 16;
       }
 
-      page.drawText(String(index + 1), { x: xCols[0], y: detailY, size: 9.5, font: regularFont, color: black });
-      page.drawText(String(item.quantity), { x: xCols[3], y: detailY, size: 9.5, font: regularFont, color: black });
-      page.drawText(item.unitPrice.toFixed(2), { x: xCols[4], y: detailY, size: 9.5, font: regularFont, color: black });
-      page.drawText(item.lineTotal.toFixed(2), { x: xCols[5], y: detailY, size: 9.5, font: regularFont, color: black });
+      const rowTopY = detailY - 2;
+
+      page.drawText(String(index + 1), { x: xCols[0], y: rowTopY, size: 9.4, font: regularFont, color: black });
+      page.drawText(String(item.quantity), { x: xCols[3], y: rowTopY, size: 9.4, font: regularFont, color: black });
+      page.drawText(item.unitPrice.toFixed(2), { x: xCols[4], y: rowTopY, size: 9.4, font: regularFont, color: black });
+      page.drawText(item.lineTotal.toFixed(2), { x: xCols[5], y: rowTopY, size: 9.4, font: regularFont, color: black });
 
       for (let lineIndex = 0; lineIndex < rowLineCount; lineIndex += 1) {
         const d1 = designationLines[lineIndex] ?? "";
         const d2 = descriptionLines[lineIndex] ?? "";
-        const lineY = detailY - (lineIndex * 11);
+        const lineY = rowTopY - (lineIndex * 12);
         if (d1) {
           page.drawText(d1, { x: xCols[1], y: lineY, size: 9.2, font: regularFont, color: black });
         }
@@ -367,9 +370,10 @@ export async function GET(request: NextRequest, context: RouteContext) {
         }
       }
 
+      const separatorY = detailY - rowHeight + 2;
       page.drawLine({
-        start: { x: CONTENT_LEFT, y: detailY - rowHeight + 4 },
-        end: { x: CONTENT_RIGHT, y: detailY - rowHeight + 4 },
+        start: { x: CONTENT_LEFT, y: separatorY },
+        end: { x: CONTENT_RIGHT, y: separatorY },
         thickness: 0.3,
         color: rgb(0.87, 0.87, 0.87),
       });
@@ -377,7 +381,7 @@ export async function GET(request: NextRequest, context: RouteContext) {
       detailY -= rowHeight;
     }
 
-    if (detailY < 150) {
+    if (detailY < FOOTER_BLOCK_TOP + 20) {
       page = createPage(true);
       detailY = 760;
     }
@@ -396,7 +400,7 @@ export async function GET(request: NextRequest, context: RouteContext) {
     const lines = normalized.flatMap((line) => wrapTextByWidth(line, 500, regularFont, 9.8));
 
     for (const line of lines) {
-      if (detailY < 130) {
+      if (detailY < FOOTER_BLOCK_TOP + 8) {
         page = createPage(true);
         detailY = 760;
       }
@@ -411,74 +415,75 @@ export async function GET(request: NextRequest, context: RouteContext) {
     }
   }
 
-  if (detailY < 200) {
+  if (detailY < FOOTER_BLOCK_TOP + 20) {
     page = createPage(true);
     detailY = 720;
   }
 
-  const validationTop = detailY;
+  const drawValidationFooterBlock = (targetPage: import("pdf-lib").PDFPage) => {
+    targetPage.drawLine({
+      start: { x: CONTENT_LEFT, y: FOOTER_BLOCK_TOP },
+      end: { x: CONTENT_RIGHT, y: FOOTER_BLOCK_TOP },
+      thickness: 0.8,
+      color: rgb(0.8, 0.8, 0.8),
+    });
 
-  page.drawLine({
-    start: { x: 38, y: validationTop },
-    end: { x: CONTENT_RIGHT, y: validationTop },
-    thickness: 0.8,
-    color: rgb(0.8, 0.8, 0.8),
-  });
-
-  page.drawText("Validation Direction / Finance", {
-    x: 38,
-    y: validationTop - 16,
-    size: 11,
-    font: boldFont,
-    color: black,
-  });
-
-  const commentText = need.reviewComment?.trim() ? `Commentaire: ${need.reviewComment}` : "Commentaire: -";
-  const commentLines = wrapTextByWidth(commentText, 500, regularFont, 9.8).slice(0, 8);
-  let commentY = validationTop - 40;
-  commentLines.forEach((line) => {
-    page.drawText(line, {
-      x: 38,
-      y: commentY,
-      size: 9.8,
-      font: regularFont,
+    targetPage.drawText("Validation Direction / Finance", {
+      x: CONTENT_LEFT,
+      y: FOOTER_BLOCK_TOP - 18,
+      size: 11,
+      font: boldFont,
       color: black,
     });
-    commentY -= 13;
-  });
 
-  const sealTextY = Math.max(30, commentY - 22);
+    const commentText = need.reviewComment?.trim() ? `Commentaire: ${need.reviewComment}` : "Commentaire: -";
+    const commentLines = wrapTextByWidth(commentText, 340, regularFont, 9.8).slice(0, 4);
+    let commentY = FOOTER_BLOCK_TOP - 44;
+    commentLines.forEach((line) => {
+      targetPage.drawText(line, {
+        x: CONTENT_LEFT,
+        y: commentY,
+        size: 9.8,
+        font: regularFont,
+        color: black,
+      });
+      commentY -= 12;
+    });
 
-  const sealAnchorY = 26;
+    const sealTextY = 58;
+    const sealAnchorY = 28;
 
-  if (need.status === "APPROVED" && need.sealedAt) {
-    if (stamp) {
-      const stampSize = getContainedSize(stamp, 118, 118, true);
-      page.drawImage(stamp, {
-        x: 404,
-        y: sealAnchorY,
-        width: stampSize.width,
-        height: stampSize.height,
-        opacity: 0.95,
+    if (need.status === "APPROVED" && need.sealedAt) {
+      if (stamp) {
+        const stampSize = getContainedSize(stamp, 108, 108, true);
+        targetPage.drawImage(stamp, {
+          x: 434,
+          y: sealAnchorY,
+          width: stampSize.width,
+          height: stampSize.height,
+          opacity: 0.95,
+        });
+      }
+
+      targetPage.drawText(`Document scellé le ${formatDate(need.sealedAt)}`, {
+        x: CONTENT_LEFT,
+        y: sealTextY,
+        size: 9.8,
+        font: regularFont,
+        color: black,
+      });
+    } else {
+      targetPage.drawText("Document non scellé (en attente d'approbation).", {
+        x: CONTENT_LEFT,
+        y: sealTextY,
+        size: 9.8,
+        font: regularFont,
+        color: black,
       });
     }
+  };
 
-    page.drawText(`Document scellé le ${formatDate(need.sealedAt)}`, {
-      x: 38,
-      y: sealTextY,
-      size: 9.8,
-      font: regularFont,
-      color: black,
-    });
-  } else {
-    page.drawText("Document non scellé (en attente d'approbation).", {
-      x: 38,
-      y: sealTextY,
-      size: 9.8,
-      font: regularFont,
-      color: black,
-    });
-  }
+  drawValidationFooterBlock(page);
 
   const allPages = pdf.getPages();
   allPages.forEach((p, index) => {
