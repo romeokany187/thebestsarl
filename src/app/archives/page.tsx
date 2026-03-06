@@ -211,33 +211,13 @@ export default async function ArchivesPage({
       </section>
 
       <section className="mb-6 rounded-2xl border border-black/10 bg-white p-4 shadow-sm dark:border-white/10 dark:bg-zinc-900">
-        <h2 className="mb-3 text-base font-semibold">Comment tirer les rapports par service/page</h2>
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 text-sm">
-          <a href="/api/tickets/report" target="_blank" rel="noreferrer" className="rounded-lg border border-black/10 p-3 hover:bg-black/5 dark:border-white/10 dark:hover:bg-white/10">
-            <p className="font-semibold">Service Ventes/Billets</p>
-            <p className="text-black/60 dark:text-white/60">Route PDF directe: /api/tickets/report</p>
-          </a>
-          <a href="/api/attendance/report" target="_blank" rel="noreferrer" className="rounded-lg border border-black/10 p-3 hover:bg-black/5 dark:border-white/10 dark:hover:bg-white/10">
-            <p className="font-semibold">Service Présences</p>
-            <p className="text-black/60 dark:text-white/60">Route PDF directe: /api/attendance/report</p>
-          </a>
-          <a href="/api/payments/report" target="_blank" rel="noreferrer" className="rounded-lg border border-black/10 p-3 hover:bg-black/5 dark:border-white/10 dark:hover:bg-white/10">
-            <p className="font-semibold">Service Paiements</p>
-            <p className="text-black/60 dark:text-white/60">Route PDF directe: /api/payments/report</p>
-          </a>
-          <a href="/reports" className="rounded-lg border border-black/10 p-3 hover:bg-black/5 dark:border-white/10 dark:hover:bg-white/10">
-            <p className="font-semibold">Rapports de travail</p>
-            <p className="text-black/60 dark:text-white/60">Dans la page Rapports, chaque ligne donne un PDF imprimable.</p>
-          </a>
-          <a href="/news" className="rounded-lg border border-black/10 p-3 hover:bg-black/5 dark:border-white/10 dark:hover:bg-white/10">
-            <p className="font-semibold">Communiqués / Nouvelles</p>
-            <p className="text-black/60 dark:text-white/60">Dans Nouvelles, bouton Lire produit le PDF officiel.</p>
-          </a>
-          <a href="/approvisionnement" className="rounded-lg border border-black/10 p-3 hover:bg-black/5 dark:border-white/10 dark:hover:bg-white/10">
-            <p className="font-semibold">Approvisionnement</p>
-            <p className="text-black/60 dark:text-white/60">États de besoin approuvés: PDF via fiche besoin.</p>
-          </a>
-        </div>
+        <h2 className="mb-3 text-base font-semibold">Voir le répertoire Archives en PDF</h2>
+        <ul className="space-y-2 text-sm text-black/70 dark:text-white/70">
+          <li>1. Choisissez le <span className="font-semibold">mode</span>: Journalier, Hebdomadaire, Mensuel ou Annuel.</li>
+          <li>2. Sélectionnez la <span className="font-semibold">date</span> correspondant au mode choisi.</li>
+          <li>3. Filtrez la <span className="font-semibold">catégorie</span> (dossier) ou laissez "Toutes".</li>
+          <li>4. Cliquez sur <span className="font-semibold">Générer PDF</span> pour obtenir le registre des documents archivés.</li>
+        </ul>
       </section>
 
       <section className="overflow-hidden rounded-2xl border border-black/10 bg-white shadow-sm dark:border-white/10 dark:bg-zinc-900">
