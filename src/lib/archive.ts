@@ -23,7 +23,23 @@ export function archiveFolderLabel(folder: ArchiveFolder) {
 
 function createReferenceFromSequence(sequence: number) {
   const year = new Date().getFullYear();
-  return `ARC-${year}-${String(sequence).padStart(6, "0")}`;
+  return `BST-${year}-${String(sequence).padStart(6, "0")}`;
+}
+
+export async function normalizeLegacyArchiveReferences(prisma: PrismaClient) {
+  const legacyDocuments = await prisma.archiveDocument.findMany({
+    where: { reference: { startsWith: "ARC-" } },
+    select: { id: true, reference: true },
+    take: 5000,
+  });
+
+  for (const item of legacyDocuments) {
+    const nextReference = item.reference.replace(/^ARC-/, "BST-");
+    await prisma.archiveDocument.update({
+      where: { id: item.id },
+      data: { reference: nextReference },
+    });
+  }
 }
 
 export async function createArchiveDocumentWithGlobalReference(

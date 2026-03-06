@@ -2,7 +2,7 @@ import { AppShell } from "@/components/app-shell";
 import Link from "next/link";
 import { ArchiveFolder } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
-import { ARCHIVE_FOLDERS, archiveFolderLabel, syncSystemArchiveDocuments } from "@/lib/archive";
+import { ARCHIVE_FOLDERS, archiveFolderLabel, normalizeLegacyArchiveReferences, syncSystemArchiveDocuments } from "@/lib/archive";
 import { requirePageRoles } from "@/lib/rbac";
 
 export const dynamic = "force-dynamic";
@@ -10,6 +10,8 @@ export const dynamic = "force-dynamic";
 type SearchParams = {
   folder?: string;
   uploaded?: string;
+  deleted?: string;
+  deleteError?: string;
 };
 
 function parseFolder(value?: string): ArchiveFolder {
@@ -48,6 +50,7 @@ export default async function ArchivesPage({
   const resolvedSearchParams = (await searchParams) ?? {};
   const selectedFolder = parseFolder(resolvedSearchParams.folder);
 
+  await normalizeLegacyArchiveReferences(prisma);
   await syncSystemArchiveDocuments(prisma);
 
   const [documents, groupedCounts] = await Promise.all([
@@ -156,6 +159,85 @@ export default async function ArchivesPage({
             Document archivé avec succès.
           </p>
         ) : null}
+        {resolvedSearchParams.deleted === "1" ? (
+          <p className="mt-3 rounded-md bg-emerald-50 px-3 py-2 text-xs text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300">
+            Document supprimé avec succès.
+          </p>
+        ) : null}
+        {resolvedSearchParams.deleteError === "1" ? (
+          <p className="mt-3 rounded-md bg-red-50 px-3 py-2 text-xs text-red-700 dark:bg-red-950/40 dark:text-red-300">
+            Suppression impossible (document introuvable ou document système protégé).
+          </p>
+        ) : null}
+      </section>
+
+      <section className="mb-6 rounded-2xl border border-black/10 bg-white p-4 shadow-sm dark:border-white/10 dark:bg-zinc-900">
+        <h2 className="mb-3 text-base font-semibold">Tirer le rapport PDF des archives</h2>
+        <form method="GET" action="/api/archives/report" target="_blank" className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5 lg:items-end">
+          <div>
+            <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-black/60 dark:text-white/60">Mode</label>
+            <select name="mode" defaultValue="month" className="w-full rounded-md border px-3 py-2 text-sm">
+              <option value="date">Journalier</option>
+              <option value="week">Hebdomadaire</option>
+              <option value="month">Mensuel</option>
+              <option value="year">Annuel</option>
+            </select>
+          </div>
+          <div>
+            <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-black/60 dark:text-white/60">Date (jour/semaine)</label>
+            <input type="date" name="date" className="w-full rounded-md border px-3 py-2 text-sm" />
+          </div>
+          <div>
+            <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-black/60 dark:text-white/60">Mois</label>
+            <input type="month" name="month" className="w-full rounded-md border px-3 py-2 text-sm" />
+          </div>
+          <div>
+            <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-black/60 dark:text-white/60">Année</label>
+            <input type="number" name="year" min={2000} max={2100} className="w-full rounded-md border px-3 py-2 text-sm" placeholder="2026" />
+          </div>
+          <div>
+            <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-black/60 dark:text-white/60">Catégorie</label>
+            <select name="folder" defaultValue={selectedFolder} className="w-full rounded-md border px-3 py-2 text-sm">
+              <option value="">Toutes</option>
+              {ARCHIVE_FOLDERS.map((folder) => (
+                <option key={folder.key} value={folder.key}>{folder.label}</option>
+              ))}
+            </select>
+          </div>
+          <button className="rounded-md bg-black px-4 py-2 text-sm font-semibold text-white dark:bg-white dark:text-black">
+            Générer PDF
+          </button>
+        </form>
+      </section>
+
+      <section className="mb-6 rounded-2xl border border-black/10 bg-white p-4 shadow-sm dark:border-white/10 dark:bg-zinc-900">
+        <h2 className="mb-3 text-base font-semibold">Comment tirer les rapports par service/page</h2>
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 text-sm">
+          <a href="/api/tickets/report" target="_blank" rel="noreferrer" className="rounded-lg border border-black/10 p-3 hover:bg-black/5 dark:border-white/10 dark:hover:bg-white/10">
+            <p className="font-semibold">Service Ventes/Billets</p>
+            <p className="text-black/60 dark:text-white/60">Route PDF directe: /api/tickets/report</p>
+          </a>
+          <a href="/api/attendance/report" target="_blank" rel="noreferrer" className="rounded-lg border border-black/10 p-3 hover:bg-black/5 dark:border-white/10 dark:hover:bg-white/10">
+            <p className="font-semibold">Service Présences</p>
+            <p className="text-black/60 dark:text-white/60">Route PDF directe: /api/attendance/report</p>
+          </a>
+          <a href="/api/payments/report" target="_blank" rel="noreferrer" className="rounded-lg border border-black/10 p-3 hover:bg-black/5 dark:border-white/10 dark:hover:bg-white/10">
+            <p className="font-semibold">Service Paiements</p>
+            <p className="text-black/60 dark:text-white/60">Route PDF directe: /api/payments/report</p>
+          </a>
+          <a href="/reports" className="rounded-lg border border-black/10 p-3 hover:bg-black/5 dark:border-white/10 dark:hover:bg-white/10">
+            <p className="font-semibold">Rapports de travail</p>
+            <p className="text-black/60 dark:text-white/60">Dans la page Rapports, chaque ligne donne un PDF imprimable.</p>
+          </a>
+          <a href="/news" className="rounded-lg border border-black/10 p-3 hover:bg-black/5 dark:border-white/10 dark:hover:bg-white/10">
+            <p className="font-semibold">Communiqués / Nouvelles</p>
+            <p className="text-black/60 dark:text-white/60">Dans Nouvelles, bouton Lire produit le PDF officiel.</p>
+          </a>
+          <a href="/approvisionnement" className="rounded-lg border border-black/10 p-3 hover:bg-black/5 dark:border-white/10 dark:hover:bg-white/10">
+            <p className="font-semibold">Approvisionnement</p>
+            <p className="text-black/60 dark:text-white/60">États de besoin approuvés: PDF via fiche besoin.</p>
+          </a>
+        </div>
       </section>
 
       <section className="overflow-hidden rounded-2xl border border-black/10 bg-white shadow-sm dark:border-white/10 dark:bg-zinc-900">
@@ -172,7 +254,7 @@ export default async function ArchivesPage({
                 <th className="px-3 py-2 text-left">Origine</th>
                 <th className="px-3 py-2 text-left">Taille</th>
                 <th className="px-3 py-2 text-left">Date</th>
-                <th className="px-3 py-2 text-left">Action</th>
+                <th className="px-3 py-2 text-left">Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -189,14 +271,25 @@ export default async function ArchivesPage({
                   <td className="px-3 py-2">{sizeLabel(entry.fileSize)}</td>
                   <td className="px-3 py-2">{new Date(entry.createdAt).toLocaleString("fr-FR")}</td>
                   <td className="px-3 py-2">
-                    <a
-                      href={entry.externalUrl ?? `/api/archives/files/${entry.id}`}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="rounded-md border border-black/15 px-2.5 py-1 text-xs font-semibold hover:bg-black/5 dark:border-white/20 dark:hover:bg-white/10"
-                    >
-                      Ouvrir
-                    </a>
+                    <div className="flex items-center gap-2">
+                      <a
+                        href={entry.externalUrl ?? `/api/archives/files/${entry.id}`}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="rounded-md border border-black/15 px-2.5 py-1 text-xs font-semibold hover:bg-black/5 dark:border-white/20 dark:hover:bg-white/10"
+                      >
+                        Ouvrir
+                      </a>
+                      {(role === "ADMIN" || role === "MANAGER") && entry.origin !== "SYSTEM" ? (
+                        <form action="/api/archives/delete" method="POST">
+                          <input type="hidden" name="id" value={entry.id} />
+                          <input type="hidden" name="folder" value={selectedFolder} />
+                          <button className="rounded-md border border-red-300 px-2.5 py-1 text-xs font-semibold text-red-700 hover:bg-red-50 dark:border-red-800 dark:text-red-300 dark:hover:bg-red-950/40">
+                            Supprimer
+                          </button>
+                        </form>
+                      ) : null}
+                    </div>
                   </td>
                 </tr>
               )) : (
