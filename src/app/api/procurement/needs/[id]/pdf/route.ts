@@ -13,9 +13,9 @@ type RouteContext = {
 
 const PAGE_WIDTH = 595;
 const PAGE_HEIGHT = 842;
-const TOP_HEADER_Y = 785;
-const FOOTER_Y = 18;
-const TABLE_MIN_BOTTOM_Y = 95;
+const CONTENT_LEFT = 38;
+const CONTENT_RIGHT = 557;
+const FOOTER_Y = 14;
 
 async function readFirstExistingFile(candidates: string[]) {
   for (const candidate of candidates) {
@@ -58,24 +58,37 @@ function formatDate(value: Date | null | undefined) {
   }).format(value);
 }
 
-function wrapTextByLength(text: string, maxChars: number) {
-  const normalized = text.trim();
-  if (!normalized) {
-    return ["-"];
-  }
-
+function wrapTextByWidth(text: string, maxWidth: number, font: import("pdf-lib").PDFFont, fontSize: number) {
+  const normalized = (text || "-").trim() || "-";
   const words = normalized.split(/\s+/);
   const lines: string[] = [];
   let current = "";
 
   for (const word of words) {
-    const next = current ? `${current} ${word}` : word;
-    if (next.length > maxChars) {
-      if (current) lines.push(current);
-      current = word;
-    } else {
-      current = next;
+    const candidate = current ? `${current} ${word}` : word;
+    const candidateWidth = font.widthOfTextAtSize(candidate, fontSize);
+    if (candidateWidth <= maxWidth) {
+      current = candidate;
+      continue;
     }
+
+    if (current) {
+      lines.push(current);
+      current = word;
+      continue;
+    }
+
+    let part = "";
+    for (const char of word) {
+      const nextPart = `${part}${char}`;
+      if (font.widthOfTextAtSize(nextPart, fontSize) <= maxWidth) {
+        part = nextPart;
+      } else {
+        if (part) lines.push(part);
+        part = char;
+      }
+    }
+    current = part;
   }
 
   if (current) lines.push(current);
@@ -110,7 +123,7 @@ export async function GET(request: NextRequest, context: RouteContext) {
 
   const pdf = await PDFDocument.create();
   pdf.registerFontkit(fontkit);
-  const pages = [] as Array<{ page: import("pdf-lib").PDFPage; index: number }>;
+  const pages = [] as Array<import("pdf-lib").PDFPage>;
 
   const montserratRegular = await readFirstExistingFile([
     "public/fonts/Montserrat-Regular.ttf",
@@ -143,6 +156,7 @@ export async function GET(request: NextRequest, context: RouteContext) {
   const brandBlue = rgb(0.07, 0.2, 0.47);
   const black = rgb(0, 0, 0);
   const quote = parseNeedQuote(need.details);
+  const grid = rgb(0.82, 0.82, 0.82);
 
   const drawHeader = (page: import("pdf-lib").PDFPage, continuation = false) => {
     if (logo) {
@@ -157,7 +171,7 @@ export async function GET(request: NextRequest, context: RouteContext) {
 
     page.drawText("THE BEST SARL", {
       x: 220,
-      y: TOP_HEADER_Y,
+      y: 785,
       size: 16,
       font: boldFont,
       color: brandBlue,
@@ -173,7 +187,7 @@ export async function GET(request: NextRequest, context: RouteContext) {
 
     page.drawLine({
       start: { x: 38, y: 742 },
-      end: { x: 557, y: 742 },
+      end: { x: CONTENT_RIGHT, y: 742 },
       thickness: 1,
       color: rgb(0.84, 0.87, 0.95),
     });
@@ -181,14 +195,14 @@ export async function GET(request: NextRequest, context: RouteContext) {
 
   const drawFooter = (page: import("pdf-lib").PDFPage, pageNumber: number, totalPages: number) => {
     page.drawLine({
-      start: { x: 38, y: 22 },
-      end: { x: PAGE_WIDTH - 38, y: 22 },
+      start: { x: CONTENT_LEFT, y: 22 },
+      end: { x: CONTENT_RIGHT, y: 22 },
       thickness: 0.6,
       color: rgb(0.83, 0.83, 0.83),
     });
 
     page.drawText(`Page ${pageNumber}/${totalPages} • Imprimé le ${formatDate(new Date())}`, {
-      x: 38,
+      x: CONTENT_LEFT,
       y: FOOTER_Y,
       size: 8.2,
       font: regularFont,
@@ -198,7 +212,7 @@ export async function GET(request: NextRequest, context: RouteContext) {
     const byText = `Par ${access.session.user.name}`;
     const byWidth = regularFont.widthOfTextAtSize(byText, 8.2);
     page.drawText(byText, {
-      x: PAGE_WIDTH - 38 - byWidth,
+      x: CONTENT_RIGHT - byWidth,
       y: FOOTER_Y,
       size: 8.2,
       font: regularFont,
@@ -209,15 +223,42 @@ export async function GET(request: NextRequest, context: RouteContext) {
   const createPage = (continuation = false) => {
     const page = pdf.addPage([PAGE_WIDTH, PAGE_HEIGHT]);
     drawHeader(page, continuation);
-    pages.push({ page, index: pages.length + 1 });
+    pages.push(page);
     return page;
   };
 
   let page = createPage(false);
+  let y = 712;
+
+  const ensureSpace = (requiredHeight: number) => {
+    if (y - requiredHeight < 70) {
+      page = createPage(true);
+      y = 770;
+    }
+  };
+
+  const drawMetaLine = (label: string, value: string, valueColor = black) => {
+    ensureSpace(16);
+    page.drawText(`${label}:`, {
+      x: CONTENT_LEFT,
+      y,
+      size: 10.2,
+      font: boldFont,
+      color: black,
+    });
+    page.drawText(value, {
+      x: 170,
+      y,
+      size: 10.2,
+      font: regularFont,
+      color: valueColor,
+    });
+    y -= 16;
+  };
 
   page.drawText(`Réf: EDB-${need.id.slice(0, 8).toUpperCase()}`, {
-    x: 38,
-    y: 712,
+    x: CONTENT_LEFT,
+    y,
     size: 10.5,
     font: regularFont,
     color: black,
@@ -225,11 +266,20 @@ export async function GET(request: NextRequest, context: RouteContext) {
 
   page.drawText(`Statut: ${need.status}`, {
     x: 378,
-    y: 712,
+    y,
     size: 10.5,
     font: regularFont,
     color: need.status === "APPROVED" ? rgb(0.05, 0.38, 0.15) : rgb(0.35, 0.24, 0.02),
   });
+  y -= 18;
+
+  page.drawLine({
+    start: { x: CONTENT_LEFT, y: y + 6 },
+    end: { x: CONTENT_RIGHT, y: y + 6 },
+    thickness: 0.7,
+    color: grid,
+  });
+  y -= 4;
 
   const details = [
     ["Objet", need.title],
@@ -242,35 +292,23 @@ export async function GET(request: NextRequest, context: RouteContext) {
     ["Date validation", formatDate(need.approvedAt ?? need.reviewedAt)],
   ] as const;
 
-  let y = 680;
   for (const [label, value] of details) {
-    page.drawText(`${label}:`, {
-      x: 38,
-      y,
-      size: 10.2,
-      font: boldFont,
-      color: black,
-    });
-    page.drawText(value, {
-      x: 165,
-      y,
-      size: 10.2,
-      font: regularFont,
-      color: black,
-    });
-    y -= 18;
+    drawMetaLine(label, value);
   }
 
+  y -= 8;
+
   page.drawText("Articles demandés:", {
-    x: 38,
-    y: 534,
+    x: CONTENT_LEFT,
+    y,
     size: 11,
     font: boldFont,
     color: black,
   });
+  y -= 16;
 
   const drawTableHeader = (targetPage: import("pdf-lib").PDFPage, headerY: number) => {
-    const xCols = [38, 68, 185, 365, 418, 484];
+    const xCols = [CONTENT_LEFT, 68, 185, 365, 418, 484];
     const headers = ["N°", "Désignation", "Description", "Qté", "P.U", "P.T"];
     headers.forEach((header, index) => {
       targetPage.drawText(header, {
@@ -282,27 +320,31 @@ export async function GET(request: NextRequest, context: RouteContext) {
       });
     });
     targetPage.drawLine({
-      start: { x: 38, y: headerY - 4 },
-      end: { x: 557, y: headerY - 4 },
+      start: { x: CONTENT_LEFT, y: headerY - 4 },
+      end: { x: CONTENT_RIGHT, y: headerY - 4 },
       thickness: 0.7,
-      color: rgb(0.82, 0.82, 0.82),
+      color: grid,
     });
   };
 
-  let detailY = 516;
+  let detailY = y;
   drawTableHeader(page, detailY);
   detailY -= 16;
 
   if (quote?.items?.length) {
-    const xCols = [38, 68, 185, 365, 418, 484];
+    const xCols = [CONTENT_LEFT, 68, 185, 365, 418, 484];
+    const colWidths = {
+      designation: 112,
+      description: 168,
+    };
 
     for (const [index, item] of quote.items.entries()) {
-      const designationLines = wrapTextByLength(item.designation, 22);
-      const descriptionLines = wrapTextByLength(item.description || "-", 30);
+      const designationLines = wrapTextByWidth(item.designation, colWidths.designation, regularFont, 9.2);
+      const descriptionLines = wrapTextByWidth(item.description || "-", colWidths.description, regularFont, 9.2);
       const rowLineCount = Math.max(designationLines.length, descriptionLines.length, 1);
-      const rowHeight = rowLineCount * 11 + 6;
+      const rowHeight = rowLineCount * 11 + 7;
 
-      if (detailY - rowHeight < TABLE_MIN_BOTTOM_Y) {
+      if (detailY - rowHeight < 130) {
         page = createPage(true);
         detailY = 760;
         drawTableHeader(page, detailY);
@@ -327,8 +369,8 @@ export async function GET(request: NextRequest, context: RouteContext) {
       }
 
       page.drawLine({
-        start: { x: 38, y: detailY - rowHeight + 4 },
-        end: { x: 557, y: detailY - rowHeight + 4 },
+        start: { x: CONTENT_LEFT, y: detailY - rowHeight + 4 },
+        end: { x: CONTENT_RIGHT, y: detailY - rowHeight + 4 },
         thickness: 0.3,
         color: rgb(0.87, 0.87, 0.87),
       });
@@ -336,7 +378,7 @@ export async function GET(request: NextRequest, context: RouteContext) {
       detailY -= rowHeight;
     }
 
-    if (detailY < 125) {
+    if (detailY < 150) {
       page = createPage(true);
       detailY = 760;
     }
@@ -352,15 +394,15 @@ export async function GET(request: NextRequest, context: RouteContext) {
   } else {
     const rawLines = (need.details || "-").split("\n").map((line) => line.trim()).filter(Boolean);
     const normalized = rawLines.length > 0 ? rawLines.map((line) => (line.startsWith("-") || line.startsWith("•") ? line : `• ${line}`)) : ["• -"];
-    const lines = normalized.flatMap((line) => wrapTextByLength(line, 88));
+    const lines = normalized.flatMap((line) => wrapTextByWidth(line, 500, regularFont, 9.8));
 
     for (const line of lines) {
-      if (detailY < TABLE_MIN_BOTTOM_Y) {
+      if (detailY < 130) {
         page = createPage(true);
         detailY = 760;
       }
       page.drawText(line, {
-        x: 38,
+        x: CONTENT_LEFT,
         y: detailY,
         size: 9.8,
         font: regularFont,
@@ -379,7 +421,7 @@ export async function GET(request: NextRequest, context: RouteContext) {
 
   page.drawLine({
     start: { x: 38, y: validationTop },
-    end: { x: 557, y: validationTop },
+    end: { x: CONTENT_RIGHT, y: validationTop },
     thickness: 0.8,
     color: rgb(0.8, 0.8, 0.8),
   });
@@ -393,7 +435,7 @@ export async function GET(request: NextRequest, context: RouteContext) {
   });
 
   const commentText = need.reviewComment?.trim() ? `Commentaire: ${need.reviewComment}` : "Commentaire: -";
-  const commentLines = wrapTextByLength(commentText, 90).slice(0, 6);
+  const commentLines = wrapTextByWidth(commentText, 500, regularFont, 9.8).slice(0, 8);
   let commentY = validationTop - 40;
   commentLines.forEach((line) => {
     page.drawText(line, {
