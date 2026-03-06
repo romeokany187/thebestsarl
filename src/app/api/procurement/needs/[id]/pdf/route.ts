@@ -5,6 +5,7 @@ import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { prisma } from "@/lib/prisma";
 import { requireApiRoles } from "@/lib/rbac";
+import { parseNeedQuote } from "@/lib/need-lines";
 
 type RouteContext = {
   params: Promise<{ id: string }>;
@@ -113,6 +114,7 @@ export async function GET(request: NextRequest, context: RouteContext) {
 
   const brandBlue = rgb(0.07, 0.2, 0.47);
   const black = rgb(0, 0, 0);
+  const quote = parseNeedQuote(need.details);
 
   if (logo) {
     const logoScaled = logo.scale(0.26);
@@ -218,20 +220,64 @@ export async function GET(request: NextRequest, context: RouteContext) {
     return lines;
   };
 
-  const rawLines = (need.details || "-").split("\n").map((line) => line.trim()).filter(Boolean);
-  const normalized = rawLines.length > 0 ? rawLines.map((line) => (line.startsWith("-") || line.startsWith("•") ? line : `• ${line}`)) : ["• -"];
-  const lines = normalized.flatMap((line) => wrapText(line, 90));
   let detailY = 492;
-  lines.slice(0, 14).forEach((line) => {
-    page.drawText(line, {
-      x: 38,
+
+  if (quote?.items?.length) {
+    const xCols = [38, 68, 170, 330, 390, 470, 545];
+    const headers = ["N°", "Désignation", "Description", "Qté", "PU", "PT"];
+    headers.forEach((header, index) => {
+      page.drawText(header, {
+        x: xCols[index],
+        y: detailY,
+        size: 10,
+        font: boldFont,
+        color: black,
+      });
+    });
+
+    detailY -= 14;
+    page.drawLine({
+      start: { x: 38, y: detailY + 4 },
+      end: { x: 557, y: detailY + 4 },
+      thickness: 0.7,
+      color: rgb(0.82, 0.82, 0.82),
+    });
+
+    for (const [index, item] of quote.items.slice(0, 10).entries()) {
+      page.drawText(String(index + 1), { x: xCols[0], y: detailY, size: 10, font: boldFont, color: black });
+      page.drawText(item.designation.slice(0, 18), { x: xCols[1], y: detailY, size: 10, font: boldFont, color: black });
+      page.drawText((item.description || "-").slice(0, 24), { x: xCols[2], y: detailY, size: 10, font: boldFont, color: black });
+      page.drawText(String(item.quantity), { x: xCols[3], y: detailY, size: 10, font: boldFont, color: black });
+      page.drawText(item.unitPrice.toFixed(2), { x: xCols[4], y: detailY, size: 10, font: boldFont, color: black });
+      page.drawText(item.lineTotal.toFixed(2), { x: xCols[5], y: detailY, size: 10, font: boldFont, color: black });
+      detailY -= 14;
+    }
+
+    detailY -= 4;
+    page.drawText(`Total général: ${quote.totalGeneral.toFixed(2)} ${need.currency ?? "XAF"}`, {
+      x: 350,
       y: detailY,
-      size: 11,
+      size: 10.5,
       font: boldFont,
       color: black,
     });
-    detailY -= 15;
-  });
+    detailY -= 10;
+  } else {
+    const rawLines = (need.details || "-").split("\n").map((line) => line.trim()).filter(Boolean);
+    const normalized = rawLines.length > 0 ? rawLines.map((line) => (line.startsWith("-") || line.startsWith("•") ? line : `• ${line}`)) : ["• -"];
+    const lines = normalized.flatMap((line) => wrapText(line, 90));
+
+    lines.slice(0, 14).forEach((line) => {
+      page.drawText(line, {
+        x: 38,
+        y: detailY,
+        size: 11,
+        font: boldFont,
+        color: black,
+      });
+      detailY -= 15;
+    });
+  }
 
   const validationTop = 132;
 

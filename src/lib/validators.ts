@@ -142,11 +142,19 @@ export const approvalSchema = z.object({
 export const needRequestSchema = z.object({
   title: z.string().min(3).max(180),
   category: z.string().min(2).max(80),
-  details: z.string().min(10).max(4000),
-  quantity: z.number().positive(),
-  unit: z.string().min(1).max(20),
+  details: z.string().min(10).max(4000).optional(),
+  quantity: z.number().positive().optional(),
+  unit: z.string().min(1).max(20).optional(),
   estimatedAmount: z.number().nonnegative().optional(),
   currency: z.string().min(3).max(3).optional(),
+  items: z.array(
+    z.object({
+      designation: z.string().min(2).max(180),
+      description: z.string().max(500).optional(),
+      quantity: z.number().positive(),
+      unitPrice: z.number().nonnegative(),
+    }),
+  ).min(1).optional(),
 });
 
 export const needApprovalSchema = z.object({

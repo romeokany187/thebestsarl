@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireApiRoles } from "@/lib/rbac";
 import { needRequestSchema } from "@/lib/validators";
+import { quoteFromItems, serializeNeedQuote } from "@/lib/need-lines";
 
 export async function GET(request: NextRequest) {
   const access = await requireApiRoles(["ADMIN", "MANAGER", "EMPLOYEE", "ACCOUNTANT"]);
@@ -47,9 +48,29 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Seul le service approvisionnement peut émettre un état de besoin." }, { status: 403 });
   }
 
+  const quote = parsed.data.items?.length
+    ? quoteFromItems(parsed.data.items)
+    : quoteFromItems([
+      {
+        designation: parsed.data.title,
+        description: parsed.data.details ?? parsed.data.category,
+        quantity: parsed.data.quantity ?? 1,
+        unitPrice: parsed.data.estimatedAmount ?? 0,
+      },
+    ]);
+
+  if (quote.items.length === 0) {
+    return NextResponse.json({ error: "Ajoutez au moins une ligne valide dans le devis (désignation, quantité, prix unitaire)." }, { status: 400 });
+  }
+
   const need = await prisma.needRequest.create({
     data: {
-      ...parsed.data,
+      title: parsed.data.title,
+      category: parsed.data.category,
+      details: serializeNeedQuote(quote),
+      quantity: quote.items.reduce((sum, item) => sum + item.quantity, 0),
+      unit: "LOT",
+      estimatedAmount: quote.totalGeneral,
       currency: parsed.data.currency?.toUpperCase() ?? "XAF",
       status: "SUBMITTED",
       requesterId: me.id,

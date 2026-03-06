@@ -1,6 +1,7 @@
 "use client";
 
 import { FormEvent, useMemo, useState } from "react";
+import { parseNeedQuote } from "@/lib/need-lines";
 
 type NeedStatus = "DRAFT" | "SUBMITTED" | "APPROVED" | "REJECTED";
 type MovementType = "IN" | "OUT";
@@ -45,6 +46,13 @@ type StockMovement = {
   needRequest?: { id: string; title: string } | null;
 };
 
+type NeedLineForm = {
+  designation: string;
+  description: string;
+  quantity: string;
+  unitPrice: string;
+};
+
 function statusLabel(status: NeedStatus) {
   if (status === "SUBMITTED") return "Soumis";
   if (status === "APPROVED") return "Approuvé";
@@ -73,11 +81,31 @@ export function ProcurementHub({
   const [needStatus, setNeedStatus] = useState("");
   const [stockStatus, setStockStatus] = useState("");
   const [approvalStatus, setApprovalStatus] = useState("");
+  const [needLines, setNeedLines] = useState<NeedLineForm[]>([
+    { designation: "", description: "", quantity: "1", unitPrice: "0" },
+  ]);
 
   const approvedNeeds = useMemo(
     () => needs.filter((need) => need.status === "APPROVED"),
     [needs],
   );
+
+  const quoteTotal = useMemo(
+    () => needLines.reduce((sum, line) => sum + ((Number(line.quantity) || 0) * (Number(line.unitPrice) || 0)), 0),
+    [needLines],
+  );
+
+  function updateNeedLine(index: number, key: keyof NeedLineForm, value: string) {
+    setNeedLines((prev) => prev.map((line, lineIndex) => (lineIndex === index ? { ...line, [key]: value } : line)));
+  }
+
+  function addNeedLine() {
+    setNeedLines((prev) => [...prev, { designation: "", description: "", quantity: "1", unitPrice: "0" }]);
+  }
+
+  function removeNeedLine(index: number) {
+    setNeedLines((prev) => (prev.length <= 1 ? prev : prev.filter((_, lineIndex) => lineIndex !== index)));
+  }
 
   async function refreshData() {
     const [needsRes, stockRes, movementsRes] = await Promise.all([
@@ -109,6 +137,20 @@ export function ProcurementHub({
     const form = event.currentTarget;
     const formData = new FormData(form);
 
+    const items = needLines
+      .map((line) => ({
+        designation: line.designation.trim(),
+        description: line.description.trim(),
+        quantity: Number(line.quantity),
+        unitPrice: Number(line.unitPrice),
+      }))
+      .filter((line) => line.designation.length > 0 && line.quantity > 0 && line.unitPrice >= 0);
+
+    if (items.length === 0) {
+      setNeedStatus("Ajoutez au moins une ligne avec désignation, quantité et prix unitaire.");
+      return;
+    }
+
     setNeedStatus("Émission en cours...");
 
     const response = await fetch("/api/procurement/needs", {
@@ -117,13 +159,8 @@ export function ProcurementHub({
       body: JSON.stringify({
         title: String(formData.get("title") ?? ""),
         category: String(formData.get("category") ?? ""),
-        details: String(formData.get("details") ?? ""),
-        quantity: Number(formData.get("quantity") ?? 0),
-        unit: String(formData.get("unit") ?? ""),
-        estimatedAmount: String(formData.get("estimatedAmount") ?? "").trim()
-          ? Number(formData.get("estimatedAmount"))
-          : undefined,
         currency: String(formData.get("currency") ?? "XAF").trim() || "XAF",
+        items,
       }),
     });
 
@@ -135,6 +172,7 @@ export function ProcurementHub({
 
     setNeedStatus("État de besoin émis et transféré à la Direction/Finance.");
     form.reset();
+    setNeedLines([{ designation: "", description: "", quantity: "1", unitPrice: "0" }]);
     await refreshData();
   }
 
@@ -214,16 +252,82 @@ export function ProcurementHub({
             <form onSubmit={submitNeed} className="mt-3 grid gap-2">
               <input name="title" required placeholder="Objet du besoin" className="rounded-md border px-3 py-2 text-sm" />
               <input name="category" required placeholder="Catégorie" className="rounded-md border px-3 py-2 text-sm" />
-              <div className="grid grid-cols-[1fr,120px] gap-2">
-                <input name="quantity" type="number" min="0.01" step="0.01" required placeholder="Quantité" className="rounded-md border px-3 py-2 text-sm" />
-                <input name="unit" required placeholder="Unité" className="rounded-md border px-3 py-2 text-sm" />
+              <div className="rounded-lg border border-black/10 p-3 dark:border-white/10">
+                <div className="grid grid-cols-[40px,1.1fr,1.2fr,120px,140px,130px,42px] gap-2 text-[11px] font-semibold uppercase tracking-wide text-black/60 dark:text-white/60">
+                  <span>N°</span>
+                  <span>Libellé</span>
+                  <span>Description</span>
+                  <span>Quantité</span>
+                  <span>Prix unitaire</span>
+                  <span>Prix total</span>
+                  <span />
+                </div>
+                <div className="mt-2 space-y-2">
+                  {needLines.map((line, index) => {
+                    const lineTotal = (Number(line.quantity) || 0) * (Number(line.unitPrice) || 0);
+
+                    return (
+                      <div key={`line-${index}`} className="grid grid-cols-[40px,1.1fr,1.2fr,120px,140px,130px,42px] gap-2">
+                        <div className="rounded-md border px-2 py-2 text-xs text-center">{index + 1}</div>
+                        <input
+                          value={line.designation}
+                          onChange={(event) => updateNeedLine(index, "designation", event.target.value)}
+                          placeholder="Désignation"
+                          className="rounded-md border px-2 py-2 text-sm"
+                        />
+                        <input
+                          value={line.description}
+                          onChange={(event) => updateNeedLine(index, "description", event.target.value)}
+                          placeholder="Description"
+                          className="rounded-md border px-2 py-2 text-sm"
+                        />
+                        <input
+                          type="number"
+                          min="0.01"
+                          step="0.01"
+                          value={line.quantity}
+                          onChange={(event) => updateNeedLine(index, "quantity", event.target.value)}
+                          className="rounded-md border px-2 py-2 text-sm"
+                        />
+                        <input
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          value={line.unitPrice}
+                          onChange={(event) => updateNeedLine(index, "unitPrice", event.target.value)}
+                          className="rounded-md border px-2 py-2 text-sm"
+                        />
+                        <div className="rounded-md border bg-black/5 px-2 py-2 text-sm dark:bg-white/10">
+                          {lineTotal.toFixed(2)}
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => removeNeedLine(index)}
+                          className="rounded-md border border-red-300 text-xs text-red-700 hover:bg-red-50 dark:border-red-700/60 dark:text-red-300 dark:hover:bg-red-950/40"
+                        >
+                          ✕
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+                <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
+                  <button
+                    type="button"
+                    onClick={addNeedLine}
+                    className="rounded-md border border-black/20 px-2.5 py-1 text-xs font-semibold hover:bg-black/5 dark:border-white/20 dark:hover:bg-white/10"
+                  >
+                    + Ajouter ligne
+                  </button>
+                  <div className="text-sm font-semibold">
+                    Total général: {quoteTotal.toFixed(2)}
+                  </div>
+                </div>
               </div>
-              <div className="grid grid-cols-[1fr,100px] gap-2">
-                <input name="estimatedAmount" type="number" min="0" step="0.01" placeholder="Montant estimatif" className="rounded-md border px-3 py-2 text-sm" />
+              <div className="grid grid-cols-[120px,120px] gap-2">
                 <input name="currency" defaultValue="XAF" maxLength={3} placeholder="Devise" className="rounded-md border px-3 py-2 text-sm uppercase" />
               </div>
-              <textarea name="details" required rows={5} placeholder="Articles demandés (une ligne par article, ex: 1) Classeur A4 - 15 pièces - Prix unitaire estimé...)" className="rounded-md border px-3 py-2 text-sm" />
-              <p className="text-[11px] text-black/55 dark:text-white/55">Tu peux mettre plusieurs articles dans un seul état de besoin, une ligne par article.</p>
+              <p className="text-[11px] text-black/55 dark:text-white/55">Format devis: chaque ligne = désignation + description + quantité + prix unitaire.</p>
               <button className="rounded-md bg-black px-3 py-2 text-sm font-semibold text-white dark:bg-white dark:text-black">Émettre</button>
             </form>
           ) : (
@@ -287,7 +391,34 @@ export function ProcurementHub({
                   Montant estimatif: {new Intl.NumberFormat("fr-FR").format(need.estimatedAmount)} {need.currency ?? "XAF"}
                 </p>
               ) : null}
-              <p className="mt-1 whitespace-pre-wrap text-xs text-black/65 dark:text-white/65">{need.details}</p>
+              {parseNeedQuote(need.details)?.items?.length ? (
+                <div className="mt-2 overflow-x-auto">
+                  <table className="min-w-full text-xs">
+                    <thead className="bg-black/5 dark:bg-white/10">
+                      <tr>
+                        <th className="px-2 py-1 text-left">N°</th>
+                        <th className="px-2 py-1 text-left">Désignation</th>
+                        <th className="px-2 py-1 text-left">Qté</th>
+                        <th className="px-2 py-1 text-left">PU</th>
+                        <th className="px-2 py-1 text-left">PT</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {parseNeedQuote(need.details)?.items.map((line, lineIndex) => (
+                        <tr key={`${need.id}-line-${lineIndex}`} className="border-t border-black/10 dark:border-white/10">
+                          <td className="px-2 py-1">{lineIndex + 1}</td>
+                          <td className="px-2 py-1">{line.designation}</td>
+                          <td className="px-2 py-1">{line.quantity}</td>
+                          <td className="px-2 py-1">{line.unitPrice.toFixed(2)}</td>
+                          <td className="px-2 py-1">{line.lineTotal.toFixed(2)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                <p className="mt-1 whitespace-pre-wrap text-xs text-black/65 dark:text-white/65">{need.details}</p>
+              )}
               <p className="mt-1 text-[11px] text-black/55 dark:text-white/55">
                 Créé le {new Date(need.createdAt).toLocaleString()}
                 {need.approvedAt ? ` • Approuvé le ${new Date(need.approvedAt).toLocaleString()}` : ""}

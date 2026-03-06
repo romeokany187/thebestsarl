@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { AppShell } from "@/components/app-shell";
 import { prisma } from "@/lib/prisma";
 import { requirePageRoles } from "@/lib/rbac";
+import { parseNeedQuote } from "@/lib/need-lines";
 
 type PageContext = {
   params: Promise<{ id: string }>;
@@ -38,6 +39,7 @@ export default async function NeedReadPage(context: PageContext) {
   });
 
   if (!need) notFound();
+  const quote = parseNeedQuote(need.details);
 
   return (
     <AppShell role={role} accessNote="Lecture d'état de besoin avec impression PDF disponible pour tous les profils." >
@@ -87,7 +89,39 @@ export default async function NeedReadPage(context: PageContext) {
 
         <section className="mt-4">
           <h3 className="font-semibold">Articles demandés</h3>
-          <p className="mt-1 whitespace-pre-wrap text-black/75 dark:text-white/75">{need.details}</p>
+          {quote?.items?.length ? (
+            <div className="mt-2 overflow-x-auto">
+              <table className="min-w-full text-sm">
+                <thead className="bg-black/5 dark:bg-white/10">
+                  <tr>
+                    <th className="px-2 py-2 text-left">N°</th>
+                    <th className="px-2 py-2 text-left">Désignation</th>
+                    <th className="px-2 py-2 text-left">Description</th>
+                    <th className="px-2 py-2 text-left">Quantité</th>
+                    <th className="px-2 py-2 text-left">Prix unitaire</th>
+                    <th className="px-2 py-2 text-left">Prix total</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {quote.items.map((line, index) => (
+                    <tr key={`${need.id}-quote-line-${index}`} className="border-t border-black/10 dark:border-white/10">
+                      <td className="px-2 py-2">{index + 1}</td>
+                      <td className="px-2 py-2">{line.designation}</td>
+                      <td className="px-2 py-2">{line.description || "-"}</td>
+                      <td className="px-2 py-2">{line.quantity}</td>
+                      <td className="px-2 py-2">{line.unitPrice.toFixed(2)} {need.currency ?? "XAF"}</td>
+                      <td className="px-2 py-2">{line.lineTotal.toFixed(2)} {need.currency ?? "XAF"}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              <p className="mt-2 text-sm font-semibold">
+                Total général: {quote.totalGeneral.toFixed(2)} {need.currency ?? "XAF"}
+              </p>
+            </div>
+          ) : (
+            <p className="mt-1 whitespace-pre-wrap text-black/75 dark:text-white/75">{need.details}</p>
+          )}
         </section>
 
         {typeof need.estimatedAmount === "number" ? (
