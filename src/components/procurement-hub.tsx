@@ -75,12 +75,14 @@ export function ProcurementHub({
   canApproveNeed: boolean;
   canManageStock: boolean;
 }) {
+  const defaultReportMonth = new Date().toISOString().slice(0, 7);
   const [needs, setNeeds] = useState(initialNeeds);
   const [stockItems, setStockItems] = useState(initialStock);
   const [movements, setMovements] = useState(initialMovements);
   const [needStatus, setNeedStatus] = useState("");
   const [stockStatus, setStockStatus] = useState("");
   const [approvalStatus, setApprovalStatus] = useState("");
+  const [stockReportMonth, setStockReportMonth] = useState(defaultReportMonth);
   const [needLines, setNeedLines] = useState<NeedLineForm[]>([
     { designation: "", description: "", quantity: "1", unitPrice: "0" },
   ]);
@@ -496,6 +498,31 @@ export function ProcurementHub({
 
         <section className="rounded-xl border border-black/10 bg-white p-4 dark:border-white/10 dark:bg-zinc-900">
           <h2 className="text-base font-semibold">Fiche stock (état courant)</h2>
+          <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
+            <label className="flex items-center gap-2 text-black/70 dark:text-white/70">
+              Période
+              <input
+                type="month"
+                value={stockReportMonth}
+                onChange={(event) => setStockReportMonth(event.target.value || defaultReportMonth)}
+                className="rounded-md border border-black/15 bg-transparent px-2 py-1 text-xs dark:border-white/20"
+              />
+            </label>
+            <a
+              href={`/api/procurement/stock/report?mode=month&month=${encodeURIComponent(stockReportMonth)}`}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex rounded-md border border-black/20 px-2.5 py-1 font-semibold hover:bg-black/5 dark:border-white/20 dark:hover:bg-white/10"
+            >
+              Lire PDF stock
+            </a>
+            <a
+              href={`/api/procurement/stock/report?mode=month&month=${encodeURIComponent(stockReportMonth)}&download=1`}
+              className="inline-flex rounded-md border border-black/20 px-2.5 py-1 font-semibold hover:bg-black/5 dark:border-white/20 dark:hover:bg-white/10"
+            >
+              Télécharger PDF stock
+            </a>
+          </div>
           <div className="mt-3 overflow-x-auto">
             <table className="min-w-full text-sm">
               <thead>
