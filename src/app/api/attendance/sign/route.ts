@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from "next/server";
-import { SiteType } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { requireApiRoles } from "@/lib/rbac";
 import { attendanceSignSchema } from "@/lib/validators";
@@ -9,8 +8,6 @@ const REFERENCE_SITE = {
   longitude: 15.30875,
   radiusMeters: 200,
   name: "Point de référence Marché Central",
-  fullAddress:
-    "Avenue Place du Marché Central, Commune Gombe, Ville Révolution, Province Kinshasa, Pays République démocratique du Congo",
 };
 
 function toRadians(value: number) {
@@ -179,46 +176,19 @@ export async function POST(request: NextRequest) {
   const effectiveRadius = Math.max(REFERENCE_SITE.radiusMeters, Math.round(accuracyM ?? 0));
   const isInReferencePerimeter = distanceToReference <= effectiveRadius;
 
-  const resolvedAddress = isInReferencePerimeter
-    ? REFERENCE_SITE.fullAddress
-    : gpsResolvedAddress;
-
-  const activeSites = isInReferencePerimeter
-    ? []
-    : await prisma.workSite.findMany({
-      where: { isActive: true },
-    });
+  const resolvedAddress = gpsResolvedAddress
+    ?? (isInReferencePerimeter ? REFERENCE_SITE.name : null);
 
   let matchedSite: {
-    id: string;
     name: string;
-    type: SiteType;
     distanceM: number;
   } | null = null;
 
   if (isInReferencePerimeter) {
     matchedSite = {
-      id: "REFERENCE_SITE",
       name: REFERENCE_SITE.name,
-      type: "OFFICE",
       distanceM: distanceToReference,
     };
-  }
-
-  if (!isInReferencePerimeter) {
-    for (const site of activeSites) {
-      const distanceM = distanceMeters(latitude, longitude, site.latitude, site.longitude);
-      if (distanceM <= site.radiusMeters) {
-        if (!matchedSite || distanceM < matchedSite.distanceM) {
-          matchedSite = {
-            id: site.id,
-            name: site.name,
-            type: site.type,
-            distanceM,
-          };
-        }
-      }
-    }
   }
 
   const locationStatus = isInReferencePerimeter
@@ -230,17 +200,24 @@ export async function POST(request: NextRequest) {
   const latenessMins = isClockOut ? 0 : computeLatenessMinutes(signTime);
   const overtimeMins = isClockOut ? computeOvertimeMinutes(signTime) : 0;
 
-  if (isClockOut) {
-    const todayRecord = await prisma.attendance.findUnique({
-      where: {
-        userId_date: {
-          userId: access.session.user.id,
-          date: day,
-        },
+  const todayRecord = await prisma.attendance.findUnique({
+    where: {
+      userId_date: {
+        userId: access.session.user.id,
+        date: day,
       },
-      select: { clockIn: true, clockOut: true },
-    });
+    },
+    select: { clockIn: true, clockOut: true },
+  });
 
+  if (!isClockOut && todayRecord?.clockIn) {
+    return NextResponse.json(
+      { error: "La présence d'entrée du jour est déjà signée." },
+      { status: 400 },
+    );
+  }
+
+  if (isClockOut) {
     if (!todayRecord?.clockIn) {
       return NextResponse.json(
         { error: "Impossible de signer la sortie sans entrée signée." },
@@ -272,7 +249,7 @@ export async function POST(request: NextRequest) {
       signAccuracyM: accuracyM,
       signAddress: resolvedAddress,
       locationStatus,
-      matchedSiteId: isInReferencePerimeter ? null : matchedSite?.id,
+      matchedSiteId: null,
       matchDistanceM: distanceToReference,
       notes: matchedSite
         ? `${isClockOut ? "Sortie" : "Entrée"} validée sur ${matchedSite.name}`
@@ -289,7 +266,7 @@ export async function POST(request: NextRequest) {
       signAccuracyM: accuracyM,
       signAddress: resolvedAddress,
       locationStatus,
-      matchedSiteId: isInReferencePerimeter ? null : matchedSite?.id,
+      matchedSiteId: null,
       matchDistanceM: distanceToReference,
       notes: matchedSite
         ? `${isClockOut ? "Sortie" : "Entrée"} validée sur ${matchedSite.name}`
