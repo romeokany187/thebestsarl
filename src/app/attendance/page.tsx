@@ -5,23 +5,75 @@ import { requirePageRoles } from "@/lib/rbac";
 
 export const dynamic = "force-dynamic";
 
-export default async function AttendancePage() {
+type SearchParams = {
+  startDate?: string;
+  endDate?: string;
+  userId?: string;
+};
+
+function dateRangeFromParams(params: SearchParams) {
+  const now = new Date();
+  const defaultDay = now.toISOString().slice(0, 10);
+  const startRaw = params.startDate ?? defaultDay;
+  const endRaw = params.endDate ?? startRaw;
+  const start = new Date(`${startRaw}T00:00:00.000Z`);
+  const end = new Date(`${endRaw}T00:00:00.000Z`);
+  end.setUTCDate(end.getUTCDate() + 1);
+
+  return {
+    start,
+    end,
+    startRaw,
+    endRaw,
+    label: `Période du ${startRaw} au ${endRaw}`,
+  };
+}
+
+export default async function AttendancePage({
+  searchParams,
+}: {
+  searchParams?: Promise<SearchParams>;
+}) {
   const { session, role } = await requirePageRoles(["ADMIN", "MANAGER", "EMPLOYEE", "ACCOUNTANT"]);
+  const resolvedSearchParams = (await searchParams) ?? {};
+  const range = dateRangeFromParams(resolvedSearchParams);
   const canManageAttendance = role === "ADMIN" || role === "MANAGER" || role === "EMPLOYEE";
+  const selectedUserId = role === "EMPLOYEE"
+    ? session.user.id
+    : resolvedSearchParams.userId && resolvedSearchParams.userId !== "ALL"
+      ? resolvedSearchParams.userId
+      : undefined;
   const accessNote = canManageAttendance
     ? role === "EMPLOYEE"
       ? "Accès personnel: vous pouvez saisir et consulter uniquement vos présences."
       : "Accès gestion: vous pouvez saisir et suivre les présences de l'équipe."
     : "Accès lecture seule: consultation des présences uniquement.";
 
+  const users = role === "EMPLOYEE"
+    ? []
+    : await prisma.user.findMany({
+      select: { id: true, name: true },
+      orderBy: { name: "asc" },
+      take: 300,
+    });
+
+  const reportQuery = new URLSearchParams({
+    startDate: range.startRaw,
+    endDate: range.endRaw,
+    ...(selectedUserId ? { userId: selectedUserId } : {}),
+  }).toString();
+
   const records = await prisma.attendance.findMany({
-    where: role === "EMPLOYEE" ? { userId: session.user.id } : undefined,
+    where: {
+      date: { gte: range.start, lt: range.end },
+      ...(selectedUserId ? { userId: selectedUserId } : {}),
+    },
     include: {
       user: { select: { name: true } },
       matchedSite: { select: { name: true, type: true } },
     },
     orderBy: { date: "desc" },
-    take: 50,
+    take: 300,
   });
 
   return (
@@ -31,6 +83,66 @@ export default async function AttendancePage() {
         <p className="text-sm text-black/60 dark:text-white/60">
           Pointage, retards, heures supplémentaires et suivi quotidien des équipes.
         </p>
+      </section>
+
+      <section className="mb-6 rounded-xl border border-black/10 bg-white p-4 dark:border-white/10 dark:bg-zinc-900">
+        <form method="GET" className="grid gap-3 lg:grid-cols-4 lg:items-end">
+          <div>
+            <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-black/60 dark:text-white/60">Du</label>
+            <input
+              type="date"
+              name="startDate"
+              defaultValue={range.startRaw}
+              className="w-full rounded-md border border-black/15 bg-white px-3 py-2 text-sm dark:border-white/15 dark:bg-zinc-900"
+            />
+          </div>
+          <div>
+            <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-black/60 dark:text-white/60">Au</label>
+            <input
+              type="date"
+              name="endDate"
+              defaultValue={range.endRaw}
+              className="w-full rounded-md border border-black/15 bg-white px-3 py-2 text-sm dark:border-white/15 dark:bg-zinc-900"
+            />
+          </div>
+          {role !== "EMPLOYEE" ? (
+            <div>
+              <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-black/60 dark:text-white/60">Employé</label>
+              <select
+                name="userId"
+                defaultValue={resolvedSearchParams.userId ?? "ALL"}
+                className="w-full rounded-md border border-black/15 bg-white px-3 py-2 text-sm dark:border-white/15 dark:bg-zinc-900"
+              >
+                <option value="ALL">Tous les employés</option>
+                {users.map((user) => (
+                  <option key={user.id} value={user.id}>{user.name}</option>
+                ))}
+              </select>
+            </div>
+          ) : (
+            <div className="text-xs text-black/60 dark:text-white/60">Vue personnelle uniquement.</div>
+          )}
+          <button type="submit" className="rounded-md bg-black px-4 py-2 text-sm font-semibold text-white dark:bg-white dark:text-black">
+            Filtrer
+          </button>
+        </form>
+        <div className="mt-3 flex flex-wrap items-center gap-2 text-xs">
+          <a
+            href={`/api/attendance/report?${reportQuery}`}
+            target="_blank"
+            rel="noreferrer"
+            className="inline-flex rounded-md border border-black/20 px-2.5 py-1 font-semibold hover:bg-black/5 dark:border-white/20 dark:hover:bg-white/10"
+          >
+            Lire rapport PDF
+          </a>
+          <a
+            href={`/api/attendance/report?${reportQuery}&download=1`}
+            className="inline-flex rounded-md border border-black/20 px-2.5 py-1 font-semibold hover:bg-black/5 dark:border-white/20 dark:hover:bg-white/10"
+          >
+            Télécharger rapport PDF
+          </a>
+        </div>
+        <p className="mt-2 text-xs text-black/60 dark:text-white/60">{range.label}</p>
       </section>
 
       <div className="grid gap-6 lg:grid-cols-[380px,1fr]">
@@ -43,7 +155,8 @@ export default async function AttendancePage() {
         )}
 
         <div className="overflow-hidden rounded-xl border border-black/10 bg-white dark:border-white/10 dark:bg-zinc-900">
-          <table className="min-w-full text-sm">
+          <div className="overflow-x-auto">
+            <table className="min-w-full text-sm">
             <thead className="bg-black/5 dark:bg-white/10">
               <tr>
                 <th className="px-3 py-2 text-left">Employé</th>
@@ -68,7 +181,7 @@ export default async function AttendancePage() {
                   <td className="px-3 py-2">
                     {row.locationStatus}
                     {row.matchedSite ? ` (${row.matchedSite.name})` : ""}
-                    {row.signLatitude && row.signLongitude
+                    {row.signLatitude != null && row.signLongitude != null
                       ? ` • ${row.signLatitude.toFixed(5)}, ${row.signLongitude.toFixed(5)}`
                       : ""}
                   </td>
@@ -77,8 +190,16 @@ export default async function AttendancePage() {
                   <td className="px-3 py-2">{row.overtimeMins} min</td>
                 </tr>
               ))}
+              {records.length === 0 ? (
+                <tr>
+                  <td colSpan={9} className="px-3 py-6 text-center text-sm text-black/55 dark:text-white/55">
+                    Aucune présence trouvée pour cette période.
+                  </td>
+                </tr>
+              ) : null}
             </tbody>
-          </table>
+            </table>
+          </div>
         </div>
       </div>
     </AppShell>

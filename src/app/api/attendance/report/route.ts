@@ -63,7 +63,12 @@ export async function GET(request: NextRequest) {
   }
 
   const range = dateRangeFromParams(request.nextUrl.searchParams);
-  const roleFilter = access.role === "EMPLOYEE" ? { userId: access.session.user.id } : {};
+  const requestedUserId = request.nextUrl.searchParams.get("userId")?.trim();
+  const roleFilter = access.role === "EMPLOYEE"
+    ? { userId: access.session.user.id }
+    : requestedUserId
+      ? { userId: requestedUserId }
+      : {};
 
   const rows = await prisma.attendance.findMany({
     where: {
@@ -126,7 +131,7 @@ export async function GET(request: NextRequest) {
     status: 200,
     headers: {
       "Content-Type": "application/pdf",
-      "Content-Disposition": `inline; filename="rapport-presences-${new Date().toISOString().slice(0, 10)}.pdf"`,
+      "Content-Disposition": `${request.nextUrl.searchParams.get("download") === "1" ? "attachment" : "inline"}; filename="rapport-presences-${new Date().toISOString().slice(0, 10)}.pdf"`,
       "Cache-Control": "private, max-age=60",
     },
   });
