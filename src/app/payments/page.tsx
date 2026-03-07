@@ -133,6 +133,11 @@ export default async function PaymentsPage({
   const selectedAirlineId = resolvedSearchParams.airlineId && resolvedSearchParams.airlineId !== "ALL"
     ? resolvedSearchParams.airlineId
     : undefined;
+  const reportQuery = new URLSearchParams({
+    startDate: currentStartDate,
+    endDate: currentEndDate,
+    ...(selectedAirlineId ? { airlineId: selectedAirlineId } : {}),
+  }).toString();
 
   const [airlines, tickets, payments] = await Promise.all([
     prisma.airline.findMany({
@@ -240,6 +245,22 @@ export default async function PaymentsPage({
 
           <button type="submit" className="rounded-md bg-black px-4 py-2 text-sm font-semibold text-white dark:bg-white dark:text-black">Filtrer</button>
         </form>
+        <div className="mt-3 flex flex-wrap items-center gap-2 text-xs">
+          <a
+            href={`/api/payments/report?${reportQuery}`}
+            target="_blank"
+            rel="noreferrer"
+            className="inline-flex rounded-md border border-black/20 px-2.5 py-1 font-semibold hover:bg-black/5 dark:border-white/20 dark:hover:bg-white/10"
+          >
+            Lire PDF paiements
+          </a>
+          <a
+            href={`/api/payments/report?${reportQuery}&download=1`}
+            className="inline-flex rounded-md border border-black/20 px-2.5 py-1 font-semibold hover:bg-black/5 dark:border-white/20 dark:hover:bg-white/10"
+          >
+            Télécharger PDF paiements
+          </a>
+        </div>
         <p className="mt-3 text-xs text-black/60 dark:text-white/60">
           {range.label} • Période du {range.start.toISOString().slice(0, 10)} au {new Date(range.end.getTime() - 1).toISOString().slice(0, 10)}
         </p>
