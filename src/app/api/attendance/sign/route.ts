@@ -63,20 +63,44 @@ async function resolveAddressFromCoords(latitude: number, longitude: number) {
     const payload = await response.json();
     const address = payload?.address;
 
-    const road = address?.road ?? address?.pedestrian ?? address?.path ?? null;
     const houseNumber = address?.house_number ?? null;
-    const quarter = address?.suburb ?? address?.neighbourhood ?? address?.quarter ?? null;
+    const avenue =
+      address?.road
+      ?? address?.residential
+      ?? address?.street
+      ?? address?.pedestrian
+      ?? address?.path
+      ?? null;
+    const quarter =
+      address?.suburb
+      ?? address?.neighbourhood
+      ?? address?.quarter
+      ?? null;
+    const commune =
+      address?.city_district
+      ?? address?.municipality
+      ?? address?.borough
+      ?? address?.township
+      ?? null;
     const city = address?.city ?? address?.town ?? address?.village ?? null;
+    const province = address?.state ?? address?.region ?? address?.county ?? null;
+    const country = address?.country ?? null;
+    const postcode = address?.postcode ?? null;
 
-    const concise = [
-      [road, houseNumber].filter(Boolean).join(" "),
-      quarter,
-      city,
+    const detailed = [
+      houseNumber ? `N° ${houseNumber}` : null,
+      avenue ? `Avenue ${avenue}` : null,
+      quarter ? `Quartier ${quarter}` : null,
+      commune ? `Commune ${commune}` : null,
+      city ? `Ville ${city}` : null,
+      province ? `Province ${province}` : null,
+      postcode ? `Code postal ${postcode}` : null,
+      country ? `Pays ${country}` : null,
     ]
       .filter(Boolean)
       .join(", ");
 
-    return concise || payload?.display_name || null;
+    return detailed || payload?.display_name || null;
   } catch {
     return null;
   }
