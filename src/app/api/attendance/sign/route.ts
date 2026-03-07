@@ -4,6 +4,15 @@ import { prisma } from "@/lib/prisma";
 import { requireApiRoles } from "@/lib/rbac";
 import { attendanceSignSchema } from "@/lib/validators";
 
+const REFERENCE_SITE = {
+  latitude: -4.30706,
+  longitude: 15.30875,
+  radiusMeters: 200,
+  name: "Point de référence Marché Central",
+  fullAddress:
+    "Avenue Place du Marché Central, Commune Gombe, Ville Révolution, Province Kinshasa, Pays République démocratique du Congo",
+};
+
 function toRadians(value: number) {
   return (value * Math.PI) / 180;
 }
@@ -159,11 +168,26 @@ export async function POST(request: NextRequest) {
   const signTime = new Date();
   const day = new Date(signTime.toDateString());
   const { latitude, longitude, accuracyM, action } = parsed.data;
-  const resolvedAddress = await resolveAddressFromCoords(latitude, longitude);
+  const gpsResolvedAddress = await resolveAddressFromCoords(latitude, longitude);
 
-  const activeSites = await prisma.workSite.findMany({
-    where: { isActive: true },
-  });
+  const distanceToReference = distanceMeters(
+    latitude,
+    longitude,
+    REFERENCE_SITE.latitude,
+    REFERENCE_SITE.longitude,
+  );
+  const effectiveRadius = Math.max(REFERENCE_SITE.radiusMeters, Math.round(accuracyM ?? 0));
+  const isInReferencePerimeter = distanceToReference <= effectiveRadius;
+
+  const resolvedAddress = isInReferencePerimeter
+    ? REFERENCE_SITE.fullAddress
+    : gpsResolvedAddress;
+
+  const activeSites = isInReferencePerimeter
+    ? []
+    : await prisma.workSite.findMany({
+      where: { isActive: true },
+    });
 
   let matchedSite: {
     id: string;
@@ -172,24 +196,33 @@ export async function POST(request: NextRequest) {
     distanceM: number;
   } | null = null;
 
-  for (const site of activeSites) {
-    const distanceM = distanceMeters(latitude, longitude, site.latitude, site.longitude);
-    if (distanceM <= site.radiusMeters) {
-      if (!matchedSite || distanceM < matchedSite.distanceM) {
-        matchedSite = {
-          id: site.id,
-          name: site.name,
-          type: site.type,
-          distanceM,
-        };
+  if (isInReferencePerimeter) {
+    matchedSite = {
+      id: "REFERENCE_SITE",
+      name: REFERENCE_SITE.name,
+      type: "OFFICE",
+      distanceM: distanceToReference,
+    };
+  }
+
+  if (!isInReferencePerimeter) {
+    for (const site of activeSites) {
+      const distanceM = distanceMeters(latitude, longitude, site.latitude, site.longitude);
+      if (distanceM <= site.radiusMeters) {
+        if (!matchedSite || distanceM < matchedSite.distanceM) {
+          matchedSite = {
+            id: site.id,
+            name: site.name,
+            type: site.type,
+            distanceM,
+          };
+        }
       }
     }
   }
 
-  const locationStatus = matchedSite
-    ? matchedSite.type === "OFFICE"
-      ? "OFFICE"
-      : "ASSIGNMENT"
+  const locationStatus = isInReferencePerimeter
+    ? "OFFICE"
     : "OFFSITE";
   const isAtOffice = locationStatus === "OFFICE";
 
@@ -239,8 +272,8 @@ export async function POST(request: NextRequest) {
       signAccuracyM: accuracyM,
       signAddress: resolvedAddress,
       locationStatus,
-      matchedSiteId: matchedSite?.id,
-      matchDistanceM: matchedSite?.distanceM,
+      matchedSiteId: isInReferencePerimeter ? null : matchedSite?.id,
+      matchDistanceM: distanceToReference,
       notes: matchedSite
         ? `${isClockOut ? "Sortie" : "Entrée"} validée sur ${matchedSite.name}`
         : `${isClockOut ? "Sortie" : "Entrée"} hors bureau${resolvedAddress ? ` • ${resolvedAddress}` : ""}`,
@@ -256,8 +289,8 @@ export async function POST(request: NextRequest) {
       signAccuracyM: accuracyM,
       signAddress: resolvedAddress,
       locationStatus,
-      matchedSiteId: matchedSite?.id,
-      matchDistanceM: matchedSite?.distanceM,
+      matchedSiteId: isInReferencePerimeter ? null : matchedSite?.id,
+      matchDistanceM: distanceToReference,
       notes: matchedSite
         ? `${isClockOut ? "Sortie" : "Entrée"} validée sur ${matchedSite.name}`
         : `${isClockOut ? "Sortie" : "Entrée"} hors bureau${resolvedAddress ? ` • ${resolvedAddress}` : ""}`,
@@ -277,7 +310,7 @@ export async function POST(request: NextRequest) {
       locationStatus,
       isAtOffice,
       matchedSiteName: matchedSite?.name ?? null,
-      matchDistanceM: matchedSite?.distanceM ?? null,
+      matchDistanceM: distanceToReference,
       resolvedAddress,
     },
   });
