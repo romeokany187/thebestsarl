@@ -56,6 +56,12 @@ function dateRangeFromParams(params: URLSearchParams) {
   return { start, end, label: `Rapport du ${start.toISOString().slice(0, 10)}` };
 }
 
+function short(value: string, max: number) {
+  const clean = value.trim();
+  if (clean.length <= max) return clean;
+  return `${clean.slice(0, max - 1)}…`;
+}
+
 export async function GET(request: NextRequest) {
   const access = await requireApiRoles(["ADMIN", "MANAGER", "EMPLOYEE", "ACCOUNTANT"]);
   if (access.error) {
@@ -90,8 +96,8 @@ export async function GET(request: NextRequest) {
     page.drawText("THEBEST SARL - Rapport des présences", { x: 24, y: 566, size: 13, font: fontBold, color: textBlack });
     page.drawText(range.label, { x: 24, y: 550, size: 9, font, color: textBlack });
     page.drawLine({ start: { x: 24, y: 544 }, end: { x: 818, y: 544 }, thickness: 0.8, color: rgb(0.8, 0.8, 0.8) });
-    const headers = ["Date", "Employé", "Statut", "Entrée", "Sortie", "Retard", "Heures supp."];
-    const x = [24, 100, 290, 370, 440, 520, 610];
+    const headers = ["Date", "Employé", "Statut", "Entrée", "Sortie", "Retard", "Heures supp.", "Lieu", "Observation"];
+    const x = [24, 90, 225, 290, 340, 390, 450, 525, 610];
     headers.forEach((header, index) => {
       page.drawText(header, { x: x[index], y: 528, size: 8, font: fontBold, color: textBlack });
     });
@@ -110,20 +116,22 @@ export async function GET(request: NextRequest) {
 
     const values = [
       new Date(row.date).toISOString().slice(0, 10),
-      row.user.name.slice(0, 28),
+      short(row.user.name, 18),
       row.status,
       row.clockIn ? new Date(row.clockIn).toISOString().slice(11, 16) : "-",
       row.clockOut ? new Date(row.clockOut).toISOString().slice(11, 16) : "-",
       `${row.latenessMins} min`,
       `${row.overtimeMins} min`,
+      row.locationStatus,
+      short(row.notes ?? "-", 42),
     ];
-    const x = [24, 100, 290, 370, 440, 520, 610];
+    const x = [24, 90, 225, 290, 340, 390, 450, 525, 610];
 
     values.forEach((value, index) => {
-      page.drawText(value, { x: x[index], y, size: 8, font, color: textBlack });
+      page.drawText(value, { x: x[index], y, size: 7.2, font, color: textBlack });
     });
 
-    y -= 12;
+    y -= 11;
   }
 
   const bytes = await pdf.save();

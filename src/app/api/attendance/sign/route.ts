@@ -39,11 +39,14 @@ function computeLatenessMinutes(signTime: Date) {
   return Math.max(0, deltaMins);
 }
 
-function computeOvertimeMinutes(signTime: Date) {
-  const officeEnd = new Date(signTime);
-  officeEnd.setHours(17, 0, 0, 0);
-  const deltaMins = Math.round((signTime.getTime() - officeEnd.getTime()) / 60000);
-  return Math.max(0, deltaMins);
+function expectedEndTime(signTime: Date) {
+  const isSaturday = signTime.getDay() === 6;
+  const end = new Date(signTime);
+  end.setHours(isSaturday ? 13 : 16, 0, 0, 0);
+  return {
+    end,
+    label: isSaturday ? "13h00 (samedi)" : "16h00",
+  };
 }
 
 async function resolveAddressFromCoords(latitude: number, longitude: number) {
@@ -88,25 +91,16 @@ async function resolveAddressFromCoords(latitude: number, longitude: number) {
       ?? address?.borough
       ?? address?.township
       ?? null;
-    const city = address?.city ?? address?.town ?? address?.village ?? null;
-    const province = address?.state ?? address?.region ?? address?.county ?? null;
-    const country = address?.country ?? null;
-    const postcode = address?.postcode ?? null;
-
     const detailed = [
       houseNumber ? `N° ${houseNumber}` : null,
       avenue ? `Avenue ${avenue}` : null,
       quarter ? `Quartier ${quarter}` : null,
       commune ? `Commune ${commune}` : null,
-      city ? `Ville ${city}` : null,
-      province ? `Province ${province}` : null,
-      postcode ? `Code postal ${postcode}` : null,
-      country ? `Pays ${country}` : null,
     ]
       .filter(Boolean)
       .join(", ");
 
-    return detailed || payload?.display_name || null;
+    return detailed || null;
   } catch {
     return null;
   }
@@ -198,7 +192,13 @@ export async function POST(request: NextRequest) {
 
   const isClockOut = action === "CLOCK_OUT";
   const latenessMins = isClockOut ? 0 : computeLatenessMinutes(signTime);
-  const overtimeMins = isClockOut ? computeOvertimeMinutes(signTime) : 0;
+  const { end: endTime, label: endTimeLabel } = expectedEndTime(signTime);
+  const overtimeMins = isClockOut
+    ? Math.max(0, Math.round((signTime.getTime() - endTime.getTime()) / 60000))
+    : 0;
+  const earlyDepartureMins = isClockOut
+    ? Math.max(0, Math.round((endTime.getTime() - signTime.getTime()) / 60000))
+    : 0;
 
   const todayRecord = await prisma.attendance.findUnique({
     where: {
@@ -233,6 +233,18 @@ export async function POST(request: NextRequest) {
     }
   }
 
+  const timingNote = isClockOut
+    ? overtimeMins > 0
+      ? `Heures supp: +${overtimeMins} min (après ${endTimeLabel}).`
+      : earlyDepartureMins > 0
+        ? `Sortie anticipée: ${earlyDepartureMins} min avant ${endTimeLabel}.`
+        : `Sortie à l'heure (${endTimeLabel}).`
+    : null;
+
+  const signNote = isClockOut
+    ? `${isAtOffice ? "Sortie signée au bureau." : "Sortie signée hors bureau."} ${timingNote}${resolvedAddress ? ` Adresse: ${resolvedAddress}.` : ""}`
+    : `${isAtOffice ? "Entrée signée au bureau." : "Entrée signée hors bureau."}${resolvedAddress ? ` Adresse: ${resolvedAddress}.` : ""}`;
+
   const record = await prisma.attendance.upsert({
     where: {
       userId_date: {
@@ -251,9 +263,7 @@ export async function POST(request: NextRequest) {
       locationStatus,
       matchedSiteId: null,
       matchDistanceM: distanceToReference,
-      notes: matchedSite
-        ? `${isClockOut ? "Sortie" : "Entrée"} validée sur ${matchedSite.name}`
-        : `${isClockOut ? "Sortie" : "Entrée"} hors bureau${resolvedAddress ? ` • ${resolvedAddress}` : ""}`,
+      notes: signNote,
     },
     create: {
       userId: access.session.user.id,
@@ -268,9 +278,7 @@ export async function POST(request: NextRequest) {
       locationStatus,
       matchedSiteId: null,
       matchDistanceM: distanceToReference,
-      notes: matchedSite
-        ? `${isClockOut ? "Sortie" : "Entrée"} validée sur ${matchedSite.name}`
-        : `${isClockOut ? "Sortie" : "Entrée"} hors bureau${resolvedAddress ? ` • ${resolvedAddress}` : ""}`,
+      notes: signNote,
     },
     include: {
       matchedSite: {
