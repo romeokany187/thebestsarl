@@ -62,6 +62,13 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
   }
 
+  if (!/Billets vendus:\s*\d+/i.test(parsed.data.content)) {
+    return NextResponse.json(
+      { error: "Le rapport doit indiquer le nombre de billets vendus." },
+      { status: 400 },
+    );
+  }
+
   if ((access.role === "EMPLOYEE" || access.role === "ACCOUNTANT") && parsed.data.authorId !== access.session.user.id) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
