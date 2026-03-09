@@ -24,6 +24,10 @@ export async function POST(request: NextRequest) {
   const access = await requireApiModuleAccess("procurement", ["ADMIN", "MANAGER", "EMPLOYEE", "ACCOUNTANT"]);
   if (access.error) return access.error;
 
+  if (access.role === "ADMIN") {
+    return NextResponse.json({ error: "Accès lecture seule: l'admin ne peut pas enregistrer de mouvement de stock." }, { status: 403 });
+  }
+
   const body = await request.json();
   const parsed = stockMovementSchema.safeParse(body);
   if (!parsed.success) {

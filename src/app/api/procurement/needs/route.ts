@@ -29,6 +29,10 @@ export async function POST(request: NextRequest) {
   const access = await requireApiModuleAccess("procurement", ["ADMIN", "MANAGER", "EMPLOYEE"]);
   if (access.error) return access.error;
 
+  if (access.role === "ADMIN") {
+    return NextResponse.json({ error: "Accès lecture seule: l'admin ne peut pas émettre d'état de besoin." }, { status: 403 });
+  }
+
   const body = await request.json();
   const parsed = needRequestSchema.safeParse(body);
   if (!parsed.success) {

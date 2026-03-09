@@ -7,6 +7,10 @@ export async function POST(request: NextRequest) {
   const access = await requireApiModuleAccess("procurement", ["ADMIN", "MANAGER", "ACCOUNTANT"]);
   if (access.error) return access.error;
 
+  if (access.role === "ADMIN") {
+    return NextResponse.json({ error: "Accès lecture seule: l'admin ne peut pas valider un état de besoin." }, { status: 403 });
+  }
+
   const body = await request.json();
   const parsed = needApprovalSchema.safeParse(body);
   if (!parsed.success) {
