@@ -51,11 +51,15 @@ export function hasModuleAccess(params: {
     return true;
   }
 
+  if (module === "profile") {
+    return true;
+  }
+
   if (role === "ADMIN") {
     return true;
   }
 
-  // Without assignment/function, only home is visible until affectation.
+  // Without assignment/function, only home and profile are visible until affectation.
   if (!isAssignedNonAdmin(jobTitle, teamName)) {
     return false;
   }
@@ -64,7 +68,7 @@ export function hasModuleAccess(params: {
     return false;
   }
 
-  if (module === "profile" || module === "reports" || module === "attendance" || module === "news" || module === "settings") {
+  if (module === "reports" || module === "attendance" || module === "news" || module === "settings") {
     return true;
   }
 
