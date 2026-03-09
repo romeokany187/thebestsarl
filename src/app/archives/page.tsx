@@ -46,9 +46,10 @@ export default async function ArchivesPage({
 }: {
   searchParams?: Promise<SearchParams>;
 }) {
-  const { role } = await requirePageModuleAccess("archives", ["ADMIN", "MANAGER", "EMPLOYEE", "ACCOUNTANT"]);
+  const { role, session } = await requirePageModuleAccess("archives", ["ADMIN", "MANAGER", "EMPLOYEE", "ACCOUNTANT"]);
   const resolvedSearchParams = (await searchParams) ?? {};
   const selectedFolder = parseFolder(resolvedSearchParams.folder);
+  const canArchiveWrite = (session.user.jobTitle ?? "") === "RELATION_PUBLIQUE";
 
   await normalizeLegacyArchiveReferences(prisma);
   await syncSystemArchiveDocuments(prisma);
@@ -85,7 +86,9 @@ export default async function ArchivesPage({
   return (
     <AppShell
       role={role}
-      accessNote="Archives interactives: classement par dossiers, upload PDF/images, référencement automatique global et intégration des documents système."
+      accessNote={canArchiveWrite
+        ? "Archives: lecture et archivage des documents (upload/suppression) réservés au service RH & Relations publiques."
+        : "Mode lecture: consultation des documents archivés et génération des rapports PDF."}
     >
       <section className="mb-6">
         <h1 className="text-2xl font-semibold tracking-tight">Archives</h1>
@@ -140,36 +143,38 @@ export default async function ArchivesPage({
         </div>
       </section>
 
-      <section className="mb-6 rounded-2xl border border-black/10 bg-white p-4 shadow-sm dark:border-white/10 dark:bg-zinc-900">
-        <h2 className="mb-3 text-base font-semibold">Ajouter un document dans {archiveFolderLabel(selectedFolder)}</h2>
-        <form action="/api/archives/upload" method="POST" encType="multipart/form-data" className="grid gap-3 sm:grid-cols-[1fr,1fr,auto] sm:items-end">
-          <input type="hidden" name="folder" value={selectedFolder} />
-          <div>
-            <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-black/60 dark:text-white/60">Titre document</label>
-            <input name="title" required minLength={3} className="w-full rounded-md border px-3 py-2 text-sm" placeholder="Ex: Déclaration DGI Février" />
-          </div>
-          <div>
-            <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-black/60 dark:text-white/60">Fichier (PDF/Image)</label>
-            <input name="file" type="file" required accept="application/pdf,image/png,image/jpeg,image/webp,image/gif" className="w-full rounded-md border px-3 py-2 text-sm" />
-          </div>
-          <button className="rounded-md bg-black px-4 py-2 text-sm font-semibold text-white dark:bg-white dark:text-black">Archiver</button>
-        </form>
-        {resolvedSearchParams.uploaded === "1" ? (
-          <p className="mt-3 rounded-md bg-emerald-50 px-3 py-2 text-xs text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300">
-            Document archivé avec succès.
-          </p>
-        ) : null}
-        {resolvedSearchParams.deleted === "1" ? (
-          <p className="mt-3 rounded-md bg-emerald-50 px-3 py-2 text-xs text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300">
-            Document supprimé avec succès.
-          </p>
-        ) : null}
-        {resolvedSearchParams.deleteError === "1" ? (
-          <p className="mt-3 rounded-md bg-red-50 px-3 py-2 text-xs text-red-700 dark:bg-red-950/40 dark:text-red-300">
-            Suppression impossible (document introuvable ou document système protégé).
-          </p>
-        ) : null}
-      </section>
+      {canArchiveWrite ? (
+        <section className="mb-6 rounded-2xl border border-black/10 bg-white p-4 shadow-sm dark:border-white/10 dark:bg-zinc-900">
+          <h2 className="mb-3 text-base font-semibold">Ajouter un document dans {archiveFolderLabel(selectedFolder)}</h2>
+          <form action="/api/archives/upload" method="POST" encType="multipart/form-data" className="grid gap-3 sm:grid-cols-[1fr,1fr,auto] sm:items-end">
+            <input type="hidden" name="folder" value={selectedFolder} />
+            <div>
+              <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-black/60 dark:text-white/60">Titre document</label>
+              <input name="title" required minLength={3} className="w-full rounded-md border px-3 py-2 text-sm" placeholder="Ex: Déclaration DGI Février" />
+            </div>
+            <div>
+              <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-black/60 dark:text-white/60">Fichier (PDF/Image)</label>
+              <input name="file" type="file" required accept="application/pdf,image/png,image/jpeg,image/webp,image/gif" className="w-full rounded-md border px-3 py-2 text-sm" />
+            </div>
+            <button className="rounded-md bg-black px-4 py-2 text-sm font-semibold text-white dark:bg-white dark:text-black">Archiver</button>
+          </form>
+          {resolvedSearchParams.uploaded === "1" ? (
+            <p className="mt-3 rounded-md bg-emerald-50 px-3 py-2 text-xs text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300">
+              Document archivé avec succès.
+            </p>
+          ) : null}
+          {resolvedSearchParams.deleted === "1" ? (
+            <p className="mt-3 rounded-md bg-emerald-50 px-3 py-2 text-xs text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300">
+              Document supprimé avec succès.
+            </p>
+          ) : null}
+          {resolvedSearchParams.deleteError === "1" ? (
+            <p className="mt-3 rounded-md bg-red-50 px-3 py-2 text-xs text-red-700 dark:bg-red-950/40 dark:text-red-300">
+              Suppression impossible (document introuvable ou document système protégé).
+            </p>
+          ) : null}
+        </section>
+      ) : null}
 
       <section className="mb-6 rounded-2xl border border-black/10 bg-white p-4 shadow-sm dark:border-white/10 dark:bg-zinc-900">
         <h2 className="mb-3 text-base font-semibold">Tirer le rapport PDF des archives</h2>
@@ -260,7 +265,7 @@ export default async function ArchivesPage({
                       >
                         Ouvrir
                       </a>
-                      {(role === "ADMIN" || role === "MANAGER") && entry.origin !== "SYSTEM" ? (
+                      {canArchiveWrite && entry.origin !== "SYSTEM" ? (
                         <form action="/api/archives/delete" method="POST">
                           <input type="hidden" name="id" value={entry.id} />
                           <input type="hidden" name="folder" value={selectedFolder} />

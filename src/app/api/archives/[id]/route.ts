@@ -5,9 +5,13 @@ import { requireApiModuleAccess } from "@/lib/rbac";
 type Params = { params: Promise<{ id: string }> };
 
 export async function DELETE(_request: Request, { params }: Params) {
-  const access = await requireApiModuleAccess("archives", ["ADMIN", "MANAGER"]);
+  const access = await requireApiModuleAccess("archives", ["ADMIN", "MANAGER", "EMPLOYEE", "ACCOUNTANT"]);
   if (access.error) {
     return access.error;
+  }
+
+  if ((access.session.user.jobTitle ?? "") !== "RELATION_PUBLIQUE") {
+    return NextResponse.json({ error: "Suppression réservée au service RH & Relations publiques." }, { status: 403 });
   }
 
   const { id } = await params;

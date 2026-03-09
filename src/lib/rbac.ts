@@ -100,9 +100,7 @@ export function hasModuleAccess(params: {
   }
 
   if (module === "archives") {
-    return jobTitle === "RELATION_PUBLIQUE"
-      || jobTitle === "DIRECTION_GENERALE"
-      || teamIncludes(teamName, ["ARCHIVE", "RH", "ADMIN"]);
+    return true;
   }
 
   if (module === "audit") {

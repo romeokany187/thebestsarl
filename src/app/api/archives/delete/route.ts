@@ -3,9 +3,14 @@ import { prisma } from "@/lib/prisma";
 import { requireApiModuleAccess } from "@/lib/rbac";
 
 export async function POST(request: NextRequest) {
-  const access = await requireApiModuleAccess("archives", ["ADMIN", "MANAGER"]);
+  const access = await requireApiModuleAccess("archives", ["ADMIN", "MANAGER", "EMPLOYEE", "ACCOUNTANT"]);
   if (access.error) {
     return access.error;
+  }
+
+  if ((access.session.user.jobTitle ?? "") !== "RELATION_PUBLIQUE") {
+    const fallback = new URL("/archives?deleteError=1", request.url);
+    return NextResponse.redirect(fallback, { status: 303 });
   }
 
   const formData = await request.formData();

@@ -37,6 +37,10 @@ export async function POST(request: NextRequest) {
     return access.error;
   }
 
+  if ((access.session.user.jobTitle ?? "") !== "RELATION_PUBLIQUE") {
+    return NextResponse.json({ error: "Archivage réservé au service RH & Relations publiques." }, { status: 403 });
+  }
+
   try {
     const formData = await request.formData();
     const folder = parseFolder(formData.get("folder"));
