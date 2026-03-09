@@ -71,7 +71,7 @@ export default async function TeamsPage({
     : { id: "", name: "Agence de Kinshasa (Direction générale)" };
 
   const branches = allTeams
-    .filter((team) => team.kind === "AGENCE" && team.name !== headOffice.name)
+    .filter((team) => team.kind === "AGENCE" && team.name !== headOffice.name && isAgencyOrPartnerTeamName(team.name))
     .map((team) => ({ id: team.id, name: team.name }));
 
   const displayedPartners = allTeams
