@@ -9,6 +9,10 @@ const teamCreateSchema = z.object({
   kind: z.nativeEnum(TeamKind).default(TeamKind.AGENCE),
 });
 
+function normalizeTeamName(value: string) {
+  return value.trim().toUpperCase();
+}
+
 export async function GET() {
   const access = await requireApiModuleAccess("teams", ["ADMIN", "MANAGER", "ACCOUNTANT"]);
   if (access.error) return access.error;
@@ -36,7 +40,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
   }
 
-  const normalizedName = parsed.data.name.trim().toUpperCase();
+  const normalizedName = normalizeTeamName(parsed.data.name);
   if (["OPERATIONS", "OPERATION", "SALES"].includes(normalizedName)) {
     return NextResponse.json(
       { error: "Utilisez uniquement des équipes de type agence ou partenaire." },
@@ -44,13 +48,21 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const existing = await prisma.team.findUnique({ where: { name: parsed.data.name.trim() } });
+  if (normalizedName.includes("KIWILU")) {
+    return NextResponse.json(
+      { error: "La création de l'équipe KIWILU est verrouillée." },
+      { status: 400 },
+    );
+  }
+
+  const cleanName = parsed.data.name.trim();
+  const existing = await prisma.team.findUnique({ where: { name: cleanName } });
   if (existing) {
     return NextResponse.json({ error: "Cette équipe existe déjà." }, { status: 400 });
   }
 
   const team = await prisma.team.create({
-    data: { name: parsed.data.name.trim(), kind: parsed.data.kind },
+    data: { name: cleanName, kind: parsed.data.kind },
     include: {
       users: {
         select: { id: true, name: true, role: true },
