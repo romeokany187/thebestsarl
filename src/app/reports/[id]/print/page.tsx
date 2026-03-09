@@ -78,9 +78,8 @@ export default async function ReportPrintPage({ params }: PageProps) {
   }
 
   const lines = renderContentParagraphs(report.content);
-  const [logoPath, signaturePath, stampPath] = await Promise.all([
+  const [logoPath, stampPath] = await Promise.all([
     findBrandAsset(["logo thebest.png", "logo.png", "logo.jpg", "branding/logo.png", "branding/logo thebest.png"]),
-    findBrandAsset(["signature.png", "signature.jpg", "branding/signature.png"]),
     findBrandAsset(["cachet.png", "cachet.jpg", "branding/cachet.png"]),
   ]);
 
@@ -110,7 +109,7 @@ export default async function ReportPrintPage({ params }: PageProps) {
         .print-card, .print-card * { font-family: 'Montserrat', Arial, sans-serif !important; }
       `}</style>
 
-      <div className="mx-auto w-full max-w-4xl bg-white px-8 py-6 print-card" style={{ fontFamily: "Montserrat, Arial, sans-serif" }}>
+      <div className="mx-auto flex min-h-screen w-full max-w-4xl flex-col bg-white px-8 py-6 print-card" style={{ fontFamily: "Montserrat, Arial, sans-serif" }}>
 
         <header className="border-b border-zinc-200 pb-5">
           <div className="flex items-start justify-between gap-4">
@@ -166,20 +165,17 @@ export default async function ReportPrintPage({ params }: PageProps) {
           </div>
         </section>
 
-        <section className="mt-8 grid gap-6 border-t border-zinc-200 pt-6 sm:grid-cols-2">
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.12em] text-zinc-700">Direction Générale</p>
-            <p className="mt-1 text-sm text-zinc-900">Validation et visa officiel</p>
+        <section className="mt-auto grid gap-3 border-t border-zinc-200 pt-4 sm:grid-cols-[1fr_auto] sm:items-center">
+          <div className="text-center sm:text-left">
+            <p className="text-xs font-semibold uppercase tracking-[0.12em] text-zinc-700">Direction Generale</p>
+            <p className="mt-1 text-sm text-zinc-900">Validation officielle</p>
           </div>
-          <div className="min-h-24 text-right">
-            <div className="ml-auto flex w-full max-w-[450px] items-end justify-end gap-2">
-              {stampPath ? <Image src={stampPath} alt="Cachet" width={110} height={110} className="h-[110px] w-[110px] opacity-95" /> : null}
-              {signaturePath ? <Image src={signaturePath} alt="Signature" width={360} height={140} className="h-[140px] w-auto" /> : null}
-            </div>
+          <div className="flex justify-center sm:justify-end">
+            {stampPath ? <Image src={stampPath} alt="Cachet" width={72} height={72} className="h-18 w-18 opacity-95" /> : null}
           </div>
         </section>
 
-        <footer className="mt-8 border-t border-zinc-200 py-5 text-[11px] text-zinc-500">
+        <footer className="mt-4 border-t border-zinc-200 py-3 text-center text-[11px] text-zinc-500">
           Document généré automatiquement par THEBEST SARL
         </footer>
       </div>
