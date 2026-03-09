@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { requireApiModuleAccess } from "@/lib/rbac";
 import { needRequestSchema } from "@/lib/validators";
@@ -81,6 +82,35 @@ export async function POST(request: NextRequest) {
       submittedAt: new Date(),
     },
   });
+
+  const validators = await prisma.user.findMany({
+    where: {
+      id: { not: me.id },
+      OR: [
+        { role: "ADMIN" },
+        { jobTitle: { in: ["DIRECTION_GENERALE", "CAISSIERE", "COMPTABLE", "AUDITEUR"] } },
+      ],
+    },
+    select: { id: true },
+    take: 160,
+  });
+
+  if (validators.length > 0) {
+    await prisma.userNotification.createMany({
+      data: validators.map((user) => ({
+        userId: user.id,
+        title: "Validation EDB requise",
+        message: `Un nouvel état de besoin est soumis: ${need.title}.`,
+        type: "PROCUREMENT_APPROVAL",
+        metadata: {
+          needRequestId: need.id,
+          needStatus: need.status,
+          needTitle: need.title,
+          source: "INBOX_APPROVAL",
+        } as Prisma.InputJsonValue,
+      })),
+    });
+  }
 
   return NextResponse.json({ data: need }, { status: 201 });
 }

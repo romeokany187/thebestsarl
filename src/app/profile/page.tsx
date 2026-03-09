@@ -1,4 +1,5 @@
 import { AppShell } from "@/components/app-shell";
+import { ProcurementInboxActions } from "@/components/procurement-inbox-actions";
 import { authOptions } from "@/auth";
 import { assignmentCapabilities, jobTitleLabel } from "@/lib/assignment";
 import { prisma } from "@/lib/prisma";
@@ -13,6 +14,8 @@ export default async function ProfilePage() {
   const userId = roleSession.user.id;
   const currentJobTitle = roleSession.user.jobTitle ?? "AGENT_TERRAIN";
   const capabilities = assignmentCapabilities(currentJobTitle);
+  const canValidateNeedsFromInbox = role === "ADMIN"
+    || ["DIRECTION_GENERALE", "CAISSIERE", "COMPTABLE", "AUDITEUR"].includes(currentJobTitle);
 
   const user = session?.user?.email
     ? await prisma.user.findUnique({
@@ -88,6 +91,46 @@ export default async function ProfilePage() {
                     </span>
                   </div>
                   <p className="mt-1 text-xs text-black/70 dark:text-white/70">{notification.message}</p>
+                  {(() => {
+                    const metadata = (notification.metadata ?? null) as { needRequestId?: string } | null;
+                    const needRequestId = typeof metadata?.needRequestId === "string"
+                      ? metadata.needRequestId
+                      : null;
+
+                    if (!needRequestId) return null;
+
+                    return (
+                      <div className="mt-2 flex flex-wrap items-center gap-2">
+                        <a
+                          href={`/api/procurement/needs/${needRequestId}/pdf`}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="inline-flex rounded-md border border-black/20 px-2.5 py-1 text-[11px] font-semibold hover:bg-black/5 dark:border-white/20 dark:hover:bg-white/10"
+                        >
+                          Lire PDF EDB
+                        </a>
+                      </div>
+                    );
+                  })()}
+                  {(() => {
+                    const metadata = (notification.metadata ?? null) as { needRequestId?: string; needStatus?: string } | null;
+                    const needRequestId = typeof metadata?.needRequestId === "string"
+                      ? metadata.needRequestId
+                      : null;
+                    const needStatus = typeof metadata?.needStatus === "string"
+                      ? metadata.needStatus
+                      : null;
+
+                    if (!canValidateNeedsFromInbox || !needRequestId || notification.type !== "PROCUREMENT_APPROVAL") {
+                      return null;
+                    }
+
+                    if (needStatus && needStatus !== "SUBMITTED") {
+                      return <p className="mt-2 text-[11px] text-black/55 dark:text-white/55">Statut actuel: {needStatus}</p>;
+                    }
+
+                    return <ProcurementInboxActions needRequestId={needRequestId} />;
+                  })()}
                   <p className="mt-1 text-[11px] text-black/50 dark:text-white/50">{new Date(notification.createdAt).toLocaleString()}</p>
                 </li>
               ))
