@@ -27,6 +27,26 @@ function dateRangeFromParams(params: URLSearchParams) {
     return { start, end, label: `Rapport du ${startRaw} au ${endRaw}` };
   }
 
+  if (params.get("mode") === "week") {
+    const nowDay = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+    const dayIndex = nowDay.getUTCDay();
+    const diffToMonday = (dayIndex + 6) % 7;
+    const defaultMonday = new Date(nowDay);
+    defaultMonday.setUTCDate(defaultMonday.getUTCDate() - diffToMonday);
+    const rawWeekStart = params.get("weekStart");
+    const monday = rawWeekStart
+      ? new Date(`${rawWeekStart}T00:00:00.000Z`)
+      : defaultMonday;
+    const start = new Date(Date.UTC(monday.getUTCFullYear(), monday.getUTCMonth(), monday.getUTCDate(), 0, 0, 0, 0));
+    const end = new Date(start);
+    end.setUTCDate(end.getUTCDate() + 7);
+    return {
+      start,
+      end,
+      label: `Rapport hebdomadaire du ${start.toISOString().slice(0, 10)} au ${new Date(end.getTime() - 1).toISOString().slice(0, 10)}`,
+    };
+  }
+
   const mode = (["date", "month", "year"].includes(params.get("mode") ?? "")
     ? params.get("mode")
     : "date") as ReportMode;
@@ -71,11 +91,13 @@ export async function GET(request: NextRequest) {
   const range = dateRangeFromParams(request.nextUrl.searchParams);
   const airlineId = request.nextUrl.searchParams.get("airlineId")?.trim() || undefined;
 
-  const [rows, airline] = await Promise.all([
+  const [rows, tickets, airline] = await Promise.all([
     prisma.payment.findMany({
       where: {
-        paidAt: { gte: range.start, lt: range.end },
-        ...(airlineId ? { ticket: { airlineId } } : {}),
+        ticket: {
+          soldAt: { gte: range.start, lt: range.end },
+          ...(airlineId ? { airlineId } : {}),
+        },
       },
       include: {
         ticket: {
@@ -88,10 +110,33 @@ export async function GET(request: NextRequest) {
       orderBy: { paidAt: "asc" },
       take: 4000,
     }),
+    prisma.ticketSale.findMany({
+      where: {
+        soldAt: { gte: range.start, lt: range.end },
+        ...(airlineId ? { airlineId } : {}),
+      },
+      include: { payments: true },
+      orderBy: { soldAt: "asc" },
+      take: 4000,
+    }),
     airlineId
       ? prisma.airline.findUnique({ where: { id: airlineId }, select: { code: true, name: true } })
       : Promise.resolve(null),
   ]);
+
+  const ticketsWithStatus = tickets.map((ticket) => {
+    const paidAmount = ticket.payments.reduce((sum, payment) => sum + payment.amount, 0);
+    const computedStatus = paidAmount <= 0
+      ? "UNPAID"
+      : paidAmount + 0.0001 >= ticket.amount
+        ? "PAID"
+        : "PARTIAL";
+    return {
+      ...ticket,
+      paidAmount,
+      computedStatus,
+    };
+  });
 
   const totals = rows.reduce(
     (acc, row) => {
@@ -112,6 +157,16 @@ export async function GET(request: NextRequest) {
     .sort((a, b) => b[1] - a[1])
     .slice(0, 3);
 
+  const paidTickets = ticketsWithStatus.filter((ticket) => ticket.computedStatus === "PAID");
+  const unpaidTickets = ticketsWithStatus.filter((ticket) => ticket.computedStatus === "UNPAID");
+  const partialTickets = ticketsWithStatus.filter((ticket) => ticket.computedStatus === "PARTIAL");
+  const totalBilled = ticketsWithStatus.reduce((sum, ticket) => sum + ticket.amount, 0);
+  const totalPaidOnTickets = ticketsWithStatus.reduce((sum, ticket) => sum + ticket.paidAmount, 0);
+  const totalOutstanding = Math.max(0, totalBilled - totalPaidOnTickets);
+  const partialBilled = partialTickets.reduce((sum, ticket) => sum + ticket.amount, 0);
+  const partialPaid = partialTickets.reduce((sum, ticket) => sum + ticket.paidAmount, 0);
+  const partialCoverage = partialBilled > 0 ? (partialPaid / partialBilled) * 100 : 0;
+
   const pdf = await PDFDocument.create();
   const font = await pdf.embedFont(StandardFonts.Helvetica);
   const fontBold = await pdf.embedFont(StandardFonts.HelveticaBold);
@@ -125,6 +180,13 @@ export async function GET(request: NextRequest) {
   const subtitle = airline
     ? `${range.label} • ${airline.code} - ${airline.name}`
     : `${range.label} • Toutes compagnies`;
+
+  const mode = request.nextUrl.searchParams.get("mode") ?? "date";
+  const detailLabel = mode === "month"
+    ? "Synthèse mensuelle"
+    : mode === "week"
+      ? "Synthèse hebdomadaire"
+      : "Synthèse journalière";
 
   const drawHeader = (continuation = false) => {
     page.drawText(`THEBEST SARL - Rapport des paiements${continuation ? " (suite)" : ""}`, {
@@ -140,15 +202,19 @@ export async function GET(request: NextRequest) {
   };
 
   const drawSummary = () => {
-    page.drawText(`Transactions: ${rows.length}`, { x: 24, y: 516, size: 8.6, font: fontBold, color: textBlack });
-    page.drawText(`Billets concernés: ${totals.ticketSet.size}`, { x: 180, y: 516, size: 8.6, font: fontBold, color: textBlack });
-    page.drawText(`Total encaissé: ${totals.totalPaid.toFixed(2)} USD`, { x: 360, y: 516, size: 8.6, font: fontBold, color: textBlack });
+    page.drawText(`${detailLabel}`, { x: 24, y: 518, size: 8.8, font: fontBold, color: textBlack });
+    page.drawText(`Billets: ${ticketsWithStatus.length} • Transactions: ${rows.length}`, { x: 180, y: 518, size: 8.4, font, color: textBlack });
+    page.drawText(`Facturé: ${totalBilled.toFixed(2)} USD`, { x: 24, y: 505, size: 8.4, font: fontBold, color: textBlack });
+    page.drawText(`Encaissé: ${totalPaidOnTickets.toFixed(2)} USD`, { x: 190, y: 505, size: 8.4, font: fontBold, color: textBlack });
+    page.drawText(`Créance: ${totalOutstanding.toFixed(2)} USD`, { x: 350, y: 505, size: 8.4, font: fontBold, color: textBlack });
+    page.drawText(`Payés: ${paidTickets.length} • Impayés: ${unpaidTickets.length} • Partiels: ${partialTickets.length}`, { x: 24, y: 492, size: 8.2, font, color: textBlack });
+    page.drawText(`Partiels encaissés: ${partialPaid.toFixed(2)} / ${partialBilled.toFixed(2)} USD (${partialCoverage.toFixed(1)}%)`, { x: 350, y: 492, size: 8.2, font, color: textBlack });
 
     const methodsLabel = topMethods.length > 0
       ? `Méthodes: ${topMethods.map(([method, amount]) => `${method} ${amount.toFixed(2)} USD`).join(" | ")}`
       : "Méthodes: -";
-    page.drawText(short(methodsLabel, 150), { x: 24, y: 503, size: 7.6, font, color: textBlack });
-    page.drawLine({ start: { x: 24, y: 498 }, end: { x: 818, y: 498 }, thickness: 0.7, color: lineGray });
+    page.drawText(short(methodsLabel, 150), { x: 24, y: 480, size: 7.6, font, color: textBlack });
+    page.drawLine({ start: { x: 24, y: 475 }, end: { x: 818, y: 475 }, thickness: 0.7, color: lineGray });
   };
 
   const headers = ["Date", "PNR", "Client", "Compagnie", "Vendeur", "Montant payé", "Méthode", "Référence"];
@@ -163,8 +229,8 @@ export async function GET(request: NextRequest) {
 
   drawHeader();
   drawSummary();
-  drawTableHeader(484);
-  let y = 468;
+  drawTableHeader(460);
+  let y = 444;
 
   for (const row of rows) {
     if (y < 38) {

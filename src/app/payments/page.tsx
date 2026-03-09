@@ -14,6 +14,7 @@ type SearchParams = {
   endDate?: string;
   mode?: string;
   date?: string;
+  weekStart?: string;
   month?: string;
   year?: string;
   semester?: string;
@@ -43,6 +44,29 @@ function dateRangeFromParams(params: SearchParams) {
       start,
       end,
       label: `Rapport du ${startRaw} au ${endRaw}`,
+    };
+  }
+
+  if (params.mode === "week") {
+    const nowDay = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+    const dayIndex = nowDay.getUTCDay();
+    const diffToMonday = (dayIndex + 6) % 7;
+    const defaultMonday = new Date(nowDay);
+    defaultMonday.setUTCDate(defaultMonday.getUTCDate() - diffToMonday);
+
+    const rawWeekStart = params.weekStart;
+    const monday = rawWeekStart
+      ? new Date(`${rawWeekStart}T00:00:00.000Z`)
+      : defaultMonday;
+    const start = new Date(Date.UTC(monday.getUTCFullYear(), monday.getUTCMonth(), monday.getUTCDate(), 0, 0, 0, 0));
+    const end = new Date(start);
+    end.setUTCDate(end.getUTCDate() + 7);
+
+    return {
+      mode: "date" as ReportMode,
+      start,
+      end,
+      label: `Rapport hebdomadaire du ${start.toISOString().slice(0, 10)} au ${new Date(end.getTime() - 1).toISOString().slice(0, 10)}`,
     };
   }
 
@@ -128,14 +152,30 @@ export default async function PaymentsPage({
 
   const now = new Date();
   const currentDate = now.toISOString().slice(0, 10);
-  const currentStartDate = resolvedSearchParams.startDate ?? currentDate;
-  const currentEndDate = resolvedSearchParams.endDate ?? currentStartDate;
+  const uiMode = (["date", "week", "month"].includes(resolvedSearchParams.mode ?? "")
+    ? resolvedSearchParams.mode
+    : "date") as "date" | "week" | "month";
+  const currentWeekStart = resolvedSearchParams.weekStart ?? (() => {
+    const today = new Date();
+    const dayIndex = today.getUTCDay();
+    const diffToMonday = (dayIndex + 6) % 7;
+    const monday = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate()));
+    monday.setUTCDate(monday.getUTCDate() - diffToMonday);
+    return monday.toISOString().slice(0, 10);
+  })();
+  const currentMonth = resolvedSearchParams.month ?? currentDate.slice(0, 7);
+  const currentStartDate = range.start.toISOString().slice(0, 10);
+  const currentEndDate = new Date(range.end.getTime() - 1).toISOString().slice(0, 10);
   const selectedAirlineId = resolvedSearchParams.airlineId && resolvedSearchParams.airlineId !== "ALL"
     ? resolvedSearchParams.airlineId
     : undefined;
   const reportQuery = new URLSearchParams({
     startDate: currentStartDate,
     endDate: currentEndDate,
+    mode: uiMode,
+    date: resolvedSearchParams.date ?? currentDate,
+    weekStart: currentWeekStart,
+    month: currentMonth,
     ...(selectedAirlineId ? { airlineId: selectedAirlineId } : {}),
   }).toString();
 
@@ -194,9 +234,68 @@ export default async function PaymentsPage({
   const totalTicketAmount = ticketsWithComputedStatus.reduce((sum, ticket) => sum + ticket.amount, 0);
   const totalPaid = ticketsWithComputedStatus.reduce((sum, ticket) => sum + ticket.paidAmount, 0);
   const receivables = Math.max(0, totalTicketAmount - totalPaid);
-  const collectedTotal = ticketsWithComputedStatus
-    .filter((ticket) => ticket.computedStatus === PaymentStatus.PAID)
-    .reduce((sum, ticket) => sum + ticket.amount, 0);
+  const paidTickets = ticketsWithComputedStatus.filter((ticket) => ticket.computedStatus === PaymentStatus.PAID);
+  const unpaidTickets = ticketsWithComputedStatus.filter((ticket) => ticket.computedStatus === PaymentStatus.UNPAID);
+  const partialTickets = ticketsWithComputedStatus.filter((ticket) => ticket.computedStatus === PaymentStatus.PARTIAL);
+
+  const collectedTotal = paidTickets.reduce((sum, ticket) => sum + ticket.amount, 0);
+  const partialBilled = partialTickets.reduce((sum, ticket) => sum + ticket.amount, 0);
+  const partialCollected = partialTickets.reduce((sum, ticket) => sum + ticket.paidAmount, 0);
+  const partialOutstanding = Math.max(0, partialBilled - partialCollected);
+  const unpaidTotal = unpaidTickets.reduce((sum, ticket) => sum + ticket.amount, 0);
+  const collectionRate = totalTicketAmount > 0 ? (totalPaid / totalTicketAmount) * 100 : 0;
+  const partialCoverageRate = partialBilled > 0 ? (partialCollected / partialBilled) * 100 : 0;
+
+  const detailByMode = (() => {
+    if (uiMode === "date") {
+      const byHour = new Map<string, { billed: number; paid: number; tickets: number }>();
+      ticketsWithComputedStatus.forEach((ticket) => {
+        const hour = new Date(ticket.soldAt).toISOString().slice(11, 13);
+        const key = `${hour}:00`;
+        const current = byHour.get(key) ?? { billed: 0, paid: 0, tickets: 0 };
+        current.billed += ticket.amount;
+        current.paid += ticket.paidAmount;
+        current.tickets += 1;
+        byHour.set(key, current);
+      });
+      return Array.from(byHour.entries())
+        .sort((a, b) => a[0].localeCompare(b[0]))
+        .map(([bucket, values]) => ({ bucket, ...values }));
+    }
+
+    if (uiMode === "week") {
+      const byDay = new Map<string, { billed: number; paid: number; tickets: number }>();
+      ticketsWithComputedStatus.forEach((ticket) => {
+        const key = new Date(ticket.soldAt).toISOString().slice(0, 10);
+        const current = byDay.get(key) ?? { billed: 0, paid: 0, tickets: 0 };
+        current.billed += ticket.amount;
+        current.paid += ticket.paidAmount;
+        current.tickets += 1;
+        byDay.set(key, current);
+      });
+      return Array.from(byDay.entries())
+        .sort((a, b) => a[0].localeCompare(b[0]))
+        .map(([bucket, values]) => ({ bucket, ...values }));
+    }
+
+    const byWeek = new Map<string, { billed: number; paid: number; tickets: number }>();
+    ticketsWithComputedStatus.forEach((ticket) => {
+      const soldAt = new Date(ticket.soldAt);
+      const monday = new Date(Date.UTC(soldAt.getUTCFullYear(), soldAt.getUTCMonth(), soldAt.getUTCDate()));
+      const dayIndex = monday.getUTCDay();
+      const diffToMonday = (dayIndex + 6) % 7;
+      monday.setUTCDate(monday.getUTCDate() - diffToMonday);
+      const key = `Semaine du ${monday.toISOString().slice(0, 10)}`;
+      const current = byWeek.get(key) ?? { billed: 0, paid: 0, tickets: 0 };
+      current.billed += ticket.amount;
+      current.paid += ticket.paidAmount;
+      current.tickets += 1;
+      byWeek.set(key, current);
+    });
+    return Array.from(byWeek.entries())
+      .sort((a, b) => a[0].localeCompare(b[0]))
+      .map(([bucket, values]) => ({ bucket, ...values }));
+  })();
 
   const paymentTickets = ticketsWithComputedStatus
     .filter((ticket) => ticket.computedStatus !== PaymentStatus.PAID)
@@ -220,8 +319,31 @@ export default async function PaymentsPage({
       </section>
 
       <section className="mb-6 rounded-2xl border border-black/10 bg-white p-4 dark:border-white/10 dark:bg-zinc-900">
-        <form method="GET" className="grid gap-3 lg:grid-cols-4 lg:items-end">
-          <input type="hidden" name="mode" value="date" />
+        <form method="GET" className="grid gap-3 lg:grid-cols-5 lg:items-end">
+
+          <div>
+            <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-black/60 dark:text-white/60">Mode</label>
+            <select name="mode" defaultValue={uiMode} className="w-full rounded-md border border-black/15 bg-white px-3 py-2 text-sm dark:border-white/15 dark:bg-zinc-900">
+              <option value="date">Journalier</option>
+              <option value="week">Hebdomadaire</option>
+              <option value="month">Mensuel</option>
+            </select>
+          </div>
+
+          <div>
+            <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-black/60 dark:text-white/60">Date (jour)</label>
+            <input type="date" name="date" defaultValue={resolvedSearchParams.date ?? currentDate} className="w-full rounded-md border border-black/15 bg-white px-3 py-2 text-sm dark:border-white/15 dark:bg-zinc-900" />
+          </div>
+
+          <div>
+            <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-black/60 dark:text-white/60">Début semaine</label>
+            <input type="date" name="weekStart" defaultValue={currentWeekStart} className="w-full rounded-md border border-black/15 bg-white px-3 py-2 text-sm dark:border-white/15 dark:bg-zinc-900" />
+          </div>
+
+          <div>
+            <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-black/60 dark:text-white/60">Mois</label>
+            <input type="month" name="month" defaultValue={currentMonth} className="w-full rounded-md border border-black/15 bg-white px-3 py-2 text-sm dark:border-white/15 dark:bg-zinc-900" />
+          </div>
 
           <div>
             <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-black/60 dark:text-white/60">Du</label>
@@ -233,7 +355,7 @@ export default async function PaymentsPage({
             <input type="date" name="endDate" defaultValue={currentEndDate} className="w-full rounded-md border border-black/15 bg-white px-3 py-2 text-sm dark:border-white/15 dark:bg-zinc-900" />
           </div>
 
-          <div>
+          <div className="lg:col-span-2">
             <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-black/60 dark:text-white/60">Compagnie</label>
             <select name="airlineId" defaultValue={resolvedSearchParams.airlineId ?? "ALL"} className="w-full rounded-md border border-black/15 bg-white px-3 py-2 text-sm dark:border-white/15 dark:bg-zinc-900">
               <option value="ALL">Toutes compagnies</option>
@@ -272,7 +394,57 @@ export default async function PaymentsPage({
         <KpiCard label="Total facturé" value={`${totalTicketAmount.toFixed(2)} USD`} />
         <KpiCard label="Total encaissé" value={`${totalPaid.toFixed(2)} USD`} />
         <KpiCard label="Total créance" value={`${receivables.toFixed(2)} USD`} />
-        <KpiCard label="Totaux collectés" value={`${collectedTotal.toFixed(2)} USD`} />
+        <KpiCard label="Tickets totalement payés" value={`${collectedTotal.toFixed(2)} USD`} />
+      </div>
+
+      <div className="mb-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <KpiCard label="Billets payés" value={`${paidTickets.length}`} hint={`${paidTickets.reduce((sum, t) => sum + t.amount, 0).toFixed(2)} USD`} />
+        <KpiCard label="Billets impayés" value={`${unpaidTickets.length}`} hint={`${unpaidTotal.toFixed(2)} USD non encaissés`} />
+        <KpiCard label="Billets partiels" value={`${partialTickets.length}`} hint={`${partialCollected.toFixed(2)} / ${partialBilled.toFixed(2)} USD`} />
+        <KpiCard label="Taux d'encaissement" value={`${collectionRate.toFixed(1)}%`} hint={`Partiels couverts à ${partialCoverageRate.toFixed(1)}%`} />
+      </div>
+
+      <section className="mb-6 rounded-2xl border border-black/10 bg-white p-4 dark:border-white/10 dark:bg-zinc-900">
+        <h2 className="text-sm font-semibold">Synthèse intelligente</h2>
+        <p className="mt-2 text-xs text-black/60 dark:text-white/60">
+          Total facturé: {totalTicketAmount.toFixed(2)} USD • Paiements reçus: {totalPaid.toFixed(2)} USD • Créances restantes: {receivables.toFixed(2)} USD.
+          Partiels: encaissé {partialCollected.toFixed(2)} USD sur {partialBilled.toFixed(2)} USD ({partialCoverageRate.toFixed(1)}%), reste {partialOutstanding.toFixed(2)} USD.
+        </p>
+      </section>
+
+      <div className="mb-6 overflow-hidden rounded-2xl border border-black/10 bg-white shadow-sm dark:border-white/10 dark:bg-zinc-900">
+        <div className="border-b border-black/10 px-4 py-3 text-sm font-semibold dark:border-white/10">
+          {uiMode === "date" ? "Détail horaire" : uiMode === "week" ? "Détail par jour" : "Détail par semaine"}
+        </div>
+        <div className="overflow-x-auto">
+          <table className="min-w-full text-sm">
+            <thead className="bg-black/5 dark:bg-white/10">
+              <tr>
+                <th className="px-4 py-3 text-left font-semibold">Période</th>
+                <th className="px-4 py-3 text-left font-semibold">Billets</th>
+                <th className="px-4 py-3 text-left font-semibold">Facturé</th>
+                <th className="px-4 py-3 text-left font-semibold">Encaissé</th>
+                <th className="px-4 py-3 text-left font-semibold">Reste</th>
+              </tr>
+            </thead>
+            <tbody>
+              {detailByMode.map((row) => (
+                <tr key={row.bucket} className="border-t border-black/5 dark:border-white/10">
+                  <td className="px-4 py-3 font-medium">{row.bucket}</td>
+                  <td className="px-4 py-3">{row.tickets}</td>
+                  <td className="px-4 py-3">{row.billed.toFixed(2)} USD</td>
+                  <td className="px-4 py-3">{row.paid.toFixed(2)} USD</td>
+                  <td className="px-4 py-3">{Math.max(0, row.billed - row.paid).toFixed(2)} USD</td>
+                </tr>
+              ))}
+              {detailByMode.length === 0 ? (
+                <tr>
+                  <td colSpan={5} className="px-4 py-8 text-center text-sm text-black/55 dark:text-white/55">Aucune donnée pour ce mode.</td>
+                </tr>
+              ) : null}
+            </tbody>
+          </table>
+        </div>
       </div>
 
       <div className="mb-6 overflow-hidden rounded-2xl border border-black/10 bg-white shadow-sm dark:border-white/10 dark:bg-zinc-900">
@@ -285,6 +457,7 @@ export default async function PaymentsPage({
                 <th className="px-4 py-3 text-left font-semibold">Facturé</th>
                 <th className="px-4 py-3 text-left font-semibold">Encaissé</th>
                 <th className="px-4 py-3 text-left font-semibold">Reste</th>
+                <th className="px-4 py-3 text-left font-semibold">Couverture</th>
                 <th className="px-4 py-3 text-left font-semibold">Statut</th>
               </tr>
             </thead>
@@ -296,6 +469,7 @@ export default async function PaymentsPage({
                   <td className="px-4 py-3">{ticket.amount.toFixed(2)} USD</td>
                   <td className="px-4 py-3">{ticket.paidAmount.toFixed(2)} USD</td>
                   <td className="px-4 py-3">{Math.max(0, ticket.amount - ticket.paidAmount).toFixed(2)} USD</td>
+                  <td className="px-4 py-3">{ticket.amount > 0 ? ((ticket.paidAmount / ticket.amount) * 100).toFixed(1) : "0.0"}%</td>
                   <td className="px-4 py-3">
                     <span className="rounded-full bg-black/5 px-2.5 py-1 text-xs font-semibold dark:bg-white/10">
                       {ticket.computedStatus}
@@ -305,7 +479,7 @@ export default async function PaymentsPage({
               ))}
               {ticketsWithComputedStatus.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="px-4 py-8 text-center text-sm text-black/55 dark:text-white/55">
+                  <td colSpan={7} className="px-4 py-8 text-center text-sm text-black/55 dark:text-white/55">
                     Aucun billet trouvé pour ce filtre.
                   </td>
                 </tr>
