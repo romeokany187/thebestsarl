@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 type JobTitle =
   | "COMMERCIAL"
@@ -99,12 +99,34 @@ const rubricByJobTitle: Record<JobTitle, JobTemplate> = {
   },
 };
 
+const titleByJobTitle: Record<JobTitle, string> = {
+  COMMERCIAL: "Rapport de vente commerciale",
+  COMPTABLE: "Rapport financier comptable",
+  AUDITEUR: "Rapport d'audit de conformite",
+  CAISSIERE: "Rapport de caisse",
+  RELATION_PUBLIQUE: "Rapport RH et relations publiques",
+  APPROVISIONNEMENT_MARKETING: "Rapport d'approvisionnement",
+  AGENT_TERRAIN: "Rapport d'activite terrain",
+  DIRECTION_GENERALE: "Rapport de direction generale",
+};
+
 export function ReportsForm({ users }: { users: UserOption[] }) {
   const [status, setStatus] = useState<string>("");
   const [selectedAuthorId, setSelectedAuthorId] = useState<string>(users[0]?.id ?? "");
+  const [reportTitle, setReportTitle] = useState<string>("");
 
   const selectedAuthor = users.find((user) => user.id === selectedAuthorId) ?? null;
   const rubrics = selectedAuthor ? rubricByJobTitle[selectedAuthor.jobTitle] : null;
+
+  useEffect(() => {
+    if (!selectedAuthor) {
+      setReportTitle("");
+      return;
+    }
+
+    const baseTitle = titleByJobTitle[selectedAuthor.jobTitle] ?? "Rapport professionnel";
+    setReportTitle(`${baseTitle} - ${new Date().toISOString().slice(0, 10)}`);
+  }, [selectedAuthorId, selectedAuthor]);
 
   async function onSubmit(formData: FormData) {
     setStatus("Enregistrement...");
@@ -145,7 +167,7 @@ export function ReportsForm({ users }: { users: UserOption[] }) {
     const statusValue = String(formData.get("status") ?? "SUBMITTED");
 
     const payload = {
-      title: formData.get("title"),
+      title: reportTitle,
       content,
       period: formData.get("period"),
       periodStart: formData.get("periodStart"),
@@ -189,7 +211,20 @@ export function ReportsForm({ users }: { users: UserOption[] }) {
       className="grid gap-3 rounded-xl border border-black/10 bg-white p-4 dark:border-white/10 dark:bg-zinc-900"
     >
       <h3 className="text-sm font-semibold">Nouveau rapport</h3>
-      <input name="title" required placeholder="Titre" className="rounded-md border px-3 py-2" />
+      <div className="grid gap-2">
+        <label htmlFor="reportTitle" className="text-xs font-semibold uppercase tracking-wide text-black/60 dark:text-white/60">
+          Titre du rapport (base selon la fonction)
+        </label>
+        <input
+          id="reportTitle"
+          name="title"
+          required
+          value={reportTitle}
+          onChange={(event) => setReportTitle(event.target.value)}
+          placeholder="Titre du rapport"
+          className="rounded-md border px-3 py-2"
+        />
+      </div>
       <div className="grid gap-3 sm:grid-cols-2">
         <select name="period" className="rounded-md border px-3 py-2" defaultValue="DAILY">
           <option value="DAILY">Journalier</option>

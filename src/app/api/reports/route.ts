@@ -18,6 +18,17 @@ function jobTitleLabel(jobTitle: string) {
   return labels[jobTitle] ?? jobTitle;
 }
 
+const titleKeywordsByJobTitle: Record<string, string[]> = {
+  COMMERCIAL: ["VENTE", "COMMERCIAL"],
+  COMPTABLE: ["FINAN", "COMPTABLE"],
+  AUDITEUR: ["AUDIT", "CONFORM"],
+  CAISSIERE: ["CAISSE", "CAISS"],
+  RELATION_PUBLIQUE: ["RH", "RESSOURCE", "RELATION PUBLIQUE"],
+  APPROVISIONNEMENT_MARKETING: ["APPROVISION", "STOCK", "ACHAT"],
+  AGENT_TERRAIN: ["TERRAIN", "ACTIVITE"],
+  DIRECTION_GENERALE: ["DIRECTION", "PILOTAGE"],
+};
+
 export async function GET(request: NextRequest) {
   const access = await requireApiModuleAccess("reports", ["ADMIN", "MANAGER", "EMPLOYEE", "ACCOUNTANT"]);
   if (access.error) {
@@ -80,6 +91,17 @@ export async function POST(request: NextRequest) {
 
   if (!author) {
     return NextResponse.json({ error: "Auteur introuvable." }, { status: 400 });
+  }
+
+  const normalizedTitle = parsed.data.title.trim().toUpperCase();
+  const expectedKeywords = titleKeywordsByJobTitle[author.jobTitle] ?? [];
+  if (expectedKeywords.length > 0 && !expectedKeywords.some((keyword) => normalizedTitle.includes(keyword))) {
+    return NextResponse.json(
+      {
+        error: `Le titre doit correspondre a la fonction: ${jobTitleLabel(author.jobTitle)}.`,
+      },
+      { status: 400 },
+    );
   }
 
   const serviceLabel = author.team?.name ?? "Service non défini";
