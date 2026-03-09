@@ -137,6 +137,19 @@ function drawPageNumber(page: PDFPage, fontRegular: PDFFont, index: number, tota
   });
 }
 
+function drawStamp(page: PDFPage, stampImage: PDFImage | null) {
+  if (!stampImage) return;
+  const fitted = getContainedSize(stampImage, 126, 126, true);
+
+  page.drawImage(stampImage, {
+    x: 276,
+    y: 34,
+    width: fitted.width,
+    height: fitted.height,
+    opacity: 0.96,
+  });
+}
+
 function drawReferenceBox(page: PDFPage, fontBold: PDFFont, fontRegular: PDFFont, postId: string, publishedAt: Date) {
   const { width, height } = page.getSize();
   const x = width - 206;
@@ -255,6 +268,15 @@ export async function GET(request: NextRequest, context: RouteContext) {
     "public/branding/logo.jpeg",
   ]);
 
+  const stampImage = await embedOptionalImage(pdf, [
+    "public/cachet.png",
+    "public/cachet.jpg",
+    "public/cachet.jpeg",
+    "public/branding/cachet.png",
+    "public/branding/cachet.jpg",
+    "public/branding/cachet.jpeg",
+  ]);
+
   const printedBy = access.session.user.name ?? access.session.user.email ?? "Utilisateur";
   const lines = wrapText(post.content, fontRegular, 10.5, PAGE_WIDTH - 76);
   const baseMetaText = `Publié le ${new Date(post.createdAt).toLocaleString()} • ${post.author.name}`;
@@ -270,7 +292,7 @@ export async function GET(request: NextRequest, context: RouteContext) {
   page.drawText(post.title, {
     x: Math.max(38, (PAGE_WIDTH - titleWidth) / 2),
     y,
-    size: 15,
+    size: 17,
     font: fontBold,
     color: TEXT_BLACK,
   });
@@ -279,8 +301,8 @@ export async function GET(request: NextRequest, context: RouteContext) {
   page.drawText(baseMetaText, {
     x: 38,
     y,
-    size: 9.5,
-    font: fontRegular,
+    size: 10.2,
+    font: fontBold,
     color: TEXT_BLACK,
   });
 
@@ -288,7 +310,7 @@ export async function GET(request: NextRequest, context: RouteContext) {
   page.drawText(subjectText, {
     x: 38,
     y,
-    size: 10,
+    size: 11,
     font: fontBold,
     color: TEXT_BLACK,
   });
@@ -303,7 +325,7 @@ export async function GET(request: NextRequest, context: RouteContext) {
       page.drawText(`Suite du communiqué: ${post.title}`, {
         x: 38,
         y: PAGE_HEIGHT - 132,
-        size: 12,
+        size: 13,
         font: fontBold,
         color: TEXT_BLACK,
       });
@@ -314,8 +336,8 @@ export async function GET(request: NextRequest, context: RouteContext) {
     page.drawText(line, {
       x: 38,
       y,
-      size: 10.5,
-      font: fontRegular,
+      size: 11,
+      font: fontBold,
       color: TEXT_BLACK,
     });
     y -= line ? 15 : 10;
@@ -323,6 +345,9 @@ export async function GET(request: NextRequest, context: RouteContext) {
 
   const pages = pdf.getPages();
   const lastPage = pages[pages.length - 1];
+  if (post.isPublished) {
+    drawStamp(lastPage, stampImage);
+  }
 
   pages.forEach((pdfPage, index) => {
     drawPageNumber(pdfPage, fontRegular, index + 1, pages.length);
