@@ -122,21 +122,35 @@ async function main() {
   });
   summary.resetRomeooAssignment = resetRomeoo.count;
 
-  const deletedOpsTeam = await prisma.team.deleteMany({
-    where: {
-      name: "Operations",
-      users: { none: {} },
-    },
+  const kinshasaTeam = await prisma.team.upsert({
+    where: { name: "Agence de Kinshasa (Direction générale)" },
+    update: { kind: "AGENCE" },
+    create: { name: "Agence de Kinshasa (Direction générale)", kind: "AGENCE" },
   });
-  summary.deletedEmptyOperationsTeam = deletedOpsTeam.count;
 
-  const deletedSalesTeam = await prisma.team.deleteMany({
+  const legacyTeams = await prisma.team.findMany({
     where: {
-      name: "Sales",
-      users: { none: {} },
+      name: { in: ["Operations", "Operation", "Sales"] },
     },
+    select: { id: true },
   });
-  summary.deletedEmptySalesTeam = deletedSalesTeam.count;
+  const legacyTeamIds = legacyTeams.map((team) => team.id);
+
+  if (legacyTeamIds.length > 0) {
+    const reassignedLegacyTeamUsers = await prisma.user.updateMany({
+      where: { teamId: { in: legacyTeamIds } },
+      data: { teamId: kinshasaTeam.id },
+    });
+    summary.reassignedLegacyTeamUsers = reassignedLegacyTeamUsers.count;
+
+    const deletedLegacyTeams = await prisma.team.deleteMany({
+      where: { id: { in: legacyTeamIds } },
+    });
+    summary.deletedLegacyTeams = deletedLegacyTeams.count;
+  } else {
+    summary.reassignedLegacyTeamUsers = 0;
+    summary.deletedLegacyTeams = 0;
+  }
 
   const deletedSites = await prisma.workSite.deleteMany({
     where: {

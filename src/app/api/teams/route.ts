@@ -13,11 +13,23 @@ function normalizeTeamName(value: string) {
   return value.trim().toUpperCase();
 }
 
+function isLegacyPlaceholderTeam(name: string) {
+  const normalized = normalizeTeamName(name);
+  return normalized === "OPERATIONS" || normalized === "OPERATION" || normalized === "SALES";
+}
+
 export async function GET() {
   const access = await requireApiModuleAccess("teams", ["ADMIN", "MANAGER", "ACCOUNTANT"]);
   if (access.error) return access.error;
 
   const teams = await prisma.team.findMany({
+    where: {
+      NOT: [
+        { name: "Operations" },
+        { name: "Operation" },
+        { name: "Sales" },
+      ],
+    },
     include: {
       users: {
         select: { id: true, name: true, role: true },
@@ -41,7 +53,7 @@ export async function POST(request: NextRequest) {
   }
 
   const normalizedName = normalizeTeamName(parsed.data.name);
-  if (["OPERATIONS", "OPERATION", "SALES"].includes(normalizedName)) {
+  if (isLegacyPlaceholderTeam(normalizedName)) {
     return NextResponse.json(
       { error: "Utilisez uniquement des équipes de type agence ou partenaire." },
       { status: 400 },

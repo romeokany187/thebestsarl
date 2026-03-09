@@ -75,7 +75,7 @@ export function hasModuleAccess(params: {
   if (module === "sales") {
     return jobTitle === "COMMERCIAL"
       || jobTitle === "DIRECTION_GENERALE"
-      || teamIncludes(teamName, ["SALES", "VENTE", "COMMERCIAL"]);
+      || teamIncludes(teamName, ["VENTE", "COMMERCIAL"]);
   }
 
   if (module === "tickets") {
@@ -84,7 +84,7 @@ export function hasModuleAccess(params: {
       || jobTitle === "COMPTABLE"
       || jobTitle === "CAISSIERE"
       || jobTitle === "DIRECTION_GENERALE"
-      || teamIncludes(teamName, ["SALES", "VENTE", "COMMERCIAL", "AUDIT", "COMPTA", "CAISSE"]);
+        || teamIncludes(teamName, ["VENTE", "COMMERCIAL", "AUDIT", "COMPTA", "CAISSE"]);
   }
 
   if (module === "payments") {

@@ -65,22 +65,24 @@ export default async function TeamsPage({
     orderBy: { name: "asc" },
   });
 
-  const headOfficeTeam = allTeams.find((team) => containsAny(team.name, ["KINSHASA", "DIRECTION", "DG"]));
+  const displayableTeams = allTeams.filter((team) => isAgencyOrPartnerTeamName(team.name));
+
+  const headOfficeTeam = displayableTeams.find((team) => containsAny(team.name, ["KINSHASA", "DIRECTION", "DG"]));
   const headOffice = headOfficeTeam
     ? { id: headOfficeTeam.id, name: headOfficeTeam.name }
     : { id: "", name: "Agence de Kinshasa (Direction générale)" };
 
-  const branches = allTeams
-    .filter((team) => team.kind === "AGENCE" && team.name !== headOffice.name && isAgencyOrPartnerTeamName(team.name))
+  const branches = displayableTeams
+    .filter((team) => team.kind === "AGENCE" && team.name !== headOffice.name)
     .map((team) => ({ id: team.id, name: team.name }));
 
-  const displayedPartners = allTeams
+  const displayedPartners = displayableTeams
     .filter((team) => team.kind === "PARTENAIRE")
     .map((team) => team.name);
 
   const manageTeamName = resolvedSearchParams.manageTeam?.trim() ?? "";
 
-  const organizationTeams = allTeams.filter((team) => isAgencyOrPartnerTeamName(team.name));
+  const organizationTeams = displayableTeams;
 
   const selectedManagedTeam = manageTeamName
     ? organizationTeams.find((team) => team.name.toUpperCase() === manageTeamName.toUpperCase())

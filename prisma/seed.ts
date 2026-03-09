@@ -6,18 +6,11 @@ const prisma = new PrismaClient();
 async function main() {
   const passwordHash = await bcrypt.hash("password123", 10);
 
-  const [opsTeam, salesTeam] = await Promise.all([
-    prisma.team.upsert({
-      where: { name: "Operations" },
-      update: {},
-      create: { name: "Operations" },
-    }),
-    prisma.team.upsert({
-      where: { name: "Sales" },
-      update: {},
-      create: { name: "Sales" },
-    }),
-  ]);
+  const kinshasaTeam = await prisma.team.upsert({
+    where: { name: "Agence de Kinshasa (Direction générale)" },
+    update: { kind: "AGENCE" },
+    create: { name: "Agence de Kinshasa (Direction générale)", kind: "AGENCE" },
+  });
 
   const admin = await prisma.user.upsert({
     where: { email: "admin@thebestsarl.com" },
@@ -28,7 +21,7 @@ async function main() {
       passwordHash,
       role: Role.ADMIN,
       jobTitle: JobTitle.DIRECTION_GENERALE,
-      teamId: opsTeam.id,
+      teamId: kinshasaTeam.id,
     },
   });
 
@@ -41,7 +34,7 @@ async function main() {
       passwordHash,
       role: Role.MANAGER,
       jobTitle: JobTitle.RELATION_PUBLIQUE,
-      teamId: opsTeam.id,
+      teamId: kinshasaTeam.id,
     },
   });
 
@@ -54,7 +47,7 @@ async function main() {
       passwordHash,
       role: Role.EMPLOYEE,
       jobTitle: JobTitle.COMMERCIAL,
-      teamId: salesTeam.id,
+      teamId: kinshasaTeam.id,
     },
   });
 
@@ -67,7 +60,7 @@ async function main() {
       passwordHash,
       role: Role.ACCOUNTANT,
       jobTitle: JobTitle.COMPTABLE,
-      teamId: salesTeam.id,
+      teamId: kinshasaTeam.id,
     },
   });
 
@@ -76,7 +69,7 @@ async function main() {
     update: {
       jobTitle: JobTitle.APPROVISIONNEMENT_MARKETING,
       role: Role.EMPLOYEE,
-      teamId: opsTeam.id,
+      teamId: kinshasaTeam.id,
     },
     create: {
       name: "Chargé Approvisionnement",
@@ -84,7 +77,7 @@ async function main() {
       passwordHash,
       role: Role.EMPLOYEE,
       jobTitle: JobTitle.APPROVISIONNEMENT_MARKETING,
-      teamId: opsTeam.id,
+      teamId: kinshasaTeam.id,
     },
   });
 
