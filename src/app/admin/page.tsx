@@ -1,5 +1,4 @@
 import { AppShell } from "@/components/app-shell";
-import { AdminSeedDemoButton } from "@/components/admin-seed-demo-button";
 import { AdminCommissionQuickForm } from "@/components/admin-commission-quick-form";
 import { UserJobTitleAdmin } from "@/components/user-job-title-admin";
 import { WorkSiteAdmin } from "@/components/worksite-admin";
@@ -36,10 +35,6 @@ export default async function AdminPage() {
         <p className="text-sm text-black/60 dark:text-white/60">
           Référentiel des utilisateurs, équipes et paramètres essentiels.
         </p>
-      </section>
-
-      <section className="mb-6">
-        <AdminSeedDemoButton />
       </section>
 
       <section className="mb-6">
