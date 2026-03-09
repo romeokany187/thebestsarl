@@ -16,7 +16,7 @@ const PAGE_HEIGHT = 842;
 const CONTENT_LEFT = 38;
 const CONTENT_RIGHT = 557;
 const FOOTER_Y = 14;
-const FOOTER_BLOCK_TOP = 176;
+const FOOTER_BLOCK_TOP = 122;
 
 async function readFirstExistingFile(candidates: string[]) {
   for (const candidate of candidates) {
@@ -438,34 +438,34 @@ export async function GET(request: NextRequest, context: RouteContext) {
 
     targetPage.drawText("Validation Direction / Finance", {
       x: CONTENT_LEFT,
-      y: FOOTER_BLOCK_TOP - 18,
-      size: 11,
+      y: FOOTER_BLOCK_TOP - 14,
+      size: 10,
       font: boldFont,
       color: black,
     });
 
     const commentText = need.reviewComment?.trim() ? `Commentaire: ${need.reviewComment}` : "Commentaire: -";
-    const commentLines = wrapTextByWidth(commentText, 340, regularFont, 9.8).slice(0, 4);
-    let commentY = FOOTER_BLOCK_TOP - 44;
+    const commentLines = wrapTextByWidth(commentText, 360, regularFont, 9.2).slice(0, 2);
+    let commentY = FOOTER_BLOCK_TOP - 34;
     commentLines.forEach((line) => {
       targetPage.drawText(line, {
         x: CONTENT_LEFT,
         y: commentY,
-        size: 9.8,
+        size: 9.2,
         font: regularFont,
         color: black,
       });
-      commentY -= 12;
+      commentY -= 11;
     });
 
-    const sealTextY = 58;
-    const sealAnchorY = 28;
+    const sealTextY = 32;
+    const sealAnchorY = 20;
 
     if (need.status === "APPROVED" && need.sealedAt) {
       if (stamp) {
-        const stampSize = getContainedSize(stamp, 108, 108, true);
+        const stampSize = getContainedSize(stamp, 78, 78, true);
         targetPage.drawImage(stamp, {
-          x: 434,
+          x: 462,
           y: sealAnchorY,
           width: stampSize.width,
           height: stampSize.height,
@@ -476,7 +476,7 @@ export async function GET(request: NextRequest, context: RouteContext) {
       targetPage.drawText(`Document scellé le ${formatDate(need.sealedAt)}`, {
         x: CONTENT_LEFT,
         y: sealTextY,
-        size: 9.8,
+        size: 9.2,
         font: regularFont,
         color: black,
       });
@@ -484,7 +484,7 @@ export async function GET(request: NextRequest, context: RouteContext) {
       targetPage.drawText("Document non scellé (en attente d'approbation).", {
         x: CONTENT_LEFT,
         y: sealTextY,
-        size: 9.8,
+        size: 9.2,
         font: regularFont,
         color: black,
       });
