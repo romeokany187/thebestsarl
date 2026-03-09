@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { CommissionCalculationStatus, CommissionMode, Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
-import { requireApiRoles } from "@/lib/rbac";
+import { requireApiModuleAccess } from "@/lib/rbac";
 import { ticketUpdateSchema } from "@/lib/validators";
 import { computeCommissionAmount, pickCommissionRule } from "@/lib/commission";
 import { ensureAirlineCatalog } from "@/lib/airline-catalog";
@@ -14,7 +14,7 @@ function clamp(value: number, min: number, max: number) {
 }
 
 export async function PATCH(request: NextRequest, { params }: Params) {
-  const access = await requireApiRoles(["ADMIN", "EMPLOYEE"]);
+  const access = await requireApiModuleAccess("tickets", ["ADMIN", "EMPLOYEE"]);
   if (access.error) {
     return access.error;
   }
@@ -248,7 +248,7 @@ export async function PATCH(request: NextRequest, { params }: Params) {
 }
 
 export async function DELETE(_request: NextRequest, { params }: Params) {
-  const access = await requireApiRoles(["ADMIN", "EMPLOYEE"]);
+  const access = await requireApiModuleAccess("tickets", ["ADMIN", "EMPLOYEE"]);
   if (access.error) {
     return access.error;
   }

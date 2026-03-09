@@ -2,7 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { AppShell } from "@/components/app-shell";
 import { prisma } from "@/lib/prisma";
-import { requirePageRoles } from "@/lib/rbac";
+import { requirePageModuleAccess } from "@/lib/rbac";
 import { parseNeedQuote } from "@/lib/need-lines";
 
 type PageContext = {
@@ -27,7 +27,7 @@ function formatDate(value: Date | null | undefined) {
 export const dynamic = "force-dynamic";
 
 export default async function NeedReadPage(context: PageContext) {
-  const { role } = await requirePageRoles(["ADMIN", "MANAGER", "EMPLOYEE", "ACCOUNTANT"]);
+  const { role } = await requirePageModuleAccess("procurement", ["ADMIN", "MANAGER", "EMPLOYEE", "ACCOUNTANT"]);
   const { id } = await context.params;
 
   const need = await prisma.needRequest.findUnique({

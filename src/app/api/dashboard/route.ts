@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { AttendanceStatus, PaymentStatus, ReportStatus, Role } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { calculateTicketMetrics } from "@/lib/kpi";
-import { requireApiRoles } from "@/lib/rbac";
+import { requireApiModuleAccess } from "@/lib/rbac";
 
 type PeriodFilter = "DAILY" | "WEEKLY" | "MONTHLY" | "ANNUAL";
 
@@ -49,7 +49,7 @@ function parseRole(value: string | null): Role | null {
 }
 
 export async function GET(request: NextRequest) {
-  const access = await requireApiRoles(["ADMIN", "MANAGER", "ACCOUNTANT"]);
+  const access = await requireApiModuleAccess("dashboard", ["ADMIN", "MANAGER", "ACCOUNTANT"]);
   if (access.error) {
     return access.error;
   }

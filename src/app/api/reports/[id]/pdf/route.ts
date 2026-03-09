@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
 import { prisma } from "@/lib/prisma";
-import { requireApiRoles } from "@/lib/rbac";
+import { requireApiModuleAccess } from "@/lib/rbac";
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -21,7 +21,7 @@ function splitLines(content: string) {
 }
 
 export async function GET(_request: Request, { params }: Params) {
-  const access = await requireApiRoles(["ADMIN", "MANAGER", "EMPLOYEE", "ACCOUNTANT"]);
+  const access = await requireApiModuleAccess("reports", ["ADMIN", "MANAGER", "EMPLOYEE", "ACCOUNTANT"]);
   if (access.error) {
     return access.error;
   }

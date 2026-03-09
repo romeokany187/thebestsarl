@@ -2,7 +2,7 @@ import { AppShell } from "@/components/app-shell";
 import { AttendanceForm } from "@/components/attendance-form";
 import { AttendanceRecordsTable } from "@/components/attendance-records-table";
 import { prisma } from "@/lib/prisma";
-import { requirePageRoles } from "@/lib/rbac";
+import { requirePageModuleAccess } from "@/lib/rbac";
 
 export const dynamic = "force-dynamic";
 
@@ -35,7 +35,7 @@ export default async function AttendancePage({
 }: {
   searchParams?: Promise<SearchParams>;
 }) {
-  const { session, role } = await requirePageRoles(["ADMIN", "MANAGER", "EMPLOYEE", "ACCOUNTANT"]);
+  const { session, role } = await requirePageModuleAccess("attendance", ["ADMIN", "MANAGER", "EMPLOYEE", "ACCOUNTANT"]);
   const resolvedSearchParams = (await searchParams) ?? {};
   const range = dateRangeFromParams(resolvedSearchParams);
   const canManageAttendance = role === "ADMIN" || role === "MANAGER" || role === "EMPLOYEE";

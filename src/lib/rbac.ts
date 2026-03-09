@@ -4,6 +4,104 @@ import { redirect } from "next/navigation";
 import { authOptions } from "@/auth";
 
 export type AppRole = "ADMIN" | "MANAGER" | "EMPLOYEE" | "ACCOUNTANT";
+export type AppModule =
+  | "home"
+  | "dashboard"
+  | "admin"
+  | "teams"
+  | "profile"
+  | "reports"
+  | "attendance"
+  | "sales"
+  | "tickets"
+  | "payments"
+  | "procurement"
+  | "archives"
+  | "audit"
+  | "news"
+  | "settings";
+
+const ALL_ROLES: AppRole[] = ["ADMIN", "MANAGER", "EMPLOYEE", "ACCOUNTANT"];
+
+function normalize(value: string | null | undefined) {
+  return (value ?? "").trim().toUpperCase();
+}
+
+function teamIncludes(teamName: string | null | undefined, terms: string[]) {
+  const normalized = normalize(teamName);
+  if (!normalized) return false;
+  return terms.some((term) => normalized.includes(term));
+}
+
+function isAssignedNonAdmin(jobTitle: string | null | undefined, teamName: string | null | undefined) {
+  return Boolean(normalize(teamName)) && normalize(jobTitle) !== "AGENT_TERRAIN";
+}
+
+export function hasModuleAccess(params: {
+  role: AppRole;
+  jobTitle?: string | null;
+  teamName?: string | null;
+  module: AppModule;
+}) {
+  const { role, module } = params;
+  const jobTitle = normalize(params.jobTitle);
+  const teamName = normalize(params.teamName);
+
+  if (module === "home") {
+    return true;
+  }
+
+  if (role === "ADMIN") {
+    return true;
+  }
+
+  // Without assignment/function, only home is visible until affectation.
+  if (!isAssignedNonAdmin(jobTitle, teamName)) {
+    return false;
+  }
+
+  if (module === "dashboard" || module === "teams" || module === "admin") {
+    return false;
+  }
+
+  if (module === "profile" || module === "reports" || module === "attendance" || module === "news" || module === "settings") {
+    return true;
+  }
+
+  if (module === "sales" || module === "tickets") {
+    return jobTitle === "COMMERCIAL"
+      || jobTitle === "DIRECTION_GENERALE"
+      || teamIncludes(teamName, ["SALES", "VENTE", "COMMERCIAL"]);
+  }
+
+  if (module === "payments") {
+    return jobTitle === "CAISSIERE"
+      || jobTitle === "COMPTABLE"
+      || jobTitle === "DIRECTION_GENERALE"
+      || teamIncludes(teamName, ["CAISSE", "PAYMENT", "PAIEMENT", "COMPTA"]);
+  }
+
+  if (module === "procurement") {
+    return jobTitle === "APPROVISIONNEMENT_MARKETING"
+      || jobTitle === "DIRECTION_GENERALE"
+      || teamIncludes(teamName, ["APPRO", "STOCK", "MARKETING"]);
+  }
+
+  if (module === "archives") {
+    return jobTitle === "RELATION_PUBLIQUE"
+      || jobTitle === "DIRECTION_GENERALE"
+      || teamIncludes(teamName, ["ARCHIVE", "RH", "ADMIN"]);
+  }
+
+  if (module === "audit") {
+    return role === "ACCOUNTANT"
+      || jobTitle === "COMPTABLE"
+      || jobTitle === "DIRECTION_GENERALE"
+      || teamIncludes(teamName, ["AUDIT"]);
+  }
+
+  return false;
+}
 
 function extractRole(role: unknown): AppRole | null {
   if (role === "ADMIN" || role === "MANAGER" || role === "EMPLOYEE" || role === "ACCOUNTANT") {
@@ -57,4 +155,41 @@ export async function requirePageRoles(allowedRoles: AppRole[]) {
     session,
     role,
   };
+}
+
+export async function requirePageModuleAccess(module: AppModule, allowedRoles: AppRole[] = ALL_ROLES) {
+  const access = await requirePageRoles(allowedRoles);
+
+  if (!hasModuleAccess({
+    role: access.role,
+    jobTitle: access.session.user.jobTitle,
+    teamName: access.session.user.teamName,
+    module,
+  })) {
+    redirect("/");
+  }
+
+  return access;
+}
+
+export async function requireApiModuleAccess(module: AppModule, allowedRoles: AppRole[] = ALL_ROLES) {
+  const access = await requireApiRoles(allowedRoles);
+  if (access.error) {
+    return access;
+  }
+
+  if (!hasModuleAccess({
+    role: access.role,
+    jobTitle: access.session.user.jobTitle,
+    teamName: access.session.user.teamName,
+    module,
+  })) {
+    return {
+      error: NextResponse.json({ error: "Forbidden" }, { status: 403 }),
+      session: access.session,
+      role: access.role,
+    };
+  }
+
+  return access;
 }

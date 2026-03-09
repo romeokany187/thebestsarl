@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { z } from "zod";
-import { requireApiRoles } from "@/lib/rbac";
+import { requireApiModuleAccess } from "@/lib/rbac";
 import { CommissionMode, TravelClass } from "@prisma/client";
 import { ensureAirlineCatalog } from "@/lib/airline-catalog";
 
@@ -22,7 +22,7 @@ const airlineSchema = z.object({
 });
 
 export async function GET() {
-  const access = await requireApiRoles(["ADMIN", "MANAGER", "ACCOUNTANT", "EMPLOYEE"]);
+  const access = await requireApiModuleAccess("sales", ["ADMIN", "MANAGER", "ACCOUNTANT", "EMPLOYEE"]);
   if (access.error) {
     return access.error;
   }
@@ -38,7 +38,7 @@ export async function GET() {
 }
 
 export async function POST(request: NextRequest) {
-  const access = await requireApiRoles(["ADMIN"]);
+  const access = await requireApiModuleAccess("sales", ["ADMIN"]);
   if (access.error) {
     return access.error;
   }

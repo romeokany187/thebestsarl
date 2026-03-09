@@ -1,5 +1,5 @@
 import { AppShell } from "@/components/app-shell";
-import { requirePageRoles } from "@/lib/rbac";
+import { requirePageModuleAccess } from "@/lib/rbac";
 
 export const dynamic = "force-dynamic";
 
@@ -23,7 +23,7 @@ const settingBlocks = [
 ];
 
 export default async function SettingsPage() {
-  const { role } = await requirePageRoles(["ADMIN", "MANAGER", "EMPLOYEE", "ACCOUNTANT"]);
+  const { role } = await requirePageModuleAccess("settings", ["ADMIN", "MANAGER", "EMPLOYEE", "ACCOUNTANT"]);
 
   return (
     <AppShell role={role} accessNote="Paramètres compte: configuration utilisateur et préparation sécurité renforcée.">

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { PaymentStatus, Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
-import { requireApiRoles } from "@/lib/rbac";
+import { requireApiModuleAccess } from "@/lib/rbac";
 import { paymentCreateSchema } from "@/lib/validators";
 import { canProcessPayments } from "@/lib/assignment";
 
@@ -12,7 +12,7 @@ function computePaymentStatus(totalDue: number, totalPaid: number): PaymentStatu
 }
 
 export async function POST(request: NextRequest) {
-  const access = await requireApiRoles(["ADMIN", "MANAGER", "ACCOUNTANT", "EMPLOYEE"]);
+  const access = await requireApiModuleAccess("payments", ["ADMIN", "MANAGER", "ACCOUNTANT", "EMPLOYEE"]);
   if (access.error) return access.error;
 
   if (

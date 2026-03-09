@@ -1,6 +1,6 @@
 import { AppShell } from "@/components/app-shell";
 import { KpiCard } from "@/components/kpi-card";
-import { requirePageRoles } from "@/lib/rbac";
+import { requirePageModuleAccess } from "@/lib/rbac";
 import { prisma } from "@/lib/prisma";
 import { ensureAirlineCatalog } from "@/lib/airline-catalog";
 
@@ -153,7 +153,7 @@ export default async function TicketsPage({
   const currentYear = String(now.getUTCFullYear());
   const currentStartDate = resolvedSearchParams.startDate ?? currentDate;
   const currentEndDate = resolvedSearchParams.endDate ?? currentStartDate;
-  const { session, role } = await requirePageRoles(["ADMIN", "MANAGER", "EMPLOYEE", "ACCOUNTANT"]);
+  const { session, role } = await requirePageModuleAccess("tickets", ["ADMIN", "MANAGER", "EMPLOYEE", "ACCOUNTANT"]);
   const roleTicketFilter = role === "EMPLOYEE" ? { sellerId: session.user.id } : {};
 
   await ensureAirlineCatalog(prisma);

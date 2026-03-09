@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { TeamKind } from "@prisma/client";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
-import { requireApiRoles } from "@/lib/rbac";
+import { requireApiModuleAccess } from "@/lib/rbac";
 
 const teamCreateSchema = z.object({
   name: z.string().min(2).max(120),
@@ -10,7 +10,7 @@ const teamCreateSchema = z.object({
 });
 
 export async function GET() {
-  const access = await requireApiRoles(["ADMIN", "MANAGER", "ACCOUNTANT"]);
+  const access = await requireApiModuleAccess("teams", ["ADMIN", "MANAGER", "ACCOUNTANT"]);
   if (access.error) return access.error;
 
   const teams = await prisma.team.findMany({
@@ -26,7 +26,7 @@ export async function GET() {
 }
 
 export async function POST(request: NextRequest) {
-  const access = await requireApiRoles(["ADMIN", "MANAGER"]);
+  const access = await requireApiModuleAccess("teams", ["ADMIN", "MANAGER"]);
   if (access.error) return access.error;
 
   const body = await request.json();

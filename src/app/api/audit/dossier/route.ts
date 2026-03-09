@@ -2,7 +2,7 @@ import { Prisma } from "@prisma/client";
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
-import { requireApiRoles } from "@/lib/rbac";
+import { requireApiModuleAccess } from "@/lib/rbac";
 
 const actionSchema = z.object({
   entityType: z.enum(["TICKET_SALE", "WORKER_REPORT", "NEED_REQUEST", "ATTENDANCE"]).optional(),
@@ -199,7 +199,7 @@ async function buildDossierDetail(entityType: string, entityId: string) {
 }
 
 export async function GET(request: NextRequest) {
-  const access = await requireApiRoles(["ADMIN", "MANAGER", "ACCOUNTANT"]);
+  const access = await requireApiModuleAccess("audit", ["ADMIN", "MANAGER", "ACCOUNTANT"]);
   if (access.error) {
     return access.error;
   }
@@ -246,7 +246,7 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
-  const access = await requireApiRoles(["ADMIN", "MANAGER", "ACCOUNTANT"]);
+  const access = await requireApiModuleAccess("audit", ["ADMIN", "MANAGER", "ACCOUNTANT"]);
   if (access.error) {
     return access.error;
   }

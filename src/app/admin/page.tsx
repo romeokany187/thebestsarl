@@ -3,12 +3,12 @@ import { AdminSeedDemoButton } from "@/components/admin-seed-demo-button";
 import { UserJobTitleAdmin } from "@/components/user-job-title-admin";
 import { WorkSiteAdmin } from "@/components/worksite-admin";
 import { prisma } from "@/lib/prisma";
-import { requirePageRoles } from "@/lib/rbac";
+import { requirePageModuleAccess } from "@/lib/rbac";
 
 export const dynamic = "force-dynamic";
 
 export default async function AdminPage() {
-  const { role } = await requirePageRoles(["ADMIN"]);
+  const { role } = await requirePageModuleAccess("admin", ["ADMIN"]);
 
   const [users, teams, airlines, rules, sites] = await Promise.all([
     prisma.user.findMany({

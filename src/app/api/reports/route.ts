@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { reportSchema } from "@/lib/validators";
-import { requireApiRoles } from "@/lib/rbac";
+import { requireApiModuleAccess } from "@/lib/rbac";
 
 function jobTitleLabel(jobTitle: string) {
   const labels: Record<string, string> = {
@@ -18,7 +18,7 @@ function jobTitleLabel(jobTitle: string) {
 }
 
 export async function GET(request: NextRequest) {
-  const access = await requireApiRoles(["ADMIN", "MANAGER", "EMPLOYEE", "ACCOUNTANT"]);
+  const access = await requireApiModuleAccess("reports", ["ADMIN", "MANAGER", "EMPLOYEE", "ACCOUNTANT"]);
   if (access.error) {
     return access.error;
   }
@@ -49,7 +49,7 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
-  const access = await requireApiRoles(["ADMIN", "MANAGER", "EMPLOYEE"]);
+  const access = await requireApiModuleAccess("reports", ["ADMIN", "MANAGER", "EMPLOYEE"]);
   if (access.error) {
     return access.error;
   }

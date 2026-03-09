@@ -2,7 +2,7 @@ import { AppShell } from "@/components/app-shell";
 import { ApprovalForm } from "@/components/approval-form";
 import { ReportsForm } from "@/components/reports-form";
 import { prisma } from "@/lib/prisma";
-import { requirePageRoles } from "@/lib/rbac";
+import { requirePageModuleAccess } from "@/lib/rbac";
 import Link from "next/link";
 
 function jobTitleLabel(jobTitle: string) {
@@ -22,7 +22,7 @@ function jobTitleLabel(jobTitle: string) {
 export const dynamic = "force-dynamic";
 
 export default async function ReportsPage() {
-  const { session, role } = await requirePageRoles(["ADMIN", "MANAGER", "EMPLOYEE", "ACCOUNTANT"]);
+  const { session, role } = await requirePageModuleAccess("reports", ["ADMIN", "MANAGER", "EMPLOYEE", "ACCOUNTANT"]);
 
   const [users, reports] = await Promise.all([
     prisma.user.findMany({

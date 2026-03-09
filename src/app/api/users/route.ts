@@ -1,9 +1,9 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { requireApiRoles } from "@/lib/rbac";
+import { requireApiModuleAccess } from "@/lib/rbac";
 
 export async function GET() {
-  const access = await requireApiRoles(["ADMIN", "MANAGER"]);
+  const access = await requireApiModuleAccess("teams", ["ADMIN", "MANAGER"]);
   if (access.error) {
     return access.error;
   }

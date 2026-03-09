@@ -1,72 +1,84 @@
 import Link from "next/link";
-import type { AppRole } from "@/lib/rbac";
+import { type AppModule, type AppRole, hasModuleAccess } from "@/lib/rbac";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/auth";
 import { LogoutButton } from "@/components/logout-button";
 
 const links = [
-  { href: "/", label: "Dashboard", roles: ["ADMIN", "MANAGER", "ACCOUNTANT"] as AppRole[] },
+  { href: "/", label: "Dashboard", module: "home" as AppModule, roles: ["ADMIN", "MANAGER", "EMPLOYEE", "ACCOUNTANT"] as AppRole[] },
   {
     href: "/profile",
     label: "Profil & Inbox",
+    module: "profile" as AppModule,
     roles: ["ADMIN", "MANAGER", "EMPLOYEE", "ACCOUNTANT"] as AppRole[],
   },
   {
     href: "/audit",
     label: "Audit",
+    module: "audit" as AppModule,
     roles: ["ADMIN", "MANAGER", "ACCOUNTANT"] as AppRole[],
   },
   {
     href: "/sales",
     label: "Ventes",
+    module: "sales" as AppModule,
     roles: ["ADMIN", "MANAGER", "EMPLOYEE", "ACCOUNTANT"] as AppRole[],
   },
   {
     href: "/tickets",
     label: "Billets",
+    module: "tickets" as AppModule,
     roles: ["ADMIN", "MANAGER", "EMPLOYEE", "ACCOUNTANT"] as AppRole[],
   },
   {
     href: "/payments",
     label: "Paiements",
+    module: "payments" as AppModule,
     roles: ["ADMIN", "MANAGER", "ACCOUNTANT"] as AppRole[],
   },
   {
     href: "/attendance",
     label: "Présences",
+    module: "attendance" as AppModule,
     roles: ["ADMIN", "MANAGER", "EMPLOYEE", "ACCOUNTANT"] as AppRole[],
   },
   {
     href: "/teams",
     label: "Équipes",
+    module: "teams" as AppModule,
     roles: ["ADMIN", "MANAGER", "ACCOUNTANT"] as AppRole[],
   },
   {
     href: "/reports",
     label: "Rapports",
+    module: "reports" as AppModule,
     roles: ["ADMIN", "MANAGER", "EMPLOYEE", "ACCOUNTANT"] as AppRole[],
   },
   {
     href: "/approvisionnement",
     label: "Approvisionnement",
+    module: "procurement" as AppModule,
     roles: ["ADMIN", "MANAGER", "EMPLOYEE", "ACCOUNTANT"] as AppRole[],
   },
   {
     href: "/archives",
     label: "Archives",
+    module: "archives" as AppModule,
     roles: ["ADMIN", "MANAGER", "EMPLOYEE", "ACCOUNTANT"] as AppRole[],
   },
   {
     href: "/news",
     label: "Nouvelles",
+    module: "news" as AppModule,
     roles: ["ADMIN", "MANAGER", "EMPLOYEE", "ACCOUNTANT"] as AppRole[],
   },
   {
     href: "/settings",
     label: "Paramètres",
+    module: "settings" as AppModule,
     roles: ["ADMIN", "MANAGER", "EMPLOYEE", "ACCOUNTANT"] as AppRole[],
   },
-  { href: "/admin", label: "Admin", roles: ["ADMIN"] as AppRole[] },
+  { href: "/admin", label: "Admin", module: "admin" as AppModule, roles: ["ADMIN"] as AppRole[] },
 ];
 
 export async function AppShell({
@@ -79,7 +91,18 @@ export async function AppShell({
   accessNote?: string;
 }) {
   const session = await getServerSession(authOptions);
-  const visibleLinks = links.filter((link) => !role || link.roles.includes(role));
+  const visibleLinks = links.filter((link) => {
+    if (!role || !link.roles.includes(role)) {
+      return false;
+    }
+
+    return hasModuleAccess({
+      role,
+      jobTitle: session?.user?.jobTitle,
+      teamName: session?.user?.teamName,
+      module: link.module,
+    });
+  });
   const roleLabel = role ? `Rôle ${role}` : null;
 
   return (

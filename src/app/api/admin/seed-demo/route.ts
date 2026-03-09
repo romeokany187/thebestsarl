@@ -2,10 +2,10 @@ import { NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
 import { JobTitle, Role } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
-import { requireApiRoles } from "@/lib/rbac";
+import { requireApiModuleAccess } from "@/lib/rbac";
 
 export async function POST() {
-  const access = await requireApiRoles(["ADMIN"]);
+  const access = await requireApiModuleAccess("admin", ["ADMIN"]);
   if (access.error) return access.error;
 
   const passwordHash = await bcrypt.hash("password123", 10);

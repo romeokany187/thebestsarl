@@ -1,11 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { requireApiRoles } from "@/lib/rbac";
+import { requireApiModuleAccess } from "@/lib/rbac";
 import { needRequestSchema } from "@/lib/validators";
 import { quoteFromItems, serializeNeedQuote } from "@/lib/need-lines";
 
 export async function GET(request: NextRequest) {
-  const access = await requireApiRoles(["ADMIN", "MANAGER", "EMPLOYEE", "ACCOUNTANT"]);
+  const access = await requireApiModuleAccess("procurement", ["ADMIN", "MANAGER", "EMPLOYEE", "ACCOUNTANT"]);
   if (access.error) return access.error;
 
   const status = request.nextUrl.searchParams.get("status");
@@ -26,7 +26,7 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
-  const access = await requireApiRoles(["ADMIN", "MANAGER", "EMPLOYEE"]);
+  const access = await requireApiModuleAccess("procurement", ["ADMIN", "MANAGER", "EMPLOYEE"]);
   if (access.error) return access.error;
 
   const body = await request.json();

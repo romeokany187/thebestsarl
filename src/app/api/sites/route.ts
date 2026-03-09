@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { requireApiRoles } from "@/lib/rbac";
+import { requireApiModuleAccess } from "@/lib/rbac";
 import { workSiteCreateSchema } from "@/lib/validators";
 
 export async function GET() {
-  const access = await requireApiRoles(["ADMIN", "MANAGER", "ACCOUNTANT"]);
+  const access = await requireApiModuleAccess("teams", ["ADMIN", "MANAGER", "ACCOUNTANT"]);
   if (access.error) {
     return access.error;
   }
@@ -17,7 +17,7 @@ export async function GET() {
 }
 
 export async function POST(request: NextRequest) {
-  const access = await requireApiRoles(["ADMIN"]);
+  const access = await requireApiModuleAccess("teams", ["ADMIN"]);
   if (access.error) {
     return access.error;
   }

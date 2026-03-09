@@ -1,12 +1,12 @@
 import { AppShell } from "@/components/app-shell";
 import { NewsPublisher } from "@/components/news-publisher";
 import { prisma } from "@/lib/prisma";
-import { requirePageRoles } from "@/lib/rbac";
+import { requirePageModuleAccess } from "@/lib/rbac";
 
 export const dynamic = "force-dynamic";
 
 export default async function NewsPage() {
-  const { role } = await requirePageRoles(["ADMIN", "MANAGER", "EMPLOYEE", "ACCOUNTANT"]);
+  const { role } = await requirePageModuleAccess("news", ["ADMIN", "MANAGER", "EMPLOYEE", "ACCOUNTANT"]);
 
   const news = await prisma.newsPost.findMany({
     where: role === "ADMIN" ? {} : { isPublished: true },

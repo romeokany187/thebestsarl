@@ -1,12 +1,12 @@
 import { AppShell } from "@/components/app-shell";
 import { ProcurementHub } from "@/components/procurement-hub";
 import { prisma } from "@/lib/prisma";
-import { requirePageRoles } from "@/lib/rbac";
+import { requirePageModuleAccess } from "@/lib/rbac";
 
 export const dynamic = "force-dynamic";
 
 export default async function ApprovisionnementPage() {
-  const { role, session } = await requirePageRoles(["ADMIN", "MANAGER", "EMPLOYEE", "ACCOUNTANT"]);
+  const { role, session } = await requirePageModuleAccess("procurement", ["ADMIN", "MANAGER", "EMPLOYEE", "ACCOUNTANT"]);
 
   const me = await prisma.user.findUnique({
     where: { id: session.user.id },

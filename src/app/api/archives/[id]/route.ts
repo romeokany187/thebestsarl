@@ -1,11 +1,11 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { requireApiRoles } from "@/lib/rbac";
+import { requireApiModuleAccess } from "@/lib/rbac";
 
 type Params = { params: Promise<{ id: string }> };
 
 export async function DELETE(_request: Request, { params }: Params) {
-  const access = await requireApiRoles(["ADMIN", "MANAGER"]);
+  const access = await requireApiModuleAccess("archives", ["ADMIN", "MANAGER"]);
   if (access.error) {
     return access.error;
   }

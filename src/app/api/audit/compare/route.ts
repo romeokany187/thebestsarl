@@ -1,7 +1,7 @@
 import { Prisma } from "@prisma/client";
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { requireApiRoles } from "@/lib/rbac";
+import { requireApiModuleAccess } from "@/lib/rbac";
 
 type CompareType = "CAISSE" | "VENTES" | "PRESENCES" | "RAPPORTS";
 
@@ -387,7 +387,7 @@ async function compareRapports(range: { start: Date; end: Date }, externalRows: 
 }
 
 export async function POST(request: NextRequest) {
-  const access = await requireApiRoles(["ADMIN", "MANAGER", "ACCOUNTANT"]);
+  const access = await requireApiModuleAccess("audit", ["ADMIN", "MANAGER", "ACCOUNTANT"]);
   if (access.error) return access.error;
 
   const formData = await request.formData();

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { ArchiveFolder } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
-import { requireApiRoles } from "@/lib/rbac";
+import { requireApiModuleAccess } from "@/lib/rbac";
 import { createArchiveDocumentWithGlobalReference } from "@/lib/archive";
 
 const allowedMimeTypes = new Set([
@@ -32,7 +32,7 @@ function parseFolder(value: FormDataEntryValue | null) {
 }
 
 export async function POST(request: NextRequest) {
-  const access = await requireApiRoles(["ADMIN", "MANAGER", "EMPLOYEE", "ACCOUNTANT"]);
+  const access = await requireApiModuleAccess("archives", ["ADMIN", "MANAGER", "EMPLOYEE", "ACCOUNTANT"]);
   if (access.error) {
     return access.error;
   }

@@ -2,7 +2,7 @@ import { PaymentStatus, ReportStatus } from "@prisma/client";
 import { AppShell } from "@/components/app-shell";
 import { AuditWorkspace } from "@/components/audit-workspace";
 import { prisma } from "@/lib/prisma";
-import { requirePageRoles } from "@/lib/rbac";
+import { requirePageModuleAccess } from "@/lib/rbac";
 
 export const dynamic = "force-dynamic";
 
@@ -38,7 +38,7 @@ export default async function AuditPage({
 }: {
   searchParams?: Promise<SearchParams>;
 }) {
-  const { role } = await requirePageRoles(["ADMIN", "MANAGER", "ACCOUNTANT"]);
+  const { role } = await requirePageModuleAccess("audit", ["ADMIN", "MANAGER", "ACCOUNTANT"]);
   const resolvedSearchParams = (await searchParams) ?? {};
   const range = dateRangeFromParams(resolvedSearchParams);
 

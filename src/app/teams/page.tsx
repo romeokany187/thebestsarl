@@ -1,6 +1,6 @@
 import { AppShell } from "@/components/app-shell";
 import { TeamAssignmentAdmin } from "@/components/team-assignment-admin";
-import { requirePageRoles } from "@/lib/rbac";
+import { requirePageModuleAccess } from "@/lib/rbac";
 import { prisma } from "@/lib/prisma";
 
 export const dynamic = "force-dynamic";
@@ -24,7 +24,7 @@ export default async function TeamsPage({
 }: {
   searchParams?: Promise<SearchParams>;
 }) {
-  const { role, session } = await requirePageRoles(["ADMIN", "MANAGER", "ACCOUNTANT"]);
+  const { role, session } = await requirePageModuleAccess("teams", ["ADMIN", "MANAGER", "ACCOUNTANT"]);
   const resolvedSearchParams = (await searchParams) ?? {};
 
   const [sites, users] = await Promise.all([

@@ -1,5 +1,5 @@
 import { notFound } from "next/navigation";
-import { requirePageRoles } from "@/lib/rbac";
+import { requirePageModuleAccess } from "@/lib/rbac";
 import { prisma } from "@/lib/prisma";
 import { PrintReportButton } from "@/components/print-report-button";
 import { access } from "node:fs/promises";
@@ -54,7 +54,7 @@ function renderContentParagraphs(content: string) {
 }
 
 export default async function ReportPrintPage({ params }: PageProps) {
-  const { session, role } = await requirePageRoles(["ADMIN", "MANAGER", "EMPLOYEE", "ACCOUNTANT"]);
+  const { session, role } = await requirePageModuleAccess("reports", ["ADMIN", "MANAGER", "EMPLOYEE", "ACCOUNTANT"]);
   const { id } = await params;
 
   const report = await prisma.workerReport.findUnique({

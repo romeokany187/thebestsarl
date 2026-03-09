@@ -3,7 +3,7 @@ import Link from "next/link";
 import { ArchiveFolder } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { ARCHIVE_FOLDERS, archiveFolderLabel, normalizeLegacyArchiveReferences, syncSystemArchiveDocuments } from "@/lib/archive";
-import { requirePageRoles } from "@/lib/rbac";
+import { requirePageModuleAccess } from "@/lib/rbac";
 
 export const dynamic = "force-dynamic";
 
@@ -46,7 +46,7 @@ export default async function ArchivesPage({
 }: {
   searchParams?: Promise<SearchParams>;
 }) {
-  const { role } = await requirePageRoles(["ADMIN", "MANAGER", "EMPLOYEE", "ACCOUNTANT"]);
+  const { role } = await requirePageModuleAccess("archives", ["ADMIN", "MANAGER", "EMPLOYEE", "ACCOUNTANT"]);
   const resolvedSearchParams = (await searchParams) ?? {};
   const selectedFolder = parseFolder(resolvedSearchParams.folder);
 

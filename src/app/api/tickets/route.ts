@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { ticketSchema } from "@/lib/validators";
 import { calculateTicketMetrics } from "@/lib/kpi";
-import { requireApiRoles } from "@/lib/rbac";
+import { requireApiModuleAccess } from "@/lib/rbac";
 import { computeCommissionAmount, pickCommissionRule } from "@/lib/commission";
 import { CommissionCalculationStatus, CommissionMode } from "@prisma/client";
 import { ensureAirlineCatalog } from "@/lib/airline-catalog";
@@ -14,7 +14,7 @@ function clamp(value: number, min: number, max: number) {
 }
 
 export async function GET() {
-  const access = await requireApiRoles(["ADMIN", "MANAGER", "EMPLOYEE", "ACCOUNTANT"]);
+  const access = await requireApiModuleAccess("tickets", ["ADMIN", "MANAGER", "EMPLOYEE", "ACCOUNTANT"]);
   if (access.error) {
     return access.error;
   }
@@ -37,7 +37,7 @@ export async function GET() {
 }
 
 export async function POST(request: NextRequest) {
-  const access = await requireApiRoles(["ADMIN", "MANAGER", "EMPLOYEE"]);
+  const access = await requireApiModuleAccess("tickets", ["ADMIN", "MANAGER", "EMPLOYEE"]);
   if (access.error) {
     return access.error;
   }

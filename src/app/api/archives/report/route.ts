@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { ArchiveFolder } from "@prisma/client";
 import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
 import { prisma } from "@/lib/prisma";
-import { requireApiRoles } from "@/lib/rbac";
+import { requireApiModuleAccess } from "@/lib/rbac";
 import { archiveFolderLabel } from "@/lib/archive";
 
 type ReportMode = "date" | "week" | "month" | "year";
@@ -82,7 +82,7 @@ function typeFromMime(mimeType: string) {
 }
 
 export async function GET(request: NextRequest) {
-  const access = await requireApiRoles(["ADMIN", "MANAGER", "EMPLOYEE", "ACCOUNTANT"]);
+  const access = await requireApiModuleAccess("archives", ["ADMIN", "MANAGER", "EMPLOYEE", "ACCOUNTANT"]);
   if (access.error) {
     return access.error;
   }

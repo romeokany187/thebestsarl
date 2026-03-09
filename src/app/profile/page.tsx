@@ -2,13 +2,13 @@ import { AppShell } from "@/components/app-shell";
 import { authOptions } from "@/auth";
 import { assignmentCapabilities, jobTitleLabel } from "@/lib/assignment";
 import { prisma } from "@/lib/prisma";
-import { requirePageRoles } from "@/lib/rbac";
+import { requirePageModuleAccess } from "@/lib/rbac";
 import { getServerSession } from "next-auth";
 
 export const dynamic = "force-dynamic";
 
 export default async function ProfilePage() {
-  const { role, session: roleSession } = await requirePageRoles(["ADMIN", "MANAGER", "EMPLOYEE", "ACCOUNTANT"]);
+  const { role, session: roleSession } = await requirePageModuleAccess("profile", ["ADMIN", "MANAGER", "EMPLOYEE", "ACCOUNTANT"]);
   const session = await getServerSession(authOptions);
   const userId = roleSession.user.id;
   const currentJobTitle = roleSession.user.jobTitle ?? "AGENT_TERRAIN";

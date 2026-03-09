@@ -11,7 +11,7 @@ export default async function Home() {
   const session = await getServerSession(authOptions);
   const isConnected = Boolean(session?.user?.email);
   const userRole = session?.user?.role;
-  const canAccessExecutiveDashboard = userRole === "ADMIN" || userRole === "MANAGER" || userRole === "ACCOUNTANT";
+  const canAccessExecutiveDashboard = userRole === "ADMIN";
 
   if (canAccessExecutiveDashboard) {
     return (

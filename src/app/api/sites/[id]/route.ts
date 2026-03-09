@@ -1,13 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { requireApiRoles } from "@/lib/rbac";
+import { requireApiModuleAccess } from "@/lib/rbac";
 import { workSiteUpdateSchema } from "@/lib/validators";
 
 export async function PATCH(
   request: NextRequest,
   context: { params: Promise<{ id: string }> },
 ) {
-  const access = await requireApiRoles(["ADMIN"]);
+  const access = await requireApiModuleAccess("teams", ["ADMIN"]);
   if (access.error) {
     return access.error;
   }

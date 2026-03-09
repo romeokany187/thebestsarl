@@ -2,7 +2,7 @@ import { AppShell } from "@/components/app-shell";
 import { TicketForm } from "@/components/ticket-form";
 import { TicketRowActions } from "@/components/ticket-row-actions";
 import { prisma } from "@/lib/prisma";
-import { requirePageRoles } from "@/lib/rbac";
+import { requirePageModuleAccess } from "@/lib/rbac";
 import { ensureAirlineCatalog } from "@/lib/airline-catalog";
 
 export const dynamic = "force-dynamic";
@@ -48,7 +48,7 @@ export default async function SalesPage({
 }) {
   const resolvedSearchParams = (await searchParams) ?? {};
   const dateRange = rangeFromSearch(resolvedSearchParams);
-  const { session, role } = await requirePageRoles(["ADMIN", "MANAGER", "EMPLOYEE", "ACCOUNTANT"]);
+  const { session, role } = await requirePageModuleAccess("sales", ["ADMIN", "MANAGER", "EMPLOYEE", "ACCOUNTANT"]);
   const roleTicketFilter = role === "EMPLOYEE" ? { sellerId: session.user.id } : {};
   const canCreateTicket = role === "ADMIN" || role === "MANAGER" || role === "EMPLOYEE";
   const canManageTickets = role === "ADMIN" || role === "EMPLOYEE";
