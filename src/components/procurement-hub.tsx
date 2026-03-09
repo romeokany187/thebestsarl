@@ -1,7 +1,6 @@
 "use client";
 
 import { FormEvent, useMemo, useState } from "react";
-import { parseNeedQuote } from "@/lib/need-lines";
 
 type NeedStatus = "DRAFT" | "SUBMITTED" | "APPROVED" | "REJECTED";
 type MovementType = "IN" | "OUT";
@@ -95,6 +94,21 @@ export function ProcurementHub({
   const quoteTotal = useMemo(
     () => needLines.reduce((sum, line) => sum + ((Number(line.quantity) || 0) * (Number(line.unitPrice) || 0)), 0),
     [needLines],
+  );
+
+  const submittedNeeds = useMemo(
+    () => needs.filter((need) => need.status === "SUBMITTED"),
+    [needs],
+  );
+
+  const rejectedNeeds = useMemo(
+    () => needs.filter((need) => need.status === "REJECTED"),
+    [needs],
+  );
+
+  const lowStockItems = useMemo(
+    () => stockItems.filter((item) => item.currentQuantity <= 5),
+    [stockItems],
   );
 
   function updateNeedLine(index: number, key: keyof NeedLineForm, value: string) {
@@ -376,85 +390,82 @@ export function ProcurementHub({
 
       <section className="rounded-xl border border-black/10 bg-white p-4 dark:border-white/10 dark:bg-zinc-900">
         <h2 className="text-base font-semibold">Suivi des états de besoin</h2>
-        <div className="mt-3 space-y-2">
-          {needs.length > 0 ? needs.map((need) => (
-            <article key={need.id} className="rounded-lg border border-black/10 p-3 text-sm dark:border-white/10">
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <p className="font-semibold">{need.title}</p>
-                <span className="rounded-full border border-black/15 px-2 py-0.5 text-[10px] font-semibold dark:border-white/20">
-                  {statusLabel(need.status)}
-                </span>
-              </div>
-              <p className="mt-1 text-xs text-black/70 dark:text-white/70">
-                {need.category} • {need.quantity} {need.unit} • Demandeur: {need.requester.name}
-              </p>
-              {typeof need.estimatedAmount === "number" ? (
-                <p className="mt-1 text-xs font-semibold text-black dark:text-white">
-                  Montant estimatif: {new Intl.NumberFormat("fr-FR").format(need.estimatedAmount)} {need.currency ?? "XAF"}
-                </p>
+        <div className="mt-3 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          <article className="rounded-lg border border-black/10 bg-black/3 p-3 dark:border-white/10 dark:bg-white/3">
+            <p className="text-[11px] uppercase tracking-wide text-black/60 dark:text-white/60">Total EDB</p>
+            <p className="mt-1 text-2xl font-semibold">{needs.length}</p>
+          </article>
+          <article className="rounded-lg border border-black/10 bg-black/3 p-3 dark:border-white/10 dark:bg-white/3">
+            <p className="text-[11px] uppercase tracking-wide text-black/60 dark:text-white/60">En attente</p>
+            <p className="mt-1 text-2xl font-semibold">{submittedNeeds.length}</p>
+          </article>
+          <article className="rounded-lg border border-black/10 bg-black/3 p-3 dark:border-white/10 dark:bg-white/3">
+            <p className="text-[11px] uppercase tracking-wide text-black/60 dark:text-white/60">Approuvés</p>
+            <p className="mt-1 text-2xl font-semibold">{approvedNeeds.length}</p>
+          </article>
+          <article className="rounded-lg border border-black/10 bg-black/3 p-3 dark:border-white/10 dark:bg-white/3">
+            <p className="text-[11px] uppercase tracking-wide text-black/60 dark:text-white/60">Rejetés</p>
+            <p className="mt-1 text-2xl font-semibold">{rejectedNeeds.length}</p>
+          </article>
+        </div>
+
+        <div className="mt-4 overflow-x-auto">
+          <table className="min-w-full text-sm">
+            <thead className="bg-black/5 dark:bg-white/10">
+              <tr>
+                <th className="px-3 py-2 text-left font-semibold">Objet</th>
+                <th className="px-3 py-2 text-left font-semibold">Demandeur</th>
+                <th className="px-3 py-2 text-left font-semibold">Montant</th>
+                <th className="px-3 py-2 text-left font-semibold">Statut</th>
+                <th className="px-3 py-2 text-left font-semibold">Date</th>
+                <th className="px-3 py-2 text-left font-semibold">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {needs.slice(0, 30).map((need) => (
+                <tr key={need.id} className="border-t border-black/10 dark:border-white/10">
+                  <td className="px-3 py-2 font-medium">{need.title}</td>
+                  <td className="px-3 py-2">{need.requester.name}</td>
+                  <td className="px-3 py-2">
+                    {typeof need.estimatedAmount === "number"
+                      ? `${new Intl.NumberFormat("fr-FR").format(need.estimatedAmount)} ${need.currency ?? "XAF"}`
+                      : "-"}
+                  </td>
+                  <td className="px-3 py-2">
+                    <span className="rounded-full border border-black/15 px-2 py-0.5 text-[11px] font-semibold dark:border-white/20">
+                      {statusLabel(need.status)}
+                    </span>
+                  </td>
+                  <td className="px-3 py-2 text-xs text-black/65 dark:text-white/65">{new Date(need.createdAt).toLocaleDateString()}</td>
+                  <td className="px-3 py-2">
+                    <div className="flex flex-wrap gap-2">
+                      <a
+                        href={`/approvisionnement/${need.id}`}
+                        className="inline-flex rounded-md border border-black/20 px-2.5 py-1 text-[11px] font-semibold hover:bg-black/5 dark:border-white/20 dark:hover:bg-white/10"
+                      >
+                        Ouvrir
+                      </a>
+                      <a
+                        href={`/api/procurement/needs/${need.id}/pdf`}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="inline-flex rounded-md border border-black/20 px-2.5 py-1 text-[11px] font-semibold hover:bg-black/5 dark:border-white/20 dark:hover:bg-white/10"
+                      >
+                        PDF
+                      </a>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+              {needs.length === 0 ? (
+                <tr>
+                  <td colSpan={6} className="px-3 py-8 text-center text-sm text-black/60 dark:text-white/60">
+                    Aucun état de besoin pour le moment.
+                  </td>
+                </tr>
               ) : null}
-              {parseNeedQuote(need.details)?.items?.length ? (
-                <div className="mt-2 overflow-x-auto">
-                  <table className="min-w-full text-xs">
-                    <thead className="bg-black/5 dark:bg-white/10">
-                      <tr>
-                        <th className="px-2 py-1 text-left">N°</th>
-                        <th className="px-2 py-1 text-left">Désignation</th>
-                        <th className="px-2 py-1 text-left">Qté</th>
-                        <th className="px-2 py-1 text-left">PU</th>
-                        <th className="px-2 py-1 text-left">PT</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {parseNeedQuote(need.details)?.items.map((line, lineIndex) => (
-                        <tr key={`${need.id}-line-${lineIndex}`} className="border-t border-black/10 dark:border-white/10">
-                          <td className="px-2 py-1">{lineIndex + 1}</td>
-                          <td className="px-2 py-1">{line.designation}</td>
-                          <td className="px-2 py-1">{line.quantity}</td>
-                          <td className="px-2 py-1">{line.unitPrice.toFixed(2)}</td>
-                          <td className="px-2 py-1">{line.lineTotal.toFixed(2)}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              ) : (
-                <p className="mt-1 whitespace-pre-wrap text-xs text-black/65 dark:text-white/65">{need.details}</p>
-              )}
-              <p className="mt-1 text-[11px] text-black/55 dark:text-white/55">
-                Créé le {new Date(need.createdAt).toLocaleString()}
-                {need.approvedAt ? ` • Approuvé le ${new Date(need.approvedAt).toLocaleString()}` : ""}
-                {need.sealedAt ? " • Document scellé" : ""}
-              </p>
-              <div className="mt-2 flex flex-wrap items-center gap-2">
-                <a
-                  href={`/approvisionnement/${need.id}`}
-                  className="inline-flex rounded-md border border-black/20 px-2.5 py-1 text-[11px] font-semibold hover:bg-black/5 dark:border-white/20 dark:hover:bg-white/10"
-                >
-                  Lire l&apos;état
-                </a>
-                <a
-                  href={`/api/procurement/needs/${need.id}/pdf`}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="inline-flex rounded-md border border-black/20 px-2.5 py-1 text-[11px] font-semibold hover:bg-black/5 dark:border-white/20 dark:hover:bg-white/10"
-                >
-                  Lire PDF
-                </a>
-                <a
-                  href={`/api/procurement/needs/${need.id}/pdf?download=1`}
-                  className="inline-flex rounded-md border border-black/20 px-2.5 py-1 text-[11px] font-semibold hover:bg-black/5 dark:border-white/20 dark:hover:bg-white/10"
-                >
-                  Télécharger PDF
-                </a>
-                <span className="text-[11px] text-black/55 dark:text-white/55">
-                  {need.status === "APPROVED" ? "Preuve d'approbation incluse" : "Le document sera marqué non scellé"}
-                </span>
-              </div>
-            </article>
-          )) : (
-            <p className="text-sm text-black/60 dark:text-white/60">Aucun état de besoin pour le moment.</p>
-          )}
+            </tbody>
+          </table>
         </div>
       </section>
 
@@ -497,7 +508,7 @@ export function ProcurementHub({
         </section>
 
         <section className="rounded-xl border border-black/10 bg-white p-4 dark:border-white/10 dark:bg-zinc-900">
-          <h2 className="text-base font-semibold">Fiche stock (état courant)</h2>
+          <h2 className="text-base font-semibold">Stock et rapports</h2>
           <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
             <label className="flex items-center gap-2 text-black/70 dark:text-white/70">
               Période
@@ -523,7 +534,24 @@ export function ProcurementHub({
               Télécharger PDF stock
             </a>
           </div>
-          <div className="mt-3 overflow-x-auto">
+
+          <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+            <article className="rounded-lg border border-black/10 bg-black/3 p-3 dark:border-white/10 dark:bg-white/3">
+              <p className="text-[11px] uppercase tracking-wide text-black/60 dark:text-white/60">Articles suivis</p>
+              <p className="mt-1 text-2xl font-semibold">{stockItems.length}</p>
+            </article>
+            <article className="rounded-lg border border-black/10 bg-black/3 p-3 dark:border-white/10 dark:bg-white/3">
+              <p className="text-[11px] uppercase tracking-wide text-black/60 dark:text-white/60">Stock faible</p>
+              <p className="mt-1 text-2xl font-semibold">{lowStockItems.length}</p>
+            </article>
+            <article className="rounded-lg border border-black/10 bg-black/3 p-3 dark:border-white/10 dark:bg-white/3">
+              <p className="text-[11px] uppercase tracking-wide text-black/60 dark:text-white/60">Mouvements</p>
+              <p className="mt-1 text-2xl font-semibold">{movements.length}</p>
+            </article>
+          </div>
+
+          <h3 className="mt-5 text-sm font-semibold">Aperçu stock (20 lignes)</h3>
+          <div className="mt-2 overflow-x-auto">
             <table className="min-w-full text-sm">
               <thead>
                 <tr className="border-b border-black/10 text-left dark:border-white/10">
@@ -534,7 +562,7 @@ export function ProcurementHub({
                 </tr>
               </thead>
               <tbody>
-                {stockItems.map((item) => (
+                {stockItems.slice(0, 20).map((item) => (
                   <tr key={item.id} className="border-b border-black/5 dark:border-white/10">
                     <td className="px-2 py-2">{item.name}</td>
                     <td className="px-2 py-2">{item.category}</td>
@@ -546,9 +574,9 @@ export function ProcurementHub({
             </table>
           </div>
 
-          <h3 className="mt-5 text-sm font-semibold">Historique des mouvements</h3>
+          <h3 className="mt-5 text-sm font-semibold">Derniers mouvements (10)</h3>
           <div className="mt-2 space-y-2">
-            {movements.length > 0 ? movements.map((movement) => (
+            {movements.length > 0 ? movements.slice(0, 10).map((movement) => (
               <article key={movement.id} className="rounded-lg border border-black/10 p-2 text-xs dark:border-white/10">
                 <p className="font-semibold">
                   {movement.movementType === "IN" ? "Entrée" : "Sortie"} • {movement.stockItem.name} • {movement.quantity} {movement.stockItem.unit}
