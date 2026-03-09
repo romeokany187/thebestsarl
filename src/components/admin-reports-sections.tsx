@@ -28,6 +28,27 @@ function formatDate(value: string | null) {
   return new Date(value).toLocaleString();
 }
 
+function formatShortDate(value: string | null) {
+  if (!value) return "-";
+  return new Date(value).toLocaleDateString();
+}
+
+function periodLabel(period: string) {
+  if (period === "DAILY") return "Journalier";
+  if (period === "WEEKLY") return "Hebdomadaire";
+  if (period === "MONTHLY") return "Mensuel";
+  if (period === "ANNUAL") return "Annuel";
+  return period;
+}
+
+function latestSubmittedAt(reports: ReportSectionItem[]) {
+  if (reports.length === 0) return null;
+  return reports
+    .map((report) => report.submittedAt)
+    .filter((value): value is string => Boolean(value))
+    .sort((a, b) => b.localeCompare(a))[0] ?? null;
+}
+
 function folderIcon(accentClass: string) {
   return (
     <div className={`inline-flex h-9 w-9 items-center justify-center rounded-lg border border-black/10 ${accentClass}`}>
@@ -59,7 +80,7 @@ export function AdminReportsSections({ sections }: { sections: ReportSection[] }
 
   return (
     <section className="space-y-4">
-      <div className="rounded-2xl border border-black/10 bg-white p-4 dark:border-white/10 dark:bg-zinc-900">
+      <div className="rounded-2xl border border-black/10 bg-linear-to-br from-white to-zinc-50 p-4 dark:border-white/10 dark:from-zinc-900 dark:to-zinc-950">
         <h2 className="text-base font-semibold">Rapports soumis par fonction</h2>
         <p className="mt-1 text-xs text-black/60 dark:text-white/60">
           Cliquez sur une section pour afficher tous les rapports soumis dans une fenetre detaillee.
@@ -82,6 +103,10 @@ export function AdminReportsSections({ sections }: { sections: ReportSection[] }
               </span>
             </div>
 
+            <div className="mt-3 rounded-lg border border-black/10 bg-black/3 px-2.5 py-2 text-[11px] text-black/65 dark:border-white/10 dark:bg-white/5 dark:text-white/65">
+              <p>Dernier depot: {formatShortDate(latestSubmittedAt(section.reports))}</p>
+            </div>
+
             <button
               type="button"
               onClick={() => setActiveSectionKey(section.key)}
@@ -94,12 +119,13 @@ export function AdminReportsSections({ sections }: { sections: ReportSection[] }
       </div>
 
       {activeSection ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4 py-6" role="dialog" aria-modal="true">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/65 px-4 py-6" role="dialog" aria-modal="true">
           <div className="max-h-[90vh] w-full max-w-4xl overflow-hidden rounded-2xl border border-white/15 bg-zinc-950 text-white shadow-2xl">
-            <div className="flex items-center justify-between border-b border-white/10 px-5 py-4">
+            <div className="flex items-center justify-between border-b border-white/10 bg-white/3 px-5 py-4">
               <div>
                 <p className="text-xs uppercase tracking-[0.14em] text-white/60">Section</p>
                 <h3 className="text-lg font-semibold">{activeSection.title}</h3>
+                <p className="mt-1 text-[11px] text-white/60">{activeSection.reports.length} rapport(s) soumis</p>
               </div>
               <button
                 type="button"
@@ -116,38 +142,54 @@ export function AdminReportsSections({ sections }: { sections: ReportSection[] }
                   Aucun rapport soumis dans cette section.
                 </div>
               ) : (
-                <div className="space-y-3">
-                  {activeSection.reports.map((report) => (
-                    <article key={report.id} className="rounded-xl border border-white/15 bg-white/5 p-4">
-                      <div className="flex flex-wrap items-start justify-between gap-3">
-                        <div className="flex items-start gap-3">
-                          {fileIcon()}
-                          <div>
-                            <h4 className="text-sm font-semibold">{report.title}</h4>
-                            <p className="mt-0.5 text-[11px] text-white/65">
-                              {report.authorName} • {report.authorJobTitle} • {report.service}
-                            </p>
+                <div className="space-y-4">
+                  {activeSection.reports.map((report, index) => (
+                    <div key={report.id} className="grid grid-cols-[22px,1fr] gap-3">
+                      <div className="pt-2">
+                        <span className="block h-2.5 w-2.5 rounded-full bg-emerald-400" />
+                        {index < activeSection.reports.length - 1 ? (
+                          <span className="ml-1 mt-1 block h-[calc(100%-10px)] w-px bg-white/15" />
+                        ) : null}
+                      </div>
+
+                      <article className="rounded-xl border border-white/15 bg-white/5 p-4">
+                        <div className="flex flex-wrap items-start justify-between gap-3">
+                          <div className="flex items-start gap-3">
+                            {fileIcon()}
+                            <div>
+                              <h4 className="text-sm font-semibold">{report.title}</h4>
+                              <p className="mt-0.5 text-[11px] text-white/65">
+                                {report.authorName} • {report.authorJobTitle} • {report.service}
+                              </p>
+                            </div>
+                          </div>
+                          <div className="text-right text-[11px] text-white/65">
+                            <p>Soumis: {formatDate(report.submittedAt)}</p>
+                            <p>Creation: {formatDate(report.createdAt)}</p>
                           </div>
                         </div>
-                        <div className="text-right text-[11px] text-white/65">
-                          <p>Soumis: {formatDate(report.submittedAt)}</p>
-                          <p>Creation: {formatDate(report.createdAt)}</p>
+
+                        <p className="mt-3 line-clamp-3 text-sm text-white/85">{report.content}</p>
+
+                        <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className="rounded-full border border-emerald-300/35 bg-emerald-300/10 px-2 py-1 text-[11px] font-semibold text-emerald-200">
+                              Soumis
+                            </span>
+                            <span className="rounded-full border border-white/20 px-2 py-1 text-[11px]">
+                              {periodLabel(report.period)}
+                            </span>
+                          </div>
+                          <Link
+                            href={`/reports/${report.id}/print`}
+                            target="_blank"
+                            className="rounded-md border border-white/20 px-3 py-1.5 text-xs font-semibold hover:bg-white/10"
+                          >
+                            Ouvrir / Imprimer
+                          </Link>
                         </div>
-                      </div>
-
-                      <p className="mt-3 line-clamp-3 text-sm text-white/85">{report.content}</p>
-
-                      <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
-                        <span className="rounded-full border border-white/20 px-2 py-1 text-[11px]">{report.period}</span>
-                        <Link
-                          href={`/reports/${report.id}/print`}
-                          target="_blank"
-                          className="rounded-md border border-white/20 px-3 py-1.5 text-xs font-semibold hover:bg-white/10"
-                        >
-                          Ouvrir / Imprimer
-                        </Link>
-                      </div>
-                    </article>
+                      </article>
+                    </div>
                   ))}
                 </div>
               )}
