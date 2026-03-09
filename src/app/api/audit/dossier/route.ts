@@ -5,8 +5,8 @@ import { prisma } from "@/lib/prisma";
 import { requireApiRoles } from "@/lib/rbac";
 
 const actionSchema = z.object({
-  entityType: z.enum(["TICKET_SALE", "WORKER_REPORT", "NEED_REQUEST", "ATTENDANCE"]),
-  entityId: z.string().min(1),
+  entityType: z.enum(["TICKET_SALE", "WORKER_REPORT", "NEED_REQUEST", "ATTENDANCE"]).optional(),
+  entityId: z.string().min(1).optional(),
   action: z.enum([
     "AUDIT_IMPORT",
     "AUDIT_AUTO_CONTROL",
@@ -258,7 +258,19 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
   }
 
-  const auditEntityType = toAuditEntityType(parsed.data.entityType);
+  const requiresDossier = [
+    "AUDIT_COMMENT",
+    "AUDIT_CONFORMITY_SAVE",
+    "AUDIT_VALIDATE",
+    "AUDIT_REJECT",
+  ].includes(parsed.data.action);
+
+  if (requiresDossier && (!parsed.data.entityType || !parsed.data.entityId)) {
+    return NextResponse.json({ error: "Ce type d'action nécessite un dossier sélectionné." }, { status: 400 });
+  }
+
+  const auditEntityType = parsed.data.entityType ? toAuditEntityType(parsed.data.entityType) : "AUDIT_WORKSPACE";
+  const auditEntityId = parsed.data.entityId ?? "GLOBAL";
   const safePayload = (parsed.data.payload ?? {}) as Prisma.InputJsonValue;
 
   const created = await prisma.auditLog.create({
@@ -266,7 +278,7 @@ export async function POST(request: NextRequest) {
       actorId: access.session.user.id,
       action: parsed.data.action,
       entityType: auditEntityType,
-      entityId: parsed.data.entityId,
+      entityId: auditEntityId,
       payload: safePayload,
     },
   });
@@ -283,11 +295,13 @@ export async function POST(request: NextRequest) {
         data: recipients.map((user) => ({
           userId: user.id,
           title: "Signalement audit",
-          message: `Signalement sur ${parsed.data.entityType} (${parsed.data.entityId}).`,
+          message: parsed.data.entityType && parsed.data.entityId
+            ? `Signalement sur ${parsed.data.entityType} (${parsed.data.entityId}).`
+            : "Signalement audit global généré depuis l'espace auditeur.",
           type: "AUDIT",
           metadata: {
-            entityType: parsed.data.entityType,
-            entityId: parsed.data.entityId,
+            entityType: parsed.data.entityType ?? "WORKSPACE",
+            entityId: parsed.data.entityId ?? "GLOBAL",
             payload: JSON.stringify(parsed.data.payload ?? {}),
           } as Prisma.InputJsonValue,
         })),

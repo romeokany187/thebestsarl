@@ -1,5 +1,6 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 
 type AuditDossier = {
@@ -11,6 +12,7 @@ type AuditDossier = {
   margin: number | null;
   service: string;
   status: string;
+  auditDecision: "PENDING" | "VALIDATED" | "REJECTED";
   ownerName: string;
   createdAt: string;
 };
@@ -70,6 +72,8 @@ export function AuditWorkspace({
   defaultStartDate: string;
   defaultEndDate: string;
 }) {
+  const router = useRouter();
+  const [dossierRows, setDossierRows] = useState(dossiers);
   const [startDate, setStartDate] = useState(defaultStartDate);
   const [endDate, setEndDate] = useState(defaultEndDate);
   const [service, setService] = useState("TOUS");
@@ -93,29 +97,30 @@ export function AuditWorkspace({
   const [comment, setComment] = useState("");
   const [status, setStatus] = useState("");
   const [loadingDetail, setLoadingDetail] = useState(false);
+  const [savingAction, setSavingAction] = useState(false);
 
   const selected = useMemo(
-    () => dossiers.find((item) => `${item.entityType}:${item.entityId}` === selectedKey) ?? null,
-    [dossiers, selectedKey],
+    () => dossierRows.find((item) => `${item.entityType}:${item.entityId}` === selectedKey) ?? null,
+    [dossierRows, selectedKey],
   );
 
   const filtered = useMemo(() => {
-    return dossiers.filter((item) => {
+    return dossierRows.filter((item) => {
       const serviceOk = service === "TOUS" || item.service === service;
       const employeeOk = employee === "TOUS" || item.ownerName === employee;
-      const text = `${item.reference} ${item.client} ${item.status} ${item.service}`.toLowerCase();
+      const text = `${item.reference} ${item.client} ${item.status} ${item.service} ${item.auditDecision}`.toLowerCase();
       const searchOk = !search.trim() || text.includes(search.toLowerCase());
       const dateKey = item.createdAt.slice(0, 10);
       const dateOk = dateKey >= startDate && dateKey <= endDate;
 
       let tabOk = true;
-      if (rowTab === "A_AUDITER") tabOk = item.status !== "VALIDATED" && item.status !== "REJECTED";
-      if (rowTab === "VALIDES") tabOk = item.status === "VALIDATED";
-      if (rowTab === "REJETES") tabOk = item.status === "REJECTED";
+      if (rowTab === "A_AUDITER") tabOk = item.auditDecision === "PENDING";
+      if (rowTab === "VALIDES") tabOk = item.auditDecision === "VALIDATED";
+      if (rowTab === "REJETES") tabOk = item.auditDecision === "REJECTED";
 
       return serviceOk && employeeOk && searchOk && dateOk && tabOk;
     });
-  }, [dossiers, service, employee, search, startDate, endDate, rowTab]);
+  }, [dossierRows, service, employee, search, startDate, endDate, rowTab]);
 
   async function loadSelectedDetails(entityType: string, entityId: string) {
     setLoadingDetail(true);
@@ -134,18 +139,22 @@ export function AuditWorkspace({
     setLoadingDetail(false);
   }
 
-  async function saveAction(action: string, payload?: Record<string, unknown>) {
-    if (!selected) {
+  async function saveAction(action: string, payload?: Record<string, unknown>, useSelected = true) {
+    if (useSelected && !selected) {
       setStatus("Sélectionnez un dossier à auditer.");
       return;
     }
+
+    setSavingAction(true);
 
     const response = await fetch("/api/audit/dossier", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        entityType: selected.entityType,
-        entityId: selected.entityId,
+        ...(useSelected && selected ? {
+          entityType: selected.entityType,
+          entityId: selected.entityId,
+        } : {}),
         action,
         payload,
       }),
@@ -154,11 +163,24 @@ export function AuditWorkspace({
     const body = await response.json().catch(() => null);
     if (!response.ok) {
       setStatus(body?.error ?? "Action audit échouée.");
+      setSavingAction(false);
       return;
     }
 
     setStatus("Action audit enregistrée et tracée.");
-    await loadSelectedDetails(selected.entityType, selected.entityId);
+    if (useSelected && selected) {
+      await loadSelectedDetails(selected.entityType, selected.entityId);
+      if (action === "AUDIT_VALIDATE" || action === "AUDIT_REJECT") {
+        const nextDecision = action === "AUDIT_VALIDATE" ? "VALIDATED" : "REJECTED";
+        setState((prev) => ({ ...prev, decision: nextDecision }));
+        setDossierRows((prev) => prev.map((row) => (
+          row.entityType === selected.entityType && row.entityId === selected.entityId
+            ? { ...row, auditDecision: nextDecision }
+            : row
+        )));
+      }
+    }
+    setSavingAction(false);
   }
 
   return (
@@ -177,15 +199,27 @@ export function AuditWorkspace({
           </select>
           <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Recherche ref/client/statut" className="rounded-md border border-black/15 px-3 py-2 text-sm dark:border-white/20" />
         </div>
+        <div className="mt-2 flex justify-end">
+          <button
+            type="button"
+            onClick={() => {
+              const params = new URLSearchParams({ startDate, endDate });
+              router.push(`/audit?${params.toString()}`);
+            }}
+            className="rounded-md border border-black/15 px-3 py-1.5 text-xs font-semibold hover:bg-black/5 dark:border-white/20 dark:hover:bg-white/10"
+          >
+            Appliquer période
+          </button>
+        </div>
       </section>
 
       <section className="rounded-2xl border border-black/10 bg-white p-4 dark:border-white/10 dark:bg-zinc-900">
         <h2 className="text-base font-semibold">5. Actions rapides</h2>
         <div className="mt-3 grid gap-2">
-          <button type="button" onClick={() => void saveAction("AUDIT_IMPORT", { source: "manual" })} className="rounded-md border border-black/15 px-3 py-2 text-sm font-semibold hover:bg-black/5 dark:border-white/20 dark:hover:bg-white/10">Importer dossiers</button>
-          <button type="button" onClick={() => void saveAction("AUDIT_AUTO_CONTROL", { mode: "standard" })} className="rounded-md border border-black/15 px-3 py-2 text-sm font-semibold hover:bg-black/5 dark:border-white/20 dark:hover:bg-white/10">Contrôle auto</button>
-          <button type="button" onClick={() => void saveAction("AUDIT_EXPORT", { format: "pdf" })} className="rounded-md border border-black/15 px-3 py-2 text-sm font-semibold hover:bg-black/5 dark:border-white/20 dark:hover:bg-white/10">Exporter</button>
-          <button type="button" onClick={() => void saveAction("AUDIT_SIGNAL", { level: "medium" })} className="rounded-md bg-black px-3 py-2 text-sm font-semibold text-white dark:bg-white dark:text-black">Créer signalement</button>
+          <button type="button" disabled={savingAction} onClick={() => void saveAction("AUDIT_IMPORT", { source: "manual" }, false)} className="rounded-md border border-black/15 px-3 py-2 text-sm font-semibold hover:bg-black/5 disabled:opacity-60 dark:border-white/20 dark:hover:bg-white/10">Importer dossiers</button>
+          <button type="button" disabled={savingAction} onClick={() => void saveAction("AUDIT_AUTO_CONTROL", { mode: "standard" }, false)} className="rounded-md border border-black/15 px-3 py-2 text-sm font-semibold hover:bg-black/5 disabled:opacity-60 dark:border-white/20 dark:hover:bg-white/10">Contrôle auto</button>
+          <button type="button" disabled={savingAction} onClick={() => void saveAction("AUDIT_EXPORT", { format: "pdf" }, false)} className="rounded-md border border-black/15 px-3 py-2 text-sm font-semibold hover:bg-black/5 disabled:opacity-60 dark:border-white/20 dark:hover:bg-white/10">Exporter</button>
+          <button type="button" disabled={savingAction} onClick={() => void saveAction("AUDIT_SIGNAL", { level: "medium" }, false)} className="rounded-md bg-black px-3 py-2 text-sm font-semibold text-white disabled:opacity-60 dark:bg-white dark:text-black">Créer signalement</button>
         </div>
       </section>
 
@@ -208,7 +242,8 @@ export function AuditWorkspace({
                 <th className="px-3 py-2 text-left">Montant</th>
                 <th className="px-3 py-2 text-left">Marge</th>
                 <th className="px-3 py-2 text-left">Service</th>
-                <th className="px-3 py-2 text-left">Statut</th>
+                <th className="px-3 py-2 text-left">Statut dossier</th>
+                <th className="px-3 py-2 text-left">Statut audit</th>
                 <th className="px-3 py-2 text-left">Action</th>
               </tr>
             </thead>
@@ -223,6 +258,7 @@ export function AuditWorkspace({
                     <td className="px-3 py-2">{row.margin == null ? "-" : `${row.margin.toFixed(2)} USD`}</td>
                     <td className="px-3 py-2">{row.service}</td>
                     <td className="px-3 py-2">{row.status}</td>
+                    <td className="px-3 py-2">{row.auditDecision}</td>
                     <td className="px-3 py-2">
                       <button
                         type="button"
@@ -240,7 +276,7 @@ export function AuditWorkspace({
               })}
               {filtered.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="px-3 py-6 text-center text-xs text-black/60 dark:text-white/60">Aucun dossier correspondant aux filtres.</td>
+                  <td colSpan={8} className="px-3 py-6 text-center text-xs text-black/60 dark:text-white/60">Aucun dossier correspondant aux filtres.</td>
                 </tr>
               ) : null}
             </tbody>
@@ -413,8 +449,8 @@ export function AuditWorkspace({
                 Commenter
               </button>
               <div className="flex items-center gap-2">
-                <button type="button" onClick={() => void saveAction("AUDIT_VALIDATE", { decision: "VALIDATED" })} className="rounded-md bg-emerald-700 px-3 py-2 text-sm font-semibold text-white">Valider</button>
-                <button type="button" onClick={() => void saveAction("AUDIT_REJECT", { decision: "REJECTED" })} className="rounded-md bg-red-700 px-3 py-2 text-sm font-semibold text-white">Rejeter</button>
+                <button type="button" disabled={savingAction} onClick={() => void saveAction("AUDIT_VALIDATE", { decision: "VALIDATED" })} className="rounded-md bg-emerald-700 px-3 py-2 text-sm font-semibold text-white disabled:opacity-60">Valider</button>
+                <button type="button" disabled={savingAction} onClick={() => void saveAction("AUDIT_REJECT", { decision: "REJECTED" })} className="rounded-md bg-red-700 px-3 py-2 text-sm font-semibold text-white disabled:opacity-60">Rejeter</button>
               </div>
             </div>
 

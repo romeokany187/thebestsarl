@@ -11,6 +11,17 @@ type SearchParams = {
   endDate?: string;
 };
 
+type AuditDecision = "PENDING" | "VALIDATED" | "REJECTED";
+
+function computeDecisionFromActions(actions: string[]): AuditDecision {
+  let decision: AuditDecision = "PENDING";
+  for (const action of actions) {
+    if (action === "AUDIT_VALIDATE") decision = "VALIDATED";
+    if (action === "AUDIT_REJECT") decision = "REJECTED";
+  }
+  return decision;
+}
+
 function dateRangeFromParams(params: SearchParams) {
   const now = new Date();
   const defaultDay = now.toISOString().slice(0, 10);
@@ -71,6 +82,64 @@ export default async function AuditPage({
     }),
   ]);
 
+  const [ticketDecisionLogs, reportDecisionLogs, needDecisionLogs, attendanceDecisionLogs] = await Promise.all([
+    prisma.auditLog.findMany({
+      where: {
+        entityType: "AUDIT_TICKET_SALE",
+        entityId: { in: tickets.map((item) => item.id) },
+        action: { in: ["AUDIT_VALIDATE", "AUDIT_REJECT"] },
+      },
+      select: { entityId: true, action: true, createdAt: true },
+      orderBy: { createdAt: "asc" },
+    }),
+    prisma.auditLog.findMany({
+      where: {
+        entityType: "AUDIT_WORKER_REPORT",
+        entityId: { in: reports.map((item) => item.id) },
+        action: { in: ["AUDIT_VALIDATE", "AUDIT_REJECT"] },
+      },
+      select: { entityId: true, action: true, createdAt: true },
+      orderBy: { createdAt: "asc" },
+    }),
+    prisma.auditLog.findMany({
+      where: {
+        entityType: "AUDIT_NEED_REQUEST",
+        entityId: { in: needs.map((item) => item.id) },
+        action: { in: ["AUDIT_VALIDATE", "AUDIT_REJECT"] },
+      },
+      select: { entityId: true, action: true, createdAt: true },
+      orderBy: { createdAt: "asc" },
+    }),
+    prisma.auditLog.findMany({
+      where: {
+        entityType: "AUDIT_ATTENDANCE",
+        entityId: { in: attendances.map((item) => item.id) },
+        action: { in: ["AUDIT_VALIDATE", "AUDIT_REJECT"] },
+      },
+      select: { entityId: true, action: true, createdAt: true },
+      orderBy: { createdAt: "asc" },
+    }),
+  ]);
+
+  const decisionMap = new Map<string, AuditDecision>();
+  const allDecisionLogs = [
+    ...ticketDecisionLogs,
+    ...reportDecisionLogs,
+    ...needDecisionLogs,
+    ...attendanceDecisionLogs,
+  ];
+
+  const groupedActions = new Map<string, string[]>();
+  for (const log of allDecisionLogs) {
+    const actions = groupedActions.get(log.entityId) ?? [];
+    actions.push(log.action);
+    groupedActions.set(log.entityId, actions);
+  }
+
+  groupedActions.forEach((actions, entityId) => {
+    decisionMap.set(entityId, computeDecisionFromActions(actions));
+  });
+
   const ticketDossiers = tickets.map((ticket) => {
     const paidAmount = ticket.payments.reduce((sum, payment) => sum + payment.amount, 0);
     const status = paidAmount <= 0
@@ -88,6 +157,7 @@ export default async function AuditPage({
       margin: ticket.commissionAmount + ticket.agencyMarkupAmount,
       service: "BILLETS",
       status,
+      auditDecision: decisionMap.get(ticket.id) ?? "PENDING",
       ownerName: ticket.seller.name,
       createdAt: ticket.soldAt.toISOString(),
     };
@@ -102,6 +172,7 @@ export default async function AuditPage({
     margin: null,
     service: "RAPPORTS",
     status: report.status,
+    auditDecision: decisionMap.get(report.id) ?? "PENDING",
     ownerName: report.author.name,
     createdAt: report.createdAt.toISOString(),
   }));
@@ -115,6 +186,7 @@ export default async function AuditPage({
     margin: null,
     service: "APPROVISIONNEMENT",
     status: need.status,
+    auditDecision: decisionMap.get(need.id) ?? "PENDING",
     ownerName: need.requester.name,
     createdAt: need.createdAt.toISOString(),
   }));
@@ -128,6 +200,7 @@ export default async function AuditPage({
     margin: null,
     service: "PRESENCES",
     status: row.status,
+    auditDecision: decisionMap.get(row.id) ?? "PENDING",
     ownerName: row.user.name,
     createdAt: row.date.toISOString(),
   }));
