@@ -59,8 +59,10 @@ export function TeamAssignmentAdmin({
   actorTeamName?: string | null;
 }) {
   const [rows, setRows] = useState(users);
+  const [teamOptions, setTeamOptions] = useState(teams);
   const [status, setStatus] = useState("");
   const [selectedTeamId, setSelectedTeamId] = useState(teams[0]?.id ?? "");
+  const [isTeamWindowOpen, setIsTeamWindowOpen] = useState(false);
   const [selectedUserId, setSelectedUserId] = useState("");
   const [selectedJobTitle, setSelectedJobTitle] = useState<JobTitle>("AGENT_TERRAIN");
   const [newTeamName, setNewTeamName] = useState("");
@@ -68,7 +70,7 @@ export function TeamAssignmentAdmin({
   const [savingId, setSavingId] = useState("");
   const [creatingTeam, setCreatingTeam] = useState(false);
 
-  const selectedTeam = teams.find((team) => team.id === selectedTeamId) ?? null;
+  const selectedTeam = teamOptions.find((team) => team.id === selectedTeamId) ?? null;
 
   const teamMembers = useMemo(
     () => rows.filter((row) => row.teamId === selectedTeamId),
@@ -215,7 +217,28 @@ export function TeamAssignmentAdmin({
       return;
     }
 
-    setStatus("Équipe créée. Recharge la page pour la gérer.");
+    const createdTeam = payload?.data as
+      | { id: string; name: string; kind: "AGENCE" | "PARTENAIRE"; createdAt: string | Date }
+      | undefined;
+
+    if (createdTeam) {
+      setTeamOptions((prev) => {
+        if (prev.some((team) => team.id === createdTeam.id)) {
+          return prev;
+        }
+
+        return [...prev, {
+          id: createdTeam.id,
+          name: createdTeam.name,
+          kind: createdTeam.kind,
+          createdAt: new Date(createdTeam.createdAt).toISOString(),
+        }].sort((a, b) => a.name.localeCompare(b.name, "fr"));
+      });
+      setSelectedTeamId(createdTeam.id);
+      setIsTeamWindowOpen(true);
+    }
+
+    setStatus("Équipe créée et ajoutée à la liste.");
     setNewTeamName("");
     setCreatingTeam(false);
   }
@@ -224,15 +247,18 @@ export function TeamAssignmentAdmin({
     <section className="rounded-xl border border-black/10 bg-white p-4 dark:border-white/10 dark:bg-zinc-900">
       <h2 className="text-lg font-semibold">Gestion des groupes (agences & partenaires)</h2>
       <p className="text-xs text-black/60 dark:text-white/60">
-        Cliquez sur une équipe pour afficher ses membres, puis affectez, désaffectez ou gérez le chef d'équipe.
+        Cliquez sur une équipe pour afficher ses membres, puis affectez, désaffectez ou gérez le chef d&apos;équipe.
       </p>
 
       <div className="mt-4 grid gap-3 lg:grid-cols-3">
-        {teams.map((team) => (
+        {teamOptions.map((team) => (
           <button
             key={team.id}
             type="button"
-            onClick={() => setSelectedTeamId(team.id)}
+            onClick={() => {
+              setSelectedTeamId(team.id);
+              setIsTeamWindowOpen(true);
+            }}
             className={`rounded-xl border px-3 py-2 text-left text-sm ${team.id === selectedTeamId
               ? "border-black bg-black/5 dark:border-white dark:bg-white/10"
               : "border-black/10 hover:bg-black/5 dark:border-white/10 dark:hover:bg-white/10"
@@ -272,8 +298,21 @@ export function TeamAssignmentAdmin({
         </div>
       </div>
 
-      {selectedTeam ? (
-        <div className="mt-4 rounded-xl border border-black/10 p-4 dark:border-white/10">
+      {selectedTeam && isTeamWindowOpen ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="max-h-[90vh] w-full max-w-5xl overflow-y-auto rounded-xl border border-black/10 bg-white p-4 shadow-2xl dark:border-white/10 dark:bg-zinc-900">
+            <div className="mb-3 flex items-center justify-between">
+              <h3 className="text-base font-semibold">Paramètres de l&apos;équipe</h3>
+              <button
+                type="button"
+                onClick={() => setIsTeamWindowOpen(false)}
+                className="rounded-md border border-black/15 px-3 py-1.5 text-xs font-semibold hover:bg-black/5 dark:border-white/20 dark:hover:bg-white/10"
+              >
+                Fermer
+              </button>
+            </div>
+
+            <div className="rounded-xl border border-black/10 p-4 dark:border-white/10">
           <div className="mb-4 rounded-lg border border-black/10 bg-black/5 p-3 text-xs dark:border-white/10 dark:bg-white/5">
             <p className="font-semibold">Infos du groupe</p>
             <p className="mt-1 text-black/70 dark:text-white/70">Type: {selectedTeam.kind === "PARTENAIRE" ? "Partenaire" : "Agence"}</p>
@@ -365,6 +404,8 @@ export function TeamAssignmentAdmin({
               </li>
             )}
           </ul>
+            </div>
+          </div>
         </div>
       ) : null}
 
