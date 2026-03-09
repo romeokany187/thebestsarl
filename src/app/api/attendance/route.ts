@@ -47,7 +47,7 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
-  const access = await requireApiModuleAccess("attendance", ["ADMIN", "MANAGER", "EMPLOYEE"]);
+  const access = await requireApiModuleAccess("attendance", ["MANAGER", "EMPLOYEE", "ACCOUNTANT"]);
   if (access.error) {
     return access.error;
   }

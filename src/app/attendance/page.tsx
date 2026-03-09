@@ -38,7 +38,7 @@ export default async function AttendancePage({
   const { session, role } = await requirePageModuleAccess("attendance", ["ADMIN", "MANAGER", "EMPLOYEE", "ACCOUNTANT"]);
   const resolvedSearchParams = (await searchParams) ?? {};
   const range = dateRangeFromParams(resolvedSearchParams);
-  const canManageAttendance = role === "ADMIN" || role === "MANAGER" || role === "EMPLOYEE";
+  const canManageAttendance = role !== "ADMIN";
   const selectedUserId = role === "EMPLOYEE"
     ? session.user.id
     : resolvedSearchParams.userId && resolvedSearchParams.userId !== "ALL"
@@ -47,7 +47,7 @@ export default async function AttendancePage({
   const accessNote = canManageAttendance
     ? role === "EMPLOYEE"
       ? "Accès personnel: vous pouvez saisir et consulter uniquement vos présences."
-      : "Accès gestion: vous pouvez saisir et suivre les présences de l'équipe."
+      : "Accès signature: vous pouvez signer vos présences et suivre les états de l'équipe."
     : "Accès lecture seule: consultation des présences uniquement.";
 
   const users = role === "EMPLOYEE"
