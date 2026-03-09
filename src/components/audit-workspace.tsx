@@ -52,6 +52,27 @@ type DossierDetail = {
   conformity: Array<{ label: string; value: string }>;
 };
 
+type CompareResultRow = {
+  key: string;
+  issue: "OK" | "MISSING_IN_SYSTEM" | "MISSING_IN_FILE" | "AMOUNT_DIFF" | "FIELD_DIFF";
+  systemValue: string;
+  externalValue: string;
+  severity: "low" | "medium" | "high";
+};
+
+type CompareResult = {
+  summary: {
+    compareType: "CAISSE" | "VENTES" | "PRESENCES" | "RAPPORTS";
+    period: string;
+    externalRows: number;
+    checkedRows: number;
+    ok: number;
+    mismatches: number;
+    highSeverity: number;
+  };
+  rows: CompareResultRow[];
+};
+
 const serviceTabs = ["TOUS", "BILLETS", "RAPPORTS", "APPROVISIONNEMENT", "PRESENCES"];
 const rowTabs = ["TOUS", "A_AUDITER", "VALIDES", "REJETES"];
 
@@ -98,6 +119,10 @@ export function AuditWorkspace({
   const [status, setStatus] = useState("");
   const [loadingDetail, setLoadingDetail] = useState(false);
   const [savingAction, setSavingAction] = useState(false);
+  const [compareType, setCompareType] = useState<"CAISSE" | "VENTES" | "PRESENCES" | "RAPPORTS">("CAISSE");
+  const [compareFile, setCompareFile] = useState<File | null>(null);
+  const [compareLoading, setCompareLoading] = useState(false);
+  const [compareResult, setCompareResult] = useState<CompareResult | null>(null);
 
   const selected = useMemo(
     () => dossierRows.find((item) => `${item.entityType}:${item.entityId}` === selectedKey) ?? null,
@@ -183,6 +208,64 @@ export function AuditWorkspace({
     setSavingAction(false);
   }
 
+  async function runExternalCompare() {
+    if (!compareFile) {
+      setStatus("Choisissez un fichier CSV externe à comparer.");
+      return;
+    }
+
+    setCompareLoading(true);
+    const formData = new FormData();
+    formData.append("compareType", compareType);
+    formData.append("startDate", startDate);
+    formData.append("endDate", endDate);
+    formData.append("file", compareFile);
+
+    const response = await fetch("/api/audit/compare", {
+      method: "POST",
+      body: formData,
+    });
+
+    const body = await response.json().catch(() => null);
+    if (!response.ok) {
+      setStatus(body?.error ?? "Échec de la comparaison externe.");
+      setCompareLoading(false);
+      return;
+    }
+
+    setCompareResult(body?.data ?? null);
+    setStatus("Comparaison externe terminée. Rapport d'écarts prêt.");
+    setCompareLoading(false);
+  }
+
+  function exportCompareCsv() {
+    if (!compareResult || compareResult.rows.length === 0) {
+      setStatus("Aucun résultat à exporter.");
+      return;
+    }
+
+    const header = "key,issue,severity,systemValue,externalValue";
+    const lines = compareResult.rows.map((row) => {
+      const escape = (value: string) => `"${value.replace(/"/g, '""')}"`;
+      return [
+        escape(row.key),
+        escape(row.issue),
+        escape(row.severity),
+        escape(row.systemValue),
+        escape(row.externalValue),
+      ].join(",");
+    });
+
+    const csv = [header, ...lines].join("\n");
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `audit-compare-${compareResult.summary.compareType.toLowerCase()}.csv`;
+    link.click();
+    URL.revokeObjectURL(url);
+  }
+
   return (
     <div className="grid gap-6 lg:grid-cols-[1.4fr,1fr,340px]">
       <section className="rounded-2xl border border-black/10 bg-white p-4 dark:border-white/10 dark:bg-zinc-900 lg:col-span-2">
@@ -220,6 +303,23 @@ export function AuditWorkspace({
           <button type="button" disabled={savingAction} onClick={() => void saveAction("AUDIT_AUTO_CONTROL", { mode: "standard" }, false)} className="rounded-md border border-black/15 px-3 py-2 text-sm font-semibold hover:bg-black/5 disabled:opacity-60 dark:border-white/20 dark:hover:bg-white/10">Contrôle auto</button>
           <button type="button" disabled={savingAction} onClick={() => void saveAction("AUDIT_EXPORT", { format: "pdf" }, false)} className="rounded-md border border-black/15 px-3 py-2 text-sm font-semibold hover:bg-black/5 disabled:opacity-60 dark:border-white/20 dark:hover:bg-white/10">Exporter</button>
           <button type="button" disabled={savingAction} onClick={() => void saveAction("AUDIT_SIGNAL", { level: "medium" }, false)} className="rounded-md bg-black px-3 py-2 text-sm font-semibold text-white disabled:opacity-60 dark:bg-white dark:text-black">Créer signalement</button>
+        </div>
+
+        <div className="mt-4 rounded-xl border border-black/10 p-3 dark:border-white/10">
+          <p className="text-xs font-semibold uppercase tracking-wide text-black/60 dark:text-white/60">Comparaison fichier externe</p>
+          <div className="mt-2 grid gap-2">
+            <select value={compareType} onChange={(e) => setCompareType(e.target.value as typeof compareType)} className="rounded-md border border-black/15 px-3 py-2 text-sm dark:border-white/20">
+              <option value="CAISSE">Caisse (entrées/sorties)</option>
+              <option value="VENTES">Ventes compagnie</option>
+              <option value="PRESENCES">Présences internes</option>
+              <option value="RAPPORTS">Rapports employés</option>
+            </select>
+            <input type="file" accept=".csv" onChange={(e) => setCompareFile(e.target.files?.[0] ?? null)} className="rounded-md border border-black/15 px-3 py-2 text-xs dark:border-white/20" />
+            <button type="button" disabled={compareLoading} onClick={() => void runExternalCompare()} className="rounded-md border border-black/15 px-3 py-2 text-sm font-semibold hover:bg-black/5 disabled:opacity-60 dark:border-white/20 dark:hover:bg-white/10">
+              {compareLoading ? "Comparaison..." : "Comparer au système"}
+            </button>
+            <p className="text-[11px] text-black/60 dark:text-white/60">Format attendu: CSV (exportez Excel en .csv).</p>
+          </div>
         </div>
       </section>
 
@@ -470,6 +570,53 @@ export function AuditWorkspace({
         )}
 
         <p className="mt-3 text-xs text-black/60 dark:text-white/60">{status}</p>
+      </section>
+
+      <section className="rounded-2xl border border-black/10 bg-white p-4 dark:border-white/10 dark:bg-zinc-900 lg:col-span-3">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h2 className="text-base font-semibold">Rapport de comparaison externe</h2>
+          <button type="button" onClick={exportCompareCsv} className="rounded-md border border-black/15 px-3 py-1.5 text-xs font-semibold hover:bg-black/5 dark:border-white/20 dark:hover:bg-white/10">
+            Exporter écarts CSV
+          </button>
+        </div>
+        {compareResult ? (
+          <>
+            <p className="mt-2 text-xs text-black/60 dark:text-white/60">
+              Type: {compareResult.summary.compareType} • Période: {compareResult.summary.period} • Lignes externes: {compareResult.summary.externalRows} • Contrôlées: {compareResult.summary.checkedRows} • OK: {compareResult.summary.ok} • Écarts: {compareResult.summary.mismatches} • Critiques: {compareResult.summary.highSeverity}
+            </p>
+            <div className="mt-3 overflow-x-auto">
+              <table className="min-w-full text-sm">
+                <thead className="bg-black/5 dark:bg-white/10">
+                  <tr>
+                    <th className="px-3 py-2 text-left">Clé</th>
+                    <th className="px-3 py-2 text-left">Écart</th>
+                    <th className="px-3 py-2 text-left">Sévérité</th>
+                    <th className="px-3 py-2 text-left">Système</th>
+                    <th className="px-3 py-2 text-left">Fichier externe</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {compareResult.rows.slice(0, 200).map((row, index) => (
+                    <tr key={`${row.key}-${index}`} className="border-t border-black/5 dark:border-white/10">
+                      <td className="px-3 py-2">{row.key}</td>
+                      <td className="px-3 py-2">{row.issue}</td>
+                      <td className="px-3 py-2">{row.severity}</td>
+                      <td className="px-3 py-2">{row.systemValue}</td>
+                      <td className="px-3 py-2">{row.externalValue}</td>
+                    </tr>
+                  ))}
+                  {compareResult.rows.length === 0 ? (
+                    <tr>
+                      <td colSpan={5} className="px-3 py-6 text-center text-xs text-black/60 dark:text-white/60">Aucun écart détecté.</td>
+                    </tr>
+                  ) : null}
+                </tbody>
+              </table>
+            </div>
+          </>
+        ) : (
+          <p className="mt-2 text-xs text-black/60 dark:text-white/60">Lancez une comparaison externe pour afficher le rapport.</p>
+        )}
       </section>
     </div>
   );
