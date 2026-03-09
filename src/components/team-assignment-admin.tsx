@@ -90,6 +90,14 @@ export function TeamAssignmentAdmin({
     [teamMembers],
   );
 
+  const teamsWithStats = useMemo(
+    () => teamOptions.map((team) => ({
+      ...team,
+      collaboratorsCount: rows.filter((row) => row.teamId === team.id).length,
+    })),
+    [teamOptions, rows],
+  );
+
   function applyUpdatedUser(payloadUser: {
     id: string;
     role: UserRole;
@@ -270,6 +278,56 @@ export function TeamAssignmentAdmin({
         ))}
       </div>
 
+      <div className="mt-6 grid gap-4 lg:grid-cols-2">
+        {teamsWithStats.map((team) => {
+          const members = rows.filter((row) => row.teamId === team.id);
+          return (
+            <article key={team.id} className="rounded-2xl border border-black/10 bg-white p-4 shadow-sm dark:border-white/10 dark:bg-zinc-900">
+              <div className="flex items-center justify-between gap-2">
+                <h3 className="text-base font-semibold">{team.name}</h3>
+                <span className="rounded-full border border-black/15 bg-black/5 px-2 py-0.5 text-[10px] font-semibold dark:border-white/20 dark:bg-white/10">
+                  {team.kind === "PARTENAIRE" ? "Partenaire" : "Agence"} • {team.collaboratorsCount} collaborateur(s)
+                </span>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setSelectedTeamId(team.id);
+                  setIsTeamWindowOpen(true);
+                }}
+                className="mt-3 rounded-md border border-black/15 px-3 py-1.5 text-xs font-semibold hover:bg-black/5 dark:border-white/20 dark:hover:bg-white/10"
+              >
+                Gérer / Ouvrir
+              </button>
+
+              <ul className="mt-3 space-y-2 text-sm">
+                {members.length > 0 ? (
+                  members.map((user) => (
+                    <li key={user.id} className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-black/10 px-3 py-2 dark:border-white/10">
+                      <span className="font-medium">{user.name}</span>
+                      <span className="inline-flex items-center gap-1 text-xs text-black/60 dark:text-white/60">
+                        <span className="rounded-full border border-black/15 bg-black/5 px-2 py-0.5 text-[10px] font-semibold dark:border-white/20 dark:bg-white/10">
+                          {jobOptions.find((option) => option.value === user.jobTitle)?.label ?? user.jobTitle}
+                        </span>
+                        <span className="rounded-full border border-black/15 bg-black/5 px-2 py-0.5 text-[10px] font-semibold dark:border-white/20 dark:bg-white/10">
+                          {roleLabel(user.role)}
+                        </span>
+                        <span>• {user.email}</span>
+                      </span>
+                    </li>
+                  ))
+                ) : (
+                  <li className="rounded-xl border border-dashed border-black/15 px-3 py-2 text-xs text-black/55 dark:border-white/20 dark:text-white/55">
+                    Aucun collaborateur affecté.
+                  </li>
+                )}
+              </ul>
+            </article>
+          );
+        })}
+      </div>
+
       <div className="mt-4 rounded-xl border border-black/10 p-3 dark:border-white/10">
         <h3 className="text-sm font-semibold">Créer une équipe</h3>
         <div className="mt-2 grid gap-2 md:grid-cols-4">
@@ -303,13 +361,26 @@ export function TeamAssignmentAdmin({
           <div className="max-h-[90vh] w-full max-w-5xl overflow-y-auto rounded-xl border border-black/10 bg-white p-4 shadow-2xl dark:border-white/10 dark:bg-zinc-900">
             <div className="mb-3 flex items-center justify-between">
               <h3 className="text-base font-semibold">Paramètres de l&apos;équipe</h3>
-              <button
-                type="button"
-                onClick={() => setIsTeamWindowOpen(false)}
-                className="rounded-md border border-black/15 px-3 py-1.5 text-xs font-semibold hover:bg-black/5 dark:border-white/20 dark:hover:bg-white/10"
-              >
-                Fermer
-              </button>
+              <div className="flex items-center gap-2">
+                <select
+                  value={selectedTeamId}
+                  onChange={(event) => setSelectedTeamId(event.target.value)}
+                  className="rounded-md border border-black/15 px-3 py-1.5 text-xs dark:border-white/20"
+                >
+                  {teamOptions.map((team) => (
+                    <option key={team.id} value={team.id}>
+                      {team.name} ({team.kind === "PARTENAIRE" ? "Partenaire" : "Agence"})
+                    </option>
+                  ))}
+                </select>
+                <button
+                  type="button"
+                  onClick={() => setIsTeamWindowOpen(false)}
+                  className="rounded-md border border-black/15 px-3 py-1.5 text-xs font-semibold hover:bg-black/5 dark:border-white/20 dark:hover:bg-white/10"
+                >
+                  Fermer
+                </button>
+              </div>
             </div>
 
             <div className="rounded-xl border border-black/10 p-4 dark:border-white/10">
