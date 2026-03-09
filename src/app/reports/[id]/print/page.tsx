@@ -114,7 +114,16 @@ export default async function ReportPrintPage({ params }: PageProps) {
         <header className="border-b border-zinc-200 pb-5">
           <div className="flex items-start justify-between gap-4">
             <div className="flex items-start gap-4">
-              {logoPath ? <Image src={logoPath} alt="Logo entreprise" width={120} height={48} className="h-12 w-auto" /> : null}
+              {logoPath ? (
+                <Image
+                  src={logoPath}
+                  alt="Logo entreprise"
+                  width={220}
+                  height={80}
+                  className="h-14 w-auto object-contain"
+                  priority
+                />
+              ) : null}
               <div>
                 <p className="text-xs font-semibold uppercase tracking-[0.2em] text-zinc-700">THEBEST SARL</p>
                 <h1 className="mt-1 text-2xl font-semibold text-zinc-900">Rapport professionnel</h1>
@@ -171,7 +180,15 @@ export default async function ReportPrintPage({ params }: PageProps) {
             <p className="mt-1 text-sm text-zinc-900">Validation officielle</p>
           </div>
           <div className="flex justify-center sm:justify-end">
-            {stampPath ? <Image src={stampPath} alt="Cachet" width={72} height={72} className="h-18 w-18 opacity-95" /> : null}
+            {stampPath ? (
+              <Image
+                src={stampPath}
+                alt="Cachet"
+                width={96}
+                height={96}
+                className="h-20 w-auto object-contain opacity-95"
+              />
+            ) : null}
           </div>
         </section>
 
