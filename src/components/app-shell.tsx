@@ -7,13 +7,8 @@ import { LogoutButton } from "@/components/logout-button";
 const links = [
   { href: "/", label: "Dashboard", roles: ["ADMIN", "MANAGER", "ACCOUNTANT"] as AppRole[] },
   {
-    href: "/reports",
-    label: "Rapports",
-    roles: ["ADMIN", "MANAGER", "EMPLOYEE", "ACCOUNTANT"] as AppRole[],
-  },
-  {
-    href: "/attendance",
-    label: "Présences",
+    href: "/profile",
+    label: "Profil & Inbox",
     roles: ["ADMIN", "MANAGER", "EMPLOYEE", "ACCOUNTANT"] as AppRole[],
   },
   {
@@ -32,13 +27,18 @@ const links = [
     roles: ["ADMIN", "MANAGER", "ACCOUNTANT"] as AppRole[],
   },
   {
+    href: "/attendance",
+    label: "Présences",
+    roles: ["ADMIN", "MANAGER", "EMPLOYEE", "ACCOUNTANT"] as AppRole[],
+  },
+  {
     href: "/teams",
     label: "Équipes",
     roles: ["ADMIN", "MANAGER", "ACCOUNTANT"] as AppRole[],
   },
   {
-    href: "/news",
-    label: "Nouvelles",
+    href: "/reports",
+    label: "Rapports",
     roles: ["ADMIN", "MANAGER", "EMPLOYEE", "ACCOUNTANT"] as AppRole[],
   },
   {
@@ -52,13 +52,13 @@ const links = [
     roles: ["ADMIN", "MANAGER", "EMPLOYEE", "ACCOUNTANT"] as AppRole[],
   },
   {
-    href: "/settings",
-    label: "Paramètres",
+    href: "/news",
+    label: "Nouvelles",
     roles: ["ADMIN", "MANAGER", "EMPLOYEE", "ACCOUNTANT"] as AppRole[],
   },
   {
-    href: "/profile",
-    label: "Profil & Inbox",
+    href: "/settings",
+    label: "Paramètres",
     roles: ["ADMIN", "MANAGER", "EMPLOYEE", "ACCOUNTANT"] as AppRole[],
   },
   { href: "/admin", label: "Admin", roles: ["ADMIN"] as AppRole[] },
