@@ -36,13 +36,21 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
   }
 
-  const existing = await prisma.team.findUnique({ where: { name: parsed.data.name } });
+  const normalizedName = parsed.data.name.trim().toUpperCase();
+  if (["OPERATIONS", "OPERATION", "SALES"].includes(normalizedName)) {
+    return NextResponse.json(
+      { error: "Utilisez uniquement des équipes de type agence ou partenaire." },
+      { status: 400 },
+    );
+  }
+
+  const existing = await prisma.team.findUnique({ where: { name: parsed.data.name.trim() } });
   if (existing) {
     return NextResponse.json({ error: "Cette équipe existe déjà." }, { status: 400 });
   }
 
   const team = await prisma.team.create({
-    data: { name: parsed.data.name, kind: parsed.data.kind },
+    data: { name: parsed.data.name.trim(), kind: parsed.data.kind },
     include: {
       users: {
         select: { id: true, name: true, role: true },

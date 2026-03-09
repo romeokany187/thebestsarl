@@ -14,6 +14,11 @@ function containsAny(value: string, terms: string[]) {
   return terms.some((term) => normalized.includes(term));
 }
 
+function isAgencyOrPartnerTeamName(name: string) {
+  const normalized = name.trim().toUpperCase();
+  return normalized !== "OPERATIONS" && normalized !== "OPERATION" && normalized !== "SALES";
+}
+
 export default async function TeamsPage({
   searchParams,
 }: {
@@ -70,7 +75,7 @@ export default async function TeamsPage({
     }
   }
 
-  const organizationTeams = await prisma.team.findMany({
+  const allTeams = await prisma.team.findMany({
     include: {
       users: {
         select: {
@@ -98,6 +103,8 @@ export default async function TeamsPage({
   const displayedPartners = partners.map((partner) => partner.name);
 
   const manageTeamName = resolvedSearchParams.manageTeam?.trim() ?? "";
+
+  const organizationTeams = allTeams.filter((team) => isAgencyOrPartnerTeamName(team.name));
 
   const selectedManagedTeam = manageTeamName
     ? organizationTeams.find((team) => team.name.toUpperCase() === manageTeamName.toUpperCase())
