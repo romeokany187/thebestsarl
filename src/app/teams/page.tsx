@@ -27,53 +27,28 @@ export default async function TeamsPage({
   const { role, session } = await requirePageModuleAccess("teams", ["ADMIN", "MANAGER", "ACCOUNTANT"]);
   const resolvedSearchParams = (await searchParams) ?? {};
 
-  const [sites, users] = await Promise.all([
-    prisma.workSite.findMany({
-      where: { isActive: true },
-      orderBy: { createdAt: "asc" },
-    }),
-    prisma.user.findMany({
-      select: {
-        id: true,
-        name: true,
-        email: true,
-        role: true,
-        jobTitle: true,
-        teamId: true,
-        team: { select: { name: true } },
-      },
-      where: { role: { in: ["EMPLOYEE", "MANAGER", "ADMIN", "ACCOUNTANT"] } },
-      orderBy: { name: "asc" },
-    }),
-  ]);
+  await prisma.team.upsert({
+    where: { name: "Agence de Kinshasa (Direction générale)" },
+    update: { kind: "AGENCE" },
+    create: {
+      name: "Agence de Kinshasa (Direction générale)",
+      kind: "AGENCE",
+    },
+  });
 
-  const organizationSites = sites.filter((site) => site.type === "OFFICE" || site.type === "PARTNER");
-  const partnerNames = organizationSites.filter((site) => site.type === "PARTNER").map((site) => site.name);
-  const agencyNames = organizationSites.filter((site) => site.type === "OFFICE").map((site) => site.name);
-
-  if (organizationSites.length > 0) {
-    await prisma.team.createMany({
-      data: organizationSites.map((site) => ({
-        name: site.name,
-        kind: site.type === "PARTNER" ? "PARTENAIRE" : "AGENCE",
-      })),
-      skipDuplicates: true,
-    });
-
-    if (partnerNames.length > 0) {
-      await prisma.team.updateMany({
-        where: { name: { in: partnerNames } },
-        data: { kind: "PARTENAIRE" },
-      });
-    }
-
-    if (agencyNames.length > 0) {
-      await prisma.team.updateMany({
-        where: { name: { in: agencyNames } },
-        data: { kind: "AGENCE" },
-      });
-    }
-  }
+  const users = await prisma.user.findMany({
+    select: {
+      id: true,
+      name: true,
+      email: true,
+      role: true,
+      jobTitle: true,
+      teamId: true,
+      team: { select: { name: true } },
+    },
+    where: { role: { in: ["EMPLOYEE", "MANAGER", "ADMIN", "ACCOUNTANT"] } },
+    orderBy: { name: "asc" },
+  });
 
   const allTeams = await prisma.team.findMany({
     include: {
@@ -90,17 +65,18 @@ export default async function TeamsPage({
     orderBy: { name: "asc" },
   });
 
-  const headOffice = sites.find((site) =>
-    site.type === "OFFICE" && containsAny(site.name, ["KINSHASA", "DIRECTION", "DG"]),
-  );
+  const headOfficeTeam = allTeams.find((team) => containsAny(team.name, ["KINSHASA", "DIRECTION", "DG"]));
+  const headOffice = headOfficeTeam
+    ? { id: headOfficeTeam.id, name: headOfficeTeam.name }
+    : { id: "", name: "Agence de Kinshasa (Direction générale)" };
 
-  const branches = sites.filter((site) =>
-    site.type === "OFFICE" && site.id !== headOffice?.id,
-  );
+  const branches = allTeams
+    .filter((team) => team.kind === "AGENCE" && team.name !== headOffice.name)
+    .map((team) => ({ id: team.id, name: team.name }));
 
-  const partners = sites.filter((site) => site.type === "PARTNER");
-
-  const displayedPartners = partners.map((partner) => partner.name);
+  const displayedPartners = allTeams
+    .filter((team) => team.kind === "PARTENAIRE")
+    .map((team) => team.name);
 
   const manageTeamName = resolvedSearchParams.manageTeam?.trim() ?? "";
 
@@ -137,15 +113,13 @@ export default async function TeamsPage({
               <p className="text-xs font-semibold uppercase tracking-wide text-black/60 dark:text-white/60">Direction générale</p>
               <span className="rounded-full border border-black/15 bg-black/5 px-2 py-0.5 text-[10px] font-semibold dark:border-white/20 dark:bg-white/10">DG</span>
             </div>
-            <p className="mt-2 text-sm font-semibold">{headOffice?.name ?? "Agence de Kinshasa (Direction Générale)"}</p>
-            {headOffice ? (
-              <a
-                href={`/teams?manageTeam=${encodeURIComponent(headOffice.name)}`}
-                className="mt-3 inline-flex rounded-md border border-black/15 px-2.5 py-1 text-[11px] font-semibold hover:bg-black/5 dark:border-white/20 dark:hover:bg-white/10"
-              >
-                Gérer
-              </a>
-            ) : null}
+            <p className="mt-2 text-sm font-semibold">{headOffice.name}</p>
+            <a
+              href={`/teams?manageTeam=${encodeURIComponent(headOffice.name)}`}
+              className="mt-3 inline-flex rounded-md border border-black/15 px-2.5 py-1 text-[11px] font-semibold hover:bg-black/5 dark:border-white/20 dark:hover:bg-white/10"
+            >
+              Gérer
+            </a>
           </article>
 
           <article className="rounded-xl border border-black/10 p-4 dark:border-white/10">
