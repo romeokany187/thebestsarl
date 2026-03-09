@@ -476,33 +476,37 @@ export function ProcurementHub({
         </div>
       </section>
 
-      <div className="grid gap-6 lg:grid-cols-[420px,1fr]">
-        <section className="rounded-xl border border-black/10 bg-white p-4 dark:border-white/10 dark:bg-zinc-900">
+      <div className="grid gap-5 lg:grid-cols-[380px,1fr]">
+        <section className="rounded-xl border border-black/10 bg-white p-3.5 dark:border-white/10 dark:bg-zinc-900">
           <h2 className="text-base font-semibold">Fiche stock dynamique</h2>
-          <p className="mt-1 text-xs text-black/60 dark:text-white/60">
+          <p className="mt-1 text-[11px] text-black/60 dark:text-white/60">
             Chaque entrée/sortie exige un justificatif pour garder la traçabilité complète.
           </p>
 
           {canManageStock ? (
             <form onSubmit={submitStockMovement} className="mt-3 grid gap-2">
-              <input name="itemName" required placeholder="Produit / Matériel" className="rounded-md border px-3 py-2 text-sm" />
-              <input name="category" required placeholder="Catégorie" className="rounded-md border px-3 py-2 text-sm" />
-              <div className="grid grid-cols-[1fr,120px] gap-2">
-                <input name="quantity" type="number" min="0.01" step="0.01" required placeholder="Quantité" className="rounded-md border px-3 py-2 text-sm" />
-                <input name="unit" required placeholder="Unité" className="rounded-md border px-3 py-2 text-sm" />
+              <div className="grid gap-2 sm:grid-cols-2">
+                <input name="itemName" required placeholder="Produit / Matériel" className="rounded-md border px-2.5 py-2 text-sm" />
+                <input name="category" required placeholder="Catégorie" className="rounded-md border px-2.5 py-2 text-sm" />
               </div>
-              <select name="movementType" defaultValue="IN" className="rounded-md border px-3 py-2 text-sm">
-                <option value="IN">Entrée stock</option>
-                <option value="OUT">Sortie stock</option>
-              </select>
-              <input name="referenceDoc" required placeholder="Référence justificatif" className="rounded-md border px-3 py-2 text-sm" />
-              <textarea name="justification" required rows={3} placeholder="Motif / justification" className="rounded-md border px-3 py-2 text-sm" />
-              <select name="needRequestId" className="rounded-md border px-3 py-2 text-sm">
-                <option value="">Aucun état de besoin lié</option>
-                {approvedNeeds.map((need) => (
-                  <option key={need.id} value={need.id}>{need.title}</option>
-                ))}
-              </select>
+              <div className="grid gap-2 sm:grid-cols-3">
+                <input name="quantity" type="number" min="0.01" step="0.01" required placeholder="Quantité" className="rounded-md border px-2.5 py-2 text-sm" />
+                <input name="unit" required placeholder="Unité" className="rounded-md border px-2.5 py-2 text-sm" />
+                <select name="movementType" defaultValue="IN" className="rounded-md border px-2.5 py-2 text-sm">
+                  <option value="IN">Entrée</option>
+                  <option value="OUT">Sortie</option>
+                </select>
+              </div>
+              <div className="grid gap-2 sm:grid-cols-2">
+                <input name="referenceDoc" required placeholder="Référence justificatif" className="rounded-md border px-2.5 py-2 text-sm" />
+                <select name="needRequestId" className="rounded-md border px-2.5 py-2 text-sm">
+                  <option value="">Sans EDB liée</option>
+                  {approvedNeeds.map((need) => (
+                    <option key={need.id} value={need.id}>{need.title}</option>
+                  ))}
+                </select>
+              </div>
+              <textarea name="justification" required rows={2} placeholder="Motif / justification" className="rounded-md border px-2.5 py-2 text-sm" />
               <button className="rounded-md bg-black px-3 py-2 text-sm font-semibold text-white dark:bg-white dark:text-black">Enregistrer mouvement</button>
             </form>
           ) : (
@@ -514,7 +518,7 @@ export function ProcurementHub({
           {stockStatus ? <p className="mt-2 text-xs text-black/60 dark:text-white/60">{stockStatus}</p> : null}
         </section>
 
-        <section className="rounded-xl border border-black/10 bg-white p-4 dark:border-white/10 dark:bg-zinc-900">
+        <section className="rounded-xl border border-black/10 bg-white p-3.5 dark:border-white/10 dark:bg-zinc-900">
           <h2 className="text-base font-semibold">Stock et rapports</h2>
           <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
             <label className="flex items-center gap-2 text-black/70 dark:text-white/70">
@@ -557,8 +561,8 @@ export function ProcurementHub({
             </article>
           </div>
 
-          <h3 className="mt-5 text-sm font-semibold">Aperçu stock (20 lignes)</h3>
-          <div className="mt-2 overflow-x-auto">
+          <h3 className="mt-4 text-sm font-semibold">Aperçu stock (20 lignes)</h3>
+          <div className="mt-2 max-h-56 overflow-auto rounded-md border border-black/10 dark:border-white/10">
             <table className="min-w-full text-sm">
               <thead>
                 <tr className="border-b border-black/10 text-left dark:border-white/10">
@@ -581,15 +585,15 @@ export function ProcurementHub({
             </table>
           </div>
 
-          <h3 className="mt-5 text-sm font-semibold">Derniers mouvements (10)</h3>
-          <div className="mt-2 space-y-2">
-            {movements.length > 0 ? movements.slice(0, 10).map((movement) => (
+          <h3 className="mt-4 text-sm font-semibold">Derniers mouvements (8)</h3>
+          <div className="mt-2 max-h-60 space-y-2 overflow-y-auto pr-1">
+            {movements.length > 0 ? movements.slice(0, 8).map((movement) => (
               <article key={movement.id} className="rounded-lg border border-black/10 p-2 text-xs dark:border-white/10">
                 <p className="font-semibold">
                   {movement.movementType === "IN" ? "Entrée" : "Sortie"} • {movement.stockItem.name} • {movement.quantity} {movement.stockItem.unit}
                 </p>
                 <p className="text-black/70 dark:text-white/70">Justificatif: {movement.referenceDoc}</p>
-                <p className="text-black/65 dark:text-white/65">{movement.justification}</p>
+                <p className="line-clamp-2 text-black/65 dark:text-white/65">{movement.justification}</p>
                 <p className="text-black/55 dark:text-white/55">
                   {new Date(movement.createdAt).toLocaleString()} • Par {movement.performedBy.name}
                   {movement.needRequest ? ` • EDB: ${movement.needRequest.title}` : ""}
