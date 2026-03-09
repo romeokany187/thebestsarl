@@ -12,6 +12,11 @@ const links = [
     roles: ["ADMIN", "MANAGER", "EMPLOYEE", "ACCOUNTANT"] as AppRole[],
   },
   {
+    href: "/audit",
+    label: "Audit",
+    roles: ["ADMIN", "MANAGER", "ACCOUNTANT"] as AppRole[],
+  },
+  {
     href: "/sales",
     label: "Ventes",
     roles: ["ADMIN", "MANAGER", "EMPLOYEE", "ACCOUNTANT"] as AppRole[],
