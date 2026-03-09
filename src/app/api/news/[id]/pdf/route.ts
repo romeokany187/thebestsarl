@@ -167,33 +167,6 @@ function drawReferenceBox(page: PDFPage, fontBold: PDFFont, fontRegular: PDFFont
   });
 }
 
-function drawSignature(page: PDFPage, signatureImage: PDFImage | null) {
-  const { width } = page.getSize();
-
-  if (signatureImage) {
-    const fitted = getContainedSize(signatureImage, 520, 230, true);
-    page.drawImage(signatureImage, {
-      x: Math.min(width - fitted.width - 16, 300),
-      y: 22,
-      width: fitted.width,
-      height: fitted.height,
-    });
-  }
-}
-
-function drawStamp(page: PDFPage, stampImage: PDFImage | null) {
-  if (!stampImage) return;
-  const fitted = getContainedSize(stampImage, 126, 126, true);
-
-  page.drawImage(stampImage, {
-    x: 276,
-    y: 34,
-    width: fitted.width,
-    height: fitted.height,
-    opacity: 0.92,
-  });
-}
-
 function wrapText(text: string, font: PDFFont, size: number, maxWidth: number) {
   const lines: string[] = [];
   const paragraphs = text.split("\n");
@@ -282,24 +255,6 @@ export async function GET(request: NextRequest, context: RouteContext) {
     "public/branding/logo.jpeg",
   ]);
 
-  const signatureImage = await embedOptionalImage(pdf, [
-    "public/signature.png",
-    "public/signature.jpg",
-    "public/signature.jpeg",
-    "public/branding/signature.png",
-    "public/branding/signature.jpg",
-    "public/branding/signature.jpeg",
-  ]);
-
-  const stampImage = await embedOptionalImage(pdf, [
-    "public/cachet.png",
-    "public/cachet.jpg",
-    "public/cachet.jpeg",
-    "public/branding/cachet.png",
-    "public/branding/cachet.jpg",
-    "public/branding/cachet.jpeg",
-  ]);
-
   const printedBy = access.session.user.name ?? access.session.user.email ?? "Utilisateur";
   const lines = wrapText(post.content, fontRegular, 10.5, PAGE_WIDTH - 76);
   const baseMetaText = `Publié le ${new Date(post.createdAt).toLocaleString()} • ${post.author.name}`;
@@ -368,8 +323,6 @@ export async function GET(request: NextRequest, context: RouteContext) {
 
   const pages = pdf.getPages();
   const lastPage = pages[pages.length - 1];
-  drawSignature(lastPage, signatureImage);
-  drawStamp(lastPage, stampImage);
 
   pages.forEach((pdfPage, index) => {
     drawPageNumber(pdfPage, fontRegular, index + 1, pages.length);

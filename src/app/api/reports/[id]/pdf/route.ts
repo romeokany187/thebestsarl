@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
 import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
+import { readFile } from "node:fs/promises";
+import path from "node:path";
 import { prisma } from "@/lib/prisma";
 import { requireApiModuleAccess } from "@/lib/rbac";
 
@@ -18,6 +20,27 @@ function splitLines(content: string) {
     .split("\n")
     .map((line) => line.trim())
     .filter((line) => line.length > 0);
+}
+
+async function readFirstExistingFile(candidates: string[]) {
+  for (const candidate of candidates) {
+    try {
+      const bytes = await readFile(path.join(process.cwd(), candidate));
+      return { bytes, path: candidate };
+    } catch {
+      continue;
+    }
+  }
+  return null;
+}
+
+async function embedOptionalImage(pdf: PDFDocument, candidates: string[]) {
+  const file = await readFirstExistingFile(candidates);
+  if (!file) return null;
+  const lower = file.path.toLowerCase();
+  if (lower.endsWith(".png")) return pdf.embedPng(file.bytes);
+  if (lower.endsWith(".jpg") || lower.endsWith(".jpeg")) return pdf.embedJpg(file.bytes);
+  return null;
 }
 
 export async function GET(_request: Request, { params }: Params) {
@@ -48,19 +71,41 @@ export async function GET(_request: Request, { params }: Params) {
   const font = await pdf.embedFont(StandardFonts.Helvetica);
   const fontBold = await pdf.embedFont(StandardFonts.HelveticaBold);
   const textBlack = rgb(0, 0, 0);
+  const lineGray = rgb(0.84, 0.84, 0.84);
+  const logoImage = report.status === "APPROVED"
+    ? await embedOptionalImage(pdf, [
+      "public/branding/logo.png",
+      "public/branding/logo.jpg",
+      "public/branding/logo.jpeg",
+      "public/logo.png",
+      "public/logo.jpg",
+      "public/logo.jpeg",
+    ])
+    : null;
   let page = pdf.addPage([595, 842]);
   const width = page.getWidth();
+  const generatedBy = access.session.user.name ?? access.session.user.email ?? "Utilisateur";
 
   const drawHeader = (isContinuation = false) => {
+    if (logoImage) {
+      const scaled = logoImage.scale(0.16);
+      page.drawImage(logoImage, {
+        x: 34,
+        y: 786,
+        width: Math.min(110, scaled.width),
+        height: Math.min(42, scaled.height),
+      });
+    }
+
     page.drawText(`THEBEST SARL - Rapport de travail${isContinuation ? " (suite)" : ""}`, {
-      x: 34,
+      x: logoImage ? 150 : 34,
       y: 804,
       size: 14,
       font: fontBold,
       color: textBlack,
     });
     page.drawText(`Référence interne: ${report.id}`, { x: 34, y: 788, size: 9, font, color: textBlack });
-    page.drawLine({ start: { x: 34, y: 782 }, end: { x: width - 34, y: 782 }, thickness: 0.8, color: rgb(0.82, 0.82, 0.82) });
+    page.drawLine({ start: { x: 34, y: 782 }, end: { x: width - 34, y: 782 }, thickness: 0.8, color: lineGray });
   };
 
   drawHeader();
@@ -93,6 +138,15 @@ export async function GET(_request: Request, { params }: Params) {
 
     y -= 4;
   }
+
+  const pages = pdf.getPages();
+  pages.forEach((p, index) => {
+    p.drawLine({ start: { x: 34, y: 20 }, end: { x: width - 34, y: 20 }, thickness: 0.6, color: lineGray });
+    p.drawText(`Page ${index + 1}/${pages.length}`, { x: 34, y: 10, size: 8, font, color: textBlack });
+    const rightText = `Par ${generatedBy}`;
+    const rightWidth = font.widthOfTextAtSize(rightText, 8);
+    p.drawText(rightText, { x: width - rightWidth - 34, y: 10, size: 8, font, color: textBlack });
+  });
 
   const bytes = await pdf.save();
   return new NextResponse(Uint8Array.from(bytes), {

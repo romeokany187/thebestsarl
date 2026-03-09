@@ -182,38 +182,6 @@ function drawTopInfo(
   });
 }
 
-function drawSignature(page: PDFPage, signatureImage: PDFImage | null, fontRegular: PDFFont) {
-  const { width } = page.getSize();
-  const baseX = width - 220;
-  const baseY = 46;
-  const textBlack = rgb(0, 0, 0);
-
-  page.drawText("Signature", {
-    x: baseX,
-    y: baseY + 24,
-    size: 8,
-    font: fontRegular,
-    color: textBlack,
-  });
-
-  page.drawLine({
-    start: { x: baseX, y: baseY + 18 },
-    end: { x: width - 36, y: baseY + 18 },
-    thickness: 0.8,
-    color: rgb(0.72, 0.72, 0.72),
-  });
-
-  if (signatureImage) {
-    const scaled = signatureImage.scale(0.2);
-    page.drawImage(signatureImage, {
-      x: baseX + 2,
-      y: baseY,
-      width: Math.min(scaled.width, 170),
-      height: Math.min(scaled.height, 34),
-    });
-  }
-}
-
 export async function GET(request: NextRequest) {
   const access = await requireApiModuleAccess("tickets", ["ADMIN", "MANAGER", "EMPLOYEE", "ACCOUNTANT"]);
   if (access.error) {
@@ -266,14 +234,6 @@ export async function GET(request: NextRequest) {
     "public/logo.jpg",
     "public/logo.jpeg",
   ]);
-  const signatureImage = await embedOptionalImage(pdf, [
-    "public/branding/signature.png",
-    "public/branding/signature.jpg",
-    "public/branding/signature.jpeg",
-    "public/signature.png",
-    "public/signature.jpg",
-    "public/signature.jpeg",
-  ]);
   const generatedBy = access.session.user.name ?? access.session.user.email ?? "Compte inconnu";
   const generatedByWithRole = `${generatedBy} (${access.role})`;
 
@@ -282,7 +242,6 @@ export async function GET(request: NextRequest) {
     let page = pdf.addPage([842, 595]);
     drawTopInfo(page, fontBold, fontRegular, periodLabel, logoImage);
     drawFooter(page, fontRegular, reportTitle, generatedByWithRole);
-    drawSignature(page, signatureImage, fontRegular);
 
     const headers = ["Date", "Émetteur", "Compagnie", "PNR", "Itinéraire", "Prix", "BaseFare", "Commission", "Nature", "Statut", "Payant"];
     const headerX = [26, 84, 160, 218, 278, 386, 454, 518, 578, 640, 708];
@@ -310,7 +269,6 @@ export async function GET(request: NextRequest) {
         page = pdf.addPage([842, 595]);
         drawTopInfo(page, fontBold, fontRegular, `${periodLabel} (suite)`, logoImage);
         drawFooter(page, fontRegular, reportTitle, generatedByWithRole);
-        drawSignature(page, signatureImage, fontRegular);
         y = 504;
         headers.forEach((header, index) => {
           page.drawText(header, {
@@ -371,7 +329,6 @@ export async function GET(request: NextRequest) {
       page = pdf.addPage([842, 595]);
       drawTopInfo(page, fontBold, fontRegular, `${periodLabel} (totaux)`, logoImage);
       drawFooter(page, fontRegular, reportTitle, generatedByWithRole);
-      drawSignature(page, signatureImage, fontRegular);
       y = 504;
     }
 
@@ -394,7 +351,6 @@ export async function GET(request: NextRequest) {
     let page = pdf.addPage([842, 595]);
     drawTopInfo(page, fontBold, fontRegular, periodLabel, logoImage);
     drawFooter(page, fontRegular, reportTitle, generatedByWithRole);
-    drawSignature(page, signatureImage, fontRegular);
 
     const grouped = Array.from(
       tickets.reduce((map, ticket) => {
@@ -451,7 +407,6 @@ export async function GET(request: NextRequest) {
         page = pdf.addPage([842, 595]);
         drawTopInfo(page, fontBold, fontRegular, `${periodLabel} (suite)`, logoImage);
         drawFooter(page, fontRegular, reportTitle, generatedByWithRole);
-        drawSignature(page, signatureImage, fontRegular);
         y = 504;
         headers.forEach((header, index) => {
           page.drawText(header, {
@@ -524,7 +479,6 @@ export async function GET(request: NextRequest) {
       page = pdf.addPage([842, 595]);
       drawTopInfo(page, fontBold, fontRegular, `${periodLabel} (totaux)`, logoImage);
       drawFooter(page, fontRegular, reportTitle, generatedByWithRole);
-      drawSignature(page, signatureImage, fontRegular);
       y = 504;
     }
 

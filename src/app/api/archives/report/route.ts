@@ -156,6 +156,16 @@ export async function GET(request: NextRequest) {
     y -= 12;
   }
 
+  const pages = pdf.getPages();
+  const printedBy = access.session.user.name ?? access.session.user.email ?? "Utilisateur";
+  pages.forEach((p, index) => {
+    p.drawLine({ start: { x: 24, y: 20 }, end: { x: 818, y: 20 }, thickness: 0.6, color: rgb(0.84, 0.84, 0.84) });
+    p.drawText(`Page ${index + 1}/${pages.length}`, { x: 24, y: 10, size: 8, font, color: textBlack });
+    const rightText = `Par ${printedBy}`;
+    const rightWidth = font.widthOfTextAtSize(rightText, 8);
+    p.drawText(rightText, { x: 818 - rightWidth, y: 10, size: 8, font, color: textBlack });
+  });
+
   const bytes = await pdf.save();
   return new NextResponse(Uint8Array.from(bytes), {
     status: 200,

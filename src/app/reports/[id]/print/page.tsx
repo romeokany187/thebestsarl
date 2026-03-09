@@ -78,10 +78,8 @@ export default async function ReportPrintPage({ params }: PageProps) {
   }
 
   const lines = renderContentParagraphs(report.content);
-  const [logoPath, stampPath] = await Promise.all([
-    findBrandAsset(["logo thebest.png", "logo.png", "logo.jpg", "branding/logo.png", "branding/logo thebest.png"]),
-    findBrandAsset(["cachet.png", "cachet.jpg", "branding/cachet.png"]),
-  ]);
+  const logoPath = await findBrandAsset(["logo thebest.png", "logo.png", "logo.jpg", "branding/logo.png", "branding/logo thebest.png"]);
+  const canShowBranding = report.status === "APPROVED";
 
   return (
     <main className="min-h-screen bg-white p-4 text-black print:bg-white print:p-0">
@@ -114,7 +112,7 @@ export default async function ReportPrintPage({ params }: PageProps) {
         <header className="border-b border-zinc-200 pb-5">
           <div className="flex items-start justify-between gap-4">
             <div className="flex items-start gap-4">
-              {logoPath ? (
+              {canShowBranding && logoPath ? (
                 <Image
                   src={logoPath}
                   alt="Logo entreprise"
@@ -179,17 +177,7 @@ export default async function ReportPrintPage({ params }: PageProps) {
             <p className="text-xs font-semibold uppercase tracking-[0.12em] text-zinc-700">Direction Generale</p>
             <p className="mt-1 text-sm text-zinc-900">Validation officielle</p>
           </div>
-          <div className="flex justify-center sm:justify-end">
-            {stampPath ? (
-              <Image
-                src={stampPath}
-                alt="Cachet"
-                width={96}
-                height={96}
-                className="h-20 w-auto object-contain opacity-95"
-              />
-            ) : null}
-          </div>
+          <div className="flex justify-center sm:justify-end" />
         </section>
 
         <footer className="mt-4 border-t border-zinc-200 py-3 text-center text-[11px] text-zinc-500">
