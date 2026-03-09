@@ -50,7 +50,7 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
-  const access = await requireApiModuleAccess("reports", ["ADMIN", "MANAGER", "EMPLOYEE"]);
+  const access = await requireApiModuleAccess("reports", ["MANAGER", "EMPLOYEE", "ACCOUNTANT"]);
   if (access.error) {
     return access.error;
   }
@@ -62,7 +62,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
   }
 
-  if (access.role === "EMPLOYEE" && parsed.data.authorId !== access.session.user.id) {
+  if ((access.role === "EMPLOYEE" || access.role === "ACCOUNTANT") && parsed.data.authorId !== access.session.user.id) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
