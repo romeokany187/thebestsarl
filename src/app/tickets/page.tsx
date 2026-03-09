@@ -137,6 +137,10 @@ function buildDailyTimeline(start: Date, endExclusive: Date) {
   return days;
 }
 
+function startOfUtcDay(value: Date) {
+  return new Date(Date.UTC(value.getUTCFullYear(), value.getUTCMonth(), value.getUTCDate(), 0, 0, 0, 0));
+}
+
 function sparklinePath(values: number[], width: number, height: number) {
   if (values.length === 0) return "";
   const max = Math.max(...values, 1);
@@ -216,7 +220,7 @@ export default async function TicketsPage({
     0,
   ));
 
-  const [ticketsForMetrics, airlineTracking, selectedDaySales, previousDaySales, caaConsumedAggregate] = await Promise.all([
+  const [ticketsForMetrics, ticketsForTrend, airlineTracking, selectedDaySales, previousDaySales, caaConsumedAggregate] = await Promise.all([
     prisma.ticketSale.findMany({
       where: whereClause,
       include: {
@@ -224,6 +228,16 @@ export default async function TicketsPage({
         seller: { select: { name: true } },
       },
       orderBy: { soldAt: "desc" },
+    }),
+    prisma.ticketSale.findMany({
+      where: roleTicketFilter,
+      select: {
+        soldAt: true,
+        amount: true,
+        commissionAmount: true,
+        commissionRateUsed: true,
+      },
+      orderBy: { soldAt: "asc" },
     }),
     prisma.airline.findMany({
       where: { code: { in: ["CAA", "FST"] } },
@@ -284,7 +298,7 @@ export default async function TicketsPage({
     }, new Map<string, { code: string; name: string; tickets: number; sales: number; commissions: number }>()),
   ).sort((a, b) => b[1].sales - a[1].sales).map((item) => item[1]);
 
-  const dailyPerformanceMap = ticketsForMetrics.reduce((map, ticket) => {
+  const dailyPerformanceMap = ticketsForTrend.reduce((map, ticket) => {
     const key = new Date(ticket.soldAt).toISOString().slice(0, 10);
     const commission = ticket.commissionAmount ?? ticket.amount * (ticket.commissionRateUsed / 100);
     const existing = map.get(key) ?? {
@@ -300,7 +314,20 @@ export default async function TicketsPage({
     return map;
   }, new Map<string, { day: string; sales: number; commissions: number; tickets: number }>());
 
-  const dailyPerformance = buildDailyTimeline(range.start, range.end).map((day) => {
+  const historicalStart = ticketsForTrend.length > 0
+    ? startOfUtcDay(ticketsForTrend[0].soldAt)
+    : startOfUtcDay(range.start);
+  const tomorrowStart = startOfUtcDay(new Date(Date.UTC(
+    now.getUTCFullYear(),
+    now.getUTCMonth(),
+    now.getUTCDate() + 1,
+    0,
+    0,
+    0,
+    0,
+  )));
+
+  const dailyPerformance = buildDailyTimeline(historicalStart, tomorrowStart).map((day) => {
     const existing = dailyPerformanceMap.get(day);
     if (existing) return existing;
     return {
@@ -311,16 +338,28 @@ export default async function TicketsPage({
     };
   });
 
-  const maxDailySales = dailyPerformance.reduce((max, point) => Math.max(max, point.sales), 0);
-  const maxDailyCommissions = dailyPerformance.reduce((max, point) => Math.max(max, point.commissions), 0);
+  let runningSales = 0;
+  let runningCommissions = 0;
+  let runningTickets = 0;
+  const cumulativeDailyPerformance = dailyPerformance.map((point) => {
+    runningSales += point.sales;
+    runningCommissions += point.commissions;
+    runningTickets += point.tickets;
+    return {
+      day: point.day,
+      sales: runningSales,
+      commissions: runningCommissions,
+      tickets: runningTickets,
+    };
+  });
 
-  const salesCurvePath = sparklinePath(dailyPerformance.map((point) => point.sales), 280, 80);
-  const commissionCurvePath = sparklinePath(dailyPerformance.map((point) => point.commissions), 280, 80);
-  const salesStart = dailyPerformance[0]?.sales ?? 0;
-  const salesEnd = dailyPerformance[dailyPerformance.length - 1]?.sales ?? 0;
+  const salesCurvePath = sparklinePath(cumulativeDailyPerformance.map((point) => point.sales), 280, 80);
+  const commissionCurvePath = sparklinePath(cumulativeDailyPerformance.map((point) => point.commissions), 280, 80);
+  const salesStart = cumulativeDailyPerformance[0]?.sales ?? 0;
+  const salesEnd = cumulativeDailyPerformance[cumulativeDailyPerformance.length - 1]?.sales ?? 0;
   const salesTrendPercent = salesStart > 0 ? ((salesEnd - salesStart) / salesStart) * 100 : salesEnd > 0 ? 100 : 0;
-  const commissionStart = dailyPerformance[0]?.commissions ?? 0;
-  const commissionEnd = dailyPerformance[dailyPerformance.length - 1]?.commissions ?? 0;
+  const commissionStart = cumulativeDailyPerformance[0]?.commissions ?? 0;
+  const commissionEnd = cumulativeDailyPerformance[cumulativeDailyPerformance.length - 1]?.commissions ?? 0;
   const commissionTrendPercent = commissionStart > 0
     ? ((commissionEnd - commissionStart) / commissionStart) * 100
     : commissionEnd > 0
@@ -462,37 +501,37 @@ export default async function TicketsPage({
         <div className="grid gap-3 md:grid-cols-2">
           <div className="rounded-xl border border-black/10 p-3 dark:border-white/10">
             <div className="mb-2 flex items-center justify-between">
-              <p className="text-xs font-semibold uppercase tracking-wide text-black/60 dark:text-white/60">Progression ventes</p>
+              <p className="text-xs font-semibold uppercase tracking-wide text-black/60 dark:text-white/60">Progression ventes cumulées</p>
               <p className={`text-xs font-semibold ${salesTrendPercent >= 0 ? "text-emerald-600" : "text-red-600"}`}>
                 {salesTrendPercent >= 0 ? "+" : ""}{salesTrendPercent.toFixed(1)}%
               </p>
             </div>
             <p className="text-sm font-semibold">{formatCurrency(salesEnd)}</p>
-            <p className="mb-2 text-[11px] text-black/60 dark:text-white/60">Dernier point • Début {formatCurrency(salesStart)}</p>
+            <p className="mb-2 text-[11px] text-black/60 dark:text-white/60">Cumul historique • Début {formatCurrency(salesStart)}</p>
             <svg viewBox="0 0 280 80" className="h-20 w-full">
               <path d={salesCurvePath} fill="none" stroke="currentColor" strokeWidth="2.2" className="text-black dark:text-white" />
             </svg>
             <div className="mt-1 flex justify-between text-[10px] text-black/45 dark:text-white/45">
-              <span>{compactDate(dailyPerformance[0]?.day ?? "")}</span>
-              <span>{compactDate(dailyPerformance[dailyPerformance.length - 1]?.day ?? "")}</span>
+              <span>{compactDate(cumulativeDailyPerformance[0]?.day ?? "")}</span>
+              <span>{compactDate(cumulativeDailyPerformance[cumulativeDailyPerformance.length - 1]?.day ?? "")}</span>
             </div>
           </div>
 
           <div className="rounded-xl border border-black/10 p-3 dark:border-white/10">
             <div className="mb-2 flex items-center justify-between">
-              <p className="text-xs font-semibold uppercase tracking-wide text-black/60 dark:text-white/60">Progression commissions</p>
+              <p className="text-xs font-semibold uppercase tracking-wide text-black/60 dark:text-white/60">Progression commissions cumulées</p>
               <p className={`text-xs font-semibold ${commissionTrendPercent >= 0 ? "text-emerald-600" : "text-red-600"}`}>
                 {commissionTrendPercent >= 0 ? "+" : ""}{commissionTrendPercent.toFixed(1)}%
               </p>
             </div>
             <p className="text-sm font-semibold">{formatCurrency(commissionEnd)}</p>
-            <p className="mb-2 text-[11px] text-black/60 dark:text-white/60">Dernier point • Début {formatCurrency(commissionStart)}</p>
+            <p className="mb-2 text-[11px] text-black/60 dark:text-white/60">Cumul historique • Début {formatCurrency(commissionStart)}</p>
             <svg viewBox="0 0 280 80" className="h-20 w-full">
               <path d={commissionCurvePath} fill="none" stroke="currentColor" strokeWidth="2.2" className="text-black/70 dark:text-white/70" />
             </svg>
             <div className="mt-1 flex justify-between text-[10px] text-black/45 dark:text-white/45">
-              <span>{compactDate(dailyPerformance[0]?.day ?? "")}</span>
-              <span>{compactDate(dailyPerformance[dailyPerformance.length - 1]?.day ?? "")}</span>
+              <span>{compactDate(cumulativeDailyPerformance[0]?.day ?? "")}</span>
+              <span>{compactDate(cumulativeDailyPerformance[cumulativeDailyPerformance.length - 1]?.day ?? "")}</span>
             </div>
           </div>
 
@@ -540,7 +579,7 @@ export default async function TicketsPage({
             </div>
           </div>
         </div>
-        {dailyPerformance.length === 0 ? (
+        {cumulativeDailyPerformance.length === 0 ? (
           <p className="mt-3 text-xs text-black/55 dark:text-white/55">Aucune performance à afficher pour cette période.</p>
         ) : null}
       </section>
