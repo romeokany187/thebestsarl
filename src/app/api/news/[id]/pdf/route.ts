@@ -8,7 +8,7 @@ import { requireApiModuleAccess } from "@/lib/rbac";
 
 const PAGE_WIDTH = 595;
 const PAGE_HEIGHT = 842;
-const TEXT_BLACK = rgb(0, 0, 0);
+const TEXT_BLACK = rgb(0.06, 0.06, 0.06);
 
 type RouteContext = {
   params: Promise<{ id: string }>;
@@ -73,15 +73,15 @@ function drawHeader(logo: PDFImage | null, page: PDFPage, titleFont: PDFFont, te
   page.drawText("COMMUNIQUÉ OFFICIEL", {
     x: 220,
     y: height - 74,
-    size: 11,
-    font: textFont,
+    size: 11.5,
+    font: titleFont,
     color: TEXT_BLACK,
   });
 
   page.drawText("Direction Générale", {
     x: 220,
     y: height - 92,
-    size: 10,
+    size: 10.5,
     font: titleFont,
     color: TEXT_BLACK,
   });
@@ -107,17 +107,17 @@ function drawFooter(page: PDFPage, fontRegular: PDFFont, printedBy: string) {
   page.drawText(`Document officiel - Direction Générale`, {
     x: 38,
     y: 26,
-    size: 8.5,
+    size: 8.2,
     font: fontRegular,
     color: TEXT_BLACK,
   });
 
   const rightText = `Imprimé par: ${printedBy}`;
-  const rightWidth = fontRegular.widthOfTextAtSize(rightText, 8.5);
+  const rightWidth = fontRegular.widthOfTextAtSize(rightText, 8.2);
   page.drawText(rightText, {
     x: width - rightWidth - 38,
     y: 26,
-    size: 8.5,
+    size: 8.2,
     font: fontRegular,
     color: TEXT_BLACK,
   });
@@ -126,12 +126,12 @@ function drawFooter(page: PDFPage, fontRegular: PDFFont, printedBy: string) {
 function drawPageNumber(page: PDFPage, fontRegular: PDFFont, index: number, total: number) {
   const { width } = page.getSize();
   const text = `Page ${index}/${total}`;
-  const textWidth = fontRegular.widthOfTextAtSize(text, 8.5);
+  const textWidth = fontRegular.widthOfTextAtSize(text, 8.2);
 
   page.drawText(text, {
     x: (width - textWidth) / 2,
     y: 26,
-    size: 8.5,
+    size: 8.2,
     font: fontRegular,
     color: TEXT_BLACK,
   });
@@ -141,12 +141,13 @@ function drawStamp(page: PDFPage, stampImage: PDFImage | null) {
   if (!stampImage) return;
   const fitted = getContainedSize(stampImage, 126, 126, true);
 
+  const { width } = page.getSize();
   page.drawImage(stampImage, {
-    x: 276,
-    y: 34,
+    x: (width - fitted.width) / 2,
+    y: 44,
     width: fitted.width,
     height: fitted.height,
-    opacity: 0.96,
+    opacity: 1,
   });
 }
 
@@ -292,7 +293,7 @@ export async function GET(request: NextRequest, context: RouteContext) {
   page.drawText(post.title, {
     x: Math.max(38, (PAGE_WIDTH - titleWidth) / 2),
     y,
-    size: 17,
+    size: 18,
     font: fontBold,
     color: TEXT_BLACK,
   });
@@ -301,7 +302,7 @@ export async function GET(request: NextRequest, context: RouteContext) {
   page.drawText(baseMetaText, {
     x: 38,
     y,
-    size: 10.2,
+    size: 11,
     font: fontBold,
     color: TEXT_BLACK,
   });
@@ -310,7 +311,7 @@ export async function GET(request: NextRequest, context: RouteContext) {
   page.drawText(subjectText, {
     x: 38,
     y,
-    size: 11,
+    size: 11.5,
     font: fontBold,
     color: TEXT_BLACK,
   });
@@ -325,7 +326,7 @@ export async function GET(request: NextRequest, context: RouteContext) {
       page.drawText(`Suite du communiqué: ${post.title}`, {
         x: 38,
         y: PAGE_HEIGHT - 132,
-        size: 13,
+        size: 13.5,
         font: fontBold,
         color: TEXT_BLACK,
       });
@@ -336,11 +337,11 @@ export async function GET(request: NextRequest, context: RouteContext) {
     page.drawText(line, {
       x: 38,
       y,
-      size: 11,
+      size: 11.8,
       font: fontBold,
       color: TEXT_BLACK,
     });
-    y -= line ? 15 : 10;
+    y -= line ? 17 : 11;
   }
 
   const pages = pdf.getPages();
