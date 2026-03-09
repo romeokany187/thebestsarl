@@ -1,0 +1,299 @@
+import { Prisma } from "@prisma/client";
+import { NextRequest, NextResponse } from "next/server";
+import { z } from "zod";
+import { prisma } from "@/lib/prisma";
+import { requireApiRoles } from "@/lib/rbac";
+
+const actionSchema = z.object({
+  entityType: z.enum(["TICKET_SALE", "WORKER_REPORT", "NEED_REQUEST", "ATTENDANCE"]),
+  entityId: z.string().min(1),
+  action: z.enum([
+    "AUDIT_IMPORT",
+    "AUDIT_AUTO_CONTROL",
+    "AUDIT_EXPORT",
+    "AUDIT_SIGNAL",
+    "AUDIT_COMMENT",
+    "AUDIT_CONFORMITY_SAVE",
+    "AUDIT_VALIDATE",
+    "AUDIT_REJECT",
+  ]),
+  payload: z.record(z.string(), z.unknown()).optional(),
+});
+
+function toAuditEntityType(entityType: string) {
+  return `AUDIT_${entityType}`;
+}
+
+function extractStateFromTrail(
+  trail: Array<{ action: string; createdAt: Date; actor: { name: string }; payload: unknown }>,
+) {
+  let compliance = {
+    documentsOk: false,
+    amountsOk: false,
+    processOk: false,
+    riskChecked: false,
+  };
+  let decision: "PENDING" | "VALIDATED" | "REJECTED" = "PENDING";
+  const comments: Array<{ text: string; createdAt: string; author: string }> = [];
+
+  for (const item of trail) {
+    if (item.action === "AUDIT_CONFORMITY_SAVE" && typeof item.payload === "object" && item.payload) {
+      const maybeCompliance = (item.payload as { compliance?: typeof compliance }).compliance;
+      if (maybeCompliance) {
+        compliance = {
+          documentsOk: Boolean(maybeCompliance.documentsOk),
+          amountsOk: Boolean(maybeCompliance.amountsOk),
+          processOk: Boolean(maybeCompliance.processOk),
+          riskChecked: Boolean(maybeCompliance.riskChecked),
+        };
+      }
+    }
+
+    if (item.action === "AUDIT_VALIDATE") {
+      decision = "VALIDATED";
+    }
+
+    if (item.action === "AUDIT_REJECT") {
+      decision = "REJECTED";
+    }
+
+    if (item.action === "AUDIT_COMMENT" && typeof item.payload === "object" && item.payload) {
+      const text = (item.payload as { text?: string }).text;
+      if (text && text.trim()) {
+        comments.push({
+          text,
+          createdAt: item.createdAt.toISOString(),
+          author: item.actor.name,
+        });
+      }
+    }
+  }
+
+  return {
+    compliance,
+    decision,
+    comments,
+  };
+}
+
+async function buildDossierDetail(entityType: string, entityId: string) {
+  if (entityType === "TICKET_SALE") {
+    const ticket = await prisma.ticketSale.findUnique({
+      where: { id: entityId },
+      include: {
+        airline: { select: { name: true, code: true } },
+        seller: { select: { name: true } },
+        payments: { select: { amount: true, method: true, paidAt: true } },
+      },
+    });
+
+    if (!ticket) return null;
+
+    const paidAmount = ticket.payments.reduce((sum, payment) => sum + payment.amount, 0);
+    const remaining = Math.max(0, ticket.amount - paidAmount);
+
+    return {
+      header: {
+        title: `${ticket.ticketNumber} • ${ticket.customerName}`,
+        subtitle: `${ticket.airline.code} - ${ticket.airline.name} • Agent: ${ticket.seller.name}`,
+        status: ticket.paymentStatus,
+      },
+      financial: [
+        { label: "Facturé", value: `${ticket.amount.toFixed(2)} ${ticket.currency}` },
+        { label: "Encaissé", value: `${paidAmount.toFixed(2)} ${ticket.currency}` },
+        { label: "Reste", value: `${remaining.toFixed(2)} ${ticket.currency}` },
+        { label: "Marge agence", value: `${ticket.agencyMarkupAmount.toFixed(2)} ${ticket.currency}` },
+        { label: "Commission", value: `${ticket.commissionAmount.toFixed(2)} ${ticket.currency}` },
+      ],
+      conformity: [
+        { label: "Nature vente", value: ticket.saleNature },
+        { label: "Statut paiement", value: ticket.paymentStatus },
+        { label: "Voyage", value: new Date(ticket.travelDate).toLocaleDateString() },
+      ],
+    };
+  }
+
+  if (entityType === "WORKER_REPORT") {
+    const report = await prisma.workerReport.findUnique({
+      where: { id: entityId },
+      include: {
+        author: { select: { name: true } },
+      },
+    });
+
+    if (!report) return null;
+
+    return {
+      header: {
+        title: report.title,
+        subtitle: `Auteur: ${report.author.name}`,
+        status: report.status,
+      },
+      financial: [
+        { label: "Période", value: `${new Date(report.periodStart).toLocaleDateString()} -> ${new Date(report.periodEnd).toLocaleDateString()}` },
+        { label: "Type", value: report.period },
+        { label: "Montant", value: "N/A" },
+      ],
+      conformity: [
+        { label: "Statut", value: report.status },
+        { label: "Soumis", value: report.submittedAt ? new Date(report.submittedAt).toLocaleString() : "Non" },
+        { label: "Validé", value: report.approvedAt ? new Date(report.approvedAt).toLocaleString() : "Non" },
+      ],
+    };
+  }
+
+  if (entityType === "NEED_REQUEST") {
+    const need = await prisma.needRequest.findUnique({
+      where: { id: entityId },
+      include: {
+        requester: { select: { name: true } },
+      },
+    });
+
+    if (!need) return null;
+
+    return {
+      header: {
+        title: need.title,
+        subtitle: `Demandeur: ${need.requester.name}`,
+        status: need.status,
+      },
+      financial: [
+        { label: "Montant estimé", value: `${(need.estimatedAmount ?? 0).toFixed(2)} ${need.currency ?? "XAF"}` },
+        { label: "Quantité", value: `${need.quantity} ${need.unit}` },
+      ],
+      conformity: [
+        { label: "Catégorie", value: need.category },
+        { label: "Statut", value: need.status },
+        { label: "Soumis le", value: need.submittedAt ? new Date(need.submittedAt).toLocaleString() : "N/A" },
+      ],
+    };
+  }
+
+  const attendance = await prisma.attendance.findUnique({
+    where: { id: entityId },
+    include: {
+      user: { select: { name: true } },
+    },
+  });
+
+  if (!attendance) return null;
+
+  return {
+    header: {
+      title: `Présence • ${attendance.user.name}`,
+      subtitle: `${new Date(attendance.date).toLocaleDateString()}`,
+      status: attendance.status,
+    },
+    financial: [
+      { label: "Retard", value: `${attendance.latenessMins} min` },
+      { label: "Heures supp.", value: `${attendance.overtimeMins} min` },
+      { label: "Montant", value: "N/A" },
+    ],
+    conformity: [
+      { label: "Entrée", value: attendance.clockIn ? new Date(attendance.clockIn).toLocaleTimeString() : "Non signée" },
+      { label: "Sortie", value: attendance.clockOut ? new Date(attendance.clockOut).toLocaleTimeString() : "Non signée" },
+      { label: "Localisation", value: attendance.locationStatus },
+    ],
+  };
+}
+
+export async function GET(request: NextRequest) {
+  const access = await requireApiRoles(["ADMIN", "MANAGER", "ACCOUNTANT"]);
+  if (access.error) {
+    return access.error;
+  }
+
+  const entityType = request.nextUrl.searchParams.get("entityType");
+  const entityId = request.nextUrl.searchParams.get("entityId");
+
+  if (!entityType || !entityId) {
+    return NextResponse.json({ error: "entityType et entityId sont requis." }, { status: 400 });
+  }
+
+  if (!["TICKET_SALE", "WORKER_REPORT", "NEED_REQUEST", "ATTENDANCE"].includes(entityType)) {
+    return NextResponse.json({ error: "Type de dossier invalide." }, { status: 400 });
+  }
+
+  const [detail, trail] = await Promise.all([
+    buildDossierDetail(entityType, entityId),
+    prisma.auditLog.findMany({
+      where: {
+        entityType: toAuditEntityType(entityType),
+        entityId,
+      },
+      include: {
+        actor: { select: { name: true } },
+      },
+      orderBy: { createdAt: "asc" },
+      take: 300,
+    }),
+  ]);
+
+  if (!detail) {
+    return NextResponse.json({ error: "Dossier introuvable." }, { status: 404 });
+  }
+
+  const state = extractStateFromTrail(trail);
+
+  return NextResponse.json({
+    data: {
+      detail,
+      trail,
+      state,
+    },
+  });
+}
+
+export async function POST(request: NextRequest) {
+  const access = await requireApiRoles(["ADMIN", "MANAGER", "ACCOUNTANT"]);
+  if (access.error) {
+    return access.error;
+  }
+
+  const body = await request.json();
+  const parsed = actionSchema.safeParse(body);
+
+  if (!parsed.success) {
+    return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
+  }
+
+  const auditEntityType = toAuditEntityType(parsed.data.entityType);
+  const safePayload = (parsed.data.payload ?? {}) as Prisma.InputJsonValue;
+
+  const created = await prisma.auditLog.create({
+    data: {
+      actorId: access.session.user.id,
+      action: parsed.data.action,
+      entityType: auditEntityType,
+      entityId: parsed.data.entityId,
+      payload: safePayload,
+    },
+  });
+
+  if (parsed.data.action === "AUDIT_SIGNAL") {
+    const recipients = await prisma.user.findMany({
+      where: { role: { in: ["ADMIN", "MANAGER", "ACCOUNTANT"] } },
+      select: { id: true },
+      take: 120,
+    });
+
+    if (recipients.length > 0) {
+      await prisma.userNotification.createMany({
+        data: recipients.map((user) => ({
+          userId: user.id,
+          title: "Signalement audit",
+          message: `Signalement sur ${parsed.data.entityType} (${parsed.data.entityId}).`,
+          type: "AUDIT",
+          metadata: {
+            entityType: parsed.data.entityType,
+            entityId: parsed.data.entityId,
+            payload: JSON.stringify(parsed.data.payload ?? {}),
+          } as Prisma.InputJsonValue,
+        })),
+      });
+    }
+  }
+
+  return NextResponse.json({ data: created }, { status: 201 });
+}
