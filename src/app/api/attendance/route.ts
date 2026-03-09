@@ -11,11 +11,25 @@ export async function GET(request: NextRequest) {
 
   const { searchParams } = new URL(request.url);
   const requestedUserId = searchParams.get("userId");
+  const startDate = searchParams.get("startDate");
+  const endDate = searchParams.get("endDate");
   const userId = access.role === "EMPLOYEE" ? access.session.user.id : requestedUserId;
+
+  let dateFilter: { gte: Date; lt: Date } | undefined;
+  if (startDate && endDate) {
+    const start = new Date(`${startDate}T00:00:00.000Z`);
+    const end = new Date(`${endDate}T00:00:00.000Z`);
+
+    if (!Number.isNaN(start.getTime()) && !Number.isNaN(end.getTime())) {
+      end.setUTCDate(end.getUTCDate() + 1);
+      dateFilter = { gte: start, lt: end };
+    }
+  }
 
   const records = await prisma.attendance.findMany({
     where: {
       ...(userId ? { userId } : {}),
+      ...(dateFilter ? { date: dateFilter } : {}),
     },
     include: {
       user: {

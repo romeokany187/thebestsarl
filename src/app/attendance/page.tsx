@@ -1,5 +1,6 @@
 import { AppShell } from "@/components/app-shell";
 import { AttendanceForm } from "@/components/attendance-form";
+import { AttendanceRecordsTable } from "@/components/attendance-records-table";
 import { prisma } from "@/lib/prisma";
 import { requirePageRoles } from "@/lib/rbac";
 
@@ -154,53 +155,12 @@ export default async function AttendancePage({
           </section>
         )}
 
-        <div className="overflow-hidden rounded-xl border border-black/10 bg-white dark:border-white/10 dark:bg-zinc-900">
-          <div className="overflow-x-auto">
-            <table className="min-w-full text-sm">
-            <thead className="bg-black/5 dark:bg-white/10">
-              <tr>
-                <th className="px-3 py-2 text-left">Employé</th>
-                <th className="px-3 py-2 text-left">Date</th>
-                <th className="px-3 py-2 text-left">Entrée</th>
-                <th className="px-3 py-2 text-left">Sortie</th>
-                <th className="px-3 py-2 text-left">Signé à</th>
-                <th className="px-3 py-2 text-left">Localisation détectée</th>
-                <th className="px-3 py-2 text-left">Adresse détectée</th>
-                <th className="px-3 py-2 text-left">Retard</th>
-                <th className="px-3 py-2 text-left">Heures supp.</th>
-              </tr>
-            </thead>
-            <tbody>
-              {records.map((row) => (
-                <tr key={row.id} className="border-t border-black/5 dark:border-white/10">
-                  <td className="px-3 py-2">{row.user.name}</td>
-                  <td className="px-3 py-2">{new Date(row.date).toLocaleDateString()}</td>
-                  <td className="px-3 py-2">{row.clockIn ? new Date(row.clockIn).toLocaleTimeString() : "-"}</td>
-                  <td className="px-3 py-2">{row.clockOut ? new Date(row.clockOut).toLocaleTimeString() : "-"}</td>
-                  <td className="px-3 py-2">{row.signedAt ? new Date(row.signedAt).toLocaleString() : "-"}</td>
-                  <td className="px-3 py-2">
-                    {row.locationStatus}
-                    {row.matchedSite ? ` (${row.matchedSite.name})` : ""}
-                    {row.signLatitude != null && row.signLongitude != null
-                      ? ` • ${row.signLatitude.toFixed(5)}, ${row.signLongitude.toFixed(5)}`
-                      : ""}
-                  </td>
-                  <td className="px-3 py-2">{row.signAddress ?? "-"}</td>
-                  <td className="px-3 py-2">{row.latenessMins} min</td>
-                  <td className="px-3 py-2">{row.overtimeMins} min</td>
-                </tr>
-              ))}
-              {records.length === 0 ? (
-                <tr>
-                  <td colSpan={9} className="px-3 py-6 text-center text-sm text-black/55 dark:text-white/55">
-                    Aucune présence trouvée pour cette période.
-                  </td>
-                </tr>
-              ) : null}
-            </tbody>
-            </table>
-          </div>
-        </div>
+        <AttendanceRecordsTable
+          initialRecords={records}
+          startDate={range.startRaw}
+          endDate={range.endRaw}
+          userId={selectedUserId}
+        />
       </div>
     </AppShell>
   );

@@ -99,6 +99,7 @@ export function AttendanceForm({ role }: { role: AppRole }) {
           const refreshPayload = await refreshResponse.json();
           applyTodayStatus(refreshPayload?.data);
         }
+        window.dispatchEvent(new Event("attendance:updated"));
         setIsSigning(false);
       },
       () => {
