@@ -141,10 +141,9 @@ export default async function PaymentsPage({
   searchParams?: Promise<SearchParams>;
 }) {
   const { role, session } = await requirePageModuleAccess("payments", ["ADMIN", "MANAGER", "ACCOUNTANT", "EMPLOYEE"]);
-  if (
-    role === "EMPLOYEE"
-    && !canProcessPayments(session.user.jobTitle ?? "")
-  ) {
+  const canOperatePayments = canProcessPayments(session.user.jobTitle ?? "");
+
+  if (role !== "ADMIN" && !canOperatePayments) {
     redirect("/");
   }
   const resolvedSearchParams = (await searchParams) ?? {};
@@ -337,7 +336,7 @@ export default async function PaymentsPage({
         </p>
       </section>
 
-      <PaymentEntryForm tickets={paymentTickets} />
+      {canOperatePayments ? <PaymentEntryForm tickets={paymentTickets} /> : null}
 
       <div className="mb-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <KpiCard label="Total facturé" value={`${totalTicketAmount.toFixed(2)} USD`} />

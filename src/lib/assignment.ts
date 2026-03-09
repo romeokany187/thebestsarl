@@ -56,5 +56,5 @@ export function canSellTickets(jobTitle: string) {
 }
 
 export function canProcessPayments(jobTitle: string) {
-  return jobTitle === "COMPTABLE" || jobTitle === "CAISSIERE" || jobTitle === "DIRECTION_GENERALE";
+  return jobTitle === "COMPTABLE" || jobTitle === "CAISSIERE";
 }
