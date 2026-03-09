@@ -52,16 +52,18 @@ export function TeamAssignmentAdmin({
   teams,
   actorRole,
   actorTeamName,
+  initialSelectedTeamId,
 }: {
   users: UserRow[];
   teams: TeamOption[];
   actorRole: UserRole;
   actorTeamName?: string | null;
+  initialSelectedTeamId?: string;
 }) {
   const [rows, setRows] = useState(users);
   const [teamOptions, setTeamOptions] = useState(teams);
   const [status, setStatus] = useState("");
-  const [selectedTeamId, setSelectedTeamId] = useState(teams[0]?.id ?? "");
+  const [selectedTeamId, setSelectedTeamId] = useState(initialSelectedTeamId ?? teams[0]?.id ?? "");
   const [isTeamWindowOpen, setIsTeamWindowOpen] = useState(false);
   const [selectedUserId, setSelectedUserId] = useState("");
   const [selectedJobTitle, setSelectedJobTitle] = useState<JobTitle>("AGENT_TERRAIN");

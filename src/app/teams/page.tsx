@@ -5,18 +5,22 @@ import { prisma } from "@/lib/prisma";
 
 export const dynamic = "force-dynamic";
 
+type SearchParams = {
+  manageTeam?: string;
+};
+
 function containsAny(value: string, terms: string[]) {
   const normalized = value.toUpperCase();
   return terms.some((term) => normalized.includes(term));
 }
 
-function isFunctionalInternalGroup(name: string) {
-  const normalized = name.trim().toUpperCase();
-  return normalized === "OPERATIONS" || normalized === "SALES";
-}
-
-export default async function TeamsPage() {
+export default async function TeamsPage({
+  searchParams,
+}: {
+  searchParams?: Promise<SearchParams>;
+}) {
   const { role, session } = await requirePageRoles(["ADMIN", "MANAGER", "ACCOUNTANT"]);
+  const resolvedSearchParams = (await searchParams) ?? {};
 
   const [sites, users] = await Promise.all([
     prisma.workSite.findMany({
@@ -66,7 +70,7 @@ export default async function TeamsPage() {
     }
   }
 
-  const organizationTeamsRaw = await prisma.team.findMany({
+  const organizationTeams = await prisma.team.findMany({
     include: {
       users: {
         select: {
@@ -81,8 +85,6 @@ export default async function TeamsPage() {
     orderBy: { name: "asc" },
   });
 
-  const organizationTeams = organizationTeamsRaw.filter((team) => !isFunctionalInternalGroup(team.name));
-
   const headOffice = sites.find((site) =>
     site.type === "OFFICE" && containsAny(site.name, ["KINSHASA", "DIRECTION", "DG"]),
   );
@@ -93,10 +95,13 @@ export default async function TeamsPage() {
 
   const partners = sites.filter((site) => site.type === "PARTNER");
 
-  const fallbackPartners = ["HKSERVICE", "Mr SAMMY"];
-  const displayedPartners = partners.length > 0
-    ? partners.map((partner) => partner.name)
-    : fallbackPartners;
+  const displayedPartners = partners.map((partner) => partner.name);
+
+  const manageTeamName = resolvedSearchParams.manageTeam?.trim() ?? "";
+
+  const selectedManagedTeam = manageTeamName
+    ? organizationTeams.find((team) => team.name.toUpperCase() === manageTeamName.toUpperCase())
+    : null;
 
   const assignmentTargets = organizationTeams.map((team) => ({
     id: team.id,
@@ -126,6 +131,14 @@ export default async function TeamsPage() {
               <span className="rounded-full border border-black/15 bg-black/5 px-2 py-0.5 text-[10px] font-semibold dark:border-white/20 dark:bg-white/10">DG</span>
             </div>
             <p className="mt-2 text-sm font-semibold">{headOffice?.name ?? "Agence de Kinshasa (Direction Générale)"}</p>
+            {headOffice ? (
+              <a
+                href={`/teams?manageTeam=${encodeURIComponent(headOffice.name)}`}
+                className="mt-3 inline-flex rounded-md border border-black/15 px-2.5 py-1 text-[11px] font-semibold hover:bg-black/5 dark:border-white/20 dark:hover:bg-white/10"
+              >
+                Gérer
+              </a>
+            ) : null}
           </article>
 
           <article className="rounded-xl border border-black/10 p-4 dark:border-white/10">
@@ -136,13 +149,26 @@ export default async function TeamsPage() {
             <ul className="mt-2 space-y-2 text-sm">
               {(branches.length > 0
                 ? branches.map((branch) => branch.name)
-                : ["Agence de Mbujimayi", "Agence de Lubumbashi"]
+                : []
               ).map((branch) => (
                 <li key={branch} className="flex items-center justify-between rounded-md border border-black/10 px-2 py-1 dark:border-white/10">
                   <span>{branch}</span>
-                  <span className="rounded-full border border-black/15 bg-black/5 px-2 py-0.5 text-[10px] font-semibold dark:border-white/20 dark:bg-white/10">Succursale</span>
+                  <span className="inline-flex items-center gap-2">
+                    <span className="rounded-full border border-black/15 bg-black/5 px-2 py-0.5 text-[10px] font-semibold dark:border-white/20 dark:bg-white/10">Succursale</span>
+                    <a
+                      href={`/teams?manageTeam=${encodeURIComponent(branch)}`}
+                      className="rounded-md border border-black/15 px-2 py-0.5 text-[10px] font-semibold hover:bg-black/5 dark:border-white/20 dark:hover:bg-white/10"
+                    >
+                      Gérer
+                    </a>
+                  </span>
                 </li>
               ))}
+              {branches.length === 0 ? (
+                <li className="rounded-xl border border-dashed border-black/15 px-3 py-2 text-xs text-black/55 dark:border-white/20 dark:text-white/55">
+                  Aucune succursale disponible.
+                </li>
+              ) : null}
             </ul>
           </article>
 
@@ -155,9 +181,22 @@ export default async function TeamsPage() {
               {displayedPartners.map((partner) => (
                 <li key={partner} className="flex items-center justify-between rounded-md border border-black/10 px-2 py-1 dark:border-white/10">
                   <span>{partner}</span>
-                  <span className="rounded-full border border-black/15 bg-black/5 px-2 py-0.5 text-[10px] font-semibold dark:border-white/20 dark:bg-white/10">Partenaire</span>
+                  <span className="inline-flex items-center gap-2">
+                    <span className="rounded-full border border-black/15 bg-black/5 px-2 py-0.5 text-[10px] font-semibold dark:border-white/20 dark:bg-white/10">Partenaire</span>
+                    <a
+                      href={`/teams?manageTeam=${encodeURIComponent(partner)}`}
+                      className="rounded-md border border-black/15 px-2 py-0.5 text-[10px] font-semibold hover:bg-black/5 dark:border-white/20 dark:hover:bg-white/10"
+                    >
+                      Gérer
+                    </a>
+                  </span>
                 </li>
               ))}
+              {displayedPartners.length === 0 ? (
+                <li className="rounded-xl border border-dashed border-black/15 px-3 py-2 text-xs text-black/55 dark:border-white/20 dark:text-white/55">
+                  Aucun partenaire disponible.
+                </li>
+              ) : null}
             </ul>
           </article>
         </div>
@@ -177,6 +216,7 @@ export default async function TeamsPage() {
           teams={assignmentTargets}
           actorRole={role}
           actorTeamName={session.user.teamName ?? null}
+          initialSelectedTeamId={selectedManagedTeam?.id}
         />
       </section>
     </AppShell>
