@@ -98,11 +98,7 @@ export function hasModuleAccess(params: {
   }
 
   if (module === "audit") {
-    return role === "ACCOUNTANT"
-      || jobTitle === "COMPTABLE"
-      || jobTitle === "AUDITEUR"
-      || jobTitle === "DIRECTION_GENERALE"
-      || teamIncludes(teamName, ["AUDIT"]);
+    return jobTitle === "AUDITEUR";
   }
 
   return false;

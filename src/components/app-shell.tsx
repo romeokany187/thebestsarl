@@ -16,7 +16,7 @@ const links = [
     href: "/audit",
     label: "Audit",
     module: "audit" as AppModule,
-    roles: ["ADMIN", "MANAGER", "ACCOUNTANT"] as AppRole[],
+    roles: ["ADMIN", "MANAGER", "EMPLOYEE", "ACCOUNTANT"] as AppRole[],
   },
   {
     href: "/sales",

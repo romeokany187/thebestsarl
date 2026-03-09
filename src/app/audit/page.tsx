@@ -38,7 +38,8 @@ export default async function AuditPage({
 }: {
   searchParams?: Promise<SearchParams>;
 }) {
-  const { role } = await requirePageModuleAccess("audit", ["ADMIN", "MANAGER", "ACCOUNTANT"]);
+  const { role, session } = await requirePageModuleAccess("audit", ["ADMIN", "MANAGER", "EMPLOYEE", "ACCOUNTANT"]);
+  const canWriteAudit = (session.user.jobTitle ?? "").toUpperCase() === "AUDITEUR";
   const resolvedSearchParams = (await searchParams) ?? {};
   const range = dateRangeFromParams(resolvedSearchParams);
 
@@ -239,7 +240,12 @@ export default async function AuditPage({
   const employees = Array.from(new Set(dossiers.map((item) => item.ownerName))).sort((a, b) => a.localeCompare(b, "fr"));
 
   return (
-    <AppShell role={role} accessNote="Espace auditeur: contrôle transverse, traçabilité et validation multi-services.">
+    <AppShell
+      role={role}
+      accessNote={canWriteAudit
+        ? "Espace auditeur: contrôle transverse, traçabilité et validation multi-services."
+        : "Mode lecture: consultation des rapports d'audit uniquement."}
+    >
       <section className="mb-6">
         <h1 className="text-2xl font-semibold tracking-tight">Espace Auditeur</h1>
         <p className="text-sm text-black/60 dark:text-white/60">
@@ -253,6 +259,7 @@ export default async function AuditPage({
         employees={employees}
         defaultStartDate={range.startRaw}
         defaultEndDate={range.endRaw}
+        canWrite={canWriteAudit}
       />
     </AppShell>
   );

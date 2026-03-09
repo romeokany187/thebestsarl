@@ -82,6 +82,7 @@ export function AuditWorkspace({
   employees,
   defaultStartDate,
   defaultEndDate,
+  canWrite,
 }: {
   dossiers: AuditDossier[];
   alerts: {
@@ -92,6 +93,7 @@ export function AuditWorkspace({
   employees: string[];
   defaultStartDate: string;
   defaultEndDate: string;
+  canWrite: boolean;
 }) {
   const router = useRouter();
   const [dossierRows, setDossierRows] = useState(dossiers);
@@ -165,6 +167,11 @@ export function AuditWorkspace({
   }
 
   async function saveAction(action: string, payload?: Record<string, unknown>, useSelected = true) {
+    if (!canWrite) {
+      setStatus("Mode lecture: seules les actions de l'auditeur sont autorisées.");
+      return;
+    }
+
     if (useSelected && !selected) {
       setStatus("Sélectionnez un dossier à auditer.");
       return;
@@ -209,6 +216,11 @@ export function AuditWorkspace({
   }
 
   async function runExternalCompare() {
+    if (!canWrite) {
+      setStatus("Mode lecture: comparaison externe réservée à l'auditeur.");
+      return;
+    }
+
     if (!compareFile) {
       setStatus("Choisissez un fichier CSV externe à comparer.");
       return;
@@ -298,11 +310,14 @@ export function AuditWorkspace({
 
       <section className="rounded-2xl border border-black/10 bg-white p-4 dark:border-white/10 dark:bg-zinc-900">
         <h2 className="text-base font-semibold">5. Actions rapides</h2>
+        {!canWrite ? (
+          <p className="mt-2 text-xs text-black/60 dark:text-white/60">Mode lecture: réservé à l'auditeur.</p>
+        ) : null}
         <div className="mt-3 grid gap-2">
-          <button type="button" disabled={savingAction} onClick={() => void saveAction("AUDIT_IMPORT", { source: "manual" }, false)} className="rounded-md border border-black/15 px-3 py-2 text-sm font-semibold hover:bg-black/5 disabled:opacity-60 dark:border-white/20 dark:hover:bg-white/10">Importer dossiers</button>
-          <button type="button" disabled={savingAction} onClick={() => void saveAction("AUDIT_AUTO_CONTROL", { mode: "standard" }, false)} className="rounded-md border border-black/15 px-3 py-2 text-sm font-semibold hover:bg-black/5 disabled:opacity-60 dark:border-white/20 dark:hover:bg-white/10">Contrôle auto</button>
-          <button type="button" disabled={savingAction} onClick={() => void saveAction("AUDIT_EXPORT", { format: "pdf" }, false)} className="rounded-md border border-black/15 px-3 py-2 text-sm font-semibold hover:bg-black/5 disabled:opacity-60 dark:border-white/20 dark:hover:bg-white/10">Exporter</button>
-          <button type="button" disabled={savingAction} onClick={() => void saveAction("AUDIT_SIGNAL", { level: "medium" }, false)} className="rounded-md bg-black px-3 py-2 text-sm font-semibold text-white disabled:opacity-60 dark:bg-white dark:text-black">Créer signalement</button>
+          <button type="button" disabled={savingAction || !canWrite} onClick={() => void saveAction("AUDIT_IMPORT", { source: "manual" }, false)} className="rounded-md border border-black/15 px-3 py-2 text-sm font-semibold hover:bg-black/5 disabled:opacity-60 dark:border-white/20 dark:hover:bg-white/10">Importer dossiers</button>
+          <button type="button" disabled={savingAction || !canWrite} onClick={() => void saveAction("AUDIT_AUTO_CONTROL", { mode: "standard" }, false)} className="rounded-md border border-black/15 px-3 py-2 text-sm font-semibold hover:bg-black/5 disabled:opacity-60 dark:border-white/20 dark:hover:bg-white/10">Contrôle auto</button>
+          <button type="button" disabled={savingAction || !canWrite} onClick={() => void saveAction("AUDIT_EXPORT", { format: "pdf" }, false)} className="rounded-md border border-black/15 px-3 py-2 text-sm font-semibold hover:bg-black/5 disabled:opacity-60 dark:border-white/20 dark:hover:bg-white/10">Exporter</button>
+          <button type="button" disabled={savingAction || !canWrite} onClick={() => void saveAction("AUDIT_SIGNAL", { level: "medium" }, false)} className="rounded-md bg-black px-3 py-2 text-sm font-semibold text-white disabled:opacity-60 dark:bg-white dark:text-black">Créer signalement</button>
         </div>
 
         <div className="mt-4 rounded-xl border border-black/10 p-3 dark:border-white/10">
@@ -315,7 +330,7 @@ export function AuditWorkspace({
               <option value="RAPPORTS">Rapports employés</option>
             </select>
             <input type="file" accept=".csv" onChange={(e) => setCompareFile(e.target.files?.[0] ?? null)} className="rounded-md border border-black/15 px-3 py-2 text-xs dark:border-white/20" />
-            <button type="button" disabled={compareLoading} onClick={() => void runExternalCompare()} className="rounded-md border border-black/15 px-3 py-2 text-sm font-semibold hover:bg-black/5 disabled:opacity-60 dark:border-white/20 dark:hover:bg-white/10">
+            <button type="button" disabled={compareLoading || !canWrite} onClick={() => void runExternalCompare()} className="rounded-md border border-black/15 px-3 py-2 text-sm font-semibold hover:bg-black/5 disabled:opacity-60 dark:border-white/20 dark:hover:bg-white/10">
               {compareLoading ? "Comparaison..." : "Comparer au système"}
             </button>
             <p className="text-[11px] text-black/60 dark:text-white/60">Format attendu: CSV (exportez Excel en .csv).</p>
@@ -461,6 +476,7 @@ export function AuditWorkspace({
                     <input
                       type="checkbox"
                       checked={state.compliance.documentsOk}
+                      disabled={!canWrite}
                       onChange={async (event) => {
                         const compliance = { ...state.compliance, documentsOk: event.target.checked };
                         setState((prev) => ({ ...prev, compliance }));
@@ -473,6 +489,7 @@ export function AuditWorkspace({
                     <input
                       type="checkbox"
                       checked={state.compliance.amountsOk}
+                      disabled={!canWrite}
                       onChange={async (event) => {
                         const compliance = { ...state.compliance, amountsOk: event.target.checked };
                         setState((prev) => ({ ...prev, compliance }));
@@ -485,6 +502,7 @@ export function AuditWorkspace({
                     <input
                       type="checkbox"
                       checked={state.compliance.processOk}
+                      disabled={!canWrite}
                       onChange={async (event) => {
                         const compliance = { ...state.compliance, processOk: event.target.checked };
                         setState((prev) => ({ ...prev, compliance }));
@@ -497,6 +515,7 @@ export function AuditWorkspace({
                     <input
                       type="checkbox"
                       checked={state.compliance.riskChecked}
+                      disabled={!canWrite}
                       onChange={async (event) => {
                         const compliance = { ...state.compliance, riskChecked: event.target.checked };
                         setState((prev) => ({ ...prev, compliance }));
@@ -532,10 +551,12 @@ export function AuditWorkspace({
                 value={comment}
                 onChange={(event) => setComment(event.target.value)}
                 placeholder="Commentaire d'audit..."
+                disabled={!canWrite}
                 className="min-h-20 rounded-md border border-black/15 px-3 py-2 text-sm dark:border-white/20"
               />
               <button
                 type="button"
+                disabled={!canWrite}
                 onClick={async () => {
                   if (!comment.trim()) {
                     setStatus("Ajoutez un commentaire avant enregistrement.");
@@ -549,8 +570,8 @@ export function AuditWorkspace({
                 Commenter
               </button>
               <div className="flex items-center gap-2">
-                <button type="button" disabled={savingAction} onClick={() => void saveAction("AUDIT_VALIDATE", { decision: "VALIDATED" })} className="rounded-md bg-emerald-700 px-3 py-2 text-sm font-semibold text-white disabled:opacity-60">Valider</button>
-                <button type="button" disabled={savingAction} onClick={() => void saveAction("AUDIT_REJECT", { decision: "REJECTED" })} className="rounded-md bg-red-700 px-3 py-2 text-sm font-semibold text-white disabled:opacity-60">Rejeter</button>
+                <button type="button" disabled={savingAction || !canWrite} onClick={() => void saveAction("AUDIT_VALIDATE", { decision: "VALIDATED" })} className="rounded-md bg-emerald-700 px-3 py-2 text-sm font-semibold text-white disabled:opacity-60">Valider</button>
+                <button type="button" disabled={savingAction || !canWrite} onClick={() => void saveAction("AUDIT_REJECT", { decision: "REJECTED" })} className="rounded-md bg-red-700 px-3 py-2 text-sm font-semibold text-white disabled:opacity-60">Rejeter</button>
               </div>
             </div>
 
