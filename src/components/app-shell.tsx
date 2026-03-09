@@ -47,11 +47,6 @@ const links = [
     roles: ["ADMIN", "MANAGER", "EMPLOYEE", "ACCOUNTANT"] as AppRole[],
   },
   {
-    href: "/inbox",
-    label: "Inbox",
-    roles: ["ADMIN", "MANAGER", "EMPLOYEE", "ACCOUNTANT"] as AppRole[],
-  },
-  {
     href: "/archives",
     label: "Archives",
     roles: ["ADMIN", "MANAGER", "EMPLOYEE", "ACCOUNTANT"] as AppRole[],
@@ -63,7 +58,7 @@ const links = [
   },
   {
     href: "/profile",
-    label: "Profil",
+    label: "Profil & Inbox",
     roles: ["ADMIN", "MANAGER", "EMPLOYEE", "ACCOUNTANT"] as AppRole[],
   },
   { href: "/admin", label: "Admin", roles: ["ADMIN"] as AppRole[] },
