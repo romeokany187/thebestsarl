@@ -96,7 +96,6 @@ export function hasModuleAccess(params: {
 
   if (module === "procurement") {
     return jobTitle === "APPROVISIONNEMENT_MARKETING"
-      || jobTitle === "DIRECTION_GENERALE"
       || teamIncludes(teamName, ["APPRO", "STOCK", "MARKETING"]);
   }
 
