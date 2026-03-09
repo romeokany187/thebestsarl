@@ -113,7 +113,28 @@ function formatCurrency(value: number) {
 }
 
 function compactDate(value: string) {
-  return value.slice(5);
+  return value ? value.slice(5) : "--";
+}
+
+function buildDailyTimeline(start: Date, endExclusive: Date) {
+  const days: string[] = [];
+  const cursor = new Date(Date.UTC(start.getUTCFullYear(), start.getUTCMonth(), start.getUTCDate(), 0, 0, 0, 0));
+  const end = new Date(Date.UTC(
+    endExclusive.getUTCFullYear(),
+    endExclusive.getUTCMonth(),
+    endExclusive.getUTCDate(),
+    0,
+    0,
+    0,
+    0,
+  ));
+
+  while (cursor < end) {
+    days.push(cursor.toISOString().slice(0, 10));
+    cursor.setUTCDate(cursor.getUTCDate() + 1);
+  }
+
+  return days;
 }
 
 function sparklinePath(values: number[], width: number, height: number) {
@@ -263,23 +284,32 @@ export default async function TicketsPage({
     }, new Map<string, { code: string; name: string; tickets: number; sales: number; commissions: number }>()),
   ).sort((a, b) => b[1].sales - a[1].sales).map((item) => item[1]);
 
-  const dailyPerformance = Array.from(
-    ticketsForMetrics.reduce((map, ticket) => {
-      const key = new Date(ticket.soldAt).toISOString().slice(0, 10);
-      const commission = ticket.commissionAmount ?? ticket.amount * (ticket.commissionRateUsed / 100);
-      const existing = map.get(key) ?? {
-        day: key,
-        sales: 0,
-        commissions: 0,
-        tickets: 0,
-      };
-      existing.sales += ticket.amount;
-      existing.commissions += commission;
-      existing.tickets += 1;
-      map.set(key, existing);
-      return map;
-    }, new Map<string, { day: string; sales: number; commissions: number; tickets: number }>()),
-  ).sort((a, b) => a[0].localeCompare(b[0])).map((item) => item[1]);
+  const dailyPerformanceMap = ticketsForMetrics.reduce((map, ticket) => {
+    const key = new Date(ticket.soldAt).toISOString().slice(0, 10);
+    const commission = ticket.commissionAmount ?? ticket.amount * (ticket.commissionRateUsed / 100);
+    const existing = map.get(key) ?? {
+      day: key,
+      sales: 0,
+      commissions: 0,
+      tickets: 0,
+    };
+    existing.sales += ticket.amount;
+    existing.commissions += commission;
+    existing.tickets += 1;
+    map.set(key, existing);
+    return map;
+  }, new Map<string, { day: string; sales: number; commissions: number; tickets: number }>());
+
+  const dailyPerformance = buildDailyTimeline(range.start, range.end).map((day) => {
+    const existing = dailyPerformanceMap.get(day);
+    if (existing) return existing;
+    return {
+      day,
+      sales: 0,
+      commissions: 0,
+      tickets: 0,
+    };
+  });
 
   const maxDailySales = dailyPerformance.reduce((max, point) => Math.max(max, point.sales), 0);
   const maxDailyCommissions = dailyPerformance.reduce((max, point) => Math.max(max, point.commissions), 0);

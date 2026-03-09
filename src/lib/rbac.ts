@@ -72,10 +72,19 @@ export function hasModuleAccess(params: {
     return true;
   }
 
-  if (module === "sales" || module === "tickets") {
+  if (module === "sales") {
     return jobTitle === "COMMERCIAL"
       || jobTitle === "DIRECTION_GENERALE"
       || teamIncludes(teamName, ["SALES", "VENTE", "COMMERCIAL"]);
+  }
+
+  if (module === "tickets") {
+    return jobTitle === "COMMERCIAL"
+      || jobTitle === "AUDITEUR"
+      || jobTitle === "COMPTABLE"
+      || jobTitle === "CAISSIERE"
+      || jobTitle === "DIRECTION_GENERALE"
+      || teamIncludes(teamName, ["SALES", "VENTE", "COMMERCIAL", "AUDIT", "COMPTA", "CAISSE"]);
   }
 
   if (module === "payments") {
