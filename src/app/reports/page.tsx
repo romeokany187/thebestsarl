@@ -1,10 +1,9 @@
 import { AppShell } from "@/components/app-shell";
-import { ApprovalForm } from "@/components/approval-form";
 import { AdminReportsSections } from "@/components/admin-reports-sections";
+import { ReportsLibraryModal } from "@/components/reports-library-modal";
 import { ReportsForm } from "@/components/reports-form";
 import { prisma } from "@/lib/prisma";
 import { requirePageModuleAccess } from "@/lib/rbac";
-import Link from "next/link";
 
 function jobTitleLabel(jobTitle: string) {
   const labels: Record<string, string> = {
@@ -63,6 +62,7 @@ const adminReportSections = [
 
 export default async function ReportsPage() {
   const { session, role } = await requirePageModuleAccess("reports", ["ADMIN", "MANAGER", "EMPLOYEE", "ACCOUNTANT"]);
+  const isPersonalScope = role === "EMPLOYEE" || role === "ACCOUNTANT";
 
   const [users, reports] = await Promise.all([
     prisma.user.findMany({
@@ -70,6 +70,7 @@ export default async function ReportsPage() {
       orderBy: { name: "asc" },
     }),
     prisma.workerReport.findMany({
+      where: isPersonalScope ? { authorId: session.user.id } : {},
       include: {
         author: { select: { name: true, jobTitle: true, team: { select: { name: true } } } },
         reviewer: { select: { name: true } },
@@ -143,32 +144,22 @@ export default async function ReportsPage() {
             </section>
           )}
 
-          <div className="space-y-3">
-            {reports.map((report) => (
-              <article key={report.id} className="rounded-xl border border-black/10 bg-white p-4 dark:border-white/10 dark:bg-zinc-900">
-                <div className="flex flex-wrap items-center justify-between gap-3">
-                  <h3 className="font-semibold">{report.title}</h3>
-                  <span className="rounded-full bg-black/5 px-2 py-1 text-xs dark:bg-white/10">{report.status}</span>
-                </div>
-                <p className="mt-2 text-sm text-black/80 dark:text-white/80">{report.content}</p>
-                <p className="mt-2 text-xs text-black/60 dark:text-white/60">
-                  Auteur: {report.author.name} • Fonction: {jobTitleLabel(report.author.jobTitle)} • Service: {report.author.team?.name ?? "-"} • Période: {report.period}
-                </p>
-                <div className="mt-2">
-                  <Link
-                    href={`/reports/${report.id}/print`}
-                    target="_blank"
-                    className="text-xs font-semibold text-black/70 underline underline-offset-2 dark:text-white/70"
-                  >
-                    Version imprimable PDF
-                  </Link>
-                </div>
-                {canApproveReport ? (
-                  <ApprovalForm reportId={report.id} managers={managers.map((manager) => ({ id: manager.id, name: manager.name }))} />
-                ) : null}
-              </article>
-            ))}
-          </div>
+          <ReportsLibraryModal
+            reports={reports.map((report) => ({
+              id: report.id,
+              title: report.title,
+              content: report.content,
+              period: report.period,
+              status: report.status,
+              authorName: report.author.name,
+              authorJobTitle: jobTitleLabel(report.author.jobTitle),
+              service: report.author.team?.name ?? "-",
+              createdAt: report.createdAt.toISOString(),
+              submittedAt: report.submittedAt ? report.submittedAt.toISOString() : null,
+            }))}
+            managers={managers.map((manager) => ({ id: manager.id, name: manager.name }))}
+            canApprove={canApproveReport}
+          />
         </div>
       )}
     </AppShell>
