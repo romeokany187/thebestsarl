@@ -5,6 +5,7 @@ import { useState } from "react";
 type JobTitle =
   | "COMMERCIAL"
   | "COMPTABLE"
+  | "AUDITEUR"
   | "CAISSIERE"
   | "RELATION_PUBLIQUE"
   | "APPROVISIONNEMENT_MARKETING"
@@ -26,6 +27,12 @@ const rubricByJobTitle: Record<JobTitle, { summary: string; tasks: string; issue
     issues: "Écarts comptables, pièces manquantes, anomalies",
     plan: "Actions de régularisation et clôture suivante",
   },
+  AUDITEUR: {
+    summary: "Résumé des contrôles et vérifications de conformité",
+    tasks: "Dossiers audités, contrôles effectués, vérifications croisées",
+    issues: "Écarts détectés, non-conformités, risques observés",
+    plan: "Actions correctives et plan de suivi d'audit",
+  },
   CAISSIERE: {
     summary: "Résumé des encaissements et décaissements",
     tasks: "Encaissements traités, reçus émis, opérations de caisse",
@@ -33,16 +40,16 @@ const rubricByJobTitle: Record<JobTitle, { summary: string; tasks: string; issue
     plan: "Actions de sécurisation et suivi de caisse",
   },
   RELATION_PUBLIQUE: {
-    summary: "Résumé des interactions institutionnelles et clients",
-    tasks: "Activités de communication, relations partenaires",
-    issues: "Réclamations, incidents d'image, contraintes externes",
-    plan: "Plan d'amélioration relationnelle et communication",
+    summary: "Résumé des activités RP et ressources humaines",
+    tasks: "Communication institutionnelle, suivi du personnel, coordination RH",
+    issues: "Réclamations internes/externes, incidents RH, contraintes organisationnelles",
+    plan: "Plan d'amélioration RP/RH et communication interne",
   },
   APPROVISIONNEMENT_MARKETING: {
-    summary: "Résumé des besoins, commandes et actions marketing",
-    tasks: "Approvisionnements lancés, supports marketing diffusés",
-    issues: "Ruptures, délais fournisseurs, performance campagnes",
-    plan: "Plan d'achat et actions marketing à venir",
+    summary: "Résumé des besoins, commandes et suivi fournisseur",
+    tasks: "Approvisionnements lancés, réceptions et suivi des stocks",
+    issues: "Ruptures, retards fournisseurs, écarts de livraison",
+    plan: "Plan d'achat et priorités d'approvisionnement",
   },
   AGENT_TERRAIN: {
     summary: "Résumé des missions terrain et interventions",

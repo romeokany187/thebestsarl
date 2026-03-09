@@ -36,10 +36,11 @@ function jobTitleLabel(jobTitle: string) {
   const labels: Record<string, string> = {
     COMMERCIAL: "Commercial",
     COMPTABLE: "Comptable",
+    AUDITEUR: "Auditeur",
     CAISSIERE: "Caissière",
-    RELATION_PUBLIQUE: "Relation publique",
-    APPROVISIONNEMENT_MARKETING: "Chargé des approvisionnements marketing",
-    AGENT_TERRAIN: "Agent de terrain",
+    RELATION_PUBLIQUE: "Relations publiques & ressources humaines",
+    APPROVISIONNEMENT_MARKETING: "Chargé des approvisionnements",
+    AGENT_TERRAIN: "Non affecté",
     DIRECTION_GENERALE: "Direction générale",
   };
 

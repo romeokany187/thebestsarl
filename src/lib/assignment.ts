@@ -1,6 +1,7 @@
 export type JobTitleValue =
   | "COMMERCIAL"
   | "COMPTABLE"
+  | "AUDITEUR"
   | "CAISSIERE"
   | "RELATION_PUBLIQUE"
   | "APPROVISIONNEMENT_MARKETING"
@@ -11,10 +12,11 @@ export function jobTitleLabel(jobTitle: string) {
   const labels: Record<string, string> = {
     COMMERCIAL: "Commercial",
     COMPTABLE: "Comptable",
+    AUDITEUR: "Auditeur",
     CAISSIERE: "Caissière",
-    RELATION_PUBLIQUE: "Relation publique",
-    APPROVISIONNEMENT_MARKETING: "Approvisionnement marketing",
-    AGENT_TERRAIN: "Agent de terrain",
+    RELATION_PUBLIQUE: "Relations publiques & ressources humaines",
+    APPROVISIONNEMENT_MARKETING: "Chargé des approvisionnements",
+    AGENT_TERRAIN: "Non affecté",
     DIRECTION_GENERALE: "Direction générale",
   };
 
@@ -30,16 +32,20 @@ export function assignmentCapabilities(jobTitle: string) {
     return ["Encaissements", "Suivi créances", "Validation paiements"];
   }
 
+  if (jobTitle === "AUDITEUR") {
+    return ["Contrôle de conformité", "Analyse des écarts", "Traçabilité des constats"];
+  }
+
   if (jobTitle === "DIRECTION_GENERALE") {
     return ["Supervision globale", "Affectation équipes", "Validation stratégique"];
   }
 
   if (jobTitle === "RELATION_PUBLIQUE") {
-    return ["Suivi partenaires", "Communication externe", "Coordination client"];
+    return ["Relations publiques", "Suivi RH", "Coordination institutionnelle"];
   }
 
   if (jobTitle === "APPROVISIONNEMENT_MARKETING") {
-    return ["Support marketing", "Approvisionnement", "Coordination campagnes"];
+    return ["Approvisionnement", "Suivi fournisseurs", "Coordination logistique"];
   }
 
   return ["Opérations terrain", "Suivi activité", "Support équipe"];

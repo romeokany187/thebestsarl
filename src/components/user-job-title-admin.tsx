@@ -5,6 +5,7 @@ import { useMemo, useState } from "react";
 type JobTitle =
   | "COMMERCIAL"
   | "COMPTABLE"
+  | "AUDITEUR"
   | "CAISSIERE"
   | "RELATION_PUBLIQUE"
   | "APPROVISIONNEMENT_MARKETING"
@@ -23,10 +24,11 @@ type UserRow = {
 const jobOptions: Array<{ value: JobTitle; label: string }> = [
   { value: "COMMERCIAL", label: "Commercial" },
   { value: "COMPTABLE", label: "Comptable" },
+  { value: "AUDITEUR", label: "Auditeur" },
   { value: "CAISSIERE", label: "Caissière" },
-  { value: "RELATION_PUBLIQUE", label: "Relation publique" },
-  { value: "APPROVISIONNEMENT_MARKETING", label: "Chargé approvisionnements marketing" },
-  { value: "AGENT_TERRAIN", label: "Agent de terrain" },
+  { value: "RELATION_PUBLIQUE", label: "Relations publiques & ressources humaines" },
+  { value: "APPROVISIONNEMENT_MARKETING", label: "Chargé des approvisionnements" },
+  { value: "AGENT_TERRAIN", label: "Non affecté" },
   { value: "DIRECTION_GENERALE", label: "Direction générale" },
 ];
 
