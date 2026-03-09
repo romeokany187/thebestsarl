@@ -269,65 +269,10 @@ export function ProcurementHub({
               <input name="title" required placeholder="Objet du besoin" className="rounded-md border px-3 py-2 text-sm" />
               <input name="category" required placeholder="Catégorie" className="rounded-md border px-3 py-2 text-sm" />
               <div className="rounded-lg border border-black/10 p-3 dark:border-white/10">
-                <div className="grid grid-cols-[40px,1.1fr,1.2fr,120px,140px,130px,42px] gap-2 text-[11px] font-semibold uppercase tracking-wide text-black/60 dark:text-white/60">
-                  <span>N°</span>
-                  <span>Libellé</span>
-                  <span>Description</span>
-                  <span>Quantité</span>
-                  <span>Prix unitaire</span>
-                  <span>Prix total</span>
-                  <span />
-                </div>
-                <div className="mt-2 space-y-2">
-                  {needLines.map((line, index) => {
-                    const lineTotal = (Number(line.quantity) || 0) * (Number(line.unitPrice) || 0);
-
-                    return (
-                      <div key={`line-${index}`} className="grid grid-cols-[40px,1.1fr,1.2fr,120px,140px,130px,42px] gap-2">
-                        <div className="rounded-md border px-2 py-2 text-xs text-center">{index + 1}</div>
-                        <input
-                          value={line.designation}
-                          onChange={(event) => updateNeedLine(index, "designation", event.target.value)}
-                          placeholder="Désignation"
-                          className="rounded-md border px-2 py-2 text-sm"
-                        />
-                        <input
-                          value={line.description}
-                          onChange={(event) => updateNeedLine(index, "description", event.target.value)}
-                          placeholder="Description"
-                          className="rounded-md border px-2 py-2 text-sm"
-                        />
-                        <input
-                          type="number"
-                          min="0.01"
-                          step="0.01"
-                          value={line.quantity}
-                          onChange={(event) => updateNeedLine(index, "quantity", event.target.value)}
-                          className="rounded-md border px-2 py-2 text-sm"
-                        />
-                        <input
-                          type="number"
-                          min="0"
-                          step="0.01"
-                          value={line.unitPrice}
-                          onChange={(event) => updateNeedLine(index, "unitPrice", event.target.value)}
-                          className="rounded-md border px-2 py-2 text-sm"
-                        />
-                        <div className="rounded-md border bg-black/5 px-2 py-2 text-sm dark:bg-white/10">
-                          {lineTotal.toFixed(2)}
-                        </div>
-                        <button
-                          type="button"
-                          onClick={() => removeNeedLine(index)}
-                          className="rounded-md border border-red-300 text-xs text-red-700 hover:bg-red-50 dark:border-red-700/60 dark:text-red-300 dark:hover:bg-red-950/40"
-                        >
-                          ✕
-                        </button>
-                      </div>
-                    );
-                  })}
-                </div>
-                <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
+                <div className="flex items-center justify-between gap-2">
+                  <p className="text-[11px] font-semibold uppercase tracking-wide text-black/60 dark:text-white/60">
+                    Lignes du devis ({needLines.length})
+                  </p>
                   <button
                     type="button"
                     onClick={addNeedLine}
@@ -335,6 +280,68 @@ export function ProcurementHub({
                   >
                     + Ajouter ligne
                   </button>
+                </div>
+
+                <div className="mt-2 max-h-64 space-y-2 overflow-y-auto pr-1">
+                  {needLines.map((line, index) => {
+                    const lineTotal = (Number(line.quantity) || 0) * (Number(line.unitPrice) || 0);
+
+                    return (
+                      <div key={`line-${index}`} className="rounded-md border border-black/10 p-2.5 dark:border-white/10">
+                        <div className="mb-2 flex items-center justify-between gap-2">
+                          <p className="text-xs font-semibold text-black/70 dark:text-white/70">Article {index + 1}</p>
+                          <button
+                            type="button"
+                            onClick={() => removeNeedLine(index)}
+                            className="rounded-md border border-red-300 px-2 py-1 text-[11px] font-semibold text-red-700 hover:bg-red-50 dark:border-red-700/60 dark:text-red-300 dark:hover:bg-red-950/40"
+                          >
+                            Retirer
+                          </button>
+                        </div>
+
+                        <div className="grid gap-2 sm:grid-cols-2">
+                          <input
+                            value={line.designation}
+                            onChange={(event) => updateNeedLine(index, "designation", event.target.value)}
+                            placeholder="Désignation"
+                            className="rounded-md border px-2 py-2 text-sm"
+                          />
+                          <input
+                            value={line.description}
+                            onChange={(event) => updateNeedLine(index, "description", event.target.value)}
+                            placeholder="Description"
+                            className="rounded-md border px-2 py-2 text-sm"
+                          />
+                        </div>
+
+                        <div className="mt-2 grid gap-2 sm:grid-cols-3">
+                          <input
+                            type="number"
+                            min="0.01"
+                            step="0.01"
+                            value={line.quantity}
+                            onChange={(event) => updateNeedLine(index, "quantity", event.target.value)}
+                            placeholder="Quantité"
+                            className="rounded-md border px-2 py-2 text-sm"
+                          />
+                          <input
+                            type="number"
+                            min="0"
+                            step="0.01"
+                            value={line.unitPrice}
+                            onChange={(event) => updateNeedLine(index, "unitPrice", event.target.value)}
+                            placeholder="Prix unitaire"
+                            className="rounded-md border px-2 py-2 text-sm"
+                          />
+                          <div className="flex items-center rounded-md border bg-black/5 px-3 py-2 text-sm font-semibold dark:bg-white/10">
+                            Total: {lineTotal.toFixed(2)}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+                <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
                   <div className="text-sm font-semibold">
                     Total général: {quoteTotal.toFixed(2)}
                   </div>
