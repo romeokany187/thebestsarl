@@ -230,6 +230,7 @@ export function ReportsForm({ users }: { users: UserOption[] }) {
           <option value="DAILY">Journalier</option>
           <option value="WEEKLY">Hebdomadaire</option>
           <option value="MONTHLY">Mensuel</option>
+          <option value="SEMESTER">Semestriel</option>
           <option value="ANNUAL">Annuel</option>
         </select>
         <select name="status" className="rounded-md border px-3 py-2" defaultValue="SUBMITTED">

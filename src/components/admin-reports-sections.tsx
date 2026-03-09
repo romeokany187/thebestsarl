@@ -37,6 +37,7 @@ function periodLabel(period: string) {
   if (period === "DAILY") return "Journalier";
   if (period === "WEEKLY") return "Hebdomadaire";
   if (period === "MONTHLY") return "Mensuel";
+  if (period === "SEMESTER") return "Semestriel";
   if (period === "ANNUAL") return "Annuel";
   return period;
 }

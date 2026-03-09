@@ -86,6 +86,26 @@ export const reportSchema = z.object({
     }
   }
 
+  if (String(value.period) === "SEMESTER") {
+    const sameYear = start.getFullYear() === end.getFullYear();
+    const firstSemester = start.getMonth() === 0
+      && start.getDate() === 1
+      && end.getMonth() === 5
+      && end.getDate() === 30;
+    const secondSemester = start.getMonth() === 6
+      && start.getDate() === 1
+      && end.getMonth() === 11
+      && end.getDate() === 31;
+
+    if (!sameYear || (!firstSemester && !secondSemester)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["periodStart"],
+        message: "Un rapport semestriel doit couvrir soit du 1er janvier au 30 juin, soit du 1er juillet au 31 decembre.",
+      });
+    }
+  }
+
   if (value.period === "ANNUAL") {
     const sameYear = start.getFullYear() === end.getFullYear();
     const isYearWindow = start.getMonth() === 0

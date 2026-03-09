@@ -30,6 +30,7 @@ enum ReportPeriod {
   DAILY
   WEEKLY
   MONTHLY
+  SEMESTER
   ANNUAL
 }
 
