@@ -14,6 +14,8 @@ export const reportSchema = z.object({
   const end = new Date(value.periodEnd);
   start.setHours(0, 0, 0, 0);
   end.setHours(0, 0, 0, 0);
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
 
   if (end < start) {
     ctx.addIssue({
@@ -26,6 +28,14 @@ export const reportSchema = z.object({
 
   const days = Math.floor((end.getTime() - start.getTime()) / 86400000) + 1;
 
+  if (end > today) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["periodEnd"],
+      message: "La date de fin ne peut pas etre dans le futur.",
+    });
+  }
+
   if (value.period === "DAILY" && days !== 1) {
     ctx.addIssue({
       code: z.ZodIssueCode.custom,
@@ -34,20 +44,62 @@ export const reportSchema = z.object({
     });
   }
 
-  if (value.period === "WEEKLY" && (days < 5 || days > 7)) {
-    ctx.addIssue({
-      code: z.ZodIssueCode.custom,
-      path: ["periodEnd"],
-      message: "Un rapport hebdomadaire doit couvrir entre 5 et 7 jours.",
-    });
+  if (value.period === "DAILY") {
+    const daysSinceStart = Math.floor((today.getTime() - start.getTime()) / 86400000);
+    if (daysSinceStart > 1) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["periodStart"],
+        message: "Un rapport journalier doit etre saisi le jour meme ou au plus tard le lendemain.",
+      });
+    }
   }
 
-  if (value.period === "MONTHLY" && (days < 28 || days > 31)) {
-    ctx.addIssue({
-      code: z.ZodIssueCode.custom,
-      path: ["periodEnd"],
-      message: "Un rapport mensuel doit couvrir entre 28 et 31 jours.",
-    });
+  if (value.period === "WEEKLY") {
+    if (days !== 7) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["periodEnd"],
+        message: "Un rapport hebdomadaire doit couvrir exactement 7 jours.",
+      });
+    }
+
+    if (start.getDay() !== 1 || end.getDay() !== 0) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["periodStart"],
+        message: "Un rapport hebdomadaire doit aller du lundi au dimanche.",
+      });
+    }
+  }
+
+  if (value.period === "MONTHLY") {
+    const sameMonth = start.getFullYear() === end.getFullYear() && start.getMonth() === end.getMonth();
+    const lastDayOfMonth = new Date(start.getFullYear(), start.getMonth() + 1, 0).getDate();
+
+    if (!sameMonth || start.getDate() !== 1 || end.getDate() !== lastDayOfMonth) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["periodStart"],
+        message: "Un rapport mensuel doit aller du 1er jour jusqu'au dernier jour du mois.",
+      });
+    }
+  }
+
+  if (value.period === "ANNUAL") {
+    const sameYear = start.getFullYear() === end.getFullYear();
+    const isYearWindow = start.getMonth() === 0
+      && start.getDate() === 1
+      && end.getMonth() === 11
+      && end.getDate() === 31;
+
+    if (!sameYear || !isYearWindow) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["periodStart"],
+        message: "Un rapport annuel doit couvrir du 1er janvier au 31 decembre de la meme annee.",
+      });
+    }
   }
 });
 
