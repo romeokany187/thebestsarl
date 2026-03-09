@@ -48,13 +48,6 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  if (normalizedName.includes("KIWILU")) {
-    return NextResponse.json(
-      { error: "La création de l'équipe KIWILU est verrouillée." },
-      { status: 400 },
-    );
-  }
-
   const cleanName = parsed.data.name.trim();
   const existing = await prisma.team.findUnique({ where: { name: cleanName } });
   if (existing) {
