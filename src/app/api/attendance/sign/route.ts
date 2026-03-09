@@ -35,7 +35,8 @@ function distanceMeters(
 function computeLatenessMinutes(signTime: Date) {
   const officeStart = new Date(signTime);
   officeStart.setHours(8, 30, 0, 0);
-  const deltaMins = Math.round((signTime.getTime() - officeStart.getTime()) / 60000);
+  // Retard starts only after 08:30; partial minutes are not rounded up.
+  const deltaMins = Math.floor((signTime.getTime() - officeStart.getTime()) / 60000);
   return Math.max(0, deltaMins);
 }
 
