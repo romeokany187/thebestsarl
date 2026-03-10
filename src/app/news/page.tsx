@@ -18,11 +18,11 @@ function getNewsCategory(title: string, content: string): NewsCategory {
 }
 
 function categoryMeta(category: NewsCategory) {
-  if (category === "ALERTE") return { label: "Alerte", tone: "bg-red-50 text-red-700 border-red-200", icon: "!" };
-  if (category === "FINANCE") return { label: "Finance", tone: "bg-emerald-50 text-emerald-700 border-emerald-200", icon: "$" };
+  if (category === "ALERTE") return { label: "Alerte", tone: "bg-red-50 text-red-700 border-red-200", icon: "AV" };
+  if (category === "FINANCE") return { label: "Finance", tone: "bg-emerald-50 text-emerald-700 border-emerald-200", icon: "FN" };
   if (category === "RH") return { label: "RH", tone: "bg-amber-50 text-amber-700 border-amber-200", icon: "RH" };
   if (category === "OPERATIONS") return { label: "Opérations", tone: "bg-blue-50 text-blue-700 border-blue-200", icon: "OP" };
-  return { label: "Général", tone: "bg-slate-50 text-slate-700 border-slate-200", icon: "N" };
+  return { label: "Général", tone: "bg-slate-50 text-slate-700 border-slate-200", icon: "CM" };
 }
 
 export default async function NewsPage() {
@@ -39,10 +39,9 @@ export default async function NewsPage() {
     take: 80,
   });
 
-  const [featured, ...others] = news;
-  const grouped = new Map<NewsCategory, typeof others>();
+  const grouped = new Map<NewsCategory, typeof news>();
 
-  for (const item of others) {
+  for (const item of news) {
     const category = getNewsCategory(item.title, item.content);
     const current = grouped.get(category) ?? [];
     current.push(item);
@@ -75,25 +74,6 @@ export default async function NewsPage() {
 
       <div className="grid gap-6 lg:grid-cols-[1fr,340px]">
         <section className="space-y-4">
-          {featured ? (
-            <article className="rounded-2xl border border-black/10 bg-white p-4 shadow-sm dark:border-white/10 dark:bg-zinc-900">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-black/55 dark:text-white/55">A la une</p>
-              <h2 className="mt-1 text-lg font-semibold leading-tight">{featured.title}</h2>
-              <p className="mt-2 line-clamp-5 whitespace-pre-wrap text-sm leading-relaxed text-black/80 dark:text-white/80">{featured.content}</p>
-              <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-black/10 pt-2 text-xs text-black/60 dark:border-white/10 dark:text-white/60">
-                <p>Par {featured.author.name} ({featured.author.email}) • {new Date(featured.createdAt).toLocaleString("fr-FR")}</p>
-                <a
-                  href={`/api/news/${featured.id}/pdf`}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="rounded-md border border-black/15 px-2.5 py-1 font-semibold hover:bg-black/5 dark:border-white/20 dark:hover:bg-white/10"
-                >
-                  Lire PDF
-                </a>
-              </div>
-            </article>
-          ) : null}
-
           {orderedCategories.map((category) => {
             const items = grouped.get(category) ?? [];
             if (items.length === 0) return null;
@@ -112,22 +92,24 @@ export default async function NewsPage() {
                   <span className="text-xs text-black/55 dark:text-white/55">{items.length} publication(s)</span>
                 </div>
 
-                <div className="divide-y divide-black/10 dark:divide-white/10">
+                <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
                   {items.map((item) => (
-                    <article key={item.id} className="py-2 first:pt-0 last:pb-0">
-                      <div className="flex items-start justify-between gap-2">
-                        <h4 className="text-sm font-semibold leading-snug">{item.title}</h4>
+                    <article key={item.id} className="rounded-xl border border-black/10 bg-black/2 p-2.5 dark:border-white/10 dark:bg-white/3">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className={`inline-flex h-6 min-w-6 items-center justify-center rounded-md border px-1.5 text-[10px] font-bold ${meta.tone}`}>
+                          {meta.icon}
+                        </span>
                         <a
                           href={`/api/news/${item.id}/pdf`}
                           target="_blank"
                           rel="noreferrer"
                           className="shrink-0 rounded-md border border-black/15 px-2 py-0.5 text-[11px] font-semibold hover:bg-black/5 dark:border-white/20 dark:hover:bg-white/10"
                         >
-                          PDF
+                          Lire
                         </a>
                       </div>
-                      <p className="mt-1 line-clamp-2 whitespace-pre-wrap text-xs text-black/75 dark:text-white/75">{item.content}</p>
-                      <p className="mt-1 text-[11px] text-black/55 dark:text-white/55">{new Date(item.createdAt).toLocaleString("fr-FR")} • {item.author.name}</p>
+                      <h4 className="mt-2 line-clamp-2 text-sm font-semibold leading-snug">{item.title}</h4>
+                      <p className="mt-1 text-[11px] text-black/55 dark:text-white/55">{new Date(item.createdAt).toLocaleDateString("fr-FR")}</p>
                     </article>
                   ))}
                 </div>
