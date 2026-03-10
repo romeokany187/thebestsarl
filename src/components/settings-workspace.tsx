@@ -9,7 +9,6 @@ type Props = {
   initialEmail: string;
 };
 
-type Density = "comfortable" | "compact";
 type ExportFormat = "PDF" | "CSV" | "XLSX";
 
 export function SettingsWorkspace({ role, initialName, initialEmail }: Props) {
@@ -17,7 +16,6 @@ export function SettingsWorkspace({ role, initialName, initialEmail }: Props) {
   const [profileStatus, setProfileStatus] = useState("");
   const [savingProfile, setSavingProfile] = useState(false);
 
-  const [density, setDensity] = useState<Density>("comfortable");
   const [exportFormat, setExportFormat] = useState<ExportFormat>("PDF");
   const [prefsStatus, setPrefsStatus] = useState("");
   const [adminStatus, setAdminStatus] = useState("");
@@ -26,12 +24,7 @@ export function SettingsWorkspace({ role, initialName, initialEmail }: Props) {
   const [adminCompactTables, setAdminCompactTables] = useState(false);
 
   useEffect(() => {
-    const savedDensity = localStorage.getItem("ui-density");
     const savedExport = localStorage.getItem("default-export-format");
-
-    if (savedDensity === "comfortable" || savedDensity === "compact") {
-      setDensity(savedDensity);
-    }
 
     if (savedExport === "PDF" || savedExport === "CSV" || savedExport === "XLSX") {
       setExportFormat(savedExport);
@@ -52,8 +45,7 @@ export function SettingsWorkspace({ role, initialName, initialEmail }: Props) {
     }
   }, []);
 
-  function saveLocalPreferences(nextDensity: Density, nextExport: ExportFormat) {
-    localStorage.setItem("ui-density", nextDensity);
+  function saveLocalPreferences(nextExport: ExportFormat) {
     localStorage.setItem("default-export-format", nextExport);
     setPrefsStatus("Préférences enregistrées sur ce navigateur.");
   }
@@ -120,22 +112,6 @@ export function SettingsWorkspace({ role, initialName, initialEmail }: Props) {
       </section>
 
       <section className="rounded-2xl border border-black/10 bg-white p-5 shadow-sm dark:border-white/10 dark:bg-zinc-900">
-        <h2 className="text-lg font-semibold">Affichage</h2>
-        <p className="mt-2 text-sm text-black/65 dark:text-white/65">Choisir la densité de l'interface.</p>
-        <div className="mt-4 grid gap-2">
-          <label className="text-xs font-semibold uppercase tracking-wide text-black/60 dark:text-white/60">Densité</label>
-          <select
-            value={density}
-            onChange={(event) => setDensity(event.target.value as Density)}
-            className="rounded-md border border-black/15 px-3 py-2 text-sm dark:border-white/20"
-          >
-            <option value="comfortable">Confort</option>
-            <option value="compact">Compact</option>
-          </select>
-        </div>
-      </section>
-
-      <section className="rounded-2xl border border-black/10 bg-white p-5 shadow-sm dark:border-white/10 dark:bg-zinc-900">
         <h2 className="text-lg font-semibold">Exports</h2>
         <p className="mt-2 text-sm text-black/65 dark:text-white/65">Définir le format d'export par défaut.</p>
         <div className="mt-4 grid gap-2">
@@ -151,7 +127,7 @@ export function SettingsWorkspace({ role, initialName, initialEmail }: Props) {
           </select>
           <button
             type="button"
-            onClick={() => saveLocalPreferences(density, exportFormat)}
+            onClick={() => saveLocalPreferences(exportFormat)}
             className="mt-2 w-fit rounded-md border border-black/15 px-3 py-2 text-xs font-semibold hover:bg-black/5 dark:border-white/15 dark:hover:bg-white/10"
           >
             Enregistrer les préférences
