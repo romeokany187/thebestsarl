@@ -43,6 +43,15 @@ type DossierState = {
   };
   decision: "PENDING" | "VALIDATED" | "REJECTED";
   comments: Array<{ text: string; createdAt: string; author: string }>;
+  actionItems: Array<{
+    id: string;
+    title: string;
+    owner: string;
+    dueDate: string;
+    severity: "LOW" | "MEDIUM" | "HIGH";
+    status: "OPEN" | "IN_PROGRESS" | "CLOSED";
+    updatedAt: string;
+  }>;
 };
 
 type DossierDetail = {
@@ -172,12 +181,17 @@ export function AuditWorkspace({
     },
     decision: "PENDING",
     comments: [],
+    actionItems: [],
   });
   const [comment, setComment] = useState("");
   const [status, setStatus] = useState("");
   const [loadingDetail, setLoadingDetail] = useState(false);
   const [isAuditModalOpen, setIsAuditModalOpen] = useState(false);
   const [savingAction, setSavingAction] = useState(false);
+  const [newActionTitle, setNewActionTitle] = useState("");
+  const [newActionOwner, setNewActionOwner] = useState("");
+  const [newActionDueDate, setNewActionDueDate] = useState("");
+  const [newActionSeverity, setNewActionSeverity] = useState<"LOW" | "MEDIUM" | "HIGH">("MEDIUM");
   const [compareType, setCompareType] = useState<"CAISSE" | "VENTES" | "PRESENCES" | "RAPPORTS">("CAISSE");
   const [compareFile, setCompareFile] = useState<File | null>(null);
   const [compareLoading, setCompareLoading] = useState(false);
@@ -791,6 +805,19 @@ export function AuditWorkspace({
               </div>
 
               <aside className="rounded-lg border border-black/10 p-3 dark:border-white/10">
+                <div className="mb-3 rounded-md border border-black/10 bg-black/5 p-2 text-xs dark:border-white/10 dark:bg-white/5">
+                  <p className="font-semibold">Workflow assistant</p>
+                  <p className="mt-1 text-black/70 dark:text-white/70">
+                    {state.decision === "VALIDATED"
+                      ? "Cloture: dossier conforme."
+                      : state.decision === "REJECTED"
+                        ? "Action corrective requise avant cloture."
+                        : state.compliance.documentsOk && state.compliance.amountsOk && state.compliance.processOk && state.compliance.riskChecked
+                          ? "Pret pour decision: valider ou rejeter."
+                          : "Collecte et verification en cours."}
+                  </p>
+                </div>
+
                 <p className="text-xs font-semibold uppercase tracking-wide text-black/60 dark:text-white/60">Décision audit</p>
                 <p className="mt-1 text-sm">Statut courant: <span className="font-semibold">{state.decision}</span></p>
                 <p className="mt-1 text-xs text-black/60 dark:text-white/60">Motif risque: {selected.riskReason}</p>
@@ -816,6 +843,104 @@ export function AuditWorkspace({
                 <div className="mt-2 grid gap-2 sm:grid-cols-2">
                   <button type="button" disabled={savingAction || !canWrite} onClick={() => void saveAction("AUDIT_VALIDATE", { decision: "VALIDATED" })} className="rounded-md bg-emerald-700 px-3 py-2 text-sm font-semibold text-white disabled:opacity-60">Valider</button>
                   <button type="button" disabled={savingAction || !canWrite} onClick={() => void saveAction("AUDIT_REJECT", { decision: "REJECTED" })} className="rounded-md bg-red-700 px-3 py-2 text-sm font-semibold text-white disabled:opacity-60">Rejeter</button>
+                </div>
+
+                <div className="mt-4 border-t border-black/10 pt-3 dark:border-white/10">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-black/60 dark:text-white/60">Plan d'actions correctives</p>
+                  {canWrite ? (
+                    <div className="mt-2 space-y-2">
+                      <input
+                        value={newActionTitle}
+                        onChange={(event) => setNewActionTitle(event.target.value)}
+                        placeholder="Action a lancer..."
+                        className="w-full rounded-md border border-black/15 px-2 py-1.5 text-xs dark:border-white/20"
+                      />
+                      <div className="grid grid-cols-2 gap-2">
+                        <input
+                          value={newActionOwner}
+                          onChange={(event) => setNewActionOwner(event.target.value)}
+                          placeholder="Responsable"
+                          className="rounded-md border border-black/15 px-2 py-1.5 text-xs dark:border-white/20"
+                        />
+                        <input
+                          type="date"
+                          value={newActionDueDate}
+                          onChange={(event) => setNewActionDueDate(event.target.value)}
+                          className="rounded-md border border-black/15 px-2 py-1.5 text-xs dark:border-white/20"
+                        />
+                      </div>
+                      <div className="grid grid-cols-[1fr,auto] gap-2">
+                        <select
+                          value={newActionSeverity}
+                          onChange={(event) => setNewActionSeverity(event.target.value as "LOW" | "MEDIUM" | "HIGH")}
+                          className="rounded-md border border-black/15 px-2 py-1.5 text-xs dark:border-white/20"
+                        >
+                          <option value="LOW">Priorite basse</option>
+                          <option value="MEDIUM">Priorite moyenne</option>
+                          <option value="HIGH">Priorite haute</option>
+                        </select>
+                        <button
+                          type="button"
+                          onClick={async () => {
+                            if (!newActionTitle.trim()) {
+                              setStatus("Renseignez le titre de l'action.");
+                              return;
+                            }
+                            const id = `act-${Date.now()}`;
+                            await saveAction("AUDIT_ACTION_CREATE", {
+                              id,
+                              title: newActionTitle.trim(),
+                              owner: newActionOwner.trim() || "Non assigne",
+                              dueDate: newActionDueDate,
+                              severity: newActionSeverity,
+                            });
+                            setNewActionTitle("");
+                            setNewActionOwner("");
+                            setNewActionDueDate("");
+                            setNewActionSeverity("MEDIUM");
+                          }}
+                          className="rounded-md border border-black/15 px-2 py-1.5 text-xs font-semibold hover:bg-black/5 dark:border-white/20 dark:hover:bg-white/10"
+                        >
+                          Ajouter
+                        </button>
+                      </div>
+                    </div>
+                  ) : null}
+
+                  <ul className="mt-2 space-y-2">
+                    {state.actionItems.map((item) => (
+                      <li key={item.id} className="rounded-md border border-black/10 px-2 py-2 text-xs dark:border-white/10">
+                        <p className="font-semibold">{item.title}</p>
+                        <p className="mt-0.5 text-black/60 dark:text-white/60">{item.owner} • echeance {item.dueDate || "non definie"} • {item.severity}</p>
+                        <div className="mt-1 flex flex-wrap gap-1">
+                          <span className="rounded-full border border-black/15 px-2 py-0.5 dark:border-white/20">{item.status}</span>
+                          {canWrite && item.status !== "IN_PROGRESS" && item.status !== "CLOSED" ? (
+                            <button
+                              type="button"
+                              onClick={() => void saveAction("AUDIT_ACTION_PROGRESS", { id: item.id, status: "IN_PROGRESS" })}
+                              className="rounded-full border border-black/15 px-2 py-0.5 font-semibold hover:bg-black/5 dark:border-white/20 dark:hover:bg-white/10"
+                            >
+                              Demarrer
+                            </button>
+                          ) : null}
+                          {canWrite && item.status !== "CLOSED" ? (
+                            <button
+                              type="button"
+                              onClick={() => void saveAction("AUDIT_ACTION_CLOSE", { id: item.id })}
+                              className="rounded-full border border-emerald-600 px-2 py-0.5 font-semibold text-emerald-700 hover:bg-emerald-50 dark:border-emerald-400 dark:text-emerald-300 dark:hover:bg-emerald-900/30"
+                            >
+                              Cloturer
+                            </button>
+                          ) : null}
+                        </div>
+                      </li>
+                    ))}
+                    {state.actionItems.length === 0 ? (
+                      <li className="rounded-md border border-black/10 px-2 py-2 text-xs text-black/60 dark:border-white/10 dark:text-white/60">
+                        Aucune action corrective enregistree sur ce dossier.
+                      </li>
+                    ) : null}
+                  </ul>
                 </div>
               </aside>
             </div>

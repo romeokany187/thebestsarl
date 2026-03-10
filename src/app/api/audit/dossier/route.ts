@@ -16,6 +16,9 @@ const actionSchema = z.object({
     "AUDIT_CONFORMITY_SAVE",
     "AUDIT_VALIDATE",
     "AUDIT_REJECT",
+    "AUDIT_ACTION_CREATE",
+    "AUDIT_ACTION_PROGRESS",
+    "AUDIT_ACTION_CLOSE",
   ]),
   payload: z.record(z.string(), z.unknown()).optional(),
 });
@@ -35,6 +38,15 @@ function extractStateFromTrail(
   };
   let decision: "PENDING" | "VALIDATED" | "REJECTED" = "PENDING";
   const comments: Array<{ text: string; createdAt: string; author: string }> = [];
+  const actionPlan = new Map<string, {
+    id: string;
+    title: string;
+    owner: string;
+    dueDate: string;
+    severity: "LOW" | "MEDIUM" | "HIGH";
+    status: "OPEN" | "IN_PROGRESS" | "CLOSED";
+    updatedAt: string;
+  }>();
 
   for (const item of trail) {
     if (item.action === "AUDIT_CONFORMITY_SAVE" && typeof item.payload === "object" && item.payload) {
@@ -67,12 +79,63 @@ function extractStateFromTrail(
         });
       }
     }
+
+    if (item.action === "AUDIT_ACTION_CREATE" && typeof item.payload === "object" && item.payload) {
+      const payload = item.payload as {
+        id?: string;
+        title?: string;
+        owner?: string;
+        dueDate?: string;
+        severity?: "LOW" | "MEDIUM" | "HIGH";
+      };
+
+      const id = payload.id?.trim();
+      const title = payload.title?.trim();
+      if (id && title) {
+        actionPlan.set(id, {
+          id,
+          title,
+          owner: payload.owner?.trim() || "Non assigné",
+          dueDate: payload.dueDate?.trim() || "",
+          severity: payload.severity ?? "MEDIUM",
+          status: "OPEN",
+          updatedAt: item.createdAt.toISOString(),
+        });
+      }
+    }
+
+    if (item.action === "AUDIT_ACTION_PROGRESS" && typeof item.payload === "object" && item.payload) {
+      const payload = item.payload as { id?: string; status?: "OPEN" | "IN_PROGRESS" | "CLOSED" };
+      const id = payload.id?.trim();
+      if (id && actionPlan.has(id)) {
+        const current = actionPlan.get(id)!;
+        actionPlan.set(id, {
+          ...current,
+          status: payload.status ?? "IN_PROGRESS",
+          updatedAt: item.createdAt.toISOString(),
+        });
+      }
+    }
+
+    if (item.action === "AUDIT_ACTION_CLOSE" && typeof item.payload === "object" && item.payload) {
+      const payload = item.payload as { id?: string };
+      const id = payload.id?.trim();
+      if (id && actionPlan.has(id)) {
+        const current = actionPlan.get(id)!;
+        actionPlan.set(id, {
+          ...current,
+          status: "CLOSED",
+          updatedAt: item.createdAt.toISOString(),
+        });
+      }
+    }
   }
 
   return {
     compliance,
     decision,
     comments,
+    actionItems: Array.from(actionPlan.values()).sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)),
   };
 }
 
