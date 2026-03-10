@@ -1,8 +1,10 @@
 "use client";
 
 import { FormEvent, useEffect, useState } from "react";
+import type { AppRole } from "@/lib/rbac";
 
 type Props = {
+  role: AppRole;
   initialName: string;
   initialEmail: string;
 };
@@ -10,7 +12,7 @@ type Props = {
 type Density = "comfortable" | "compact";
 type ExportFormat = "PDF" | "CSV" | "XLSX";
 
-export function SettingsWorkspace({ initialName, initialEmail }: Props) {
+export function SettingsWorkspace({ role, initialName, initialEmail }: Props) {
   const [name, setName] = useState(initialName);
   const [profileStatus, setProfileStatus] = useState("");
   const [savingProfile, setSavingProfile] = useState(false);
@@ -18,6 +20,10 @@ export function SettingsWorkspace({ initialName, initialEmail }: Props) {
   const [density, setDensity] = useState<Density>("comfortable");
   const [exportFormat, setExportFormat] = useState<ExportFormat>("PDF");
   const [prefsStatus, setPrefsStatus] = useState("");
+  const [adminStatus, setAdminStatus] = useState("");
+  const [adminDefaultPeriod, setAdminDefaultPeriod] = useState("month");
+  const [adminStrictAudit, setAdminStrictAudit] = useState(true);
+  const [adminCompactTables, setAdminCompactTables] = useState(false);
 
   useEffect(() => {
     const savedDensity = localStorage.getItem("ui-density");
@@ -30,12 +36,33 @@ export function SettingsWorkspace({ initialName, initialEmail }: Props) {
     if (savedExport === "PDF" || savedExport === "CSV" || savedExport === "XLSX") {
       setExportFormat(savedExport);
     }
+
+    const savedPeriod = localStorage.getItem("admin-default-period");
+    const savedStrict = localStorage.getItem("admin-strict-audit");
+    const savedCompact = localStorage.getItem("admin-compact-tables");
+
+    if (savedPeriod === "date" || savedPeriod === "week" || savedPeriod === "month" || savedPeriod === "year") {
+      setAdminDefaultPeriod(savedPeriod);
+    }
+    if (savedStrict === "true" || savedStrict === "false") {
+      setAdminStrictAudit(savedStrict === "true");
+    }
+    if (savedCompact === "true" || savedCompact === "false") {
+      setAdminCompactTables(savedCompact === "true");
+    }
   }, []);
 
   function saveLocalPreferences(nextDensity: Density, nextExport: ExportFormat) {
     localStorage.setItem("ui-density", nextDensity);
     localStorage.setItem("default-export-format", nextExport);
     setPrefsStatus("Préférences enregistrées sur ce navigateur.");
+  }
+
+  function saveAdminPreferences() {
+    localStorage.setItem("admin-default-period", adminDefaultPeriod);
+    localStorage.setItem("admin-strict-audit", String(adminStrictAudit));
+    localStorage.setItem("admin-compact-tables", String(adminCompactTables));
+    setAdminStatus("Réglages administrateur enregistrés.");
   }
 
   async function onSaveProfile(event: FormEvent<HTMLFormElement>) {
@@ -93,19 +120,6 @@ export function SettingsWorkspace({ initialName, initialEmail }: Props) {
       </section>
 
       <section className="rounded-2xl border border-black/10 bg-white p-5 shadow-sm dark:border-white/10 dark:bg-zinc-900">
-        <h2 className="text-lg font-semibold">Sécurité</h2>
-        <p className="mt-2 text-sm text-black/65 dark:text-white/65">Connexion Google active. La sécurité du compte se gère depuis Google.</p>
-        <a
-          href="https://myaccount.google.com/security"
-          target="_blank"
-          rel="noreferrer"
-          className="mt-4 inline-flex rounded-md border border-black/15 px-3 py-2 text-xs font-semibold hover:bg-black/5 dark:border-white/15 dark:hover:bg-white/10"
-        >
-          Ouvrir la sécurité Google
-        </a>
-      </section>
-
-      <section className="rounded-2xl border border-black/10 bg-white p-5 shadow-sm dark:border-white/10 dark:bg-zinc-900">
         <h2 className="text-lg font-semibold">Affichage</h2>
         <p className="mt-2 text-sm text-black/65 dark:text-white/65">Choisir la densité de l'interface.</p>
         <div className="mt-4 grid gap-2">
@@ -145,6 +159,55 @@ export function SettingsWorkspace({ initialName, initialEmail }: Props) {
           {prefsStatus ? <p className="text-xs text-black/60 dark:text-white/60">{prefsStatus}</p> : null}
         </div>
       </section>
+
+      {role === "ADMIN" ? (
+        <section className="rounded-2xl border border-black/10 bg-white p-5 shadow-sm dark:border-white/10 dark:bg-zinc-900 md:col-span-2">
+          <h2 className="text-lg font-semibold">Pilotage global application (Admin)</h2>
+          <p className="mt-2 text-sm text-black/65 dark:text-white/65">
+            Espace central pour gérer l&apos;application: administration, affectations, archives, rapports et paramètres opérationnels.
+          </p>
+
+          <div className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+            <a href="/admin" className="rounded-md border border-black/15 px-3 py-2 text-xs font-semibold hover:bg-black/5 dark:border-white/15 dark:hover:bg-white/10">Utilisateurs & rôles</a>
+            <a href="/teams" className="rounded-md border border-black/15 px-3 py-2 text-xs font-semibold hover:bg-black/5 dark:border-white/15 dark:hover:bg-white/10">Équipes & affectations</a>
+            <a href="/reports" className="rounded-md border border-black/15 px-3 py-2 text-xs font-semibold hover:bg-black/5 dark:border-white/15 dark:hover:bg-white/10">Validation des rapports</a>
+            <a href="/archives" className="rounded-md border border-black/15 px-3 py-2 text-xs font-semibold hover:bg-black/5 dark:border-white/15 dark:hover:bg-white/10">Politique archives</a>
+          </div>
+
+          <div className="mt-4 grid gap-3 sm:grid-cols-3">
+            <div>
+              <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-black/60 dark:text-white/60">Période par défaut (pilotage)</label>
+              <select
+                value={adminDefaultPeriod}
+                onChange={(event) => setAdminDefaultPeriod(event.target.value)}
+                className="w-full rounded-md border border-black/15 px-3 py-2 text-sm dark:border-white/20"
+              >
+                <option value="date">Journalier</option>
+                <option value="week">Hebdomadaire</option>
+                <option value="month">Mensuel</option>
+                <option value="year">Annuel</option>
+              </select>
+            </div>
+            <label className="flex items-center gap-2 rounded-md border border-black/10 px-3 py-2 text-sm dark:border-white/20">
+              <input type="checkbox" checked={adminStrictAudit} onChange={(event) => setAdminStrictAudit(event.target.checked)} />
+              Audit strict activé
+            </label>
+            <label className="flex items-center gap-2 rounded-md border border-black/10 px-3 py-2 text-sm dark:border-white/20">
+              <input type="checkbox" checked={adminCompactTables} onChange={(event) => setAdminCompactTables(event.target.checked)} />
+              Tables compactes (admin)
+            </label>
+          </div>
+
+          <button
+            type="button"
+            onClick={saveAdminPreferences}
+            className="mt-3 rounded-md bg-black px-4 py-2 text-xs font-semibold text-white dark:bg-white dark:text-black"
+          >
+            Enregistrer les réglages admin
+          </button>
+          {adminStatus ? <p className="mt-2 text-xs text-black/60 dark:text-white/60">{adminStatus}</p> : null}
+        </section>
+      ) : null}
     </div>
   );
 }

@@ -20,7 +20,11 @@ export default async function SettingsPage() {
         <p className="text-sm text-black/60 dark:text-white/60">Configuration fonctionnelle du compte et des préférences utilisateur.</p>
       </section>
 
-      <SettingsWorkspace initialName={user?.name ?? session.user.name ?? ""} initialEmail={user?.email ?? session.user.email ?? ""} />
+      <SettingsWorkspace
+        role={role}
+        initialName={user?.name ?? session.user.name ?? ""}
+        initialEmail={user?.email ?? session.user.email ?? ""}
+      />
     </AppShell>
   );
 }
