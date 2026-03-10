@@ -13,6 +13,66 @@ type SearchParams = {
 
 type AuditDecision = "PENDING" | "VALIDATED" | "REJECTED";
 
+type AuditRiskLevel = "LOW" | "MEDIUM" | "HIGH";
+
+function riskLevelFromScore(score: number): AuditRiskLevel {
+  if (score >= 70) return "HIGH";
+  if (score >= 40) return "MEDIUM";
+  return "LOW";
+}
+
+function computeRiskForDossier(params: {
+  service: string;
+  status: string;
+  auditDecision: AuditDecision;
+  amount: number;
+}) {
+  let score = 0;
+  const reasons: string[] = [];
+
+  if (params.auditDecision === "PENDING") {
+    score += 25;
+    reasons.push("dossier non audité");
+  }
+
+  if (params.auditDecision === "REJECTED") {
+    score += 35;
+    reasons.push("rejet audit");
+  }
+
+  if (params.service === "BILLETS" && params.status === "PARTIAL") {
+    score += 28;
+    reasons.push("paiement partiel");
+  }
+
+  if (params.service === "RAPPORTS" && params.status === "SUBMITTED") {
+    score += 20;
+    reasons.push("rapport non approuvé");
+  }
+
+  if (params.service === "APPROVISIONNEMENT" && params.status === "SUBMITTED") {
+    score += 22;
+    reasons.push("EDB en attente");
+  }
+
+  if (params.amount >= 1500) {
+    score += 12;
+    reasons.push("montant sensible");
+  }
+
+  if (params.amount >= 4000) {
+    score += 12;
+    reasons.push("montant élevé");
+  }
+
+  const bounded = Math.min(100, score);
+  return {
+    riskScore: bounded,
+    riskLevel: riskLevelFromScore(bounded),
+    riskReason: reasons.length > 0 ? reasons.join(" • ") : "profil stable",
+  };
+}
+
 function computeDecisionFromActions(actions: string[]): AuditDecision {
   let decision: AuditDecision = "PENDING";
   for (const action of actions) {
@@ -207,6 +267,15 @@ export default async function AuditPage({
   }));
 
   const dossiers = [...ticketDossiers, ...reportDossiers, ...needDossiers, ...attendanceDossiers]
+    .map((item) => ({
+      ...item,
+      ...computeRiskForDossier({
+        service: item.service,
+        status: String(item.status),
+        auditDecision: item.auditDecision,
+        amount: item.amount,
+      }),
+    }))
     .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
 
   const alerts = {
@@ -239,6 +308,33 @@ export default async function AuditPage({
 
   const employees = Array.from(new Set(dossiers.map((item) => item.ownerName))).sort((a, b) => a.localeCompare(b, "fr"));
 
+  const globalRiskIndex = dossiers.length > 0
+    ? Math.round(dossiers.reduce((sum, item) => sum + item.riskScore, 0) / dossiers.length)
+    : 0;
+
+  const criticalPending = dossiers.filter((item) => item.auditDecision === "PENDING" && item.riskLevel === "HIGH");
+
+  const serviceExposureMap = new Map<string, number>();
+  for (const item of dossiers) {
+    const current = serviceExposureMap.get(item.service) ?? 0;
+    serviceExposureMap.set(item.service, current + item.riskScore);
+  }
+  const topServiceAtRisk = Array.from(serviceExposureMap.entries()).sort((a, b) => b[1] - a[1])[0]?.[0] ?? "-";
+
+  const recommendations: string[] = [];
+  if (criticalPending.length > 0) {
+    recommendations.push(`Traiter en priorité ${criticalPending.length} dossier(s) critique(s) en attente.`);
+  }
+  if (ticketDossiers.some((item) => item.status === PaymentStatus.PARTIAL)) {
+    recommendations.push("Vérifier immédiatement les billets en paiement partiel et rapprocher les encaissements.");
+  }
+  if (reportDossiers.some((item) => item.status === ReportStatus.SUBMITTED)) {
+    recommendations.push("Accélérer la boucle de validation des rapports soumis pour réduire le risque documentaire.");
+  }
+  if (recommendations.length === 0) {
+    recommendations.push("Profil global stable: maintenir les contrôles périodiques et la traçabilité des validations.");
+  }
+
   return (
     <AppShell
       role={role}
@@ -260,6 +356,16 @@ export default async function AuditPage({
         defaultStartDate={range.startRaw}
         defaultEndDate={range.endRaw}
         canWrite={canWriteAudit}
+        insights={{
+          globalRiskIndex,
+          criticalPendingCount: criticalPending.length,
+          topServiceAtRisk,
+          recommendations,
+          prioritizedQueue: dossiers
+            .slice()
+            .sort((a, b) => b.riskScore - a.riskScore || b.createdAt.localeCompare(a.createdAt))
+            .slice(0, 8),
+        }}
       />
     </AppShell>
   );

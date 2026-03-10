@@ -15,6 +15,9 @@ type AuditDossier = {
   auditDecision: "PENDING" | "VALIDATED" | "REJECTED";
   ownerName: string;
   createdAt: string;
+  riskScore: number;
+  riskLevel: "LOW" | "MEDIUM" | "HIGH";
+  riskReason: string;
 };
 
 type AlertItem = {
@@ -83,6 +86,7 @@ export function AuditWorkspace({
   defaultStartDate,
   defaultEndDate,
   canWrite,
+  insights,
 }: {
   dossiers: AuditDossier[];
   alerts: {
@@ -94,6 +98,13 @@ export function AuditWorkspace({
   defaultStartDate: string;
   defaultEndDate: string;
   canWrite: boolean;
+  insights: {
+    globalRiskIndex: number;
+    criticalPendingCount: number;
+    topServiceAtRisk: string;
+    recommendations: string[];
+    prioritizedQueue: AuditDossier[];
+  };
 }) {
   const router = useRouter();
   const [dossierRows, setDossierRows] = useState(dossiers);
@@ -280,6 +291,51 @@ export function AuditWorkspace({
 
   return (
     <div className="grid gap-6 lg:grid-cols-[1.4fr,1fr,340px]">
+      <section className="rounded-2xl border border-black/10 bg-white p-4 dark:border-white/10 dark:bg-zinc-900 lg:col-span-3">
+        <h2 className="text-base font-semibold">Pilotage intelligent audit</h2>
+        <div className="mt-3 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          <article className="rounded-lg border border-black/10 bg-black/3 p-3 dark:border-white/10 dark:bg-white/3">
+            <p className="text-[11px] uppercase tracking-wide text-black/60 dark:text-white/60">Indice de risque</p>
+            <p className="mt-1 text-2xl font-semibold">{insights.globalRiskIndex}/100</p>
+          </article>
+          <article className="rounded-lg border border-black/10 bg-black/3 p-3 dark:border-white/10 dark:bg-white/3">
+            <p className="text-[11px] uppercase tracking-wide text-black/60 dark:text-white/60">Critiques en attente</p>
+            <p className="mt-1 text-2xl font-semibold">{insights.criticalPendingCount}</p>
+          </article>
+          <article className="rounded-lg border border-black/10 bg-black/3 p-3 dark:border-white/10 dark:bg-white/3">
+            <p className="text-[11px] uppercase tracking-wide text-black/60 dark:text-white/60">Service le plus exposé</p>
+            <p className="mt-1 text-lg font-semibold">{insights.topServiceAtRisk}</p>
+          </article>
+          <article className="rounded-lg border border-black/10 bg-black/3 p-3 dark:border-white/10 dark:bg-white/3">
+            <p className="text-[11px] uppercase tracking-wide text-black/60 dark:text-white/60">Priorité immédiate</p>
+            <p className="mt-1 text-sm font-semibold">{insights.recommendations[0]}</p>
+          </article>
+        </div>
+
+        <div className="mt-4 grid gap-4 lg:grid-cols-2">
+          <div className="rounded-lg border border-black/10 p-3 dark:border-white/10">
+            <p className="text-xs font-semibold uppercase tracking-wide text-black/60 dark:text-white/60">Recommandations raisonnées</p>
+            <ul className="mt-2 space-y-2 text-sm">
+              {insights.recommendations.map((item, index) => (
+                <li key={`${item}-${index}`} className="rounded-md border border-black/10 px-3 py-2 dark:border-white/10">{item}</li>
+              ))}
+            </ul>
+          </div>
+
+          <div className="rounded-lg border border-black/10 p-3 dark:border-white/10">
+            <p className="text-xs font-semibold uppercase tracking-wide text-black/60 dark:text-white/60">File priorisée (top risques)</p>
+            <ul className="mt-2 space-y-2 text-sm">
+              {insights.prioritizedQueue.map((item) => (
+                <li key={`${item.entityType}:${item.entityId}`} className="rounded-md border border-black/10 px-3 py-2 dark:border-white/10">
+                  <p className="font-semibold">{item.reference}</p>
+                  <p className="text-xs text-black/60 dark:text-white/60">{item.service} • {item.riskLevel} ({item.riskScore}/100) • {item.riskReason}</p>
+                </li>
+              ))}
+            </ul>
+          </div>
+        </div>
+      </section>
+
       <section className="rounded-2xl border border-black/10 bg-white p-4 dark:border-white/10 dark:bg-zinc-900 lg:col-span-2">
         <h2 className="text-base font-semibold">1. Filtres audit</h2>
         <div className="mt-3 grid gap-2 md:grid-cols-5">
@@ -359,6 +415,7 @@ export function AuditWorkspace({
                 <th className="px-3 py-2 text-left">Service</th>
                 <th className="px-3 py-2 text-left">Statut dossier</th>
                 <th className="px-3 py-2 text-left">Statut audit</th>
+                <th className="px-3 py-2 text-left">Risque</th>
                 <th className="px-3 py-2 text-left">Action</th>
               </tr>
             </thead>
@@ -374,6 +431,11 @@ export function AuditWorkspace({
                     <td className="px-3 py-2">{row.service}</td>
                     <td className="px-3 py-2">{row.status}</td>
                     <td className="px-3 py-2">{row.auditDecision}</td>
+                    <td className="px-3 py-2">
+                      <span className="rounded-full border border-black/15 bg-black/5 px-2 py-0.5 text-[11px] font-semibold dark:border-white/20 dark:bg-white/10">
+                        {row.riskLevel} {row.riskScore}
+                      </span>
+                    </td>
                     <td className="px-3 py-2">
                       <button
                         type="button"
@@ -391,7 +453,7 @@ export function AuditWorkspace({
               })}
               {filtered.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="px-3 py-6 text-center text-xs text-black/60 dark:text-white/60">Aucun dossier correspondant aux filtres.</td>
+                  <td colSpan={9} className="px-3 py-6 text-center text-xs text-black/60 dark:text-white/60">Aucun dossier correspondant aux filtres.</td>
                 </tr>
               ) : null}
             </tbody>
