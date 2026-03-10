@@ -5,7 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { requireApiModuleAccess } from "@/lib/rbac";
 
 const actionSchema = z.object({
-  entityType: z.enum(["TICKET_SALE", "WORKER_REPORT", "NEED_REQUEST", "ATTENDANCE"]).optional(),
+  entityType: z.enum(["TICKET_SALE", "PAYMENT", "WORKER_REPORT", "NEED_REQUEST", "ATTENDANCE"]).optional(),
   entityId: z.string().min(1).optional(),
   action: z.enum([
     "AUDIT_IMPORT",
@@ -77,6 +77,47 @@ function extractStateFromTrail(
 }
 
 async function buildDossierDetail(entityType: string, entityId: string) {
+  if (entityType === "PAYMENT") {
+    const payment = await prisma.payment.findUnique({
+      where: { id: entityId },
+      include: {
+        ticket: {
+          select: {
+            ticketNumber: true,
+            customerName: true,
+            amount: true,
+            currency: true,
+            payments: { select: { amount: true } },
+          },
+        },
+      },
+    });
+
+    if (!payment) return null;
+
+    const totalPaid = payment.ticket.payments.reduce((sum, row) => sum + row.amount, 0);
+    const remaining = Math.max(0, payment.ticket.amount - totalPaid);
+
+    return {
+      header: {
+        title: `Caisse • ${payment.ticket.ticketNumber}`,
+        subtitle: `${payment.ticket.customerName} • Méthode: ${payment.method}`,
+        status: payment.reference ?? "Réf non renseignée",
+      },
+      financial: [
+        { label: "Mouvement encaissé", value: `${payment.amount.toFixed(2)} ${payment.ticket.currency}` },
+        { label: "Billet facturé", value: `${payment.ticket.amount.toFixed(2)} ${payment.ticket.currency}` },
+        { label: "Total encaissé billet", value: `${totalPaid.toFixed(2)} ${payment.ticket.currency}` },
+        { label: "Reste billet", value: `${remaining.toFixed(2)} ${payment.ticket.currency}` },
+      ],
+      conformity: [
+        { label: "Référence paiement", value: payment.reference ?? "-" },
+        { label: "Date paiement", value: new Date(payment.paidAt).toLocaleString() },
+        { label: "Traçabilité", value: payment.reference ? "Référence fournie" : "Référence manquante" },
+      ],
+    };
+  }
+
   if (entityType === "TICKET_SALE") {
     const ticket = await prisma.ticketSale.findUnique({
       where: { id: entityId },
@@ -211,7 +252,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "entityType et entityId sont requis." }, { status: 400 });
   }
 
-  if (!["TICKET_SALE", "WORKER_REPORT", "NEED_REQUEST", "ATTENDANCE"].includes(entityType)) {
+  if (!["TICKET_SALE", "PAYMENT", "WORKER_REPORT", "NEED_REQUEST", "ATTENDANCE"].includes(entityType)) {
     return NextResponse.json({ error: "Type de dossier invalide." }, { status: 400 });
   }
 

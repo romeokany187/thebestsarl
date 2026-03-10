@@ -103,7 +103,7 @@ export default async function AuditPage({
   const resolvedSearchParams = (await searchParams) ?? {};
   const range = dateRangeFromParams(resolvedSearchParams);
 
-  const [tickets, reports, needs, attendances, stocks, notifications] = await Promise.all([
+  const [tickets, payments, reports, needs, attendances, stocks, notifications] = await Promise.all([
     prisma.ticketSale.findMany({
       where: { soldAt: { gte: range.start, lt: range.end } },
       include: {
@@ -112,6 +112,21 @@ export default async function AuditPage({
       },
       orderBy: { soldAt: "desc" },
       take: 400,
+    }),
+    prisma.payment.findMany({
+      where: { paidAt: { gte: range.start, lt: range.end } },
+      include: {
+        ticket: {
+          select: {
+            ticketNumber: true,
+            customerName: true,
+            amount: true,
+            currency: true,
+          },
+        },
+      },
+      orderBy: { paidAt: "desc" },
+      take: 500,
     }),
     prisma.workerReport.findMany({
       where: { createdAt: { gte: range.start, lt: range.end } },
@@ -143,11 +158,20 @@ export default async function AuditPage({
     }),
   ]);
 
-  const [ticketDecisionLogs, reportDecisionLogs, needDecisionLogs, attendanceDecisionLogs] = await Promise.all([
+  const [ticketDecisionLogs, paymentDecisionLogs, reportDecisionLogs, needDecisionLogs, attendanceDecisionLogs] = await Promise.all([
     prisma.auditLog.findMany({
       where: {
         entityType: "AUDIT_TICKET_SALE",
         entityId: { in: tickets.map((item) => item.id) },
+        action: { in: ["AUDIT_VALIDATE", "AUDIT_REJECT"] },
+      },
+      select: { entityId: true, action: true, createdAt: true },
+      orderBy: { createdAt: "asc" },
+    }),
+    prisma.auditLog.findMany({
+      where: {
+        entityType: "AUDIT_PAYMENT",
+        entityId: { in: payments.map((item) => item.id) },
         action: { in: ["AUDIT_VALIDATE", "AUDIT_REJECT"] },
       },
       select: { entityId: true, action: true, createdAt: true },
@@ -185,6 +209,7 @@ export default async function AuditPage({
   const decisionMap = new Map<string, AuditDecision>();
   const allDecisionLogs = [
     ...ticketDecisionLogs,
+    ...paymentDecisionLogs,
     ...reportDecisionLogs,
     ...needDecisionLogs,
     ...attendanceDecisionLogs,
@@ -238,6 +263,20 @@ export default async function AuditPage({
     createdAt: report.createdAt.toISOString(),
   }));
 
+  const paymentDossiers = payments.map((payment) => ({
+    entityType: "PAYMENT" as const,
+    entityId: payment.id,
+    reference: `Paiement ${payment.ticket.ticketNumber}`,
+    client: payment.ticket.customerName,
+    amount: payment.amount,
+    margin: null,
+    service: "CAISSE",
+    status: payment.method,
+    auditDecision: decisionMap.get(payment.id) ?? "PENDING",
+    ownerName: payment.reference ?? "Caisse",
+    createdAt: payment.paidAt.toISOString(),
+  }));
+
   const needDossiers = needs.map((need) => ({
     entityType: "NEED_REQUEST" as const,
     entityId: need.id,
@@ -266,7 +305,7 @@ export default async function AuditPage({
     createdAt: row.date.toISOString(),
   }));
 
-  const dossiers = [...ticketDossiers, ...reportDossiers, ...needDossiers, ...attendanceDossiers]
+  const dossiers = [...ticketDossiers, ...paymentDossiers, ...reportDossiers, ...needDossiers, ...attendanceDossiers]
     .map((item) => ({
       ...item,
       ...computeRiskForDossier({
@@ -284,6 +323,11 @@ export default async function AuditPage({
         label: "Billets partiellement payés",
         detail: `${ticketDossiers.filter((item) => item.status === PaymentStatus.PARTIAL).length} dossier(s) à vérifier.`,
         severity: "high" as const,
+      },
+      {
+        label: "Paiements caisse à contrôler",
+        detail: `${paymentDossiers.filter((item) => item.auditDecision === "PENDING").length} mouvement(s) en attente de vérification.`,
+        severity: "medium" as const,
       },
       {
         label: "Rapports soumis non approuvés",

@@ -4,7 +4,7 @@ import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 
 type AuditDossier = {
-  entityType: "TICKET_SALE" | "WORKER_REPORT" | "NEED_REQUEST" | "ATTENDANCE";
+  entityType: "TICKET_SALE" | "PAYMENT" | "WORKER_REPORT" | "NEED_REQUEST" | "ATTENDANCE";
   entityId: string;
   reference: string;
   client: string;
@@ -76,8 +76,53 @@ type CompareResult = {
   rows: CompareResultRow[];
 };
 
-const serviceTabs = ["TOUS", "BILLETS", "RAPPORTS", "APPROVISIONNEMENT", "PRESENCES"];
+const serviceTabs = ["TOUS", "BILLETS", "CAISSE", "RAPPORTS", "APPROVISIONNEMENT", "PRESENCES"];
 const rowTabs = ["TOUS", "A_AUDITER", "VALIDES", "REJETES"];
+
+function serviceChecklist(service: string) {
+  if (service === "BILLETS") {
+    return [
+      "Concordance ticket / client / compagnie",
+      "Montant facturé cohérent avec le billet",
+      "Rapprochement commission et marge",
+      "Conformité des dates de vente et voyage",
+    ];
+  }
+
+  if (service === "CAISSE") {
+    return [
+      "Rapprochement entrée caisse avec billet source",
+      "Présence d'une référence de paiement traçable",
+      "Absence d'écart entre encaissement et facturation",
+      "Justification des sorties et mouvements sensibles",
+    ];
+  }
+
+  if (service === "PRESENCES") {
+    return [
+      "Signature entrée/sortie valide",
+      "Cohérence localisation et horaires",
+      "Retards/heures supp justifiés",
+      "Traçabilité quotidienne des pointages",
+    ];
+  }
+
+  if (service === "RAPPORTS") {
+    return [
+      "Période du rapport conforme",
+      "Contenu aligné à la fonction",
+      "Indicateurs clés correctement renseignés",
+      "Circuit de soumission/approbation respecté",
+    ];
+  }
+
+  return [
+    "Pièces justificatives présentes",
+    "Montants et volumes cohérents",
+    "Processus métier respecté",
+    "Traçabilité et responsabilité établies",
+  ];
+}
 
 export function AuditWorkspace({
   dossiers,
@@ -131,6 +176,7 @@ export function AuditWorkspace({
   const [comment, setComment] = useState("");
   const [status, setStatus] = useState("");
   const [loadingDetail, setLoadingDetail] = useState(false);
+  const [isAuditModalOpen, setIsAuditModalOpen] = useState(false);
   const [savingAction, setSavingAction] = useState(false);
   const [compareType, setCompareType] = useState<"CAISSE" | "VENTES" | "PRESENCES" | "RAPPORTS">("CAISSE");
   const [compareFile, setCompareFile] = useState<File | null>(null);
@@ -159,6 +205,13 @@ export function AuditWorkspace({
       return serviceOk && employeeOk && searchOk && dateOk && tabOk;
     });
   }, [dossierRows, service, employee, search, startDate, endDate, rowTab]);
+
+  async function openAuditModal(row: AuditDossier) {
+    const key = `${row.entityType}:${row.entityId}`;
+    setSelectedKey(key);
+    setIsAuditModalOpen(true);
+    await loadSelectedDetails(row.entityType, row.entityId);
+  }
 
   async function loadSelectedDetails(entityType: string, entityId: string) {
     setLoadingDetail(true);
@@ -439,10 +492,7 @@ export function AuditWorkspace({
                     <td className="px-3 py-2">
                       <button
                         type="button"
-                        onClick={async () => {
-                          setSelectedKey(key);
-                          await loadSelectedDetails(row.entityType, row.entityId);
-                        }}
+                        onClick={() => void openAuditModal(row)}
                         className="rounded-md border border-black/15 px-2.5 py-1 text-xs font-semibold hover:bg-black/5 dark:border-white/20 dark:hover:bg-white/10"
                       >
                         Auditer
@@ -654,6 +704,124 @@ export function AuditWorkspace({
 
         <p className="mt-3 text-xs text-black/60 dark:text-white/60">{status}</p>
       </section>
+
+      {selected && isAuditModalOpen ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="max-h-[90vh] w-full max-w-5xl overflow-auto rounded-2xl border border-black/10 bg-white p-4 shadow-2xl dark:border-white/10 dark:bg-zinc-900">
+            <div className="flex items-center justify-between gap-3 border-b border-black/10 pb-3 dark:border-white/10">
+              <div>
+                <p className="text-xs uppercase tracking-wide text-black/60 dark:text-white/60">Audit structuré</p>
+                <h3 className="text-lg font-semibold">{detail?.header.title ?? selected.reference}</h3>
+                <p className="text-xs text-black/60 dark:text-white/60">{detail?.header.subtitle ?? `${selected.client} • ${selected.service}`} • Risque {selected.riskLevel} ({selected.riskScore}/100)</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsAuditModalOpen(false)}
+                className="rounded-md border border-black/15 px-3 py-1.5 text-xs font-semibold hover:bg-black/5 dark:border-white/20 dark:hover:bg-white/10"
+              >
+                Fermer
+              </button>
+            </div>
+
+            <div className="mt-3 grid gap-4 lg:grid-cols-[1fr,300px]">
+              <div>
+                <div className="flex flex-wrap gap-2 text-xs">
+                  {(["FINANCIER", "CONFORMITE", "TRAIL"] as const).map((tab) => (
+                    <button key={tab} type="button" onClick={() => setDetailTab(tab)} className={`rounded-full border px-2.5 py-1 font-semibold ${detailTab === tab ? "border-black bg-black/5 dark:border-white dark:bg-white/10" : "border-black/15 dark:border-white/20"}`}>
+                      {tab}
+                    </button>
+                  ))}
+                </div>
+
+                <div className="mt-3">
+                  {loadingDetail ? <p className="text-xs text-black/60 dark:text-white/60">Chargement du dossier...</p> : null}
+
+                  {!loadingDetail && detailTab === "FINANCIER" ? (
+                    <ul className="space-y-2 text-sm">
+                      {(detail?.financial ?? []).map((item) => (
+                        <li key={item.label} className="rounded-md border border-black/10 px-3 py-2 dark:border-white/10">
+                          <span className="font-semibold">{item.label}:</span> {item.value}
+                        </li>
+                      ))}
+                    </ul>
+                  ) : null}
+
+                  {!loadingDetail && detailTab === "CONFORMITE" ? (
+                    <div className="space-y-3 text-sm">
+                      <ul className="space-y-1 rounded-md border border-black/10 p-3 text-xs dark:border-white/10">
+                        {serviceChecklist(selected.service).map((item) => (
+                          <li key={item}>• {item}</li>
+                        ))}
+                      </ul>
+
+                      <label className="flex items-center gap-2"><input type="checkbox" checked={state.compliance.documentsOk} disabled={!canWrite} onChange={async (event) => {
+                        const compliance = { ...state.compliance, documentsOk: event.target.checked };
+                        setState((prev) => ({ ...prev, compliance }));
+                        await saveAction("AUDIT_CONFORMITY_SAVE", { compliance });
+                      }} /> Documents vérifiés</label>
+                      <label className="flex items-center gap-2"><input type="checkbox" checked={state.compliance.amountsOk} disabled={!canWrite} onChange={async (event) => {
+                        const compliance = { ...state.compliance, amountsOk: event.target.checked };
+                        setState((prev) => ({ ...prev, compliance }));
+                        await saveAction("AUDIT_CONFORMITY_SAVE", { compliance });
+                      }} /> Chiffres validés</label>
+                      <label className="flex items-center gap-2"><input type="checkbox" checked={state.compliance.processOk} disabled={!canWrite} onChange={async (event) => {
+                        const compliance = { ...state.compliance, processOk: event.target.checked };
+                        setState((prev) => ({ ...prev, compliance }));
+                        await saveAction("AUDIT_CONFORMITY_SAVE", { compliance });
+                      }} /> Processus conforme</label>
+                      <label className="flex items-center gap-2"><input type="checkbox" checked={state.compliance.riskChecked} disabled={!canWrite} onChange={async (event) => {
+                        const compliance = { ...state.compliance, riskChecked: event.target.checked };
+                        setState((prev) => ({ ...prev, compliance }));
+                        await saveAction("AUDIT_CONFORMITY_SAVE", { compliance });
+                      }} /> Risques contrôlés</label>
+                    </div>
+                  ) : null}
+
+                  {!loadingDetail && detailTab === "TRAIL" ? (
+                    <ul className="space-y-2 text-sm">
+                      {trail.map((item) => (
+                        <li key={item.id} className="rounded-md border border-black/10 px-3 py-2 dark:border-white/10">
+                          <p className="font-semibold">{item.action}</p>
+                          <p className="text-xs text-black/60 dark:text-white/60">{item.actor.name} • {new Date(item.createdAt).toLocaleString()}</p>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : null}
+                </div>
+              </div>
+
+              <aside className="rounded-lg border border-black/10 p-3 dark:border-white/10">
+                <p className="text-xs font-semibold uppercase tracking-wide text-black/60 dark:text-white/60">Décision audit</p>
+                <p className="mt-1 text-sm">Statut courant: <span className="font-semibold">{state.decision}</span></p>
+                <p className="mt-1 text-xs text-black/60 dark:text-white/60">Motif risque: {selected.riskReason}</p>
+
+                <textarea
+                  value={comment}
+                  onChange={(event) => setComment(event.target.value)}
+                  placeholder="Commentaire d'audit..."
+                  disabled={!canWrite}
+                  className="mt-3 min-h-24 w-full rounded-md border border-black/15 px-3 py-2 text-sm dark:border-white/20"
+                />
+                <button type="button" disabled={!canWrite} onClick={async () => {
+                  if (!comment.trim()) {
+                    setStatus("Ajoutez un commentaire avant enregistrement.");
+                    return;
+                  }
+                  await saveAction("AUDIT_COMMENT", { text: comment.trim() });
+                  setComment("");
+                }} className="mt-2 w-full rounded-md border border-black/15 px-3 py-2 text-sm font-semibold hover:bg-black/5 dark:border-white/20 dark:hover:bg-white/10">
+                  Enregistrer commentaire
+                </button>
+
+                <div className="mt-2 grid gap-2 sm:grid-cols-2">
+                  <button type="button" disabled={savingAction || !canWrite} onClick={() => void saveAction("AUDIT_VALIDATE", { decision: "VALIDATED" })} className="rounded-md bg-emerald-700 px-3 py-2 text-sm font-semibold text-white disabled:opacity-60">Valider</button>
+                  <button type="button" disabled={savingAction || !canWrite} onClick={() => void saveAction("AUDIT_REJECT", { decision: "REJECTED" })} className="rounded-md bg-red-700 px-3 py-2 text-sm font-semibold text-white disabled:opacity-60">Rejeter</button>
+                </div>
+              </aside>
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       <section className="rounded-2xl border border-black/10 bg-white p-4 dark:border-white/10 dark:bg-zinc-900 lg:col-span-3">
         <div className="flex flex-wrap items-center justify-between gap-2">
