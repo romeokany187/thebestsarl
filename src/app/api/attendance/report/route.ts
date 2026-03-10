@@ -63,18 +63,14 @@ function short(value: string, max: number) {
 }
 
 export async function GET(request: NextRequest) {
-  const access = await requireApiModuleAccess("attendance", ["ADMIN", "MANAGER", "EMPLOYEE", "ACCOUNTANT"]);
+  const access = await requireApiModuleAccess("attendance", ["ADMIN"]);
   if (access.error) {
     return access.error;
   }
 
   const range = dateRangeFromParams(request.nextUrl.searchParams);
   const requestedUserId = request.nextUrl.searchParams.get("userId")?.trim();
-  const roleFilter = access.role === "EMPLOYEE"
-    ? { userId: access.session.user.id }
-    : requestedUserId
-      ? { userId: requestedUserId }
-      : {};
+  const roleFilter = requestedUserId ? { userId: requestedUserId } : {};
 
   const rows = await prisma.attendance.findMany({
     where: {

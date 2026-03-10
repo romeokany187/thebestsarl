@@ -39,18 +39,16 @@ export default async function AttendancePage({
   const resolvedSearchParams = (await searchParams) ?? {};
   const range = dateRangeFromParams(resolvedSearchParams);
   const canManageAttendance = role !== "ADMIN";
-  const selectedUserId = role === "EMPLOYEE"
-    ? session.user.id
-    : resolvedSearchParams.userId && resolvedSearchParams.userId !== "ALL"
+  const selectedUserId = role === "ADMIN"
+    ? resolvedSearchParams.userId && resolvedSearchParams.userId !== "ALL"
       ? resolvedSearchParams.userId
-      : undefined;
+      : undefined
+    : session.user.id;
   const accessNote = canManageAttendance
-    ? role === "EMPLOYEE"
-      ? "Accès personnel: vous pouvez saisir et consulter uniquement vos présences."
-      : "Accès signature: vous pouvez signer vos présences et suivre les états de l'équipe."
+    ? "Accès personnel: vous signez votre présence et consultez uniquement vos propres lignes."
     : "Accès lecture seule: consultation des présences uniquement.";
 
-  const users = role === "EMPLOYEE"
+  const users = role !== "ADMIN"
     ? []
     : await prisma.user.findMany({
       select: { id: true, name: true },
@@ -106,7 +104,7 @@ export default async function AttendancePage({
               className="w-full rounded-md border border-black/15 bg-white px-3 py-2 text-sm dark:border-white/15 dark:bg-zinc-900"
             />
           </div>
-          {role !== "EMPLOYEE" ? (
+          {role === "ADMIN" ? (
             <div>
               <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-black/60 dark:text-white/60">Employé</label>
               <select
@@ -127,22 +125,24 @@ export default async function AttendancePage({
             Filtrer
           </button>
         </form>
-        <div className="mt-3 flex flex-wrap items-center gap-2 text-xs">
-          <a
-            href={`/api/attendance/report?${reportQuery}`}
-            target="_blank"
-            rel="noreferrer"
-            className="inline-flex rounded-md border border-black/20 px-2.5 py-1 font-semibold hover:bg-black/5 dark:border-white/20 dark:hover:bg-white/10"
-          >
-            Lire rapport PDF
-          </a>
-          <a
-            href={`/api/attendance/report?${reportQuery}&download=1`}
-            className="inline-flex rounded-md border border-black/20 px-2.5 py-1 font-semibold hover:bg-black/5 dark:border-white/20 dark:hover:bg-white/10"
-          >
-            Télécharger rapport PDF
-          </a>
-        </div>
+        {role === "ADMIN" ? (
+          <div className="mt-3 flex flex-wrap items-center gap-2 text-xs">
+            <a
+              href={`/api/attendance/report?${reportQuery}`}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex rounded-md border border-black/20 px-2.5 py-1 font-semibold hover:bg-black/5 dark:border-white/20 dark:hover:bg-white/10"
+            >
+              Lire rapport PDF
+            </a>
+            <a
+              href={`/api/attendance/report?${reportQuery}&download=1`}
+              className="inline-flex rounded-md border border-black/20 px-2.5 py-1 font-semibold hover:bg-black/5 dark:border-white/20 dark:hover:bg-white/10"
+            >
+              Télécharger rapport PDF
+            </a>
+          </div>
+        ) : null}
         <p className="mt-2 text-xs text-black/60 dark:text-white/60">{range.label}</p>
       </section>
 
@@ -160,6 +160,7 @@ export default async function AttendancePage({
           startDate={range.startRaw}
           endDate={range.endRaw}
           userId={selectedUserId}
+          showEmployeeColumn={role === "ADMIN"}
         />
       </div>
     </AppShell>

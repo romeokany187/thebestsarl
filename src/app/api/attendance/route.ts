@@ -13,7 +13,7 @@ export async function GET(request: NextRequest) {
   const requestedUserId = searchParams.get("userId");
   const startDate = searchParams.get("startDate");
   const endDate = searchParams.get("endDate");
-  const userId = access.role === "EMPLOYEE" ? access.session.user.id : requestedUserId;
+  const userId = access.role === "ADMIN" ? requestedUserId : access.session.user.id;
 
   let dateFilter: { gte: Date; lt: Date } | undefined;
   if (startDate && endDate) {
@@ -59,8 +59,8 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
   }
 
-  if (access.role === "EMPLOYEE" && parsed.data.userId !== access.session.user.id) {
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  if (parsed.data.userId !== access.session.user.id) {
+    return NextResponse.json({ error: "Vous ne pouvez enregistrer que votre propre présence." }, { status: 403 });
   }
 
   const day = new Date(parsed.data.date.toDateString());

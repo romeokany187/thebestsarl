@@ -27,9 +27,10 @@ type Props = {
   startDate: string;
   endDate: string;
   userId?: string;
+  showEmployeeColumn?: boolean;
 };
 
-export function AttendanceRecordsTable({ initialRecords, startDate, endDate, userId }: Props) {
+export function AttendanceRecordsTable({ initialRecords, startDate, endDate, userId, showEmployeeColumn = true }: Props) {
   const [records, setRecords] = useState<AttendanceRecord[]>(initialRecords);
 
   const queryString = useMemo(() => {
@@ -87,7 +88,7 @@ export function AttendanceRecordsTable({ initialRecords, startDate, endDate, use
         <table className="min-w-full text-sm">
           <thead className="bg-black/5 dark:bg-white/10">
             <tr>
-              <th className="px-3 py-2 text-left">Employé</th>
+              {showEmployeeColumn ? <th className="px-3 py-2 text-left">Employé</th> : null}
               <th className="px-3 py-2 text-left">Date</th>
               <th className="px-3 py-2 text-left">Entrée</th>
               <th className="px-3 py-2 text-left">Sortie</th>
@@ -101,7 +102,7 @@ export function AttendanceRecordsTable({ initialRecords, startDate, endDate, use
           <tbody>
             {records.map((row) => (
               <tr key={row.id} className="border-t border-black/5 dark:border-white/10">
-                <td className="px-3 py-2">{row.user.name}</td>
+                {showEmployeeColumn ? <td className="px-3 py-2">{row.user.name}</td> : null}
                 <td className="px-3 py-2">{new Date(row.date).toLocaleDateString()}</td>
                 <td className="px-3 py-2">{row.clockIn ? new Date(row.clockIn).toLocaleTimeString() : "-"}</td>
                 <td className="px-3 py-2">{row.clockOut ? new Date(row.clockOut).toLocaleTimeString() : "-"}</td>
@@ -120,7 +121,7 @@ export function AttendanceRecordsTable({ initialRecords, startDate, endDate, use
             ))}
             {records.length === 0 ? (
               <tr>
-                <td colSpan={9} className="px-3 py-6 text-center text-sm text-black/55 dark:text-white/55">
+                <td colSpan={showEmployeeColumn ? 9 : 8} className="px-3 py-6 text-center text-sm text-black/55 dark:text-white/55">
                   Aucune présence trouvée pour cette période.
                 </td>
               </tr>
