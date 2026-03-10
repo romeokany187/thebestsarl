@@ -5,26 +5,6 @@ import { requirePageModuleAccess } from "@/lib/rbac";
 
 export const dynamic = "force-dynamic";
 
-type NewsCategory = "ALERTE" | "FINANCE" | "RH" | "OPERATIONS" | "GENERAL";
-
-function getNewsCategory(title: string, content: string): NewsCategory {
-  const source = `${title} ${content}`.toLowerCase();
-
-  if (/alerte|urgent|incident|attention|retard|panne/.test(source)) return "ALERTE";
-  if (/caisse|paiement|facture|finance|comptable|budget/.test(source)) return "FINANCE";
-  if (/rh|ressource humaine|conge|absence|recrutement|personnel/.test(source)) return "RH";
-  if (/stock|approvisionnement|operation|terrain|logistique|service/.test(source)) return "OPERATIONS";
-  return "GENERAL";
-}
-
-function categoryMeta(category: NewsCategory) {
-  if (category === "ALERTE") return { label: "Alerte", tone: "bg-red-50 text-red-700 border-red-200", icon: "AV" };
-  if (category === "FINANCE") return { label: "Finance", tone: "bg-emerald-50 text-emerald-700 border-emerald-200", icon: "FN" };
-  if (category === "RH") return { label: "RH", tone: "bg-amber-50 text-amber-700 border-amber-200", icon: "RH" };
-  if (category === "OPERATIONS") return { label: "Opérations", tone: "bg-blue-50 text-blue-700 border-blue-200", icon: "OP" };
-  return { label: "Général", tone: "bg-slate-50 text-slate-700 border-slate-200", icon: "CM" };
-}
-
 export default async function NewsPage() {
   const { role } = await requirePageModuleAccess("news", ["ADMIN", "MANAGER", "EMPLOYEE", "ACCOUNTANT"]);
 
@@ -38,17 +18,6 @@ export default async function NewsPage() {
     orderBy: { createdAt: "desc" },
     take: 80,
   });
-
-  const grouped = new Map<NewsCategory, typeof news>();
-
-  for (const item of news) {
-    const category = getNewsCategory(item.title, item.content);
-    const current = grouped.get(category) ?? [];
-    current.push(item);
-    grouped.set(category, current);
-  }
-
-  const orderedCategories: NewsCategory[] = ["ALERTE", "FINANCE", "RH", "OPERATIONS", "GENERAL"];
 
   return (
     <AppShell
@@ -74,48 +43,36 @@ export default async function NewsPage() {
 
       <div className="grid gap-6 lg:grid-cols-[1fr,340px]">
         <section className="space-y-4">
-          {orderedCategories.map((category) => {
-            const items = grouped.get(category) ?? [];
-            if (items.length === 0) return null;
+          {news.length > 0 ? (
+            <section className="rounded-2xl border border-black/10 bg-white p-3.5 shadow-sm dark:border-white/10 dark:bg-zinc-900">
+              <div className="mb-2 flex items-center justify-between gap-2">
+                <h3 className="text-sm font-semibold">Tous les communiqués</h3>
+                <span className="text-xs text-black/55 dark:text-white/55">{news.length} publication(s)</span>
+              </div>
 
-            const meta = categoryMeta(category);
-
-            return (
-              <section key={category} className="rounded-2xl border border-black/10 bg-white p-3.5 shadow-sm dark:border-white/10 dark:bg-zinc-900">
-                <div className="mb-2 flex items-center justify-between gap-2">
-                  <div className="flex items-center gap-2">
-                    <span className={`inline-flex h-6 min-w-6 items-center justify-center rounded-md border px-1.5 text-[10px] font-bold ${meta.tone}`}>
-                      {meta.icon}
-                    </span>
-                    <h3 className="text-sm font-semibold">{meta.label}</h3>
-                  </div>
-                  <span className="text-xs text-black/55 dark:text-white/55">{items.length} publication(s)</span>
-                </div>
-
-                <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
-                  {items.map((item) => (
-                    <article key={item.id} className="rounded-xl border border-black/10 bg-black/2 p-2.5 dark:border-white/10 dark:bg-white/3">
-                      <div className="flex items-center justify-between gap-2">
-                        <span className={`inline-flex h-6 min-w-6 items-center justify-center rounded-md border px-1.5 text-[10px] font-bold ${meta.tone}`}>
-                          {meta.icon}
-                        </span>
-                        <a
-                          href={`/api/news/${item.id}/pdf`}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="shrink-0 rounded-md border border-black/15 px-2 py-0.5 text-[11px] font-semibold hover:bg-black/5 dark:border-white/20 dark:hover:bg-white/10"
-                        >
-                          Lire
-                        </a>
-                      </div>
-                      <h4 className="mt-2 line-clamp-2 text-sm font-semibold leading-snug">{item.title}</h4>
-                      <p className="mt-1 text-[11px] text-black/55 dark:text-white/55">{new Date(item.createdAt).toLocaleDateString("fr-FR")}</p>
-                    </article>
-                  ))}
-                </div>
-              </section>
-            );
-          })}
+              <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+                {news.map((item) => (
+                  <article key={item.id} className="rounded-xl border border-black/10 bg-black/2 p-2.5 dark:border-white/10 dark:bg-white/3">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="inline-flex h-6 min-w-6 items-center justify-center rounded-md border border-black/20 bg-slate-50 px-1.5 text-[10px] font-bold text-slate-700 dark:border-white/20 dark:bg-zinc-800 dark:text-zinc-200">
+                        CM
+                      </span>
+                      <a
+                        href={`/api/news/${item.id}/pdf`}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="shrink-0 rounded-md border border-black/15 px-2 py-0.5 text-[11px] font-semibold hover:bg-black/5 dark:border-white/20 dark:hover:bg-white/10"
+                      >
+                        Lire
+                      </a>
+                    </div>
+                    <h4 className="mt-2 line-clamp-2 text-sm font-semibold leading-snug">{item.title}</h4>
+                    <p className="mt-1 text-[11px] text-black/55 dark:text-white/55">{new Date(item.createdAt).toLocaleDateString("fr-FR")}</p>
+                  </article>
+                ))}
+              </div>
+            </section>
+          ) : null}
 
           {news.length === 0 ? (
             <p className="rounded-xl border border-dashed border-black/20 px-4 py-5 text-sm text-black/60 dark:border-white/20 dark:text-white/60">
