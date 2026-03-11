@@ -83,6 +83,16 @@ type AiAnalysis = {
     executiveSummary: string;
     controlMatrix: Array<{ control: string; score: number; status: "OK" | "WATCH" | "ALERT"; evidence: string }>;
     findings: Array<{ title: string; priority: "HIGH" | "MEDIUM" | "LOW"; impact: string; evidence: string; recommendation: string }>;
+    positives: string[];
+    risks: string[];
+    forecasts: string[];
+    companyBreakdown: Array<{ company: string; rowIssue: string; ticketsDelta: number; amountDelta: number }>;
+    caisseHealth: {
+      payments: { system: number; external: number; delta: number } | null;
+      benefits: { system: number; external: number; delta: number } | null;
+      expenses: { system: number; external: number; delta: number } | null;
+      net: { system: number; external: number; delta: number } | null;
+    };
     evidenceSamples: Array<{ key: string; issue: string; severity: string; systemValue: string; externalValue: string }>;
     totalEstimatedDelta: number;
     strictVerdict: "IDENTIQUE" | "NON_IDENTIQUE";
@@ -169,9 +179,9 @@ export function AuditWorkspace({
   const missionGuide = mission === "GLOBAL"
     ? "Vue IA globale: priorise les dossiers a risque, propose une decision de cloture et un plan d'actions transverse."
     : mission === "VENTES_COMPAGNIE"
-      ? "Mission ventes compagnie: confrontez le rapport externe (ex: AIRCONGO) avec les billets encodes de cette compagnie."
+      ? "Mission ventes globale: le rapport externe melange toutes les compagnies; l'IA compare ensuite compagnie par compagnie avec les billets du systeme."
       : mission === "MOUVEMENTS_CAISSE"
-        ? "Mission caisse: verifie coherence entre mouvements externes et paiements/decaissements internes."
+        ? "Mission caisse: confronte paiements + benefices avec depenses (depenses attendues via etats des besoins) puis sort risques et recommandations."
         : mission === "BESOINS_VS_CAISSE"
           ? "Mission besoins vs caisse: rapproche besoins approuves et sorties effectives de caisse."
           : mission === "ARCHIVES"
@@ -493,6 +503,82 @@ export function AuditWorkspace({
                   ))}
                 </ul>
               </div>
+
+              <div className="grid gap-3 md:grid-cols-3">
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-wide text-black/60 dark:text-white/60">Points positifs</p>
+                  <ul className="mt-2 space-y-2 text-xs">
+                    {aiResult.deepAnalysis.positives.map((item, index) => (
+                      <li key={`${item}-${index}`} className="rounded-md border border-black/10 px-3 py-2 dark:border-white/10">{item}</li>
+                    ))}
+                  </ul>
+                </div>
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-wide text-black/60 dark:text-white/60">Risques</p>
+                  <ul className="mt-2 space-y-2 text-xs">
+                    {aiResult.deepAnalysis.risks.map((item, index) => (
+                      <li key={`${item}-${index}`} className="rounded-md border border-black/10 px-3 py-2 dark:border-white/10">{item}</li>
+                    ))}
+                  </ul>
+                </div>
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-wide text-black/60 dark:text-white/60">Previsions</p>
+                  <ul className="mt-2 space-y-2 text-xs">
+                    {aiResult.deepAnalysis.forecasts.map((item, index) => (
+                      <li key={`${item}-${index}`} className="rounded-md border border-black/10 px-3 py-2 dark:border-white/10">{item}</li>
+                    ))}
+                  </ul>
+                </div>
+              </div>
+
+              {aiResult.deepAnalysis.companyBreakdown.length > 0 ? (
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-wide text-black/60 dark:text-white/60">Analyse billets par compagnie</p>
+                  <div className="mt-2 overflow-auto rounded-md border border-black/10 dark:border-white/10">
+                    <table className="min-w-full text-xs">
+                      <thead className="sticky top-0 bg-black/5 dark:bg-white/10">
+                        <tr>
+                          <th className="px-2 py-1 text-left">Compagnie</th>
+                          <th className="px-2 py-1 text-left">Issue</th>
+                          <th className="px-2 py-1 text-left">Delta billets</th>
+                          <th className="px-2 py-1 text-left">Delta montant</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {aiResult.deepAnalysis.companyBreakdown.map((item, index) => (
+                          <tr key={`${item.company}-${index}`} className="border-t border-black/5 dark:border-white/10">
+                            <td className="px-2 py-1">{item.company}</td>
+                            <td className="px-2 py-1">{item.rowIssue}</td>
+                            <td className="px-2 py-1">{item.ticketsDelta}</td>
+                            <td className="px-2 py-1">{item.amountDelta.toFixed(2)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              ) : null}
+
+              {(aiResult.deepAnalysis.caisseHealth.payments || aiResult.deepAnalysis.caisseHealth.benefits || aiResult.deepAnalysis.caisseHealth.expenses || aiResult.deepAnalysis.caisseHealth.net) ? (
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-wide text-black/60 dark:text-white/60">Santé caisse (système vs externe)</p>
+                  <div className="mt-2 grid gap-2 md:grid-cols-2">
+                    {([
+                      ["Paiements", aiResult.deepAnalysis.caisseHealth.payments],
+                      ["Benefices", aiResult.deepAnalysis.caisseHealth.benefits],
+                      ["Depenses besoins", aiResult.deepAnalysis.caisseHealth.expenses],
+                      ["Solde net", aiResult.deepAnalysis.caisseHealth.net],
+                    ] as const).map(([label, row]) => (
+                      <div key={label} className="rounded-md border border-black/10 px-3 py-2 text-xs dark:border-white/10">
+                        <p className="font-semibold">{label}</p>
+                        <p>Systeme: {row?.system.toFixed(2) ?? "-"}</p>
+                        <p>Externe: {row?.external.toFixed(2) ?? "-"}</p>
+                        <p>Delta: {row?.delta.toFixed(2) ?? "-"}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
 
               <div>
                 <p className="text-xs font-semibold uppercase tracking-wide text-black/60 dark:text-white/60">Echantillon des divergences</p>

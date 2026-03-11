@@ -190,11 +190,19 @@ async function parseExternalRowsFromFile(file: File) {
 }
 
 async function compareCaisse(range: { start: Date; end: Date }, externalRows: Array<Record<string, string>>) {
-  const [payments, approvedNeeds] = await Promise.all([
+  const [payments, tickets, approvedNeeds] = await Promise.all([
     prisma.payment.findMany({
       where: { paidAt: { gte: range.start, lt: range.end } },
       include: {
         ticket: { select: { ticketNumber: true } },
+      },
+      take: 6000,
+    }),
+    prisma.ticketSale.findMany({
+      where: { soldAt: { gte: range.start, lt: range.end } },
+      select: {
+        commissionAmount: true,
+        agencyMarkupAmount: true,
       },
       take: 6000,
     }),
@@ -211,84 +219,101 @@ async function compareCaisse(range: { start: Date; end: Date }, externalRows: Ar
     }),
   ]);
 
-  const systemMap = new Map<string, { amount: number; type: "IN" | "OUT" }>();
+  const systemPayments = payments.reduce((sum, row) => sum + row.amount, 0);
+  const systemBenefits = tickets.reduce((sum, row) => sum + row.commissionAmount + row.agencyMarkupAmount, 0);
+  const systemExpenses = approvedNeeds.reduce((sum, row) => sum + (row.estimatedAmount ?? 0), 0);
+  const systemNet = systemPayments + systemBenefits - systemExpenses;
 
-  for (const payment of payments) {
-    const key = normalizeKey(`IN:${payment.ticket.ticketNumber}`);
-    systemMap.set(key, {
-      amount: (systemMap.get(key)?.amount ?? 0) + payment.amount,
-      type: "IN",
-    });
-  }
-
-  for (const need of approvedNeeds) {
-    const amount = need.estimatedAmount ?? 0;
-    const key = normalizeKey(`OUT:${need.title}`);
-    systemMap.set(key, {
-      amount: (systemMap.get(key)?.amount ?? 0) + amount,
-      type: "OUT",
-    });
-  }
-
-  const externalMap = new Map<string, { amount: number; type: "IN" | "OUT" }>();
+  let externalPayments = 0;
+  let externalBenefits = 0;
+  let externalExpenses = 0;
 
   for (const row of externalRows) {
-    const ref = getValue(row, ["reference", "ref", "libelle", "description", "ticket", "titre"]);
-    const typeRaw = getValue(row, ["type", "sens", "mouvement"]);
-    const amount = asAmount(getValue(row, ["amount", "montant", "value", "valeur"]));
-    const type = typeRaw.toUpperCase().includes("OUT") || typeRaw.toUpperCase().includes("DEP") ? "OUT" : "IN";
-    const key = normalizeKey(`${type}:${ref || amount.toFixed(2)}`);
-    externalMap.set(key, {
-      amount: (externalMap.get(key)?.amount ?? 0) + amount,
-      type,
-    });
+    const rawLabel = `${getValue(row, ["categorie", "category", "libelle", "description", "nature"])} ${getValue(row, ["type", "sens", "mouvement"])}`;
+    const label = normalizeKey(rawLabel);
+    const amount = asAmount(getValue(row, ["amount", "montant", "value", "valeur", "total"]));
+
+    if (label.includes("BENEF") || label.includes("MARGE") || label.includes("COMMISSION")) {
+      externalBenefits += amount;
+      continue;
+    }
+
+    if (label.includes("DEPENSE") || label.includes("SORTIE") || label.includes("BESOIN") || label.includes("OUT") || label.includes("DEP")) {
+      externalExpenses += amount;
+      continue;
+    }
+
+    if (label.includes("PAIEMENT") || label.includes("ENCAISSEMENT") || label.includes("RECETTE") || label.includes("IN")) {
+      externalPayments += amount;
+      continue;
+    }
+
+    // By default, treat uncategorized lines as incoming cash.
+    externalPayments += amount;
   }
 
-  const keys = new Set([...systemMap.keys(), ...externalMap.keys()]);
+  const externalNet = externalPayments + externalBenefits - externalExpenses;
+
+  const systemMap = new Map<string, number>([
+    ["METRIC:PAIEMENTS", systemPayments],
+    ["METRIC:BENEFICES", systemBenefits],
+    ["METRIC:DEPENSES_BESOINS", systemExpenses],
+    ["METRIC:SOLDE_NET", systemNet],
+  ]);
+
+  const externalMap = new Map<string, number>([
+    ["METRIC:PAIEMENTS", externalPayments],
+    ["METRIC:BENEFICES", externalBenefits],
+    ["METRIC:DEPENSES_BESOINS", externalExpenses],
+    ["METRIC:SOLDE_NET", externalNet],
+  ]);
+
+  const keys = new Set(["METRIC:PAIEMENTS", "METRIC:BENEFICES", "METRIC:DEPENSES_BESOINS", "METRIC:SOLDE_NET"]);
   const rows: CompareRow[] = [];
 
   keys.forEach((key) => {
     const s = systemMap.get(key);
     const e = externalMap.get(key);
-    if (!s && e) {
+
+    if (s == null && e != null) {
       rows.push({
         key,
         issue: "MISSING_IN_SYSTEM",
         systemValue: "-",
-        externalValue: `${e.type} ${e.amount.toFixed(2)}`,
+        externalValue: `${e.toFixed(2)}`,
         severity: "high",
       });
       return;
     }
 
-    if (s && !e) {
+    if (s != null && e == null) {
       rows.push({
         key,
         issue: "MISSING_IN_FILE",
-        systemValue: `${s.type} ${s.amount.toFixed(2)}`,
+        systemValue: `${s.toFixed(2)}`,
         externalValue: "-",
         severity: "medium",
       });
       return;
     }
 
-    if (s && e && !compareNumeric(s.amount, e.amount)) {
+    if (s != null && e != null && !compareNumeric(s, e)) {
       rows.push({
         key,
         issue: "AMOUNT_DIFF",
-        systemValue: `${s.type} ${s.amount.toFixed(2)}`,
-        externalValue: `${e.type} ${e.amount.toFixed(2)}`,
+        systemValue: `${s.toFixed(2)}`,
+        externalValue: `${e.toFixed(2)}`,
         severity: "high",
       });
       return;
     }
 
-    if (s && e) {
+    if (s != null && e != null) {
       rows.push({
         key,
         issue: "OK",
-        systemValue: `${s.type} ${s.amount.toFixed(2)}`,
-        externalValue: `${e.type} ${e.amount.toFixed(2)}`,
+        systemValue: `${s.toFixed(2)}`,
+        externalValue: `${e.toFixed(2)}`,
         severity: "low",
       });
     }
@@ -312,38 +337,36 @@ async function compareVentes(
       } : {}),
     },
     select: {
-      ticketNumber: true,
-      customerName: true,
       amount: true,
-      soldAt: true,
       airline: { select: { code: true } },
     },
     take: 6000,
   });
 
-  const systemMap = new Map<string, { amount: number; client: string; date: string; airline: string }>();
+  const systemMap = new Map<string, { amount: number; count: number }>();
   tickets.forEach((ticket) => {
-    systemMap.set(normalizeKey(ticket.ticketNumber), {
-      amount: ticket.amount,
-      client: ticket.customerName,
-      date: ticket.soldAt.toISOString().slice(0, 10),
-      airline: normalizeKey(ticket.airline.code),
+    const airline = normalizeKey(ticket.airline.code || "INCONNUE");
+    const current = systemMap.get(airline) ?? { amount: 0, count: 0 };
+    systemMap.set(airline, {
+      amount: current.amount + ticket.amount,
+      count: current.count + 1,
     });
   });
 
-  const externalMap = new Map<string, { amount: number; client: string; date: string; airline: string }>();
+  const externalMap = new Map<string, { amount: number; count: number }>();
   externalRows.forEach((row) => {
-    const key = normalizeKey(getValue(row, ["ticket", "ticketnumber", "pnr", "reference", "ref"]));
-    if (!key) return;
+    const airline = normalizeKey(getValue(row, ["airline", "compagnie", "carrier", "code_compagnie", "compagnie_code"]));
+    if (!airline) return;
+    if (airlineScopeNormalized && airline !== airlineScopeNormalized) return;
 
-    const airline = normalizeKey(getValue(row, ["airline", "compagnie", "carrier", "code_compagnie"]));
-    if (airlineScopeNormalized && airline && airline !== airlineScopeNormalized) return;
+    const countFromFile = Number.parseInt(getValue(row, ["tickets", "nombre", "count", "nb_tickets"]), 10);
+    const count = Number.isFinite(countFromFile) ? countFromFile : 1;
+    const amount = asAmount(getValue(row, ["amount", "montant", "total", "total_ventes"]));
 
-    externalMap.set(key, {
-      amount: asAmount(getValue(row, ["amount", "montant"])),
-      client: getValue(row, ["client", "customer", "nom"]),
-      date: getValue(row, ["date", "soldat", "vente_date"]).slice(0, 10),
-      airline,
+    const current = externalMap.get(airline) ?? { amount: 0, count: 0 };
+    externalMap.set(airline, {
+      amount: current.amount + amount,
+      count: current.count + count,
     });
   });
 
@@ -353,30 +376,63 @@ async function compareVentes(
   keys.forEach((key) => {
     const s = systemMap.get(key);
     const e = externalMap.get(key);
+
     if (!s && e) {
-      rows.push({ key, issue: "MISSING_IN_SYSTEM", systemValue: "-", externalValue: `${e.client} ${e.amount.toFixed(2)}`, severity: "high" });
+      rows.push({
+        key: `COMPANY:${key}`,
+        issue: "MISSING_IN_SYSTEM",
+        systemValue: "-",
+        externalValue: `Tickets=${e.count};Montant=${e.amount.toFixed(2)}`,
+        severity: "high",
+      });
       return;
     }
+
     if (s && !e) {
-      rows.push({ key, issue: "MISSING_IN_FILE", systemValue: `${s.client} ${s.amount.toFixed(2)}`, externalValue: "-", severity: "medium" });
+      rows.push({
+        key: `COMPANY:${key}`,
+        issue: "MISSING_IN_FILE",
+        systemValue: `Tickets=${s.count};Montant=${s.amount.toFixed(2)}`,
+        externalValue: "-",
+        severity: "medium",
+      });
       return;
     }
+
     if (s && e) {
       const sameAmount = compareNumeric(s.amount, e.amount);
-      const sameClient = exactTextEqual(s.client, e.client);
-      const sameAirline = !airlineScopeNormalized || !e.airline || exactTextEqual(s.airline, e.airline);
-      if (!sameAmount || !sameClient || !sameAirline) {
+      const sameCount = s.count === e.count;
+      if (!sameAmount || !sameCount) {
         rows.push({
-          key,
+          key: `COMPANY:${key}`,
           issue: !sameAmount ? "AMOUNT_DIFF" : "FIELD_DIFF",
-          systemValue: `${s.airline} ${s.client} ${s.amount.toFixed(2)} ${s.date}`,
-          externalValue: `${e.airline || "-"} ${e.client} ${e.amount.toFixed(2)} ${e.date}`,
+          systemValue: `Tickets=${s.count};Montant=${s.amount.toFixed(2)}`,
+          externalValue: `Tickets=${e.count};Montant=${e.amount.toFixed(2)}`,
           severity: "high",
         });
         return;
       }
-      rows.push({ key, issue: "OK", systemValue: `${s.client} ${s.amount.toFixed(2)}`, externalValue: `${e.client} ${e.amount.toFixed(2)}`, severity: "low" });
+      rows.push({
+        key: `COMPANY:${key}`,
+        issue: "OK",
+        systemValue: `Tickets=${s.count};Montant=${s.amount.toFixed(2)}`,
+        externalValue: `Tickets=${e.count};Montant=${e.amount.toFixed(2)}`,
+        severity: "low",
+      });
     }
+  });
+
+  const totalSystemAmount = Array.from(systemMap.values()).reduce((sum, row) => sum + row.amount, 0);
+  const totalExternalAmount = Array.from(externalMap.values()).reduce((sum, row) => sum + row.amount, 0);
+  const totalSystemCount = Array.from(systemMap.values()).reduce((sum, row) => sum + row.count, 0);
+  const totalExternalCount = Array.from(externalMap.values()).reduce((sum, row) => sum + row.count, 0);
+
+  rows.push({
+    key: "GLOBAL:TOTAL_VENTES",
+    issue: compareNumeric(totalSystemAmount, totalExternalAmount) && totalSystemCount === totalExternalCount ? "OK" : "AMOUNT_DIFF",
+    systemValue: `Tickets=${totalSystemCount};Montant=${totalSystemAmount.toFixed(2)}`,
+    externalValue: `Tickets=${totalExternalCount};Montant=${totalExternalAmount.toFixed(2)}`,
+    severity: compareNumeric(totalSystemAmount, totalExternalAmount) && totalSystemCount === totalExternalCount ? "low" : "high",
   });
 
   return rows;

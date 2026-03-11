@@ -105,6 +105,15 @@ function controlStatusFromRate(rate: number): ControlStatus {
   return "ALERT";
 }
 
+function parsePair(value: string | undefined) {
+  const text = value ?? "";
+  const ticketsMatch = text.match(/TICKETS\s*=\s*([0-9]+)/i);
+  const amountMatch = text.match(/MONTANT\s*=\s*([0-9.,-]+)/i);
+  const tickets = ticketsMatch ? Number.parseInt(ticketsMatch[1], 10) : 0;
+  const amount = amountMatch ? amountFromText(amountMatch[1]) : 0;
+  return { tickets: Number.isFinite(tickets) ? tickets : 0, amount };
+}
+
 export async function POST(request: NextRequest) {
   const access = await requireApiModuleAccess("audit", ["ADMIN", "MANAGER", "EMPLOYEE", "ACCOUNTANT"]);
   if (access.error) return access.error;
@@ -165,6 +174,34 @@ export async function POST(request: NextRequest) {
       riskScore: d.riskScore,
       reason: d.riskReason,
     }));
+
+  const companyRows = compareRows.filter((row) => row.key.startsWith("COMPANY:"));
+  const companyDiffs = companyRows
+    .map((row) => {
+      const company = row.key.replace("COMPANY:", "");
+      const s = parsePair(row.systemValue);
+      const e = parsePair(row.externalValue);
+      return {
+        company,
+        rowIssue: row.issue,
+        ticketsDelta: s.tickets - e.tickets,
+        amountDelta: s.amount - e.amount,
+      };
+    })
+    .sort((a, b) => Math.abs(b.amountDelta) - Math.abs(a.amountDelta));
+
+  const caisseRows = compareRows.filter((row) => row.key.startsWith("METRIC:"));
+  const caisseMetrics = new Map<string, { system: number; external: number; delta: number }>();
+  for (const row of caisseRows) {
+    const metric = row.key.replace("METRIC:", "");
+    const system = amountFromText(row.systemValue);
+    const external = amountFromText(row.externalValue);
+    caisseMetrics.set(metric, {
+      system,
+      external,
+      delta: system - external,
+    });
+  }
 
   let decisionSuggestion: "VALIDATE" | "REJECT" | "ESCALATE" = "VALIDATE";
   const reasons: string[] = [];
@@ -417,6 +454,39 @@ export async function POST(request: NextRequest) {
             : "Concordance montant satisfaisante.",
         },
       ],
+      positives: [
+        strictVerdict === "IDENTIQUE"
+          ? "Concordance stricte globale validee sur la periode analysee."
+          : "Certaines zones restent stables malgre les divergences detectees.",
+        `Taux de concordance textuelle: ${consistencyRate}%`,
+        `Taux d'integrite financiere: ${financialIntegrityRate}%`,
+      ],
+      risks: [
+        issueRank.high > 0
+          ? `${issueRank.high} ecart(s) critique(s) a traiter en priorite.`
+          : "Aucun ecart critique majeur detecte.",
+        strictAmountMismatchRows > 0
+          ? `${strictAmountMismatchRows} divergence(s) stricte(s) sur les montants.`
+          : "Aucune divergence stricte montant.",
+        strictTextMismatchRows > 0
+          ? `${strictTextMismatchRows} divergence(s) stricte(s) textuelle(s).`
+          : "Aucune divergence stricte textuelle.",
+      ],
+      forecasts: [
+        estimatedDelta > 0
+          ? "Si les ecarts persistent, le risque de non-conformite financiere augmentera sur la prochaine cloture."
+          : "Si la discipline actuelle est maintenue, la prochaine cloture devrait rester stable.",
+        pendingHigh > 0
+          ? `Avec ${pendingHigh} dossier(s) a haut risque en attente, prevoir une charge de correction elevee sous 7 jours.`
+          : "Charge corrective previsionnelle faible sur 7 jours.",
+      ],
+      companyBreakdown: companyDiffs.slice(0, 12),
+      caisseHealth: {
+        payments: caisseMetrics.get("PAIEMENTS") ?? null,
+        benefits: caisseMetrics.get("BENEFICES") ?? null,
+        expenses: caisseMetrics.get("DEPENSES_BESOINS") ?? null,
+        net: caisseMetrics.get("SOLDE_NET") ?? null,
+      },
       evidenceSamples: compareRows
         .filter((row) => row.issue !== "OK")
         .slice(0, 10)
