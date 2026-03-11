@@ -66,6 +66,7 @@ export function ProcurementHub({
   canCreateNeed,
   canApproveNeed,
   canManageStock,
+  hideNeedWorkflow,
 }: {
   initialNeeds: NeedItem[];
   initialStock: StockItem[];
@@ -73,6 +74,7 @@ export function ProcurementHub({
   canCreateNeed: boolean;
   canApproveNeed: boolean;
   canManageStock: boolean;
+  hideNeedWorkflow?: boolean;
 }) {
   const defaultReportMonth = new Date().toISOString().slice(0, 7);
   const [needs, setNeeds] = useState(initialNeeds);
@@ -257,143 +259,145 @@ export function ProcurementHub({
 
   return (
     <div className="space-y-6">
-      <div className="grid gap-6 lg:grid-cols-[420px,1fr]">
-        <section className="rounded-xl border border-black/10 bg-white p-4 dark:border-white/10 dark:bg-zinc-900">
-          <h2 className="text-base font-semibold">Émettre un état de besoin</h2>
-          <p className="mt-1 text-xs text-black/60 dark:text-white/60">
-            Le document est transmis à la Direction Générale et à la Finance pour validation.
-          </p>
+      {hideNeedWorkflow ? null : (
+        <div className="grid gap-6 lg:grid-cols-[420px,1fr]">
+          <section className="rounded-xl border border-black/10 bg-white p-4 dark:border-white/10 dark:bg-zinc-900">
+            <h2 className="text-base font-semibold">Émettre un état de besoin</h2>
+            <p className="mt-1 text-xs text-black/60 dark:text-white/60">
+              Le document est transmis à la Direction Générale et à la Finance pour validation.
+            </p>
 
-          {canCreateNeed ? (
-            <form onSubmit={submitNeed} className="mt-3 grid gap-2">
-              <input name="title" required placeholder="Objet du besoin" className="rounded-md border px-3 py-2 text-sm" />
-              <input name="category" required placeholder="Catégorie" className="rounded-md border px-3 py-2 text-sm" />
-              <div className="rounded-lg border border-black/10 p-3 dark:border-white/10">
-                <div className="flex items-center justify-between gap-2">
-                  <p className="text-[11px] font-semibold uppercase tracking-wide text-black/60 dark:text-white/60">
-                    Lignes du devis ({needLines.length})
-                  </p>
-                  <button
-                    type="button"
-                    onClick={addNeedLine}
-                    className="rounded-md border border-black/20 px-2.5 py-1 text-xs font-semibold hover:bg-black/5 dark:border-white/20 dark:hover:bg-white/10"
-                  >
-                    + Ajouter ligne
-                  </button>
-                </div>
+            {canCreateNeed ? (
+              <form onSubmit={submitNeed} className="mt-3 grid gap-2">
+                <input name="title" required placeholder="Objet du besoin" className="rounded-md border px-3 py-2 text-sm" />
+                <input name="category" required placeholder="Catégorie" className="rounded-md border px-3 py-2 text-sm" />
+                <div className="rounded-lg border border-black/10 p-3 dark:border-white/10">
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="text-[11px] font-semibold uppercase tracking-wide text-black/60 dark:text-white/60">
+                      Lignes du devis ({needLines.length})
+                    </p>
+                    <button
+                      type="button"
+                      onClick={addNeedLine}
+                      className="rounded-md border border-black/20 px-2.5 py-1 text-xs font-semibold hover:bg-black/5 dark:border-white/20 dark:hover:bg-white/10"
+                    >
+                      + Ajouter ligne
+                    </button>
+                  </div>
 
-                <div className="mt-2 max-h-64 space-y-2 overflow-y-auto pr-1">
-                  {needLines.map((line, index) => {
-                    const lineTotal = (Number(line.quantity) || 0) * (Number(line.unitPrice) || 0);
+                  <div className="mt-2 max-h-64 space-y-2 overflow-y-auto pr-1">
+                    {needLines.map((line, index) => {
+                      const lineTotal = (Number(line.quantity) || 0) * (Number(line.unitPrice) || 0);
 
-                    return (
-                      <div key={`line-${index}`} className="rounded-md border border-black/10 p-2.5 dark:border-white/10">
-                        <div className="mb-2 flex items-center justify-between gap-2">
-                          <p className="text-xs font-semibold text-black/70 dark:text-white/70">Article {index + 1}</p>
-                          <button
-                            type="button"
-                            onClick={() => removeNeedLine(index)}
-                            className="rounded-md border border-red-300 px-2 py-1 text-[11px] font-semibold text-red-700 hover:bg-red-50 dark:border-red-700/60 dark:text-red-300 dark:hover:bg-red-950/40"
-                          >
-                            Retirer
-                          </button>
-                        </div>
+                      return (
+                        <div key={`line-${index}`} className="rounded-md border border-black/10 p-2.5 dark:border-white/10">
+                          <div className="mb-2 flex items-center justify-between gap-2">
+                            <p className="text-xs font-semibold text-black/70 dark:text-white/70">Article {index + 1}</p>
+                            <button
+                              type="button"
+                              onClick={() => removeNeedLine(index)}
+                              className="rounded-md border border-red-300 px-2 py-1 text-[11px] font-semibold text-red-700 hover:bg-red-50 dark:border-red-700/60 dark:text-red-300 dark:hover:bg-red-950/40"
+                            >
+                              Retirer
+                            </button>
+                          </div>
 
-                        <div className="grid gap-2 sm:grid-cols-2">
-                          <input
-                            value={line.designation}
-                            onChange={(event) => updateNeedLine(index, "designation", event.target.value)}
-                            placeholder="Désignation"
-                            className="rounded-md border px-2 py-2 text-sm"
-                          />
-                          <input
-                            value={line.description}
-                            onChange={(event) => updateNeedLine(index, "description", event.target.value)}
-                            placeholder="Description"
-                            className="rounded-md border px-2 py-2 text-sm"
-                          />
-                        </div>
+                          <div className="grid gap-2 sm:grid-cols-2">
+                            <input
+                              value={line.designation}
+                              onChange={(event) => updateNeedLine(index, "designation", event.target.value)}
+                              placeholder="Désignation"
+                              className="rounded-md border px-2 py-2 text-sm"
+                            />
+                            <input
+                              value={line.description}
+                              onChange={(event) => updateNeedLine(index, "description", event.target.value)}
+                              placeholder="Description"
+                              className="rounded-md border px-2 py-2 text-sm"
+                            />
+                          </div>
 
-                        <div className="mt-2 grid gap-2 sm:grid-cols-3">
-                          <input
-                            type="number"
-                            min="0.01"
-                            step="0.01"
-                            value={line.quantity}
-                            onChange={(event) => updateNeedLine(index, "quantity", event.target.value)}
-                            placeholder="Quantité"
-                            className="rounded-md border px-2 py-2 text-sm"
-                          />
-                          <input
-                            type="number"
-                            min="0"
-                            step="0.01"
-                            value={line.unitPrice}
-                            onChange={(event) => updateNeedLine(index, "unitPrice", event.target.value)}
-                            placeholder="Prix unitaire"
-                            className="rounded-md border px-2 py-2 text-sm"
-                          />
-                          <div className="flex items-center rounded-md border bg-black/5 px-3 py-2 text-sm font-semibold dark:bg-white/10">
-                            Total: {lineTotal.toFixed(2)}
+                          <div className="mt-2 grid gap-2 sm:grid-cols-3">
+                            <input
+                              type="number"
+                              min="0.01"
+                              step="0.01"
+                              value={line.quantity}
+                              onChange={(event) => updateNeedLine(index, "quantity", event.target.value)}
+                              placeholder="Quantité"
+                              className="rounded-md border px-2 py-2 text-sm"
+                            />
+                            <input
+                              type="number"
+                              min="0"
+                              step="0.01"
+                              value={line.unitPrice}
+                              onChange={(event) => updateNeedLine(index, "unitPrice", event.target.value)}
+                              placeholder="Prix unitaire"
+                              className="rounded-md border px-2 py-2 text-sm"
+                            />
+                            <div className="flex items-center rounded-md border bg-black/5 px-3 py-2 text-sm font-semibold dark:bg-white/10">
+                              Total: {lineTotal.toFixed(2)}
+                            </div>
                           </div>
                         </div>
-                      </div>
-                    );
-                  })}
-                </div>
-                <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
-                  <div className="text-sm font-semibold">
-                    Total général: {quoteTotal.toFixed(2)}
+                      );
+                    })}
+                  </div>
+                  <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
+                    <div className="text-sm font-semibold">
+                      Total général: {quoteTotal.toFixed(2)}
+                    </div>
                   </div>
                 </div>
-              </div>
-              <div className="grid grid-cols-[120px,120px] gap-2">
-                <input name="currency" defaultValue="XAF" maxLength={3} placeholder="Devise" className="rounded-md border px-3 py-2 text-sm uppercase" />
-              </div>
-              <p className="text-[11px] text-black/55 dark:text-white/55">Format devis: chaque ligne = désignation + description + quantité + prix unitaire.</p>
-              <button className="rounded-md bg-black px-3 py-2 text-sm font-semibold text-white dark:bg-white dark:text-black">Émettre</button>
-            </form>
-          ) : (
-            <p className="mt-3 rounded-md border border-dashed border-black/20 px-3 py-2 text-xs text-black/70 dark:border-white/20 dark:text-white/70">
-              Émission réservée au service Approvisionnement.
+                <div className="grid grid-cols-[120px,120px] gap-2">
+                  <input name="currency" defaultValue="XAF" maxLength={3} placeholder="Devise" className="rounded-md border px-3 py-2 text-sm uppercase" />
+                </div>
+                <p className="text-[11px] text-black/55 dark:text-white/55">Format devis: chaque ligne = désignation + description + quantité + prix unitaire.</p>
+                <button className="rounded-md bg-black px-3 py-2 text-sm font-semibold text-white dark:bg-white dark:text-black">Émettre</button>
+              </form>
+            ) : (
+              <p className="mt-3 rounded-md border border-dashed border-black/20 px-3 py-2 text-xs text-black/70 dark:border-white/20 dark:text-white/70">
+                Émission réservée au service Approvisionnement.
+              </p>
+            )}
+
+            {needStatus ? <p className="mt-2 text-xs text-black/60 dark:text-white/60">{needStatus}</p> : null}
+          </section>
+
+          <section className="rounded-xl border border-black/10 bg-white p-4 dark:border-white/10 dark:bg-zinc-900">
+            <h2 className="text-base font-semibold">Validation Direction / Finance</h2>
+            <p className="mt-1 text-xs text-black/60 dark:text-white/60">
+              Un état approuvé revient avec statut Approuvé et sceau documentaire.
             </p>
-          )}
 
-          {needStatus ? <p className="mt-2 text-xs text-black/60 dark:text-white/60">{needStatus}</p> : null}
-        </section>
+            {canApproveNeed ? (
+              <form onSubmit={submitApproval} className="mt-3 grid gap-2 sm:grid-cols-2">
+                <select name="needRequestId" required className="rounded-md border px-3 py-2 text-sm sm:col-span-2">
+                  <option value="">Sélectionner un état de besoin</option>
+                  {needs
+                    .filter((need) => need.status === "SUBMITTED")
+                    .map((need) => (
+                      <option key={need.id} value={need.id}>{need.title} • {need.requester.name}</option>
+                    ))}
+                </select>
+                <select name="status" defaultValue="APPROVED" className="rounded-md border px-3 py-2 text-sm">
+                  <option value="APPROVED">Approuver</option>
+                  <option value="REJECTED">Rejeter</option>
+                </select>
+                <input name="reviewComment" placeholder="Commentaire" className="rounded-md border px-3 py-2 text-sm" />
+                <button className="rounded-md bg-black px-3 py-2 text-sm font-semibold text-white dark:bg-white dark:text-black sm:col-span-2">Valider</button>
+              </form>
+            ) : (
+              <p className="mt-3 rounded-md border border-dashed border-black/20 px-3 py-2 text-xs text-black/70 dark:border-white/20 dark:text-white/70">
+                Validation réservée à la Direction et à la Finance.
+              </p>
+            )}
 
-        <section className="rounded-xl border border-black/10 bg-white p-4 dark:border-white/10 dark:bg-zinc-900">
-          <h2 className="text-base font-semibold">Validation Direction / Finance</h2>
-          <p className="mt-1 text-xs text-black/60 dark:text-white/60">
-            Un état approuvé revient avec statut Approuvé et sceau documentaire.
-          </p>
-
-          {canApproveNeed ? (
-            <form onSubmit={submitApproval} className="mt-3 grid gap-2 sm:grid-cols-2">
-              <select name="needRequestId" required className="rounded-md border px-3 py-2 text-sm sm:col-span-2">
-                <option value="">Sélectionner un état de besoin</option>
-                {needs
-                  .filter((need) => need.status === "SUBMITTED")
-                  .map((need) => (
-                    <option key={need.id} value={need.id}>{need.title} • {need.requester.name}</option>
-                  ))}
-              </select>
-              <select name="status" defaultValue="APPROVED" className="rounded-md border px-3 py-2 text-sm">
-                <option value="APPROVED">Approuver</option>
-                <option value="REJECTED">Rejeter</option>
-              </select>
-              <input name="reviewComment" placeholder="Commentaire" className="rounded-md border px-3 py-2 text-sm" />
-              <button className="rounded-md bg-black px-3 py-2 text-sm font-semibold text-white dark:bg-white dark:text-black sm:col-span-2">Valider</button>
-            </form>
-          ) : (
-            <p className="mt-3 rounded-md border border-dashed border-black/20 px-3 py-2 text-xs text-black/70 dark:border-white/20 dark:text-white/70">
-              Validation réservée à la Direction et à la Finance.
-            </p>
-          )}
-
-          {approvalStatus ? <p className="mt-2 text-xs text-black/60 dark:text-white/60">{approvalStatus}</p> : null}
-        </section>
-      </div>
+            {approvalStatus ? <p className="mt-2 text-xs text-black/60 dark:text-white/60">{approvalStatus}</p> : null}
+          </section>
+        </div>
+      )}
 
       <section className="rounded-xl border border-black/10 bg-white p-4 dark:border-white/10 dark:bg-zinc-900">
         <h2 className="text-base font-semibold">Suivi des états de besoin</h2>

@@ -75,6 +75,7 @@ export default async function ApprovisionnementPage() {
         canCreateNeed={canCreateNeed}
         canApproveNeed={canApproveNeed}
         canManageStock={canManageStock}
+        hideNeedWorkflow={isAdminReadOnly}
       />
     </AppShell>
   );
