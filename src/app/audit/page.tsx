@@ -418,7 +418,7 @@ export default async function AuditPage({
     score += Math.min(30, reportsApproved * 6 + reportsSubmitted * 2);
     const rounded = Math.round(Math.min(100, score));
 
-    const level = rounded >= 80
+    const level: EmployeeAuditMetric["level"] = rounded >= 80
       ? "EXCELLENT"
       : rounded >= 60
         ? "GOOD"
