@@ -125,6 +125,7 @@ export function AuditWorkspace({
   const [aiLoading, setAiLoading] = useState(false);
   const [aiResult, setAiResult] = useState<AiAnalysis | null>(null);
   const [status, setStatus] = useState("");
+  const [focusPane, setFocusPane] = useState<"ASSISTANT" | "ENGINE">("ASSISTANT");
 
   const filtered = useMemo(() => {
     return dossiers.filter((item) => {
@@ -257,14 +258,34 @@ export function AuditWorkspace({
   }
 
   return (
-    <div className="grid h-full min-h-0 gap-4 overflow-hidden lg:grid-cols-[minmax(0,1.5fr)_minmax(420px,1fr)]">
-      <section className="flex min-h-0 min-w-0 flex-col rounded-2xl border border-black/10 bg-white p-4 dark:border-white/10 dark:bg-zinc-900">
-        <div className="shrink-0">
-          <h2 className="text-base font-semibold">Assistant IA Audit</h2>
-          <p className="mt-1 text-xs text-black/60 dark:text-white/60">Cette section remplace l'ancien workflow et produit des analyses plus robustes (decision + arguments + plan d'actions).</p>
-        </div>
+    <div className="flex h-full min-h-0 flex-col gap-4 overflow-hidden">
+      <section className="grid shrink-0 gap-3 md:grid-cols-2">
+        <button
+          type="button"
+          onClick={() => setFocusPane("ASSISTANT")}
+          className={`rounded-2xl border p-4 text-left transition ${focusPane === "ASSISTANT" ? "border-black/25 bg-black/5 dark:border-white/30 dark:bg-white/10" : "border-black/10 bg-white dark:border-white/10 dark:bg-zinc-900"}`}
+        >
+          <p className="text-base font-semibold">Assistant IA Audit</p>
+          <p className="mt-1 text-xs text-black/60 dark:text-white/60">Filtres, dossiers et supervision. Cette vue prend tout l'espace quand elle est active.</p>
+        </button>
+        <button
+          type="button"
+          onClick={() => setFocusPane("ENGINE")}
+          className={`rounded-2xl border p-4 text-left transition ${focusPane === "ENGINE" ? "border-black/25 bg-black/5 dark:border-white/30 dark:bg-white/10" : "border-black/10 bg-white dark:border-white/10 dark:bg-zinc-900"}`}
+        >
+          <p className="text-base font-semibold">Moteur IA</p>
+          <p className="mt-1 text-xs text-black/60 dark:text-white/60">Mission, comparaison externe, raisonnement IA et plan d'actions. Cette vue prend tout l'espace quand elle est active.</p>
+        </button>
+      </section>
 
-        <div className="mt-3 grid gap-2 md:grid-cols-2 xl:grid-cols-5">
+      {focusPane === "ASSISTANT" ? (
+        <section className="flex min-h-0 min-w-0 flex-1 flex-col rounded-2xl border border-black/10 bg-white p-5 dark:border-white/10 dark:bg-zinc-900">
+          <div className="shrink-0">
+            <h2 className="text-base font-semibold">Assistant IA Audit</h2>
+            <p className="mt-1 text-xs text-black/60 dark:text-white/60">Espace de travail audit: filtrez, visualisez et priorisez les dossiers.</p>
+          </div>
+
+          <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-5">
           <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className="rounded-md border border-black/15 px-3 py-2 text-sm dark:border-white/20" />
           <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} className="rounded-md border border-black/15 px-3 py-2 text-sm dark:border-white/20" />
           <select value={service} onChange={(e) => setService(e.target.value)} className="rounded-md border border-black/15 px-3 py-2 text-sm dark:border-white/20">
@@ -277,7 +298,7 @@ export function AuditWorkspace({
           <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Recherche" className="rounded-md border border-black/15 px-3 py-2 text-sm dark:border-white/20" />
         </div>
 
-        <div className="mt-2 flex items-center justify-between gap-2">
+          <div className="mt-3 flex items-center justify-between gap-3">
           <div className="flex flex-wrap gap-2 text-xs">
             {rowTabs.map((tab) => (
               <button key={tab} type="button" onClick={() => setRowTab(tab)} className={`rounded-full border px-2.5 py-1 font-semibold ${rowTab === tab ? "border-black bg-black/5 dark:border-white dark:bg-white/10" : "border-black/15 dark:border-white/20"}`}>
@@ -297,8 +318,8 @@ export function AuditWorkspace({
           </button>
         </div>
 
-        <div className="mt-3 min-h-0 flex-1 overflow-auto rounded-lg border border-black/10 dark:border-white/10">
-          <table className="min-w-full text-sm">
+          <div className="mt-4 min-h-0 flex-1 overflow-auto rounded-lg border border-black/10 dark:border-white/10">
+          <table className="min-w-full text-sm leading-6">
             <thead className="sticky top-0 bg-black/5 dark:bg-white/10">
               <tr>
                 <th className="px-3 py-2 text-left">Ref</th>
@@ -334,14 +355,16 @@ export function AuditWorkspace({
               ) : null}
             </tbody>
           </table>
-        </div>
-      </section>
+          </div>
+        </section>
+      ) : null}
 
-      <section className="flex min-h-0 min-w-0 flex-col overflow-hidden rounded-2xl border border-black/10 bg-white p-4 dark:border-white/10 dark:bg-zinc-900">
-        <h2 className="text-base font-semibold">Moteur IA</h2>
-        <p className="mt-1 text-xs text-black/60 dark:text-white/60">{missionGuide}</p>
+      {focusPane === "ENGINE" ? (
+        <section className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-2xl border border-black/10 bg-white p-5 dark:border-white/10 dark:bg-zinc-900">
+          <h2 className="text-base font-semibold">Moteur IA</h2>
+          <p className="mt-1 text-xs text-black/60 dark:text-white/60">{missionGuide}</p>
 
-        <div className="mt-3 space-y-2 rounded-xl border border-black/10 p-3 dark:border-white/10">
+          <div className="mt-4 space-y-3 rounded-xl border border-black/10 p-4 dark:border-white/10">
           <select value={mission} onChange={(e) => setMission(e.target.value as AiAnalysis["mission"])} className="w-full rounded-md border border-black/15 px-3 py-2 text-sm dark:border-white/20">
             <option value="GLOBAL">Mission globale</option>
             <option value="VENTES_COMPAGNIE">Mission ventes compagnie</option>
@@ -386,7 +409,7 @@ export function AuditWorkspace({
             {aiLoading ? "Analyse IA..." : "2) Lancer analyse IA"}
           </button>
 
-          <div className="grid grid-cols-3 gap-2 text-xs">
+          <div className="grid grid-cols-3 gap-3 text-xs">
             <div className="rounded-md border border-black/10 px-2 py-1 dark:border-white/10">
               <p className="text-black/60 dark:text-white/60">Risque global</p>
               <p className="font-semibold">{insights.globalRiskIndex}/100</p>
@@ -400,12 +423,12 @@ export function AuditWorkspace({
               <p className="font-semibold">{insights.topServiceAtRisk}</p>
             </div>
           </div>
-        </div>
+          </div>
 
-        <div className="mt-3 min-h-0 flex-1 overflow-auto rounded-xl border border-black/10 p-3 text-sm dark:border-white/10">
+          <div className="mt-4 min-h-0 flex-1 overflow-auto rounded-xl border border-black/10 p-4 text-sm dark:border-white/10">
           {aiResult ? (
-            <div className="space-y-3">
-              <div className="rounded-md border border-black/10 bg-black/5 p-2 dark:border-white/10 dark:bg-white/5">
+            <div className="space-y-4">
+              <div className="rounded-md border border-black/10 bg-black/5 p-3 dark:border-white/10 dark:bg-white/5">
                 <p className="text-xs uppercase tracking-wide text-black/60 dark:text-white/60">Decision suggeree</p>
                 <p className="text-lg font-semibold">{aiResult.decisionSuggestion} • Confiance {aiResult.confidence}%</p>
                 <p className="mt-1 text-xs text-black/60 dark:text-white/60">
@@ -415,18 +438,18 @@ export function AuditWorkspace({
 
               <div>
                 <p className="text-xs font-semibold uppercase tracking-wide text-black/60 dark:text-white/60">Raisonnement IA</p>
-                <ul className="mt-1 space-y-1 text-xs">
+                <ul className="mt-2 space-y-2 text-xs">
                   {aiResult.reasons.map((reason, index) => (
-                    <li key={`${reason}-${index}`} className="rounded-md border border-black/10 px-2 py-1 dark:border-white/10">{reason}</li>
+                    <li key={`${reason}-${index}`} className="rounded-md border border-black/10 px-3 py-2 dark:border-white/10">{reason}</li>
                   ))}
                 </ul>
               </div>
 
               <div>
                 <p className="text-xs font-semibold uppercase tracking-wide text-black/60 dark:text-white/60">Plan d'actions propose</p>
-                <ul className="mt-1 space-y-1 text-xs">
+                <ul className="mt-2 space-y-2 text-xs">
                   {aiResult.actionPlan.map((action, index) => (
-                    <li key={`${action.title}-${index}`} className="rounded-md border border-black/10 px-2 py-1 dark:border-white/10">
+                    <li key={`${action.title}-${index}`} className="rounded-md border border-black/10 px-3 py-2 dark:border-white/10">
                       <p className="font-semibold">{action.title}</p>
                       <p className="text-black/60 dark:text-white/60">Priorite {action.priority} • Owner {action.owner} • Echeance J+{action.dueInDays}</p>
                     </li>
@@ -436,9 +459,9 @@ export function AuditWorkspace({
 
               <div>
                 <p className="text-xs font-semibold uppercase tracking-wide text-black/60 dark:text-white/60">File prioritaire</p>
-                <ul className="mt-1 space-y-1 text-xs">
+                <ul className="mt-2 space-y-2 text-xs">
                   {aiResult.priorityQueue.map((item, index) => (
-                    <li key={`${item.reference}-${index}`} className="rounded-md border border-black/10 px-2 py-1 dark:border-white/10">
+                    <li key={`${item.reference}-${index}`} className="rounded-md border border-black/10 px-3 py-2 dark:border-white/10">
                       {item.reference} • {item.service} • {item.riskScore}/100
                     </li>
                   ))}
@@ -470,10 +493,11 @@ export function AuditWorkspace({
               </ul>
             </div>
           )}
-        </div>
+          </div>
 
-        <p className="mt-2 text-xs text-black/60 dark:text-white/60">{status}</p>
-      </section>
+          <p className="mt-3 text-xs text-black/60 dark:text-white/60">{status}</p>
+        </section>
+      ) : null}
     </div>
   );
 }
