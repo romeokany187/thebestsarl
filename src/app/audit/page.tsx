@@ -112,7 +112,7 @@ export default async function AuditPage({
   searchParams?: Promise<SearchParams>;
 }) {
   const { role, session } = await requirePageModuleAccess("audit", ["ADMIN", "MANAGER", "EMPLOYEE", "ACCOUNTANT"]);
-  const canWriteAudit = (session.user.jobTitle ?? "").toUpperCase() === "AUDITEUR";
+  const canWriteAudit = role === "ADMIN" || (session.user.jobTitle ?? "").toUpperCase() === "AUDITEUR";
   const resolvedSearchParams = (await searchParams) ?? {};
   const range = dateRangeFromParams(resolvedSearchParams);
 

@@ -355,7 +355,10 @@ export async function POST(request: NextRequest) {
     return access.error;
   }
 
-  if ((access.session.user.jobTitle ?? "").toUpperCase() !== "AUDITEUR") {
+  const canWrite = access.session.user.role === "ADMIN"
+    || (access.session.user.jobTitle ?? "").toUpperCase() === "AUDITEUR";
+
+  if (!canWrite) {
     return NextResponse.json({ error: "Mode lecture: écriture réservée à l'auditeur." }, { status: 403 });
   }
 
