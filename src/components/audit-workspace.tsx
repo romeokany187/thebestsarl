@@ -303,7 +303,7 @@ export function AuditWorkspace({
       </section>
 
       {focusPane === "ASSISTANT" ? (
-        <section className="flex min-h-0 min-w-0 flex-1 flex-col rounded-2xl border border-black/10 bg-white p-5 dark:border-white/10 dark:bg-zinc-900">
+        <section className="flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto rounded-2xl border border-black/10 bg-white p-5 dark:border-white/10 dark:bg-zinc-900">
           <div className="shrink-0">
             <h2 className="text-base font-semibold">Assistant IA Audit</h2>
             <p className="mt-1 text-xs text-black/60 dark:text-white/60">Espace de travail audit: filtrez, visualisez et priorisez les dossiers.</p>
@@ -384,7 +384,7 @@ export function AuditWorkspace({
       ) : null}
 
       {focusPane === "ENGINE" ? (
-        <section className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-2xl border border-black/10 bg-white p-5 dark:border-white/10 dark:bg-zinc-900">
+        <section className="flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto rounded-2xl border border-black/10 bg-white p-5 dark:border-white/10 dark:bg-zinc-900">
           <h2 className="text-base font-semibold">Moteur IA</h2>
           <p className="mt-1 text-xs text-black/60 dark:text-white/60">{missionGuide}</p>
 
@@ -449,7 +449,7 @@ export function AuditWorkspace({
           </div>
           </div>
 
-          <div className="mt-4 min-h-0 flex-1 overflow-auto rounded-xl border border-black/10 p-4 text-sm dark:border-white/10">
+          <div className="mt-4 rounded-xl border border-black/10 p-4 text-sm dark:border-white/10">
           {aiResult ? (
             <div className="space-y-4">
               <div className="rounded-md border border-black/10 bg-black/5 p-3 dark:border-white/10 dark:bg-white/5">
