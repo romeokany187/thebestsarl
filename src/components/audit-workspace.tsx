@@ -357,54 +357,34 @@ export function AuditWorkspace({
   }
 
   return (
-    <div className="grid gap-6 lg:grid-cols-[1.4fr,1fr,340px]">
-      <section className="rounded-2xl border border-black/10 bg-white p-4 dark:border-white/10 dark:bg-zinc-900 lg:col-span-3">
-        <h2 className="text-base font-semibold">Pilotage intelligent audit</h2>
-        <div className="mt-3 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-          <article className="rounded-lg border border-black/10 bg-black/3 p-3 dark:border-white/10 dark:bg-white/3">
-            <p className="text-[11px] uppercase tracking-wide text-black/60 dark:text-white/60">Indice de risque</p>
-            <p className="mt-1 text-2xl font-semibold">{insights.globalRiskIndex}/100</p>
+    <div className="grid h-full min-h-0 gap-4 overflow-hidden lg:grid-cols-[1.55fr,1fr]">
+      <section className="rounded-2xl border border-black/10 bg-white p-4 dark:border-white/10 dark:bg-zinc-900 lg:col-span-2">
+        <h2 className="text-base font-semibold">Audit clair et concret</h2>
+        <p className="mt-1 text-xs text-black/60 dark:text-white/60">
+          Etape 1: filtrez les dossiers. Etape 2: cliquez sur Auditer. Etape 3: validez/rejetez et suivez les actions correctives.
+        </p>
+        <div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+          <article className="rounded-lg border border-black/10 bg-black/3 px-3 py-2 dark:border-white/10 dark:bg-white/3">
+            <p className="text-[11px] uppercase tracking-wide text-black/60 dark:text-white/60">Risque global</p>
+            <p className="text-xl font-semibold">{insights.globalRiskIndex}/100</p>
           </article>
-          <article className="rounded-lg border border-black/10 bg-black/3 p-3 dark:border-white/10 dark:bg-white/3">
+          <article className="rounded-lg border border-black/10 bg-black/3 px-3 py-2 dark:border-white/10 dark:bg-white/3">
             <p className="text-[11px] uppercase tracking-wide text-black/60 dark:text-white/60">Critiques en attente</p>
-            <p className="mt-1 text-2xl font-semibold">{insights.criticalPendingCount}</p>
+            <p className="text-xl font-semibold">{insights.criticalPendingCount}</p>
           </article>
-          <article className="rounded-lg border border-black/10 bg-black/3 p-3 dark:border-white/10 dark:bg-white/3">
-            <p className="text-[11px] uppercase tracking-wide text-black/60 dark:text-white/60">Service le plus exposé</p>
-            <p className="mt-1 text-lg font-semibold">{insights.topServiceAtRisk}</p>
+          <article className="rounded-lg border border-black/10 bg-black/3 px-3 py-2 dark:border-white/10 dark:bg-white/3">
+            <p className="text-[11px] uppercase tracking-wide text-black/60 dark:text-white/60">Service exposé</p>
+            <p className="text-sm font-semibold">{insights.topServiceAtRisk}</p>
           </article>
-          <article className="rounded-lg border border-black/10 bg-black/3 p-3 dark:border-white/10 dark:bg-white/3">
-            <p className="text-[11px] uppercase tracking-wide text-black/60 dark:text-white/60">Priorité immédiate</p>
-            <p className="mt-1 text-sm font-semibold">{insights.recommendations[0]}</p>
+          <article className="rounded-lg border border-black/10 bg-black/3 px-3 py-2 dark:border-white/10 dark:bg-white/3">
+            <p className="text-[11px] uppercase tracking-wide text-black/60 dark:text-white/60">Action immédiate</p>
+            <p className="text-xs font-semibold">{insights.recommendations[0]}</p>
           </article>
-        </div>
-
-        <div className="mt-4 grid gap-4 lg:grid-cols-2">
-          <div className="rounded-lg border border-black/10 p-3 dark:border-white/10">
-            <p className="text-xs font-semibold uppercase tracking-wide text-black/60 dark:text-white/60">Recommandations raisonnées</p>
-            <ul className="mt-2 space-y-2 text-sm">
-              {insights.recommendations.map((item, index) => (
-                <li key={`${item}-${index}`} className="rounded-md border border-black/10 px-3 py-2 dark:border-white/10">{item}</li>
-              ))}
-            </ul>
-          </div>
-
-          <div className="rounded-lg border border-black/10 p-3 dark:border-white/10">
-            <p className="text-xs font-semibold uppercase tracking-wide text-black/60 dark:text-white/60">File priorisée (top risques)</p>
-            <ul className="mt-2 space-y-2 text-sm">
-              {insights.prioritizedQueue.map((item) => (
-                <li key={`${item.entityType}:${item.entityId}`} className="rounded-md border border-black/10 px-3 py-2 dark:border-white/10">
-                  <p className="font-semibold">{item.reference}</p>
-                  <p className="text-xs text-black/60 dark:text-white/60">{item.service} • {item.riskLevel} ({item.riskScore}/100) • {item.riskReason}</p>
-                </li>
-              ))}
-            </ul>
-          </div>
         </div>
       </section>
 
-      <section className="rounded-2xl border border-black/10 bg-white p-4 dark:border-white/10 dark:bg-zinc-900 lg:col-span-2">
-        <h2 className="text-base font-semibold">1. Filtres audit</h2>
+      <section className="flex min-h-0 flex-col rounded-2xl border border-black/10 bg-white p-4 dark:border-white/10 dark:bg-zinc-900">
+        <h2 className="text-base font-semibold">Dossiers a auditer</h2>
         <div className="mt-3 grid gap-2 md:grid-cols-5">
           <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className="rounded-md border border-black/15 px-3 py-2 text-sm dark:border-white/20" />
           <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} className="rounded-md border border-black/15 px-3 py-2 text-sm dark:border-white/20" />
@@ -412,12 +392,20 @@ export function AuditWorkspace({
             {serviceTabs.map((tab) => <option key={tab} value={tab}>{tab}</option>)}
           </select>
           <select value={employee} onChange={(e) => setEmployee(e.target.value)} className="rounded-md border border-black/15 px-3 py-2 text-sm dark:border-white/20">
-            <option value="TOUS">Employés: tous</option>
+            <option value="TOUS">Employes: tous</option>
             {employees.map((name) => <option key={name} value={name}>{name}</option>)}
           </select>
-          <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Recherche ref/client/statut" className="rounded-md border border-black/15 px-3 py-2 text-sm dark:border-white/20" />
+          <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Recherche" className="rounded-md border border-black/15 px-3 py-2 text-sm dark:border-white/20" />
         </div>
-        <div className="mt-2 flex justify-end">
+
+        <div className="mt-2 flex items-center justify-between gap-2">
+          <div className="flex flex-wrap gap-2 text-xs">
+            {rowTabs.map((tab) => (
+              <button key={tab} type="button" onClick={() => setRowTab(tab)} className={`rounded-full border px-2.5 py-1 font-semibold ${rowTab === tab ? "border-black bg-black/5 dark:border-white dark:bg-white/10" : "border-black/15 dark:border-white/20"}`}>
+                {tab}
+              </button>
+            ))}
+          </div>
           <button
             type="button"
             onClick={() => {
@@ -426,62 +414,19 @@ export function AuditWorkspace({
             }}
             className="rounded-md border border-black/15 px-3 py-1.5 text-xs font-semibold hover:bg-black/5 dark:border-white/20 dark:hover:bg-white/10"
           >
-            Appliquer période
+            Appliquer
           </button>
         </div>
-      </section>
 
-      <section className="rounded-2xl border border-black/10 bg-white p-4 dark:border-white/10 dark:bg-zinc-900">
-        <h2 className="text-base font-semibold">5. Actions rapides</h2>
-        {!canWrite ? (
-          <p className="mt-2 text-xs text-black/60 dark:text-white/60">Mode lecture: réservé à l'auditeur.</p>
-        ) : null}
-        <div className="mt-3 grid gap-2">
-          <button type="button" disabled={savingAction || !canWrite} onClick={() => void saveAction("AUDIT_IMPORT", { source: "manual" }, false)} className="rounded-md border border-black/15 px-3 py-2 text-sm font-semibold hover:bg-black/5 disabled:opacity-60 dark:border-white/20 dark:hover:bg-white/10">Importer dossiers</button>
-          <button type="button" disabled={savingAction || !canWrite} onClick={() => void saveAction("AUDIT_AUTO_CONTROL", { mode: "standard" }, false)} className="rounded-md border border-black/15 px-3 py-2 text-sm font-semibold hover:bg-black/5 disabled:opacity-60 dark:border-white/20 dark:hover:bg-white/10">Contrôle auto</button>
-          <button type="button" disabled={savingAction || !canWrite} onClick={() => void saveAction("AUDIT_EXPORT", { format: "pdf" }, false)} className="rounded-md border border-black/15 px-3 py-2 text-sm font-semibold hover:bg-black/5 disabled:opacity-60 dark:border-white/20 dark:hover:bg-white/10">Exporter</button>
-          <button type="button" disabled={savingAction || !canWrite} onClick={() => void saveAction("AUDIT_SIGNAL", { level: "medium" }, false)} className="rounded-md bg-black px-3 py-2 text-sm font-semibold text-white disabled:opacity-60 dark:bg-white dark:text-black">Créer signalement</button>
-        </div>
-
-        <div className="mt-4 rounded-xl border border-black/10 p-3 dark:border-white/10">
-          <p className="text-xs font-semibold uppercase tracking-wide text-black/60 dark:text-white/60">Comparaison fichier externe</p>
-          <div className="mt-2 grid gap-2">
-            <select value={compareType} onChange={(e) => setCompareType(e.target.value as typeof compareType)} className="rounded-md border border-black/15 px-3 py-2 text-sm dark:border-white/20">
-              <option value="CAISSE">Caisse (entrées/sorties)</option>
-              <option value="VENTES">Ventes compagnie</option>
-              <option value="PRESENCES">Présences internes</option>
-              <option value="RAPPORTS">Rapports employés</option>
-            </select>
-            <input type="file" accept=".csv" onChange={(e) => setCompareFile(e.target.files?.[0] ?? null)} className="rounded-md border border-black/15 px-3 py-2 text-xs dark:border-white/20" />
-            <button type="button" disabled={compareLoading || !canWrite} onClick={() => void runExternalCompare()} className="rounded-md border border-black/15 px-3 py-2 text-sm font-semibold hover:bg-black/5 disabled:opacity-60 dark:border-white/20 dark:hover:bg-white/10">
-              {compareLoading ? "Comparaison..." : "Comparer au système"}
-            </button>
-            <p className="text-[11px] text-black/60 dark:text-white/60">Format attendu: CSV (exportez Excel en .csv).</p>
-          </div>
-        </div>
-      </section>
-
-      <section className="rounded-2xl border border-black/10 bg-white p-4 dark:border-white/10 dark:bg-zinc-900 lg:col-span-2">
-        <h2 className="text-base font-semibold">2. Dossiers à auditer</h2>
-        <div className="mt-2 flex flex-wrap gap-2 text-xs">
-          {rowTabs.map((tab) => (
-            <button key={tab} type="button" onClick={() => setRowTab(tab)} className={`rounded-full border px-2.5 py-1 font-semibold ${rowTab === tab ? "border-black bg-black/5 dark:border-white dark:bg-white/10" : "border-black/15 dark:border-white/20"}`}>
-              {tab}
-            </button>
-          ))}
-        </div>
-
-        <div className="mt-3 overflow-x-auto">
+        <div className="mt-3 min-h-0 flex-1 overflow-auto rounded-lg border border-black/10 dark:border-white/10">
           <table className="min-w-full text-sm">
-            <thead className="bg-black/5 dark:bg-white/10">
+            <thead className="sticky top-0 bg-black/5 dark:bg-white/10">
               <tr>
-                <th className="px-3 py-2 text-left">Réf</th>
+                <th className="px-3 py-2 text-left">Ref</th>
                 <th className="px-3 py-2 text-left">Client</th>
                 <th className="px-3 py-2 text-left">Montant</th>
-                <th className="px-3 py-2 text-left">Marge</th>
                 <th className="px-3 py-2 text-left">Service</th>
-                <th className="px-3 py-2 text-left">Statut dossier</th>
-                <th className="px-3 py-2 text-left">Statut audit</th>
+                <th className="px-3 py-2 text-left">Audit</th>
                 <th className="px-3 py-2 text-left">Risque</th>
                 <th className="px-3 py-2 text-left">Action</th>
               </tr>
@@ -494,9 +439,7 @@ export function AuditWorkspace({
                     <td className="px-3 py-2">{row.reference}</td>
                     <td className="px-3 py-2">{row.client}</td>
                     <td className="px-3 py-2">{row.amount.toFixed(2)} USD</td>
-                    <td className="px-3 py-2">{row.margin == null ? "-" : `${row.margin.toFixed(2)} USD`}</td>
                     <td className="px-3 py-2">{row.service}</td>
-                    <td className="px-3 py-2">{row.status}</td>
                     <td className="px-3 py-2">{row.auditDecision}</td>
                     <td className="px-3 py-2">
                       <span className="rounded-full border border-black/15 bg-black/5 px-2 py-0.5 text-[11px] font-semibold dark:border-white/20 dark:bg-white/10">
@@ -517,7 +460,7 @@ export function AuditWorkspace({
               })}
               {filtered.length === 0 ? (
                 <tr>
-                  <td colSpan={9} className="px-3 py-6 text-center text-xs text-black/60 dark:text-white/60">Aucun dossier correspondant aux filtres.</td>
+                  <td colSpan={7} className="px-3 py-6 text-center text-xs text-black/60 dark:text-white/60">Aucun dossier correspondant aux filtres.</td>
                 </tr>
               ) : null}
             </tbody>
@@ -525,198 +468,68 @@ export function AuditWorkspace({
         </div>
       </section>
 
-      <section className="rounded-2xl border border-black/10 bg-white p-4 dark:border-white/10 dark:bg-zinc-900 lg:row-span-2">
-        <h2 className="text-base font-semibold">4. Alertes</h2>
-        <div className="mt-3 space-y-4 text-sm">
-          <div>
-            <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-black/60 dark:text-white/60">Anomalies</p>
-            <ul className="space-y-2">
-              {alerts.anomalies.map((item, index) => (
-                <li key={`${item.label}-${index}`} className="rounded-md border border-black/10 px-3 py-2 dark:border-white/10">
-                  <p className="font-semibold">{item.label}</p>
-                  <p className="text-xs text-black/60 dark:text-white/60">{item.detail}</p>
-                </li>
-              ))}
-            </ul>
-          </div>
-          <div>
-            <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-black/60 dark:text-white/60">Stocks</p>
-            <ul className="space-y-2">
-              {alerts.stocks.map((item, index) => (
-                <li key={`${item.label}-${index}`} className="rounded-md border border-black/10 px-3 py-2 dark:border-white/10">
-                  <p className="font-semibold">{item.label}</p>
-                  <p className="text-xs text-black/60 dark:text-white/60">{item.detail}</p>
-                </li>
-              ))}
-            </ul>
-          </div>
-          <div>
-            <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-black/60 dark:text-white/60">Signalements</p>
-            <ul className="space-y-2">
-              {alerts.signalements.map((item, index) => (
-                <li key={`${item.label}-${index}`} className="rounded-md border border-black/10 px-3 py-2 dark:border-white/10">
-                  <p className="font-semibold">{item.label}</p>
-                  <p className="text-xs text-black/60 dark:text-white/60">{item.detail}</p>
-                </li>
-              ))}
-            </ul>
+      <section className="flex min-h-0 flex-col overflow-hidden rounded-2xl border border-black/10 bg-white p-4 dark:border-white/10 dark:bg-zinc-900">
+        <h2 className="text-base font-semibold">Panneau concret</h2>
+        <p className="mt-1 text-xs text-black/60 dark:text-white/60">Cliquez sur un dossier puis sur Auditer pour ouvrir l'assistant.</p>
+
+        <div className="mt-3 rounded-xl border border-black/10 p-3 dark:border-white/10">
+          <p className="text-xs font-semibold uppercase tracking-wide text-black/60 dark:text-white/60">Comparaison fichier externe</p>
+          <div className="mt-2 grid gap-2">
+            <select value={compareType} onChange={(e) => setCompareType(e.target.value as typeof compareType)} className="rounded-md border border-black/15 px-3 py-2 text-sm dark:border-white/20">
+              <option value="CAISSE">Caisse</option>
+              <option value="VENTES">Ventes</option>
+              <option value="PRESENCES">Presences</option>
+              <option value="RAPPORTS">Rapports</option>
+            </select>
+            <input type="file" accept=".csv" onChange={(e) => setCompareFile(e.target.files?.[0] ?? null)} className="rounded-md border border-black/15 px-3 py-2 text-xs dark:border-white/20" />
+            <button type="button" disabled={compareLoading || !canWrite} onClick={() => void runExternalCompare()} className="rounded-md border border-black/15 px-3 py-2 text-sm font-semibold hover:bg-black/5 disabled:opacity-60 dark:border-white/20 dark:hover:bg-white/10">
+              {compareLoading ? "Comparaison..." : "Comparer"}
+            </button>
+            <button type="button" onClick={exportCompareCsv} className="rounded-md border border-black/15 px-3 py-2 text-sm font-semibold hover:bg-black/5 dark:border-white/20 dark:hover:bg-white/10">Exporter CSV</button>
           </div>
         </div>
-      </section>
 
-      <section className="rounded-2xl border border-black/10 bg-white p-4 dark:border-white/10 dark:bg-zinc-900 lg:col-span-2">
-        <h2 className="text-base font-semibold">3. Détail dossier</h2>
-        {selected ? (
-          <>
-            <div className="mt-3 rounded-lg border border-black/10 bg-black/5 px-3 py-2 text-sm dark:border-white/10 dark:bg-white/5">
-              <p className="font-semibold">{detail?.header.title ?? selected.reference}</p>
-              <p className="text-xs text-black/60 dark:text-white/60">{detail?.header.subtitle ?? `${selected.client} • ${selected.service}`} • Statut audit: {state.decision}</p>
-            </div>
+        <div className="mt-3 min-h-0 flex-1 overflow-auto rounded-xl border border-black/10 p-3 dark:border-white/10">
+          <p className="text-xs font-semibold uppercase tracking-wide text-black/60 dark:text-white/60">Points a surveiller</p>
+          <ul className="mt-2 space-y-2 text-sm">
+            {alerts.anomalies.slice(0, 4).map((item, index) => (
+              <li key={`${item.label}-${index}`} className="rounded-md border border-black/10 px-3 py-2 dark:border-white/10">
+                <p className="font-semibold">{item.label}</p>
+                <p className="text-xs text-black/60 dark:text-white/60">{item.detail}</p>
+              </li>
+            ))}
+          </ul>
 
-            <div className="mt-3 flex flex-wrap gap-2 text-xs">
-              {(["FINANCIER", "CONFORMITE", "TRAIL"] as const).map((tab) => (
-                <button key={tab} type="button" onClick={() => setDetailTab(tab)} className={`rounded-full border px-2.5 py-1 font-semibold ${detailTab === tab ? "border-black bg-black/5 dark:border-white dark:bg-white/10" : "border-black/15 dark:border-white/20"}`}>
-                  {tab}
-                </button>
-              ))}
-            </div>
-
-            <div className="mt-3">
-              {loadingDetail ? (
-                <p className="text-xs text-black/60 dark:text-white/60">Chargement du dossier...</p>
-              ) : null}
-
-              {!loadingDetail && detailTab === "FINANCIER" ? (
-                <ul className="space-y-2 text-sm">
-                  {(detail?.financial ?? []).map((item) => (
-                    <li key={item.label} className="rounded-md border border-black/10 px-3 py-2 dark:border-white/10">
-                      <span className="font-semibold">{item.label}:</span> {item.value}
-                    </li>
-                  ))}
-                </ul>
-              ) : null}
-
-              {!loadingDetail && detailTab === "CONFORMITE" ? (
-                <div className="space-y-2 text-sm">
-                  <label className="flex items-center gap-2">
-                    <input
-                      type="checkbox"
-                      checked={state.compliance.documentsOk}
-                      disabled={!canWrite}
-                      onChange={async (event) => {
-                        const compliance = { ...state.compliance, documentsOk: event.target.checked };
-                        setState((prev) => ({ ...prev, compliance }));
-                        await saveAction("AUDIT_CONFORMITY_SAVE", { compliance });
-                      }}
-                    />
-                    Documents vérifiés
-                  </label>
-                  <label className="flex items-center gap-2">
-                    <input
-                      type="checkbox"
-                      checked={state.compliance.amountsOk}
-                      disabled={!canWrite}
-                      onChange={async (event) => {
-                        const compliance = { ...state.compliance, amountsOk: event.target.checked };
-                        setState((prev) => ({ ...prev, compliance }));
-                        await saveAction("AUDIT_CONFORMITY_SAVE", { compliance });
-                      }}
-                    />
-                    Chiffres validés
-                  </label>
-                  <label className="flex items-center gap-2">
-                    <input
-                      type="checkbox"
-                      checked={state.compliance.processOk}
-                      disabled={!canWrite}
-                      onChange={async (event) => {
-                        const compliance = { ...state.compliance, processOk: event.target.checked };
-                        setState((prev) => ({ ...prev, compliance }));
-                        await saveAction("AUDIT_CONFORMITY_SAVE", { compliance });
-                      }}
-                    />
-                    Processus conforme
-                  </label>
-                  <label className="flex items-center gap-2">
-                    <input
-                      type="checkbox"
-                      checked={state.compliance.riskChecked}
-                      disabled={!canWrite}
-                      onChange={async (event) => {
-                        const compliance = { ...state.compliance, riskChecked: event.target.checked };
-                        setState((prev) => ({ ...prev, compliance }));
-                        await saveAction("AUDIT_CONFORMITY_SAVE", { compliance });
-                      }}
-                    />
-                    Risques contrôlés
-                  </label>
-                  <ul className="mt-2 space-y-2">
-                    {(detail?.conformity ?? []).map((item) => (
-                      <li key={item.label} className="rounded-md border border-black/10 px-3 py-2 text-xs dark:border-white/10">
-                        <span className="font-semibold">{item.label}:</span> {item.value}
-                      </li>
+          {compareResult ? (
+            <div className="mt-3 rounded-md border border-black/10 p-2 text-xs dark:border-white/10">
+              <p>
+                {compareResult.summary.compareType} • OK {compareResult.summary.ok} • Ecarts {compareResult.summary.mismatches} • Critiques {compareResult.summary.highSeverity}
+              </p>
+              <div className="mt-2 max-h-40 overflow-auto rounded-md border border-black/10 dark:border-white/10">
+                <table className="min-w-full text-xs">
+                  <thead className="sticky top-0 bg-black/5 dark:bg-white/10">
+                    <tr>
+                      <th className="px-2 py-1 text-left">Cle</th>
+                      <th className="px-2 py-1 text-left">Ecart</th>
+                      <th className="px-2 py-1 text-left">Severite</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {compareResult.rows.slice(0, 40).map((row, index) => (
+                      <tr key={`${row.key}-${index}`} className="border-t border-black/5 dark:border-white/10">
+                        <td className="px-2 py-1">{row.key}</td>
+                        <td className="px-2 py-1">{row.issue}</td>
+                        <td className="px-2 py-1">{row.severity}</td>
+                      </tr>
                     ))}
-                  </ul>
-                </div>
-              ) : null}
-
-              {!loadingDetail && detailTab === "TRAIL" ? (
-                <ul className="space-y-2 text-sm">
-                  {trail.map((item) => (
-                    <li key={item.id} className="rounded-md border border-black/10 px-3 py-2 dark:border-white/10">
-                      <p className="font-semibold">{item.action}</p>
-                      <p className="text-xs text-black/60 dark:text-white/60">{item.actor.name} • {new Date(item.createdAt).toLocaleString()}</p>
-                    </li>
-                  ))}
-                </ul>
-              ) : null}
-            </div>
-
-            <div className="mt-4 grid gap-2 md:grid-cols-[1fr,auto,auto] md:items-end">
-              <textarea
-                value={comment}
-                onChange={(event) => setComment(event.target.value)}
-                placeholder="Commentaire d'audit..."
-                disabled={!canWrite}
-                className="min-h-20 rounded-md border border-black/15 px-3 py-2 text-sm dark:border-white/20"
-              />
-              <button
-                type="button"
-                disabled={!canWrite}
-                onClick={async () => {
-                  if (!comment.trim()) {
-                    setStatus("Ajoutez un commentaire avant enregistrement.");
-                    return;
-                  }
-                  await saveAction("AUDIT_COMMENT", { text: comment.trim() });
-                  setComment("");
-                }}
-                className="rounded-md border border-black/15 px-3 py-2 text-sm font-semibold hover:bg-black/5 dark:border-white/20 dark:hover:bg-white/10"
-              >
-                Commenter
-              </button>
-              <div className="flex items-center gap-2">
-                <button type="button" disabled={savingAction || !canWrite} onClick={() => void saveAction("AUDIT_VALIDATE", { decision: "VALIDATED" })} className="rounded-md bg-emerald-700 px-3 py-2 text-sm font-semibold text-white disabled:opacity-60">Valider</button>
-                <button type="button" disabled={savingAction || !canWrite} onClick={() => void saveAction("AUDIT_REJECT", { decision: "REJECTED" })} className="rounded-md bg-red-700 px-3 py-2 text-sm font-semibold text-white disabled:opacity-60">Rejeter</button>
+                  </tbody>
+                </table>
               </div>
             </div>
+          ) : null}
+        </div>
 
-            {state.comments.length > 0 ? (
-              <ul className="mt-3 space-y-2">
-                {state.comments.slice(-5).reverse().map((item, index) => (
-                  <li key={`${item.createdAt}-${index}`} className="rounded-md border border-black/10 px-3 py-2 text-xs dark:border-white/10">
-                    <p>{item.text}</p>
-                    <p className="mt-1 text-black/60 dark:text-white/60">{item.author} • {new Date(item.createdAt).toLocaleString()}</p>
-                  </li>
-                ))}
-              </ul>
-            ) : null}
-          </>
-        ) : (
-          <p className="mt-3 text-xs text-black/60 dark:text-white/60">Choisissez un dossier et cliquez sur Auditer.</p>
-        )}
-
-        <p className="mt-3 text-xs text-black/60 dark:text-white/60">{status}</p>
+        <p className="mt-2 text-xs text-black/60 dark:text-white/60">{status}</p>
       </section>
 
       {selected && isAuditModalOpen ? (
@@ -948,52 +761,6 @@ export function AuditWorkspace({
         </div>
       ) : null}
 
-      <section className="rounded-2xl border border-black/10 bg-white p-4 dark:border-white/10 dark:bg-zinc-900 lg:col-span-3">
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <h2 className="text-base font-semibold">Rapport de comparaison externe</h2>
-          <button type="button" onClick={exportCompareCsv} className="rounded-md border border-black/15 px-3 py-1.5 text-xs font-semibold hover:bg-black/5 dark:border-white/20 dark:hover:bg-white/10">
-            Exporter écarts CSV
-          </button>
-        </div>
-        {compareResult ? (
-          <>
-            <p className="mt-2 text-xs text-black/60 dark:text-white/60">
-              Type: {compareResult.summary.compareType} • Période: {compareResult.summary.period} • Lignes externes: {compareResult.summary.externalRows} • Contrôlées: {compareResult.summary.checkedRows} • OK: {compareResult.summary.ok} • Écarts: {compareResult.summary.mismatches} • Critiques: {compareResult.summary.highSeverity}
-            </p>
-            <div className="mt-3 overflow-x-auto">
-              <table className="min-w-full text-sm">
-                <thead className="bg-black/5 dark:bg-white/10">
-                  <tr>
-                    <th className="px-3 py-2 text-left">Clé</th>
-                    <th className="px-3 py-2 text-left">Écart</th>
-                    <th className="px-3 py-2 text-left">Sévérité</th>
-                    <th className="px-3 py-2 text-left">Système</th>
-                    <th className="px-3 py-2 text-left">Fichier externe</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {compareResult.rows.slice(0, 200).map((row, index) => (
-                    <tr key={`${row.key}-${index}`} className="border-t border-black/5 dark:border-white/10">
-                      <td className="px-3 py-2">{row.key}</td>
-                      <td className="px-3 py-2">{row.issue}</td>
-                      <td className="px-3 py-2">{row.severity}</td>
-                      <td className="px-3 py-2">{row.systemValue}</td>
-                      <td className="px-3 py-2">{row.externalValue}</td>
-                    </tr>
-                  ))}
-                  {compareResult.rows.length === 0 ? (
-                    <tr>
-                      <td colSpan={5} className="px-3 py-6 text-center text-xs text-black/60 dark:text-white/60">Aucun écart détecté.</td>
-                    </tr>
-                  ) : null}
-                </tbody>
-              </table>
-            </div>
-          </>
-        ) : (
-          <p className="mt-2 text-xs text-black/60 dark:text-white/60">Lancez une comparaison externe pour afficher le rapport.</p>
-        )}
-      </section>
     </div>
   );
 }

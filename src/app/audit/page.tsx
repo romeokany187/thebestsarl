@@ -386,31 +386,35 @@ export default async function AuditPage({
         ? "Espace auditeur: contrôle transverse, traçabilité et validation multi-services."
         : "Mode lecture: consultation des rapports d'audit uniquement."}
     >
-      <section className="mb-6">
-        <h1 className="text-2xl font-semibold tracking-tight">Espace Auditeur</h1>
-        <p className="text-sm text-black/60 dark:text-white/60">
-          Ouvrir un dossier, vérifier les chiffres, cocher la conformité, tracer et valider/rejeter.
-        </p>
-      </section>
+      <div className="flex h-[calc(100vh-130px)] min-h-0 flex-col overflow-hidden">
+        <section className="mb-4 shrink-0">
+          <h1 className="text-2xl font-semibold tracking-tight">Espace Auditeur</h1>
+          <p className="text-sm text-black/60 dark:text-white/60">
+            Ouvrir un dossier, vérifier les chiffres, cocher la conformité, tracer et valider/rejeter.
+          </p>
+        </section>
 
-      <AuditWorkspace
-        dossiers={dossiers}
-        alerts={alerts}
-        employees={employees}
-        defaultStartDate={range.startRaw}
-        defaultEndDate={range.endRaw}
-        canWrite={canWriteAudit}
-        insights={{
-          globalRiskIndex,
-          criticalPendingCount: criticalPending.length,
-          topServiceAtRisk,
-          recommendations,
-          prioritizedQueue: dossiers
-            .slice()
-            .sort((a, b) => b.riskScore - a.riskScore || b.createdAt.localeCompare(a.createdAt))
-            .slice(0, 8),
-        }}
-      />
+        <div className="min-h-0 flex-1 overflow-hidden">
+          <AuditWorkspace
+            dossiers={dossiers}
+            alerts={alerts}
+            employees={employees}
+            defaultStartDate={range.startRaw}
+            defaultEndDate={range.endRaw}
+            canWrite={canWriteAudit}
+            insights={{
+              globalRiskIndex,
+              criticalPendingCount: criticalPending.length,
+              topServiceAtRisk,
+              recommendations,
+              prioritizedQueue: dossiers
+                .slice()
+                .sort((a, b) => b.riskScore - a.riskScore || b.createdAt.localeCompare(a.createdAt))
+                .slice(0, 8),
+            }}
+          />
+        </div>
+      </div>
     </AppShell>
   );
 }
