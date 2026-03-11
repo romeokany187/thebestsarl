@@ -42,6 +42,12 @@ type CompareResult = {
     mismatches: number;
     highSeverity: number;
     scope?: string | null;
+    isIdenticalStrictly?: boolean;
+    strictTextMatches?: number;
+    strictTextMismatches?: number;
+    strictAmountMatches?: number;
+    strictAmountMismatches?: number;
+    verdict?: "IDENTIQUE" | "NON_IDENTIQUE";
   };
   rows: CompareResultRow[];
 };
@@ -493,6 +499,20 @@ export function AuditWorkspace({
               </ul>
             </div>
           )}
+
+          {compareResult ? (
+            <div className="mt-4 rounded-md border border-black/10 bg-black/5 p-3 text-xs dark:border-white/10 dark:bg-white/5">
+              <p className="font-semibold">
+                Verdict comparaison stricte: {compareResult.summary.verdict ?? (compareResult.summary.isIdenticalStrictly ? "IDENTIQUE" : "NON_IDENTIQUE")}
+              </p>
+              <p className="mt-1 text-black/70 dark:text-white/70">
+                Texte exact: {compareResult.summary.strictTextMatches ?? 0} identique(s), {compareResult.summary.strictTextMismatches ?? 0} different(s)
+              </p>
+              <p className="text-black/70 dark:text-white/70">
+                Chiffres exacts: {compareResult.summary.strictAmountMatches ?? 0} egaux, {compareResult.summary.strictAmountMismatches ?? 0} non egaux
+              </p>
+            </div>
+          ) : null}
           </div>
 
           <p className="mt-3 text-xs text-black/60 dark:text-white/60">{status}</p>

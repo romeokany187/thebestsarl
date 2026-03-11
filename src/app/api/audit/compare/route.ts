@@ -11,6 +11,8 @@ type CompareRow = {
   systemValue: string;
   externalValue: string;
   severity: "low" | "medium" | "high";
+  strictTextEqual?: boolean;
+  strictAmountEqual?: boolean | null;
 };
 
 function parseDateRange(startDate: string | null, endDate: string | null) {
@@ -116,6 +118,52 @@ function getValue(row: Record<string, string>, keys: string[]) {
 
 function compareNumeric(a: number, b: number) {
   return Math.abs(a - b) < 0.01;
+}
+
+function exactTextEqual(a: string, b: string) {
+  return a.trim() === b.trim();
+}
+
+function exactAmountEqualFromText(a: string, b: string) {
+  const av = asAmount(a);
+  const bv = asAmount(b);
+  return Math.round(av * 100) === Math.round(bv * 100);
+}
+
+function enrichStrictMetrics(rows: CompareRow[]) {
+  const enriched = rows.map((row) => {
+    const bothSides = row.systemValue !== "-" && row.externalValue !== "-";
+    const strictTextEqualValue = bothSides ? exactTextEqual(row.systemValue, row.externalValue) : false;
+    const strictAmountEqualValue = bothSides ? exactAmountEqualFromText(row.systemValue, row.externalValue) : null;
+    return {
+      ...row,
+      strictTextEqual: strictTextEqualValue,
+      strictAmountEqual: strictAmountEqualValue,
+    };
+  });
+
+  const strictTextMatches = enriched.filter((row) => row.strictTextEqual).length;
+  const strictTextMismatches = enriched.filter((row) => row.strictTextEqual === false).length;
+  const strictAmountMatches = enriched.filter((row) => row.strictAmountEqual === true).length;
+  const strictAmountMismatches = enriched.filter((row) => row.strictAmountEqual === false).length;
+  const isIdenticalStrictly = enriched.length > 0
+    && strictTextMismatches === 0
+    && strictAmountMismatches === 0
+    && enriched.every((row) => row.issue === "OK");
+
+  return {
+    rows: enriched,
+    strict: {
+      isIdenticalStrictly,
+      strictTextMatches,
+      strictTextMismatches,
+      strictAmountMatches,
+      strictAmountMismatches,
+      verdict: isIdenticalStrictly
+        ? "IDENTIQUE"
+        : "NON_IDENTIQUE",
+    },
+  };
 }
 
 async function parseExternalRowsFromFile(file: File) {
@@ -315,8 +363,8 @@ async function compareVentes(
     }
     if (s && e) {
       const sameAmount = compareNumeric(s.amount, e.amount);
-      const sameClient = normalizeKey(s.client) === normalizeKey(e.client);
-      const sameAirline = !airlineScopeNormalized || !e.airline || normalizeKey(s.airline) === normalizeKey(e.airline);
+      const sameClient = exactTextEqual(s.client, e.client);
+      const sameAirline = !airlineScopeNormalized || !e.airline || exactTextEqual(s.airline, e.airline);
       if (!sameAmount || !sameClient || !sameAirline) {
         rows.push({
           key,
@@ -432,8 +480,8 @@ async function compareRapports(range: { start: Date; end: Date }, externalRows: 
       return;
     }
     if (s && e) {
-      const sameStatus = !e.status || normalizeKey(s.status) === e.status;
-      const samePeriod = !e.period || normalizeKey(s.period) === e.period;
+      const sameStatus = !e.status || exactTextEqual(s.status, e.status);
+      const samePeriod = !e.period || exactTextEqual(s.period, e.period);
       if (!sameStatus || !samePeriod) {
         rows.push({ key, issue: "FIELD_DIFF", systemValue: `${s.status}/${s.period}`, externalValue: `${e.status}/${e.period}`, severity: "medium" });
       } else {
@@ -484,8 +532,8 @@ async function compareArchives(range: { start: Date; end: Date }, externalRows: 
       return;
     }
     if (s && e) {
-      const sameFolder = !e.folder || normalizeKey(s.folder) === normalizeKey(e.folder);
-      const sameTitle = !e.title || normalizeKey(s.title) === normalizeKey(e.title);
+      const sameFolder = !e.folder || exactTextEqual(s.folder, e.folder);
+      const sameTitle = !e.title || exactTextEqual(s.title, e.title);
       if (!sameFolder || !sameTitle) {
         rows.push({ key, issue: "FIELD_DIFF", systemValue: `${s.title} ${s.folder}`, externalValue: `${e.title} ${e.folder}`, severity: "medium" });
       } else {
@@ -615,15 +663,18 @@ export async function POST(request: NextRequest) {
     rows = await compareBesoinsCaisse(range, externalRows);
   }
 
+  const strictComputed = enrichStrictMetrics(rows);
+
   const summary = {
     compareType,
     period: `${range.startRaw} -> ${range.endRaw}`,
     externalRows: externalRows.length,
-    checkedRows: rows.length,
-    ok: rows.filter((row) => row.issue === "OK").length,
-    mismatches: rows.filter((row) => row.issue !== "OK").length,
-    highSeverity: rows.filter((row) => row.severity === "high").length,
+    checkedRows: strictComputed.rows.length,
+    ok: strictComputed.rows.filter((row) => row.issue === "OK").length,
+    mismatches: strictComputed.rows.filter((row) => row.issue !== "OK").length,
+    highSeverity: strictComputed.rows.filter((row) => row.severity === "high").length,
     scope: airlineScope || null,
+    ...strictComputed.strict,
   };
 
   await prisma.auditLog.create({
@@ -642,7 +693,7 @@ export async function POST(request: NextRequest) {
   return NextResponse.json({
     data: {
       summary,
-      rows: rows.slice(0, 1500),
+      rows: strictComputed.rows.slice(0, 1500),
     },
   });
 }

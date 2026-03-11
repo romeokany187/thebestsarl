@@ -17,6 +17,12 @@ const requestSchema = z.object({
       mismatches: z.number(),
       highSeverity: z.number(),
       scope: z.string().nullable().optional(),
+      isIdenticalStrictly: z.boolean().optional(),
+      strictTextMatches: z.number().optional(),
+      strictTextMismatches: z.number().optional(),
+      strictAmountMatches: z.number().optional(),
+      strictAmountMismatches: z.number().optional(),
+      verdict: z.enum(["IDENTIQUE", "NON_IDENTIQUE"]).optional(),
     }),
     rows: z.array(z.object({
       key: z.string(),
@@ -102,6 +108,9 @@ export async function POST(request: NextRequest) {
   const payload = parsed.data;
   const compareRows = payload.compareResult?.rows ?? [];
   const issueRank = rankIssues(compareRows);
+  const strictVerdict = payload.compareResult?.summary.verdict ?? (payload.compareResult?.summary.isIdenticalStrictly ? "IDENTIQUE" : "NON_IDENTIQUE");
+  const strictTextMismatches = payload.compareResult?.summary.strictTextMismatches ?? 0;
+  const strictAmountMismatches = payload.compareResult?.summary.strictAmountMismatches ?? 0;
 
   const pendingHigh = payload.dossiers.filter((d) => d.auditDecision === "PENDING" && d.riskLevel === "HIGH").length;
   const rejected = payload.dossiers.filter((d) => d.auditDecision === "REJECTED").length;
@@ -130,13 +139,18 @@ export async function POST(request: NextRequest) {
       actions.push({ title: `Importer le rapport externe ${scope} puis relancer l'analyse`, priority: "HIGH", owner: "AUDIT", dueInDays: 1 });
       confidenceSignals.push(30);
     } else {
-      reasons.push(`Comparaison ventes ${scope}: ${payload.compareResult.summary.mismatches} ecart(s), ${payload.compareResult.summary.highSeverity} critique(s).`);
+      reasons.push(`Comparaison ventes ${scope}: verdict strict ${strictVerdict}, ${payload.compareResult.summary.mismatches} ecart(s), ${payload.compareResult.summary.highSeverity} critique(s).`);
       if (issueRank.amountDiff > 0 || issueRank.missingSystem > 0) {
         decisionSuggestion = "ESCALATE";
         reasons.push("Des ecarts de montant ou des ventes absentes du systeme ont ete detectes.");
         actions.push({ title: "Bloquer la cloture compagnie et lancer rapprochement billet par billet", priority: "HIGH", owner: "AUDITEUR", dueInDays: 1 });
         actions.push({ title: `Demander attestation de vente signee a ${scope}`, priority: "MEDIUM", owner: "COMPTABLE", dueInDays: 2 });
         confidenceSignals.push(88);
+      } else if (strictTextMismatches > 0 || strictAmountMismatches > 0) {
+        decisionSuggestion = "ESCALATE";
+        reasons.push("Le controle strict detecte des differences textuelles/chiffres meme sans ecarts metier majeurs.");
+        actions.push({ title: "Executer une reconciliation ligne par ligne jusqu'a identite stricte", priority: "HIGH", owner: "AUDITEUR", dueInDays: 1 });
+        confidenceSignals.push(84);
       } else if (payload.compareResult.summary.mismatches > 0) {
         decisionSuggestion = "REJECT";
         reasons.push("Des incoherences de champs subsistent, correction requise avant validation.");
@@ -158,13 +172,18 @@ export async function POST(request: NextRequest) {
       actions.push({ title: "Charger l'etat des mouvements de caisse (excel/csv/pdf tabulaire)", priority: "HIGH", owner: "CAISSIERE", dueInDays: 1 });
       confidenceSignals.push(28);
     } else {
-      reasons.push(`Etat caisse compare: ${payload.compareResult.summary.mismatches} ecart(s), ${issueRank.amountDiff} ecart(s) montant.`);
+      reasons.push(`Etat caisse compare: verdict strict ${strictVerdict}, ${payload.compareResult.summary.mismatches} ecart(s), ${issueRank.amountDiff} ecart(s) montant.`);
       if (issueRank.amountDiff >= 1 || issueRank.high >= 1) {
         decisionSuggestion = "ESCALATE";
         reasons.push("Risque financier eleve sur la coherence encaissements/decaissements.");
         actions.push({ title: "Lancer contre-verification caisse avec comptable + auditeur", priority: "HIGH", owner: "COMPTABLE", dueInDays: 1 });
         actions.push({ title: "Verifier justificatifs des sorties liees aux besoins approuves", priority: "HIGH", owner: "APPRO", dueInDays: 2 });
         confidenceSignals.push(90);
+      } else if (strictTextMismatches > 0 || strictAmountMismatches > 0) {
+        decisionSuggestion = "ESCALATE";
+        reasons.push("La comparaison stricte signale des divergences de valeur qu'il faut resoudre avant cloture.");
+        actions.push({ title: "Corriger les lignes non identiques (texte/chiffres) puis relancer", priority: "HIGH", owner: "CAISSIERE", dueInDays: 1 });
+        confidenceSignals.push(86);
       } else if (payload.compareResult.summary.mismatches > 0) {
         decisionSuggestion = "REJECT";
         reasons.push("Des ecarts non critiques existent, ajustement requis avant cloture.");
@@ -186,13 +205,18 @@ export async function POST(request: NextRequest) {
       actions.push({ title: "Importer l'etat externe des sorties caisse liees aux besoins", priority: "HIGH", owner: "APPRO", dueInDays: 1 });
       confidenceSignals.push(30);
     } else {
-      reasons.push(`Confrontation besoins/caisse: ${issueRank.missingFile} besoin(s) sans trace externe, ${issueRank.amountDiff} ecart(s) montant.`);
+      reasons.push(`Confrontation besoins/caisse: verdict strict ${strictVerdict}, ${issueRank.missingFile} besoin(s) sans trace externe, ${issueRank.amountDiff} ecart(s) montant.`);
       if (issueRank.missingFile > 0 || issueRank.amountDiff > 0) {
         decisionSuggestion = "ESCALATE";
         reasons.push("Incoherences critiques detectees entre besoins approuves et mouvements de caisse.");
         actions.push({ title: "Suspendre nouveaux decaissements non rapproches", priority: "HIGH", owner: "DIRECTION", dueInDays: 1 });
         actions.push({ title: "Rapprocher chaque besoin approuve avec piece de sortie correspondante", priority: "HIGH", owner: "COMPTABLE", dueInDays: 2 });
         confidenceSignals.push(89);
+      } else if (strictTextMismatches > 0 || strictAmountMismatches > 0) {
+        decisionSuggestion = "ESCALATE";
+        reasons.push("Le strict matching montre encore des lignes non identiques (texte/chiffre). ");
+        actions.push({ title: "Resoudre toutes les differences strictes avant validation", priority: "HIGH", owner: "APPRO", dueInDays: 1 });
+        confidenceSignals.push(83);
       } else {
         decisionSuggestion = "VALIDATE";
         reasons.push("Besoins approuves couverts par les sorties caisse sans ecart majeur.");
@@ -209,12 +233,17 @@ export async function POST(request: NextRequest) {
       actions.push({ title: "Charger le registre externe des dossiers archives", priority: "MEDIUM", owner: "RELATION_PUBLIQUE", dueInDays: 2 });
       confidenceSignals.push(35);
     } else {
-      reasons.push(`Confrontation archives: ${payload.compareResult.summary.mismatches} ecart(s), ${issueRank.missingSystem} absent(s) du systeme.`);
+      reasons.push(`Confrontation archives: verdict strict ${strictVerdict}, ${payload.compareResult.summary.mismatches} ecart(s), ${issueRank.missingSystem} absent(s) du systeme.`);
       if (issueRank.missingSystem > 0) {
         decisionSuggestion = "ESCALATE";
         reasons.push("Des dossiers repertories en externe sont absents en archivage interne.");
         actions.push({ title: "Verifier la chaine de numerotation et ajouter les dossiers manquants", priority: "HIGH", owner: "RELATION_PUBLIQUE", dueInDays: 2 });
         confidenceSignals.push(86);
+      } else if (strictTextMismatches > 0) {
+        decisionSuggestion = "REJECT";
+        reasons.push("Les references externes et internes ne sont pas textuellement identiques.");
+        actions.push({ title: "Normaliser et corriger les references archives ligne par ligne", priority: "MEDIUM", owner: "RH", dueInDays: 2 });
+        confidenceSignals.push(74);
       } else if (payload.compareResult.summary.mismatches > 0) {
         decisionSuggestion = "REJECT";
         reasons.push("Incoherences de reference/classeur detectees dans les archives.");
