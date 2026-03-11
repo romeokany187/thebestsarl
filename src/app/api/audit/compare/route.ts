@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireApiModuleAccess } from "@/lib/rbac";
 
-type CompareType = "CAISSE" | "VENTES" | "PRESENCES" | "RAPPORTS";
+type CompareType = "CAISSE" | "VENTES" | "PRESENCES" | "RAPPORTS" | "ARCHIVES" | "BESOINS_CAISSE";
 
 type CompareRow = {
   key: string;
@@ -23,7 +23,7 @@ function parseDateRange(startDate: string | null, endDate: string | null) {
   return { start, end, startRaw, endRaw };
 }
 
-function parseCsvLine(line: string) {
+function parseDelimitedLine(line: string, delimiter: string) {
   const values: string[] = [];
   let current = "";
   let inQuotes = false;
@@ -40,7 +40,7 @@ function parseCsvLine(line: string) {
       continue;
     }
 
-    if (ch === "," && !inQuotes) {
+    if (ch === delimiter && !inQuotes) {
       values.push(current.trim());
       current = "";
       continue;
@@ -53,7 +53,21 @@ function parseCsvLine(line: string) {
   return values;
 }
 
-function parseCsv(text: string) {
+function chooseDelimiter(header: string) {
+  const delimiters = [",", ";", "|", "\t"];
+  let winner = ",";
+  let best = -1;
+  for (const delimiter of delimiters) {
+    const score = header.split(delimiter).length;
+    if (score > best) {
+      best = score;
+      winner = delimiter;
+    }
+  }
+  return best >= 2 ? winner : null;
+}
+
+function parseTabularText(text: string) {
   const lines = text
     .replace(/^\uFEFF/, "")
     .split(/\r?\n/)
@@ -62,11 +76,14 @@ function parseCsv(text: string) {
 
   if (lines.length < 2) return [];
 
-  const headers = parseCsvLine(lines[0]).map((item) => item.toLowerCase());
+  const delimiter = chooseDelimiter(lines[0]);
+  if (!delimiter) return [];
+
+  const headers = parseDelimitedLine(lines[0], delimiter).map((item) => item.toLowerCase());
   const rows: Array<Record<string, string>> = [];
 
   for (let i = 1; i < lines.length; i += 1) {
-    const values = parseCsvLine(lines[i]);
+    const values = parseDelimitedLine(lines[i], delimiter);
     const row: Record<string, string> = {};
     headers.forEach((header, index) => {
       row[header] = values[index] ?? "";
@@ -101,6 +118,29 @@ function compareNumeric(a: number, b: number) {
   return Math.abs(a - b) < 0.01;
 }
 
+async function parseExternalRowsFromFile(file: File) {
+  const ext = file.name.toLowerCase().split(".").pop() ?? "";
+
+  if (ext === "csv") {
+    const text = await file.text();
+    return parseTabularText(text);
+  }
+
+  if (ext === "xls" || ext === "xlsx" || ext === "pdf") {
+    // Without extra parsing libraries, we try tabular-text extraction first.
+    const bytes = new Uint8Array(await file.arrayBuffer());
+    const text = new TextDecoder("utf-8", { fatal: false }).decode(bytes);
+    const rows = parseTabularText(text);
+    if (rows.length > 0) return rows;
+
+    throw new Error(
+      "Impossible de parser automatiquement ce fichier Excel/PDF binaire. Exportez-le en CSV (UTF-8) ou utilisez un fichier délimité (.csv/.txt).",
+    );
+  }
+
+  throw new Error("Format non supporté. Formats acceptés: .csv, .xls, .xlsx, .pdf");
+}
+
 async function compareCaisse(range: { start: Date; end: Date }, externalRows: Array<Record<string, string>>) {
   const [payments, approvedNeeds] = await Promise.all([
     prisma.payment.findMany({
@@ -108,15 +148,18 @@ async function compareCaisse(range: { start: Date; end: Date }, externalRows: Ar
       include: {
         ticket: { select: { ticketNumber: true } },
       },
-      take: 5000,
+      take: 6000,
     }),
     prisma.needRequest.findMany({
       where: {
         status: "APPROVED",
-        createdAt: { gte: range.start, lt: range.end },
+        OR: [
+          { approvedAt: { gte: range.start, lt: range.end } },
+          { createdAt: { gte: range.start, lt: range.end } },
+        ],
       },
       select: { id: true, title: true, estimatedAmount: true },
-      take: 3000,
+      take: 4000,
     }),
   ]);
 
@@ -206,9 +249,20 @@ async function compareCaisse(range: { start: Date; end: Date }, externalRows: Ar
   return rows;
 }
 
-async function compareVentes(range: { start: Date; end: Date }, externalRows: Array<Record<string, string>>) {
+async function compareVentes(
+  range: { start: Date; end: Date },
+  externalRows: Array<Record<string, string>>,
+  airlineScope?: string,
+) {
+  const airlineScopeNormalized = normalizeKey(airlineScope ?? "");
+
   const tickets = await prisma.ticketSale.findMany({
-    where: { soldAt: { gte: range.start, lt: range.end } },
+    where: {
+      soldAt: { gte: range.start, lt: range.end },
+      ...(airlineScopeNormalized ? {
+        airline: { code: { equals: airlineScopeNormalized, mode: "insensitive" as const } },
+      } : {}),
+    },
     select: {
       ticketNumber: true,
       customerName: true,
@@ -216,7 +270,7 @@ async function compareVentes(range: { start: Date; end: Date }, externalRows: Ar
       soldAt: true,
       airline: { select: { code: true } },
     },
-    take: 5000,
+    take: 6000,
   });
 
   const systemMap = new Map<string, { amount: number; client: string; date: string; airline: string }>();
@@ -225,7 +279,7 @@ async function compareVentes(range: { start: Date; end: Date }, externalRows: Ar
       amount: ticket.amount,
       client: ticket.customerName,
       date: ticket.soldAt.toISOString().slice(0, 10),
-      airline: ticket.airline.code,
+      airline: normalizeKey(ticket.airline.code),
     });
   });
 
@@ -233,11 +287,15 @@ async function compareVentes(range: { start: Date; end: Date }, externalRows: Ar
   externalRows.forEach((row) => {
     const key = normalizeKey(getValue(row, ["ticket", "ticketnumber", "pnr", "reference", "ref"]));
     if (!key) return;
+
+    const airline = normalizeKey(getValue(row, ["airline", "compagnie", "carrier", "code_compagnie"]));
+    if (airlineScopeNormalized && airline && airline !== airlineScopeNormalized) return;
+
     externalMap.set(key, {
       amount: asAmount(getValue(row, ["amount", "montant"])),
       client: getValue(row, ["client", "customer", "nom"]),
       date: getValue(row, ["date", "soldat", "vente_date"]).slice(0, 10),
-      airline: normalizeKey(getValue(row, ["airline", "compagnie", "carrier"])),
+      airline,
     });
   });
 
@@ -258,12 +316,13 @@ async function compareVentes(range: { start: Date; end: Date }, externalRows: Ar
     if (s && e) {
       const sameAmount = compareNumeric(s.amount, e.amount);
       const sameClient = normalizeKey(s.client) === normalizeKey(e.client);
-      if (!sameAmount || !sameClient) {
+      const sameAirline = !airlineScopeNormalized || !e.airline || normalizeKey(s.airline) === normalizeKey(e.airline);
+      if (!sameAmount || !sameClient || !sameAirline) {
         rows.push({
           key,
           issue: !sameAmount ? "AMOUNT_DIFF" : "FIELD_DIFF",
-          systemValue: `${s.client} ${s.amount.toFixed(2)} ${s.date}`,
-          externalValue: `${e.client} ${e.amount.toFixed(2)} ${e.date}`,
+          systemValue: `${s.airline} ${s.client} ${s.amount.toFixed(2)} ${s.date}`,
+          externalValue: `${e.airline || "-"} ${e.client} ${e.amount.toFixed(2)} ${e.date}`,
           severity: "high",
         });
         return;
@@ -279,7 +338,7 @@ async function comparePresences(range: { start: Date; end: Date }, externalRows:
   const rowsDb = await prisma.attendance.findMany({
     where: { date: { gte: range.start, lt: range.end } },
     include: { user: { select: { name: true } } },
-    take: 5000,
+    take: 6000,
   });
 
   const systemMap = new Map<string, { in: string; out: string; status: string }>();
@@ -337,7 +396,7 @@ async function compareRapports(range: { start: Date; end: Date }, externalRows: 
   const reports = await prisma.workerReport.findMany({
     where: { createdAt: { gte: range.start, lt: range.end } },
     include: { author: { select: { name: true } } },
-    take: 4000,
+    take: 5000,
   });
 
   const systemMap = new Map<string, { status: string; period: string }>();
@@ -386,6 +445,114 @@ async function compareRapports(range: { start: Date; end: Date }, externalRows: 
   return rows;
 }
 
+async function compareArchives(range: { start: Date; end: Date }, externalRows: Array<Record<string, string>>) {
+  const archives = await prisma.archiveDocument.findMany({
+    where: { createdAt: { gte: range.start, lt: range.end } },
+    select: { reference: true, title: true, folder: true, originalFileName: true },
+    take: 5000,
+  });
+
+  const systemMap = new Map<string, { title: string; folder: string; file: string }>();
+  for (const doc of archives) {
+    const key = normalizeKey(doc.reference || doc.title);
+    systemMap.set(key, { title: doc.title, folder: doc.folder, file: doc.originalFileName });
+  }
+
+  const externalMap = new Map<string, { title: string; folder: string; file: string }>();
+  for (const row of externalRows) {
+    const ref = getValue(row, ["reference", "ref", "code"]);
+    const title = getValue(row, ["title", "titre", "dossier"]);
+    const folder = getValue(row, ["folder", "classeur", "rubrique"]);
+    const file = getValue(row, ["file", "fichier", "nom_fichier"]);
+    const key = normalizeKey(ref || title);
+    if (!key) continue;
+    externalMap.set(key, { title, folder, file });
+  }
+
+  const keys = new Set([...systemMap.keys(), ...externalMap.keys()]);
+  const rows: CompareRow[] = [];
+
+  keys.forEach((key) => {
+    const s = systemMap.get(key);
+    const e = externalMap.get(key);
+    if (!s && e) {
+      rows.push({ key, issue: "MISSING_IN_SYSTEM", systemValue: "-", externalValue: `${e.title} ${e.folder}`, severity: "high" });
+      return;
+    }
+    if (s && !e) {
+      rows.push({ key, issue: "MISSING_IN_FILE", systemValue: `${s.title} ${s.folder}`, externalValue: "-", severity: "medium" });
+      return;
+    }
+    if (s && e) {
+      const sameFolder = !e.folder || normalizeKey(s.folder) === normalizeKey(e.folder);
+      const sameTitle = !e.title || normalizeKey(s.title) === normalizeKey(e.title);
+      if (!sameFolder || !sameTitle) {
+        rows.push({ key, issue: "FIELD_DIFF", systemValue: `${s.title} ${s.folder}`, externalValue: `${e.title} ${e.folder}`, severity: "medium" });
+      } else {
+        rows.push({ key, issue: "OK", systemValue: `${s.title} ${s.folder}`, externalValue: `${e.title} ${e.folder}`, severity: "low" });
+      }
+    }
+  });
+
+  return rows;
+}
+
+async function compareBesoinsCaisse(range: { start: Date; end: Date }, externalRows: Array<Record<string, string>>) {
+  const approvedNeeds = await prisma.needRequest.findMany({
+    where: {
+      status: "APPROVED",
+      OR: [
+        { approvedAt: { gte: range.start, lt: range.end } },
+        { createdAt: { gte: range.start, lt: range.end } },
+      ],
+    },
+    select: { title: true, estimatedAmount: true },
+    take: 5000,
+  });
+
+  const systemMap = new Map<string, number>();
+  for (const need of approvedNeeds) {
+    const key = normalizeKey(need.title);
+    systemMap.set(key, (systemMap.get(key) ?? 0) + (need.estimatedAmount ?? 0));
+  }
+
+  const externalMap = new Map<string, number>();
+  for (const row of externalRows) {
+    const typeRaw = normalizeKey(getValue(row, ["type", "sens", "mouvement"]));
+    if (typeRaw && !typeRaw.includes("OUT") && !typeRaw.includes("DEP")) continue;
+
+    const key = normalizeKey(getValue(row, ["libelle", "description", "reference", "ref", "titre"]));
+    if (!key) continue;
+    const amount = asAmount(getValue(row, ["amount", "montant", "value", "valeur"]));
+    externalMap.set(key, (externalMap.get(key) ?? 0) + amount);
+  }
+
+  const keys = new Set([...systemMap.keys(), ...externalMap.keys()]);
+  const rows: CompareRow[] = [];
+
+  keys.forEach((key) => {
+    const s = systemMap.get(key);
+    const e = externalMap.get(key);
+    if (s == null && e != null) {
+      rows.push({ key, issue: "MISSING_IN_SYSTEM", systemValue: "-", externalValue: e.toFixed(2), severity: "high" });
+      return;
+    }
+    if (s != null && e == null) {
+      rows.push({ key, issue: "MISSING_IN_FILE", systemValue: s.toFixed(2), externalValue: "-", severity: "high" });
+      return;
+    }
+    if (s != null && e != null && !compareNumeric(s, e)) {
+      rows.push({ key, issue: "AMOUNT_DIFF", systemValue: s.toFixed(2), externalValue: e.toFixed(2), severity: "high" });
+      return;
+    }
+    if (s != null && e != null) {
+      rows.push({ key, issue: "OK", systemValue: s.toFixed(2), externalValue: e.toFixed(2), severity: "low" });
+    }
+  });
+
+  return rows;
+}
+
 export async function POST(request: NextRequest) {
   const access = await requireApiModuleAccess("audit", ["ADMIN", "MANAGER", "EMPLOYEE", "ACCOUNTANT"]);
   if (access.error) return access.error;
@@ -399,21 +566,30 @@ export async function POST(request: NextRequest) {
   const file = formData.get("file");
   const startDate = String(formData.get("startDate") ?? "");
   const endDate = String(formData.get("endDate") ?? "");
+  const airlineScope = String(formData.get("airlineScope") ?? "").trim();
 
   if (!(file instanceof File)) {
     return NextResponse.json({ error: "Fichier requis." }, { status: 400 });
   }
 
-  if (!["CAISSE", "VENTES", "PRESENCES", "RAPPORTS"].includes(compareTypeRaw)) {
+  if (![
+    "CAISSE",
+    "VENTES",
+    "PRESENCES",
+    "RAPPORTS",
+    "ARCHIVES",
+    "BESOINS_CAISSE",
+  ].includes(compareTypeRaw)) {
     return NextResponse.json({ error: "Type de comparaison invalide." }, { status: 400 });
   }
 
-  if (!file.name.toLowerCase().endsWith(".csv")) {
-    return NextResponse.json({ error: "Format .csv requis pour le moment. Exportez votre Excel en CSV puis réessayez." }, { status: 400 });
+  let externalRows: Array<Record<string, string>> = [];
+  try {
+    externalRows = await parseExternalRowsFromFile(file);
+  } catch (error) {
+    return NextResponse.json({ error: error instanceof Error ? error.message : "Fichier externe invalide." }, { status: 400 });
   }
 
-  const text = await file.text();
-  const externalRows = parseCsv(text);
   if (externalRows.length === 0) {
     return NextResponse.json({ error: "Le fichier est vide ou invalide." }, { status: 400 });
   }
@@ -425,11 +601,15 @@ export async function POST(request: NextRequest) {
   if (compareType === "CAISSE") {
     rows = await compareCaisse(range, externalRows);
   } else if (compareType === "VENTES") {
-    rows = await compareVentes(range, externalRows);
+    rows = await compareVentes(range, externalRows, airlineScope);
   } else if (compareType === "PRESENCES") {
     rows = await comparePresences(range, externalRows);
-  } else {
+  } else if (compareType === "RAPPORTS") {
     rows = await compareRapports(range, externalRows);
+  } else if (compareType === "ARCHIVES") {
+    rows = await compareArchives(range, externalRows);
+  } else {
+    rows = await compareBesoinsCaisse(range, externalRows);
   }
 
   const summary = {
@@ -440,6 +620,7 @@ export async function POST(request: NextRequest) {
     ok: rows.filter((row) => row.issue === "OK").length,
     mismatches: rows.filter((row) => row.issue !== "OK").length,
     highSeverity: rows.filter((row) => row.severity === "high").length,
+    scope: airlineScope || null,
   };
 
   await prisma.auditLog.create({

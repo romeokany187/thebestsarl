@@ -74,15 +74,29 @@ type CompareResultRow = {
 
 type CompareResult = {
   summary: {
-    compareType: "CAISSE" | "VENTES" | "PRESENCES" | "RAPPORTS";
+    compareType: "CAISSE" | "VENTES" | "PRESENCES" | "RAPPORTS" | "ARCHIVES" | "BESOINS_CAISSE";
     period: string;
     externalRows: number;
     checkedRows: number;
     ok: number;
     mismatches: number;
     highSeverity: number;
+    scope?: string | null;
   };
   rows: CompareResultRow[];
+};
+
+type EmployeeAuditMetric = {
+  name: string;
+  attendanceDays: number;
+  attendanceRate: number;
+  reportsSubmitted: number;
+  reportsApproved: number;
+  ticketsSold: number;
+  ticketsAmount: number;
+  score: number;
+  level: "EXCELLENT" | "GOOD" | "WATCH" | "CRITICAL";
+  recommendation: string;
 };
 
 const serviceTabs = ["TOUS", "BILLETS", "CAISSE", "RAPPORTS", "APPROVISIONNEMENT", "PRESENCES"];
@@ -141,6 +155,7 @@ export function AuditWorkspace({
   defaultEndDate,
   canWrite,
   insights,
+  employeeAudits,
 }: {
   dossiers: AuditDossier[];
   alerts: {
@@ -159,6 +174,7 @@ export function AuditWorkspace({
     recommendations: string[];
     prioritizedQueue: AuditDossier[];
   };
+  employeeAudits: EmployeeAuditMetric[];
 }) {
   const router = useRouter();
   const [dossierRows, setDossierRows] = useState(dossiers);
@@ -192,10 +208,17 @@ export function AuditWorkspace({
   const [newActionOwner, setNewActionOwner] = useState("");
   const [newActionDueDate, setNewActionDueDate] = useState("");
   const [newActionSeverity, setNewActionSeverity] = useState<"LOW" | "MEDIUM" | "HIGH">("MEDIUM");
-  const [compareType, setCompareType] = useState<"CAISSE" | "VENTES" | "PRESENCES" | "RAPPORTS">("CAISSE");
+  const [compareType, setCompareType] = useState<"CAISSE" | "VENTES" | "PRESENCES" | "RAPPORTS" | "ARCHIVES" | "BESOINS_CAISSE">("VENTES");
+  const [airlineScope, setAirlineScope] = useState("");
   const [compareFile, setCompareFile] = useState<File | null>(null);
   const [compareLoading, setCompareLoading] = useState(false);
   const [compareResult, setCompareResult] = useState<CompareResult | null>(null);
+  const [selectedAgent, setSelectedAgent] = useState(employeeAudits[0]?.name ?? "");
+
+  const selectedAgentMetric = useMemo(
+    () => employeeAudits.find((item) => item.name === selectedAgent) ?? employeeAudits[0] ?? null,
+    [employeeAudits, selectedAgent],
+  );
 
   const selected = useMemo(
     () => dossierRows.find((item) => `${item.entityType}:${item.entityId}` === selectedKey) ?? null,
@@ -309,6 +332,7 @@ export function AuditWorkspace({
     formData.append("compareType", compareType);
     formData.append("startDate", startDate);
     formData.append("endDate", endDate);
+    formData.append("airlineScope", airlineScope.trim());
     formData.append("file", compareFile);
 
     const response = await fetch("/api/audit/compare", {
@@ -327,6 +351,18 @@ export function AuditWorkspace({
     setStatus("Comparaison externe terminée. Rapport d'écarts prêt.");
     setCompareLoading(false);
   }
+
+  const compareGuide = compareType === "VENTES"
+    ? "Audit ventes compagnie: comparez le rapport externe d'une compagnie (ex: AIRCONGO) avec les billets de cette compagnie encodes dans le systeme."
+    : compareType === "CAISSE"
+      ? "Audit caisse: comparez les mouvements externes (entrees/sorties) avec les paiements billets + sorties liees aux besoins approuves."
+      : compareType === "BESOINS_CAISSE"
+        ? "Audit besoins vs caisse: comparez les besoins approuves avec les sorties de caisse declarees dans le fichier externe."
+        : compareType === "ARCHIVES"
+          ? "Audit archives: comparez le registre externe des dossiers (excel/csv/pdf) avec les references archivees dans l'application."
+          : compareType === "PRESENCES"
+            ? "Audit presences: confrontez les pointages externes avec les signatures et horaires du systeme."
+            : "Audit rapports: confrontez les rapports externes avec les rapports saisis dans l'application.";
 
   function exportCompareCsv() {
     if (!compareResult || compareResult.rows.length === 0) {
@@ -474,18 +510,30 @@ export function AuditWorkspace({
 
         <div className="mt-3 rounded-xl border border-black/10 p-3 dark:border-white/10">
           <p className="text-xs font-semibold uppercase tracking-wide text-black/60 dark:text-white/60">Comparaison fichier externe</p>
+          <p className="mt-1 text-[11px] text-black/60 dark:text-white/60">{compareGuide}</p>
           <div className="mt-2 grid gap-2">
             <select value={compareType} onChange={(e) => setCompareType(e.target.value as typeof compareType)} className="rounded-md border border-black/15 px-3 py-2 text-sm dark:border-white/20">
-              <option value="CAISSE">Caisse</option>
-              <option value="VENTES">Ventes</option>
+              <option value="VENTES">Ventes compagnie vs billets systeme</option>
+              <option value="CAISSE">Mouvements caisse vs paiements/besoins</option>
+              <option value="BESOINS_CAISSE">Besoins approuves vs sorties caisse</option>
               <option value="PRESENCES">Presences</option>
               <option value="RAPPORTS">Rapports</option>
+              <option value="ARCHIVES">Archives externes vs internes</option>
             </select>
-            <input type="file" accept=".csv" onChange={(e) => setCompareFile(e.target.files?.[0] ?? null)} className="rounded-md border border-black/15 px-3 py-2 text-xs dark:border-white/20" />
+            {compareType === "VENTES" ? (
+              <input
+                value={airlineScope}
+                onChange={(e) => setAirlineScope(e.target.value)}
+                placeholder="Code compagnie (ex: AIRCONGO)"
+                className="rounded-md border border-black/15 px-3 py-2 text-sm dark:border-white/20"
+              />
+            ) : null}
+            <input type="file" accept=".csv,.xls,.xlsx,.pdf" onChange={(e) => setCompareFile(e.target.files?.[0] ?? null)} className="rounded-md border border-black/15 px-3 py-2 text-xs dark:border-white/20" />
             <button type="button" disabled={compareLoading || !canWrite} onClick={() => void runExternalCompare()} className="rounded-md border border-black/15 px-3 py-2 text-sm font-semibold hover:bg-black/5 disabled:opacity-60 dark:border-white/20 dark:hover:bg-white/10">
               {compareLoading ? "Comparaison..." : "Comparer"}
             </button>
             <button type="button" onClick={exportCompareCsv} className="rounded-md border border-black/15 px-3 py-2 text-sm font-semibold hover:bg-black/5 dark:border-white/20 dark:hover:bg-white/10">Exporter CSV</button>
+            <p className="text-[11px] text-black/60 dark:text-white/60">Formats acceptes: CSV, Excel (.xls/.xlsx), PDF. Si le document est binaire non tabulaire, exportez en CSV UTF-8.</p>
           </div>
         </div>
 
@@ -503,7 +551,9 @@ export function AuditWorkspace({
           {compareResult ? (
             <div className="mt-3 rounded-md border border-black/10 p-2 text-xs dark:border-white/10">
               <p>
-                {compareResult.summary.compareType} • OK {compareResult.summary.ok} • Ecarts {compareResult.summary.mismatches} • Critiques {compareResult.summary.highSeverity}
+                {compareResult.summary.compareType}
+                {compareResult.summary.scope ? ` (${compareResult.summary.scope})` : ""}
+                {` • OK ${compareResult.summary.ok} • Ecarts ${compareResult.summary.mismatches} • Critiques ${compareResult.summary.highSeverity}`}
               </p>
               <div className="mt-2 max-h-40 overflow-auto rounded-md border border-black/10 dark:border-white/10">
                 <table className="min-w-full text-xs">
@@ -527,6 +577,35 @@ export function AuditWorkspace({
               </div>
             </div>
           ) : null}
+
+          <div className="mt-3 border-t border-black/10 pt-3 dark:border-white/10">
+            <p className="text-xs font-semibold uppercase tracking-wide text-black/60 dark:text-white/60">Audit performance agent</p>
+            {employeeAudits.length > 0 ? (
+              <div className="mt-2 space-y-2">
+                <select
+                  value={selectedAgent}
+                  onChange={(e) => setSelectedAgent(e.target.value)}
+                  className="w-full rounded-md border border-black/15 px-3 py-2 text-xs dark:border-white/20"
+                >
+                  {employeeAudits.map((item) => (
+                    <option key={item.name} value={item.name}>{item.name}</option>
+                  ))}
+                </select>
+
+                {selectedAgentMetric ? (
+                  <div className="rounded-md border border-black/10 p-2 text-xs dark:border-white/10">
+                    <p className="font-semibold">{selectedAgentMetric.name} • Score {selectedAgentMetric.score}/100 ({selectedAgentMetric.level})</p>
+                    <p className="mt-1">Presences: {selectedAgentMetric.attendanceRate}% ({selectedAgentMetric.attendanceDays} jours)</p>
+                    <p>Rapports: {selectedAgentMetric.reportsApproved} approuves / {selectedAgentMetric.reportsSubmitted} soumis</p>
+                    <p>Billets: {selectedAgentMetric.ticketsSold} • {selectedAgentMetric.ticketsAmount.toFixed(2)} USD</p>
+                    <p className="mt-1 text-black/60 dark:text-white/60">{selectedAgentMetric.recommendation}</p>
+                  </div>
+                ) : null}
+              </div>
+            ) : (
+              <p className="mt-2 text-xs text-black/60 dark:text-white/60">Aucune donnee agent disponible sur la periode.</p>
+            )}
+          </div>
         </div>
 
         <p className="mt-2 text-xs text-black/60 dark:text-white/60">{status}</p>

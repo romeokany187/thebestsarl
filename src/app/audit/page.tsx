@@ -15,6 +15,19 @@ type AuditDecision = "PENDING" | "VALIDATED" | "REJECTED";
 
 type AuditRiskLevel = "LOW" | "MEDIUM" | "HIGH";
 
+type EmployeeAuditMetric = {
+  name: string;
+  attendanceDays: number;
+  attendanceRate: number;
+  reportsSubmitted: number;
+  reportsApproved: number;
+  ticketsSold: number;
+  ticketsAmount: number;
+  score: number;
+  level: "EXCELLENT" | "GOOD" | "WATCH" | "CRITICAL";
+  recommendation: string;
+};
+
 function riskLevelFromScore(score: number): AuditRiskLevel {
   if (score >= 70) return "HIGH";
   if (score >= 40) return "MEDIUM";
@@ -379,6 +392,62 @@ export default async function AuditPage({
     recommendations.push("Profil global stable: maintenir les contrôles périodiques et la traçabilité des validations.");
   }
 
+  const agentNames = Array.from(new Set([
+    ...tickets.map((item) => item.seller.name),
+    ...reports.map((item) => item.author.name),
+    ...attendances.map((item) => item.user.name),
+  ])).sort((a, b) => a.localeCompare(b, "fr"));
+
+  const employeeAudits: EmployeeAuditMetric[] = agentNames.map((name) => {
+    const attendRows = attendances.filter((item) => item.user.name === name);
+    const activePresence = attendRows.filter((item) => item.status !== "ABSENT");
+    const attendanceDays = attendRows.length;
+    const attendanceRate = attendanceDays > 0 ? Math.round((activePresence.length / attendanceDays) * 100) : 0;
+
+    const reportRows = reports.filter((item) => item.author.name === name);
+    const reportsSubmitted = reportRows.filter((item) => item.status === "SUBMITTED" || item.status === "APPROVED").length;
+    const reportsApproved = reportRows.filter((item) => item.status === "APPROVED").length;
+
+    const soldRows = tickets.filter((item) => item.seller.name === name);
+    const ticketsSold = soldRows.length;
+    const ticketsAmount = soldRows.reduce((sum, item) => sum + item.amount, 0);
+
+    let score = 0;
+    score += Math.min(35, attendanceRate * 0.35);
+    score += Math.min(35, ticketsSold * 3.5);
+    score += Math.min(30, reportsApproved * 6 + reportsSubmitted * 2);
+    const rounded = Math.round(Math.min(100, score));
+
+    const level = rounded >= 80
+      ? "EXCELLENT"
+      : rounded >= 60
+        ? "GOOD"
+        : rounded >= 40
+          ? "WATCH"
+          : "CRITICAL";
+
+    const recommendation = level === "EXCELLENT"
+      ? "Performance stable, maintenir la regularite et la qualite des preuves."
+      : level === "GOOD"
+        ? "Renforcer la cadence des rapports approuves pour gagner en fiabilite."
+        : level === "WATCH"
+          ? "Surveiller ce profil: aligner presence, ventes et reporting hebdomadaire."
+          : "Risque eleve: plan d'accompagnement immediat et controle renforce.";
+
+    return {
+      name,
+      attendanceDays,
+      attendanceRate,
+      reportsSubmitted,
+      reportsApproved,
+      ticketsSold,
+      ticketsAmount,
+      score: rounded,
+      level,
+      recommendation,
+    };
+  }).sort((a, b) => b.score - a.score || a.name.localeCompare(b.name, "fr"));
+
   return (
     <AppShell
       role={role}
@@ -412,6 +481,7 @@ export default async function AuditPage({
                 .sort((a, b) => b.riskScore - a.riskScore || b.createdAt.localeCompare(a.createdAt))
                 .slice(0, 8),
             }}
+            employeeAudits={employeeAudits}
           />
         </div>
       </div>
