@@ -30,6 +30,8 @@ const requestSchema = z.object({
       severity: z.enum(["low", "medium", "high"]),
       systemValue: z.string().optional(),
       externalValue: z.string().optional(),
+      strictTextEqual: z.boolean().optional(),
+      strictAmountEqual: z.boolean().nullable().optional(),
     })).max(400).optional(),
   }).optional(),
   dossiers: z.array(z.object({
@@ -57,6 +59,8 @@ const requestSchema = z.object({
 });
 
 type Priority = "HIGH" | "MEDIUM" | "LOW";
+
+type ControlStatus = "OK" | "WATCH" | "ALERT";
 
 function cap(value: number, min: number, max: number) {
   return Math.max(min, Math.min(max, value));
@@ -88,6 +92,19 @@ function rankIssues(compareRows: Array<{ issue: string; severity: "low" | "mediu
   return count;
 }
 
+function amountFromText(value: string | undefined) {
+  if (!value) return 0;
+  const normalized = value.replace(/\s/g, "").replace(/,/g, ".").replace(/[^0-9.-]/g, "");
+  const parsed = Number.parseFloat(normalized);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function controlStatusFromRate(rate: number): ControlStatus {
+  if (rate >= 95) return "OK";
+  if (rate >= 80) return "WATCH";
+  return "ALERT";
+}
+
 export async function POST(request: NextRequest) {
   const access = await requireApiModuleAccess("audit", ["ADMIN", "MANAGER", "EMPLOYEE", "ACCOUNTANT"]);
   if (access.error) return access.error;
@@ -114,6 +131,29 @@ export async function POST(request: NextRequest) {
 
   const pendingHigh = payload.dossiers.filter((d) => d.auditDecision === "PENDING" && d.riskLevel === "HIGH").length;
   const rejected = payload.dossiers.filter((d) => d.auditDecision === "REJECTED").length;
+
+  const strictTextMatchesRows = compareRows.filter((row) => row.strictTextEqual === true).length;
+  const strictTextMismatchRows = compareRows.filter((row) => row.strictTextEqual === false).length;
+  const strictAmountMatchesRows = compareRows.filter((row) => row.strictAmountEqual === true).length;
+  const strictAmountMismatchRows = compareRows.filter((row) => row.strictAmountEqual === false).length;
+
+  const completenessRate = compareRows.length > 0
+    ? Math.round(((compareRows.length - (issueRank.missingSystem + issueRank.missingFile)) / compareRows.length) * 100)
+    : 100;
+  const consistencyRate = compareRows.length > 0
+    ? Math.round((strictTextMatchesRows / compareRows.length) * 100)
+    : 100;
+  const financialIntegrityRate = (strictAmountMatchesRows + strictAmountMismatchRows) > 0
+    ? Math.round((strictAmountMatchesRows / (strictAmountMatchesRows + strictAmountMismatchRows)) * 100)
+    : 100;
+
+  const estimatedDelta = compareRows
+    .filter((row) => row.issue === "AMOUNT_DIFF")
+    .reduce((sum, row) => {
+      const s = amountFromText(row.systemValue);
+      const e = amountFromText(row.externalValue);
+      return sum + Math.abs(s - e);
+    }, 0);
 
   const topDossiers = payload.dossiers
     .slice()
@@ -323,6 +363,72 @@ export async function POST(request: NextRequest) {
       rejectedCount: rejected,
       comparedMismatches: payload.compareResult?.summary.mismatches ?? 0,
       comparedCritical: payload.compareResult?.summary.highSeverity ?? 0,
+    },
+    deepAnalysis: {
+      executiveSummary: strictVerdict === "IDENTIQUE"
+        ? "Controle strict concluant: donnees externes et systeme sont globalement identiques sur le perimetre analyse."
+        : "Controle strict non concluant: des divergences factuelles persistent entre source externe et systeme.",
+      controlMatrix: [
+        {
+          control: "Integrite de rapprochement",
+          score: completenessRate,
+          status: controlStatusFromRate(completenessRate),
+          evidence: `${issueRank.missingSystem + issueRank.missingFile} ligne(s) manquante(s) sur ${compareRows.length || 0}`,
+        },
+        {
+          control: "Concordance textuelle stricte",
+          score: consistencyRate,
+          status: controlStatusFromRate(consistencyRate),
+          evidence: `${strictTextMatchesRows} identiques / ${strictTextMismatchRows} differents`,
+        },
+        {
+          control: "Integrite financiere",
+          score: financialIntegrityRate,
+          status: controlStatusFromRate(financialIntegrityRate),
+          evidence: `${strictAmountMatchesRows} montants egaux / ${strictAmountMismatchRows} non egaux`,
+        },
+      ],
+      findings: [
+        {
+          title: "Ecarts critiques detectes",
+          priority: issueRank.high > 0 ? "HIGH" : "LOW",
+          impact: issueRank.high > 0 ? "Risque financier/conformite eleve" : "Risque critique faible",
+          evidence: `${issueRank.high} ecart(s) critique(s), ${issueRank.amountDiff} ecart(s) montant`,
+          recommendation: issueRank.high > 0
+            ? "Traiter immediatement les lignes critiques avant toute validation finale."
+            : "Maintenir la surveillance reguliere.",
+        },
+        {
+          title: "Exactitude textuelle",
+          priority: strictTextMismatchRows > 0 ? "MEDIUM" : "LOW",
+          impact: strictTextMismatchRows > 0 ? "Incoherence de references et libelles" : "Bonne homogenite des champs texte",
+          evidence: `${strictTextMismatchRows} mismatch(s) textuel(s)`,
+          recommendation: strictTextMismatchRows > 0
+            ? "Normaliser et corriger les champs textuels ligne par ligne."
+            : "Aucune correction textuelle majeure necessaire.",
+        },
+        {
+          title: "Impact montant cumule",
+          priority: estimatedDelta > 0 ? "HIGH" : "LOW",
+          impact: estimatedDelta > 0 ? "Ecart financier cumule detecte" : "Aucun delta montant material",
+          evidence: `Delta estime ${estimatedDelta.toFixed(2)}`,
+          recommendation: estimatedDelta > 0
+            ? "Reconciliation financiere detaillee et justification documentaire des deltas."
+            : "Concordance montant satisfaisante.",
+        },
+      ],
+      evidenceSamples: compareRows
+        .filter((row) => row.issue !== "OK")
+        .slice(0, 10)
+        .map((row) => ({
+          key: row.key,
+          issue: row.issue,
+          severity: row.severity,
+          systemValue: row.systemValue ?? "-",
+          externalValue: row.externalValue ?? "-",
+        })),
+      totalEstimatedDelta: estimatedDelta,
+      strictVerdict,
     },
     priorityQueue: topDossiers,
   };

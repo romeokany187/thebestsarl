@@ -30,6 +30,8 @@ type CompareResultRow = {
   systemValue: string;
   externalValue: string;
   severity: "low" | "medium" | "high";
+  strictTextEqual?: boolean;
+  strictAmountEqual?: boolean | null;
 };
 
 type CompareResult = {
@@ -76,6 +78,14 @@ type AiAnalysis = {
     rejectedCount: number;
     comparedMismatches: number;
     comparedCritical: number;
+  };
+  deepAnalysis: {
+    executiveSummary: string;
+    controlMatrix: Array<{ control: string; score: number; status: "OK" | "WATCH" | "ALERT"; evidence: string }>;
+    findings: Array<{ title: string; priority: "HIGH" | "MEDIUM" | "LOW"; impact: string; evidence: string; recommendation: string }>;
+    evidenceSamples: Array<{ key: string; issue: string; severity: string; systemValue: string; externalValue: string }>;
+    totalEstimatedDelta: number;
+    strictVerdict: "IDENTIQUE" | "NON_IDENTIQUE";
   };
   priorityQueue: Array<{ reference: string; service: string; riskScore: number; reason: string }>;
 };
@@ -218,7 +228,15 @@ export function AuditWorkspace({
       compareResult: compareResult
         ? {
           summary: compareResult.summary,
-          rows: compareResult.rows.slice(0, 250),
+          rows: compareResult.rows.slice(0, 250).map((row) => ({
+            key: row.key,
+            issue: row.issue,
+            severity: row.severity,
+            systemValue: row.systemValue,
+            externalValue: row.externalValue,
+            strictTextEqual: row.strictTextEqual,
+            strictAmountEqual: row.strictAmountEqual,
+          })),
         }
         : undefined,
       dossiers: filtered.slice(0, 500).map((item) => ({
@@ -440,6 +458,69 @@ export function AuditWorkspace({
                 <p className="mt-1 text-xs text-black/60 dark:text-white/60">
                   Risque eleve en attente: {aiResult.keyIndicators.pendingHighRisk} • Rejetes: {aiResult.keyIndicators.rejectedCount} • Ecarts: {aiResult.keyIndicators.comparedMismatches}
                 </p>
+                <p className="mt-1 text-xs text-black/70 dark:text-white/70">
+                  Verdict strict: {aiResult.deepAnalysis.strictVerdict} • Delta estime: {aiResult.deepAnalysis.totalEstimatedDelta.toFixed(2)}
+                </p>
+              </div>
+
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-wide text-black/60 dark:text-white/60">Synthese complete IA</p>
+                <p className="mt-2 rounded-md border border-black/10 px-3 py-2 text-xs dark:border-white/10">{aiResult.deepAnalysis.executiveSummary}</p>
+              </div>
+
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-wide text-black/60 dark:text-white/60">Matrice de controle</p>
+                <ul className="mt-2 space-y-2 text-xs">
+                  {aiResult.deepAnalysis.controlMatrix.map((item, index) => (
+                    <li key={`${item.control}-${index}`} className="rounded-md border border-black/10 px-3 py-2 dark:border-white/10">
+                      <p className="font-semibold">{item.control} • {item.score}% • {item.status}</p>
+                      <p className="text-black/60 dark:text-white/60">{item.evidence}</p>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-wide text-black/60 dark:text-white/60">Constats detailles releves par l'IA</p>
+                <ul className="mt-2 space-y-2 text-xs">
+                  {aiResult.deepAnalysis.findings.map((item, index) => (
+                    <li key={`${item.title}-${index}`} className="rounded-md border border-black/10 px-3 py-2 dark:border-white/10">
+                      <p className="font-semibold">{item.title} • Priorite {item.priority}</p>
+                      <p className="mt-0.5">Impact: {item.impact}</p>
+                      <p className="text-black/60 dark:text-white/60">Preuve: {item.evidence}</p>
+                      <p className="text-black/60 dark:text-white/60">Recommandation: {item.recommendation}</p>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-wide text-black/60 dark:text-white/60">Echantillon des divergences</p>
+                <div className="mt-2 overflow-auto rounded-md border border-black/10 dark:border-white/10">
+                  <table className="min-w-full text-xs">
+                    <thead className="sticky top-0 bg-black/5 dark:bg-white/10">
+                      <tr>
+                        <th className="px-2 py-1 text-left">Cle</th>
+                        <th className="px-2 py-1 text-left">Issue</th>
+                        <th className="px-2 py-1 text-left">Severite</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {aiResult.deepAnalysis.evidenceSamples.map((item, index) => (
+                        <tr key={`${item.key}-${index}`} className="border-t border-black/5 dark:border-white/10">
+                          <td className="px-2 py-1">{item.key}</td>
+                          <td className="px-2 py-1">{item.issue}</td>
+                          <td className="px-2 py-1">{item.severity}</td>
+                        </tr>
+                      ))}
+                      {aiResult.deepAnalysis.evidenceSamples.length === 0 ? (
+                        <tr>
+                          <td colSpan={3} className="px-2 py-3 text-center text-black/60 dark:text-white/60">Aucune divergence detaillee.</td>
+                        </tr>
+                      ) : null}
+                    </tbody>
+                  </table>
+                </div>
               </div>
 
               <div>
