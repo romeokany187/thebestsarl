@@ -417,7 +417,7 @@ export function AuditWorkspace({
           {mission !== "GLOBAL" && mission !== "AUDIT_AGENT" ? (
             <>
               <select value={compareType} onChange={(e) => setCompareType(e.target.value as typeof compareType)} className="w-full rounded-md border border-black/15 px-3 py-2 text-sm dark:border-white/20">
-                <option value="VENTES">Ventes compagnie vs billets</option>
+                <option value="VENTES">Ventes globales (journalier/hebdo/mensuel) vs systeme</option>
                 <option value="CAISSE">Mouvements caisse</option>
                 <option value="BESOINS_CAISSE">Besoins approuves vs caisse</option>
                 <option value="ARCHIVES">Archives externes vs internes</option>

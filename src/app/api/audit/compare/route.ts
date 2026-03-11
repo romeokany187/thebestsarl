@@ -1,5 +1,6 @@
 import { Prisma } from "@prisma/client";
 import { NextRequest, NextResponse } from "next/server";
+import * as XLSX from "xlsx";
 import { prisma } from "@/lib/prisma";
 import { requireApiModuleAccess } from "@/lib/rbac";
 
@@ -96,8 +97,83 @@ function parseTabularText(text: string) {
   return rows;
 }
 
+const KNOWN_COMPANIES = ["CAA", "AIR CONGO", "ETHIOPIAN", "MG", "AIR FAST", "KENYA", "KP", "AF", "TC"];
+
+function parseExcelBuffer(bytes: Uint8Array) {
+  const workbook = XLSX.read(bytes, { type: "array" });
+  const rows: Array<Record<string, string>> = [];
+
+  for (const sheetName of workbook.SheetNames) {
+    const sheet = workbook.Sheets[sheetName];
+    const matrix = XLSX.utils.sheet_to_json<(string | number | boolean | null)[]>(sheet, {
+      header: 1,
+      defval: "",
+      raw: false,
+      blankrows: false,
+    });
+
+    if (matrix.length === 0) continue;
+
+    let headerIndex = -1;
+    let bestScore = -1;
+    for (let i = 0; i < matrix.length; i += 1) {
+      const row = matrix[i] ?? [];
+      const joined = row.map((cell) => String(cell ?? "")).join(" ").toUpperCase();
+      let score = 0;
+      for (const cell of row) {
+        if (String(cell ?? "").trim()) {
+          score += 1;
+        }
+      }
+      const hasSignal = joined.includes("DATE")
+        || joined.includes("BILLET")
+        || joined.includes("MONTANT")
+        || joined.includes("COMPAGNIE")
+        || KNOWN_COMPANIES.some((company) => joined.includes(company));
+
+      if (hasSignal && score > bestScore) {
+        bestScore = score;
+        headerIndex = i;
+      }
+    }
+
+    if (headerIndex < 0) continue;
+
+    const headers = (matrix[headerIndex] ?? []).map((cell, idx) => {
+      const value = String(cell ?? "").trim();
+      return value ? value.toLowerCase() : `col_${idx}`;
+    });
+
+    for (let i = headerIndex + 1; i < matrix.length; i += 1) {
+      const line = matrix[i] ?? [];
+      const row: Record<string, string> = {};
+      let hasData = false;
+      headers.forEach((header, idx) => {
+        const value = String(line[idx] ?? "").trim();
+        row[header] = value;
+        if (value) hasData = true;
+      });
+      if (hasData) rows.push(row);
+    }
+  }
+
+  return rows;
+}
+
 function normalizeKey(value: string) {
   return value.trim().toUpperCase();
+}
+
+function normalizeCompany(value: string) {
+  return normalizeKey(value).replace(/[^A-Z0-9]/g, "");
+}
+
+function companyFromHeader(header: string) {
+  const normalizedHeader = normalizeCompany(header);
+  for (const company of KNOWN_COMPANIES) {
+    if (normalizedHeader === normalizeCompany(company)) return company;
+  }
+  return null;
 }
 
 function asAmount(value: string | null | undefined) {
@@ -174,7 +250,14 @@ async function parseExternalRowsFromFile(file: File) {
     return parseTabularText(text);
   }
 
-  if (ext === "xls" || ext === "xlsx" || ext === "pdf") {
+  if (ext === "xls" || ext === "xlsx") {
+    const bytes = new Uint8Array(await file.arrayBuffer());
+    const rows = parseExcelBuffer(bytes);
+    if (rows.length > 0) return rows;
+    throw new Error("Le fichier Excel est lisible mais aucune table exploitable n'a ete detectee.");
+  }
+
+  if (ext === "pdf") {
     // Without extra parsing libraries, we try tabular-text extraction first.
     const bytes = new Uint8Array(await file.arrayBuffer());
     const text = new TextDecoder("utf-8", { fatal: false }).decode(bytes);
@@ -229,6 +312,17 @@ async function compareCaisse(range: { start: Date; end: Date }, externalRows: Ar
   let externalExpenses = 0;
 
   for (const row of externalRows) {
+    const explicitPayments = asAmount(getValue(row, ["paiements", "payments", "encaissements", "recettes", "incomes"]));
+    const explicitBenefits = asAmount(getValue(row, ["benefices", "benefit", "profits", "commissions", "marges"]));
+    const explicitExpenses = asAmount(getValue(row, ["depenses", "expenses", "sorties", "outflows", "besoins"]));
+
+    if (explicitPayments !== 0 || explicitBenefits !== 0 || explicitExpenses !== 0) {
+      externalPayments += explicitPayments;
+      externalBenefits += explicitBenefits;
+      externalExpenses += explicitExpenses;
+      continue;
+    }
+
     const rawLabel = `${getValue(row, ["categorie", "category", "libelle", "description", "nature"])} ${getValue(row, ["type", "sens", "mouvement"])}`;
     const label = normalizeKey(rawLabel);
     const amount = asAmount(getValue(row, ["amount", "montant", "value", "valeur", "total"]));
@@ -327,13 +421,14 @@ async function compareVentes(
   externalRows: Array<Record<string, string>>,
   airlineScope?: string,
 ) {
-  const airlineScopeNormalized = normalizeKey(airlineScope ?? "");
+  const airlineScopeRaw = (airlineScope ?? "").trim();
+  const airlineScopeNormalized = normalizeCompany(airlineScopeRaw);
 
   const tickets = await prisma.ticketSale.findMany({
     where: {
       soldAt: { gte: range.start, lt: range.end },
-      ...(airlineScopeNormalized ? {
-        airline: { code: { equals: airlineScopeNormalized, mode: "insensitive" as const } },
+      ...(airlineScopeRaw ? {
+        airline: { code: { equals: airlineScopeRaw, mode: "insensitive" as const } },
       } : {}),
     },
     select: {
@@ -345,7 +440,7 @@ async function compareVentes(
 
   const systemMap = new Map<string, { amount: number; count: number }>();
   tickets.forEach((ticket) => {
-    const airline = normalizeKey(ticket.airline.code || "INCONNUE");
+    const airline = normalizeCompany(ticket.airline.code || "INCONNUE");
     const current = systemMap.get(airline) ?? { amount: 0, count: 0 };
     systemMap.set(airline, {
       amount: current.amount + ticket.amount,
@@ -353,21 +448,46 @@ async function compareVentes(
     });
   });
 
-  const externalMap = new Map<string, { amount: number; count: number }>();
+  const externalMap = new Map<string, { amount: number; count: number; countKnown: boolean }>();
   externalRows.forEach((row) => {
-    const airline = normalizeKey(getValue(row, ["airline", "compagnie", "carrier", "code_compagnie", "compagnie_code"]));
-    if (!airline) return;
-    if (airlineScopeNormalized && airline !== airlineScopeNormalized) return;
+    const rowEntries = Object.entries(row);
+    const explicitAirline = normalizeCompany(getValue(row, ["airline", "compagnie", "carrier", "code_compagnie", "compagnie_code"]));
 
-    const countFromFile = Number.parseInt(getValue(row, ["tickets", "nombre", "count", "nb_tickets"]), 10);
-    const count = Number.isFinite(countFromFile) ? countFromFile : 1;
-    const amount = asAmount(getValue(row, ["amount", "montant", "total", "total_ventes"]));
+    if (explicitAirline) {
+      if (airlineScopeNormalized && explicitAirline !== airlineScopeNormalized) return;
 
-    const current = externalMap.get(airline) ?? { amount: 0, count: 0 };
-    externalMap.set(airline, {
-      amount: current.amount + amount,
-      count: current.count + count,
-    });
+      const countFromFile = Number.parseInt(getValue(row, ["tickets", "nombre", "count", "nb_tickets", "billets"]), 10);
+      const amount = asAmount(getValue(row, ["amount", "montant", "total", "total_ventes", "totaux"]));
+
+      const current = externalMap.get(explicitAirline) ?? { amount: 0, count: 0, countKnown: false };
+      externalMap.set(explicitAirline, {
+        amount: current.amount + amount,
+        count: current.count + (Number.isFinite(countFromFile) ? countFromFile : 0),
+        countKnown: current.countKnown || Number.isFinite(countFromFile),
+      });
+      return;
+    }
+
+    const rowTicketCountRaw = Number.parseInt(getValue(row, ["billets", "tickets", "nombre", "count", "nb_tickets"]), 10);
+    const rowTicketCount = Number.isFinite(rowTicketCountRaw) ? rowTicketCountRaw : 0;
+
+    for (const [header, value] of rowEntries) {
+      const company = companyFromHeader(header);
+      if (!company) continue;
+
+      const companyKey = normalizeCompany(company);
+      if (airlineScopeNormalized && companyKey !== airlineScopeNormalized) continue;
+
+      const amount = asAmount(value);
+      if (amount === 0) continue;
+
+      const current = externalMap.get(companyKey) ?? { amount: 0, count: 0, countKnown: false };
+      externalMap.set(companyKey, {
+        amount: current.amount + amount,
+        count: current.count + rowTicketCount,
+        countKnown: current.countKnown || rowTicketCount > 0,
+      });
+    }
   });
 
   const keys = new Set([...systemMap.keys(), ...externalMap.keys()]);
@@ -401,7 +521,7 @@ async function compareVentes(
 
     if (s && e) {
       const sameAmount = compareNumeric(s.amount, e.amount);
-      const sameCount = s.count === e.count;
+      const sameCount = !e.countKnown || s.count === e.count;
       if (!sameAmount || !sameCount) {
         rows.push({
           key: `COMPANY:${key}`,
@@ -426,13 +546,14 @@ async function compareVentes(
   const totalExternalAmount = Array.from(externalMap.values()).reduce((sum, row) => sum + row.amount, 0);
   const totalSystemCount = Array.from(systemMap.values()).reduce((sum, row) => sum + row.count, 0);
   const totalExternalCount = Array.from(externalMap.values()).reduce((sum, row) => sum + row.count, 0);
+  const totalExternalCountKnown = Array.from(externalMap.values()).some((row) => row.countKnown);
 
   rows.push({
     key: "GLOBAL:TOTAL_VENTES",
-    issue: compareNumeric(totalSystemAmount, totalExternalAmount) && totalSystemCount === totalExternalCount ? "OK" : "AMOUNT_DIFF",
+    issue: compareNumeric(totalSystemAmount, totalExternalAmount) && (!totalExternalCountKnown || totalSystemCount === totalExternalCount) ? "OK" : "AMOUNT_DIFF",
     systemValue: `Tickets=${totalSystemCount};Montant=${totalSystemAmount.toFixed(2)}`,
     externalValue: `Tickets=${totalExternalCount};Montant=${totalExternalAmount.toFixed(2)}`,
-    severity: compareNumeric(totalSystemAmount, totalExternalAmount) && totalSystemCount === totalExternalCount ? "low" : "high",
+    severity: compareNumeric(totalSystemAmount, totalExternalAmount) && (!totalExternalCountKnown || totalSystemCount === totalExternalCount) ? "low" : "high",
   });
 
   return rows;
