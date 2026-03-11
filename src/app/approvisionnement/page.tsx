@@ -76,6 +76,7 @@ export default async function ApprovisionnementPage() {
         canApproveNeed={canApproveNeed}
         canManageStock={canManageStock}
         hideNeedWorkflow={isAdminReadOnly}
+        hideDynamicStock={isAdminReadOnly}
       />
     </AppShell>
   );

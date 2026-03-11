@@ -67,6 +67,7 @@ export function ProcurementHub({
   canApproveNeed,
   canManageStock,
   hideNeedWorkflow,
+  hideDynamicStock,
 }: {
   initialNeeds: NeedItem[];
   initialStock: StockItem[];
@@ -75,6 +76,7 @@ export function ProcurementHub({
   canApproveNeed: boolean;
   canManageStock: boolean;
   hideNeedWorkflow?: boolean;
+  hideDynamicStock?: boolean;
 }) {
   const defaultReportMonth = new Date().toISOString().slice(0, 7);
   const [needs, setNeeds] = useState(initialNeeds);
@@ -256,6 +258,8 @@ export function ProcurementHub({
     form.reset();
     await refreshData();
   }
+
+  const stockGridColumns = hideDynamicStock ? "lg:grid-cols-1" : "lg:grid-cols-[380px,1fr]";
 
   return (
     <div className="space-y-6">
@@ -480,47 +484,49 @@ export function ProcurementHub({
         </div>
       </section>
 
-      <div className="grid gap-5 lg:grid-cols-[380px,1fr]">
-        <section className="rounded-xl border border-black/10 bg-white p-3.5 dark:border-white/10 dark:bg-zinc-900">
-          <h2 className="text-base font-semibold">Fiche stock dynamique</h2>
-          <p className="mt-1 text-[11px] text-black/60 dark:text-white/60">
-            Chaque entrée/sortie exige un justificatif pour garder la traçabilité complète.
-          </p>
-
-          {canManageStock ? (
-            <form onSubmit={submitStockMovement} className="mt-3 grid gap-2">
-              <div className="grid gap-2 sm:grid-cols-2">
-                <input name="itemName" required placeholder="Produit / Matériel" className="rounded-md border px-2.5 py-2 text-sm" />
-                <input name="category" required placeholder="Catégorie" className="rounded-md border px-2.5 py-2 text-sm" />
-              </div>
-              <div className="grid gap-2 sm:grid-cols-3">
-                <input name="quantity" type="number" min="0.01" step="0.01" required placeholder="Quantité" className="rounded-md border px-2.5 py-2 text-sm" />
-                <input name="unit" required placeholder="Unité" className="rounded-md border px-2.5 py-2 text-sm" />
-                <select name="movementType" defaultValue="IN" className="rounded-md border px-2.5 py-2 text-sm">
-                  <option value="IN">Entrée</option>
-                  <option value="OUT">Sortie</option>
-                </select>
-              </div>
-              <div className="grid gap-2 sm:grid-cols-2">
-                <input name="referenceDoc" required placeholder="Référence justificatif" className="rounded-md border px-2.5 py-2 text-sm" />
-                <select name="needRequestId" className="rounded-md border px-2.5 py-2 text-sm">
-                  <option value="">Sans EDB liée</option>
-                  {approvedNeeds.map((need) => (
-                    <option key={need.id} value={need.id}>{need.title}</option>
-                  ))}
-                </select>
-              </div>
-              <textarea name="justification" required rows={2} placeholder="Motif / justification" className="rounded-md border px-2.5 py-2 text-sm" />
-              <button className="rounded-md bg-black px-3 py-2 text-sm font-semibold text-white dark:bg-white dark:text-black">Enregistrer mouvement</button>
-            </form>
-          ) : (
-            <p className="mt-3 rounded-md border border-dashed border-black/20 px-3 py-2 text-xs text-black/70 dark:border-white/20 dark:text-white/70">
-              Gestion de stock réservée à l&apos;Approvisionnement.
+      <div className={`grid gap-5 ${stockGridColumns}`}>
+        {hideDynamicStock ? null : (
+          <section className="rounded-xl border border-black/10 bg-white p-3.5 dark:border-white/10 dark:bg-zinc-900">
+            <h2 className="text-base font-semibold">Fiche stock dynamique</h2>
+            <p className="mt-1 text-[11px] text-black/60 dark:text-white/60">
+              Chaque entrée/sortie exige un justificatif pour garder la traçabilité complète.
             </p>
-          )}
 
-          {stockStatus ? <p className="mt-2 text-xs text-black/60 dark:text-white/60">{stockStatus}</p> : null}
-        </section>
+            {canManageStock ? (
+              <form onSubmit={submitStockMovement} className="mt-3 grid gap-2">
+                <div className="grid gap-2 sm:grid-cols-2">
+                  <input name="itemName" required placeholder="Produit / Matériel" className="rounded-md border px-2.5 py-2 text-sm" />
+                  <input name="category" required placeholder="Catégorie" className="rounded-md border px-2.5 py-2 text-sm" />
+                </div>
+                <div className="grid gap-2 sm:grid-cols-3">
+                  <input name="quantity" type="number" min="0.01" step="0.01" required placeholder="Quantité" className="rounded-md border px-2.5 py-2 text-sm" />
+                  <input name="unit" required placeholder="Unité" className="rounded-md border px-2.5 py-2 text-sm" />
+                  <select name="movementType" defaultValue="IN" className="rounded-md border px-2.5 py-2 text-sm">
+                    <option value="IN">Entrée</option>
+                    <option value="OUT">Sortie</option>
+                  </select>
+                </div>
+                <div className="grid gap-2 sm:grid-cols-2">
+                  <input name="referenceDoc" required placeholder="Référence justificatif" className="rounded-md border px-2.5 py-2 text-sm" />
+                  <select name="needRequestId" className="rounded-md border px-2.5 py-2 text-sm">
+                    <option value="">Sans EDB liée</option>
+                    {approvedNeeds.map((need) => (
+                      <option key={need.id} value={need.id}>{need.title}</option>
+                    ))}
+                  </select>
+                </div>
+                <textarea name="justification" required rows={2} placeholder="Motif / justification" className="rounded-md border px-2.5 py-2 text-sm" />
+                <button className="rounded-md bg-black px-3 py-2 text-sm font-semibold text-white dark:bg-white dark:text-black">Enregistrer mouvement</button>
+              </form>
+            ) : (
+              <p className="mt-3 rounded-md border border-dashed border-black/20 px-3 py-2 text-xs text-black/70 dark:border-white/20 dark:text-white/70">
+                Gestion de stock réservée à l&apos;Approvisionnement.
+              </p>
+            )}
+
+            {stockStatus ? <p className="mt-2 text-xs text-black/60 dark:text-white/60">{stockStatus}</p> : null}
+          </section>
+        )}
 
         <section className="rounded-xl border border-black/10 bg-white p-3.5 dark:border-white/10 dark:bg-zinc-900">
           <h2 className="text-base font-semibold">Stock et rapports</h2>
