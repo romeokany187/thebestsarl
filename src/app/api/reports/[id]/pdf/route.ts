@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
-import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
+import { PDFDocument, rgb } from "pdf-lib";
+import fontkit from "@pdf-lib/fontkit";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { prisma } from "@/lib/prisma";
@@ -68,8 +69,23 @@ export async function GET(_request: Request, { params }: Params) {
   }
 
   const pdf = await PDFDocument.create();
-  const font = await pdf.embedFont(StandardFonts.Helvetica);
-  const fontBold = await pdf.embedFont(StandardFonts.HelveticaBold);
+  pdf.registerFontkit(fontkit);
+
+  const montserratRegular = await readFirstExistingFile([
+    "public/fonts/Montserrat-Regular.ttf",
+    "public/branding/fonts/Montserrat-Regular.ttf",
+  ]);
+  const montserratBold = await readFirstExistingFile([
+    "public/fonts/Montserrat-Bold.ttf",
+    "public/branding/fonts/Montserrat-Bold.ttf",
+  ]);
+
+  if (!montserratRegular || !montserratBold) {
+    return NextResponse.json({ error: "Polices Montserrat introuvables sur le serveur." }, { status: 500 });
+  }
+
+  const font = await pdf.embedFont(montserratRegular.bytes);
+  const fontBold = await pdf.embedFont(montserratBold.bytes);
   const textBlack = rgb(0, 0, 0);
   const lineGray = rgb(0.84, 0.84, 0.84);
   const logoImage = report.status === "APPROVED"

@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { ArchiveFolder } from "@prisma/client";
-import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
+import { PDFDocument, rgb } from "pdf-lib";
+import fontkit from "@pdf-lib/fontkit";
+import { readFile } from "node:fs/promises";
+import path from "node:path";
 import { prisma } from "@/lib/prisma";
 import { requireApiModuleAccess } from "@/lib/rbac";
 import { archiveFolderLabel } from "@/lib/archive";
@@ -81,6 +84,17 @@ function typeFromMime(mimeType: string) {
   return "Fichier";
 }
 
+async function readFirstExistingFile(candidates: string[]) {
+  for (const candidate of candidates) {
+    try {
+      return await readFile(path.join(process.cwd(), candidate));
+    } catch {
+      continue;
+    }
+  }
+  return null;
+}
+
 export async function GET(request: NextRequest) {
   const access = await requireApiModuleAccess("archives", ["ADMIN", "MANAGER", "EMPLOYEE", "ACCOUNTANT"]);
   if (access.error) {
@@ -108,8 +122,23 @@ export async function GET(request: NextRequest) {
   });
 
   const pdf = await PDFDocument.create();
-  const font = await pdf.embedFont(StandardFonts.Helvetica);
-  const bold = await pdf.embedFont(StandardFonts.HelveticaBold);
+  pdf.registerFontkit(fontkit);
+
+  const montserratRegular = await readFirstExistingFile([
+    "public/fonts/Montserrat-Regular.ttf",
+    "public/branding/fonts/Montserrat-Regular.ttf",
+  ]);
+  const montserratBold = await readFirstExistingFile([
+    "public/fonts/Montserrat-Bold.ttf",
+    "public/branding/fonts/Montserrat-Bold.ttf",
+  ]);
+
+  if (!montserratRegular || !montserratBold) {
+    return NextResponse.json({ error: "Polices Montserrat introuvables sur le serveur." }, { status: 500 });
+  }
+
+  const font = await pdf.embedFont(montserratRegular);
+  const bold = await pdf.embedFont(montserratBold);
   const textBlack = rgb(0, 0, 0);
   let page = pdf.addPage([842, 595]);
 
