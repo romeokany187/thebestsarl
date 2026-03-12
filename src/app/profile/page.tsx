@@ -1,4 +1,5 @@
 import { AppShell } from "@/components/app-shell";
+import { AppMailComposer } from "@/components/app-mail-composer";
 import { ProcurementInboxActions } from "@/components/procurement-inbox-actions";
 import { authOptions } from "@/auth";
 import { assignmentCapabilities, jobTitleLabel } from "@/lib/assignment";
@@ -36,6 +37,21 @@ export default async function ProfilePage() {
       take: 6,
     }),
   ]);
+
+  const mailRecipients = await prisma.user.findMany({
+    select: {
+      id: true,
+      name: true,
+      email: true,
+      role: true,
+      jobTitle: true,
+      team: { select: { name: true } },
+    },
+    orderBy: { name: "asc" },
+    take: 500,
+  });
+
+  const canBroadcastMails = role === "ADMIN" || role === "MANAGER";
 
   return (
     <AppShell role={role} accessNote="Profil connecté et inbox: informations du compte, notifications et activité récente.">
@@ -76,6 +92,21 @@ export default async function ProfilePage() {
           ))}
         </ul>
       </section>
+
+      <div className="mb-4">
+        <AppMailComposer
+          currentUserId={userId}
+          canBroadcast={canBroadcastMails}
+          recipients={mailRecipients.map((recipient) => ({
+            id: recipient.id,
+            name: recipient.name,
+            email: recipient.email,
+            role: recipient.role,
+            jobTitle: recipient.jobTitle,
+            teamName: recipient.team?.name ?? null,
+          }))}
+        />
+      </div>
 
       <div className="grid gap-4 lg:grid-cols-2">
         <section className="rounded-2xl border border-black/10 bg-white p-5 shadow-sm dark:border-white/10 dark:bg-zinc-900">

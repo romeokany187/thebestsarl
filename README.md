@@ -174,3 +174,22 @@ npx vercel link
 - exports PDF/Excel (rapports, ventes, comptabilité),
 - notifications automatiques (rappels de rapport fin de journée/semaine),
 - journal d'audit avancé et historisation des modifications.
+
+## Email applicatif (envoi depuis la plateforme)
+
+La plateforme peut envoyer des emails aux utilisateurs directement depuis l'application:
+- envoi manuel depuis `Profil & Inbox`,
+- diffusion d'un communiqué publié,
+- envoi automatique lors d'une mise à jour d'affectation.
+
+Variables à ajouter dans `.env`:
+
+```dotenv
+SMTP_HOST="smtp.gmail.com"
+SMTP_PORT="587"
+SMTP_SECURE="false"
+SMTP_USER="your-smtp-user@gmail.com"
+SMTP_PASS="your-smtp-app-password"
+MAIL_FROM_NAME="THEBEST SARL"
+MAIL_FROM_EMAIL="no-reply@thebestsarl.com"
+```

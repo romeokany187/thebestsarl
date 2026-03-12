@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { requireApiModuleAccess } from "@/lib/rbac";
+import { isMailConfigured, sendMailBatch } from "@/lib/mail";
 
 const newsCreateSchema = z.object({
   title: z.string().min(3).max(180),
@@ -50,6 +51,57 @@ export async function POST(request: NextRequest) {
       },
     },
   });
+
+  const recipients = await prisma.user.findMany({
+    where: { id: { not: access.session.user.id } },
+    select: { id: true, name: true, email: true },
+    orderBy: { name: "asc" },
+  });
+
+  if (recipients.length > 0) {
+    await prisma.userNotification.createMany({
+      data: recipients.map((recipient) => ({
+        userId: recipient.id,
+        title: `Nouveau communiqué: ${created.title}`,
+        message: "Un nouveau communiqué a été publié. Consultez le module Nouvelles.",
+        type: "NEWS",
+        metadata: {
+          newsId: created.id,
+          authorId: created.author.id,
+          authorName: created.author.name,
+        },
+      })),
+    });
+
+    if (isMailConfigured()) {
+      try {
+        const appUrl = process.env.NEXTAUTH_URL?.trim() || "";
+        const newsUrl = appUrl ? `${appUrl}/news` : "/news";
+        await sendMailBatch({
+          recipients: recipients.map((recipient) => ({ email: recipient.email, name: recipient.name })),
+          subject: `[Communiqué] ${created.title}`,
+          text: [
+            "THEBEST SARL - Nouveau communiqué",
+            "",
+            `Titre: ${created.title}`,
+            "",
+            created.content,
+            "",
+            `Consulter: ${newsUrl}`,
+          ].join("\n"),
+          html: `
+            <p><strong>THEBEST SARL - Nouveau communiqué</strong></p>
+            <p><strong>Titre:</strong> ${created.title}</p>
+            <p>${created.content.replace(/\n/g, "<br/>")}</p>
+            <p><a href="${newsUrl}">Ouvrir le module Nouvelles</a></p>
+          `,
+          replyTo: created.author.email,
+        });
+      } catch {
+        // Ne pas bloquer la publication si l'email échoue.
+      }
+    }
+  }
 
   return NextResponse.json({ data: created }, { status: 201 });
 }

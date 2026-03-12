@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { requireApiModuleAccess } from "@/lib/rbac";
+import { isMailConfigured, sendMailBatch } from "@/lib/mail";
 
 const userUpdateSchema = z.object({
   jobTitle: z.nativeEnum(JobTitle).optional(),
@@ -24,7 +25,7 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
 
   const actor = await prisma.user.findUnique({
     where: { id: access.session.user.id },
-    select: { id: true, role: true, jobTitle: true },
+    select: { id: true, role: true, jobTitle: true, name: true, email: true },
   });
 
   if (!actor) {
@@ -70,6 +71,8 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
     }
   }
 
+  let assignmentMessage = "";
+
   const updated = await prisma.$transaction(async (tx) => {
     const user = await tx.user.update({
       where: { id },
@@ -106,12 +109,14 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
       if (jobChanged) messageParts.push(`Fonction ${fromJob} → ${toJob}`);
       if (roleChanged) messageParts.push(`Rôle ${fromRole} → ${toRole}`);
 
+      assignmentMessage = `Votre affectation a été mise à jour: ${messageParts.join("; ")}.`;
+
       await tx.userNotification.create({
         data: {
           userId: user.id,
           title,
           type: "ASSIGNMENT",
-          message: `Votre affectation a été mise à jour: ${messageParts.join("; ")}.`,
+          message: assignmentMessage,
           metadata: {
             fromTeam,
             toTeam,
@@ -127,6 +132,30 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
 
     return user;
   });
+
+  if (assignmentMessage && isMailConfigured()) {
+    try {
+      await sendMailBatch({
+        recipients: [{ email: updated.email, name: updated.name }],
+        subject: "Mise à jour de votre affectation",
+        text: [
+          `Bonjour ${updated.name},`,
+          "",
+          assignmentMessage,
+          "",
+          `Mis à jour par: ${actor.name}`,
+        ].join("\n"),
+        html: `
+          <p>Bonjour ${updated.name},</p>
+          <p>${assignmentMessage}</p>
+          <p><strong>Mis à jour par:</strong> ${actor.name}</p>
+        `,
+        replyTo: actor.email,
+      });
+    } catch {
+      // Ne pas bloquer la mise à jour d'affectation si l'email échoue.
+    }
+  }
 
   return NextResponse.json({ data: updated });
 }
