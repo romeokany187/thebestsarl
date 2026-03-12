@@ -205,17 +205,17 @@ export async function GET(request: NextRequest, context: RouteContext) {
       x: CONTENT_LEFT,
       y: FOOTER_Y,
       size: 8.2,
-      font: regularFont,
+      font: boldFont,
       color: black,
     });
 
     const byText = `Par ${access.session.user.name}`;
-    const byWidth = regularFont.widthOfTextAtSize(byText, 8.2);
+    const byWidth = boldFont.widthOfTextAtSize(byText, 8.2);
     page.drawText(byText, {
       x: CONTENT_RIGHT - byWidth,
       y: FOOTER_Y,
       size: 8.2,
-      font: regularFont,
+      font: boldFont,
       color: black,
     });
   };
@@ -250,7 +250,7 @@ export async function GET(request: NextRequest, context: RouteContext) {
       x: 170,
       y,
       size: 10.2,
-      font: regularFont,
+      font: boldFont,
       color: valueColor,
     });
     y -= 16;
@@ -260,7 +260,7 @@ export async function GET(request: NextRequest, context: RouteContext) {
     x: CONTENT_LEFT,
     y,
     size: 10.5,
-    font: regularFont,
+    font: boldFont,
     color: black,
   });
 
@@ -268,7 +268,7 @@ export async function GET(request: NextRequest, context: RouteContext) {
     x: 378,
     y,
     size: 10.5,
-    font: regularFont,
+    font: boldFont,
     color: black,
   });
   y -= 18;
@@ -339,8 +339,8 @@ export async function GET(request: NextRequest, context: RouteContext) {
     };
 
     for (const [index, item] of quote.items.entries()) {
-      const designationLines = wrapTextByWidth(item.designation, colWidths.designation, regularFont, 9.2);
-      const descriptionLines = wrapTextByWidth(item.description || "-", colWidths.description, regularFont, 9.2);
+      const designationLines = wrapTextByWidth(item.designation, colWidths.designation, boldFont, 9.2);
+      const descriptionLines = wrapTextByWidth(item.description || "-", colWidths.description, boldFont, 9.2);
       const rowLineCount = Math.max(designationLines.length, descriptionLines.length, 1);
       const rowHeight = Math.max(34, rowLineCount * 13 + 16);
 
@@ -354,20 +354,20 @@ export async function GET(request: NextRequest, context: RouteContext) {
       const rowTopY = detailY;
       const rowTextY = rowTopY - 15;
 
-      page.drawText(String(index + 1), { x: xCols[0], y: rowTextY, size: 9.4, font: regularFont, color: black });
-      page.drawText(String(item.quantity), { x: xCols[3], y: rowTextY, size: 9.4, font: regularFont, color: black });
-      page.drawText(item.unitPrice.toFixed(2), { x: xCols[4], y: rowTextY, size: 9.4, font: regularFont, color: black });
-      page.drawText(item.lineTotal.toFixed(2), { x: xCols[5], y: rowTextY, size: 9.4, font: regularFont, color: black });
+      page.drawText(String(index + 1), { x: xCols[0], y: rowTextY, size: 9.4, font: boldFont, color: black });
+      page.drawText(String(item.quantity), { x: xCols[3], y: rowTextY, size: 9.4, font: boldFont, color: black });
+      page.drawText(item.unitPrice.toFixed(2), { x: xCols[4], y: rowTextY, size: 9.4, font: boldFont, color: black });
+      page.drawText(item.lineTotal.toFixed(2), { x: xCols[5], y: rowTextY, size: 9.4, font: boldFont, color: black });
 
       for (let lineIndex = 0; lineIndex < rowLineCount; lineIndex += 1) {
         const d1 = designationLines[lineIndex] ?? "";
         const d2 = descriptionLines[lineIndex] ?? "";
         const lineY = rowTextY - (lineIndex * 13);
         if (d1) {
-          page.drawText(d1, { x: xCols[1], y: lineY, size: 9.2, font: regularFont, color: black });
+          page.drawText(d1, { x: xCols[1], y: lineY, size: 9.2, font: boldFont, color: black });
         }
         if (d2) {
-          page.drawText(d2, { x: xCols[2], y: lineY, size: 9.2, font: regularFont, color: black });
+          page.drawText(d2, { x: xCols[2], y: lineY, size: 9.2, font: boldFont, color: black });
         }
       }
 
@@ -405,7 +405,7 @@ export async function GET(request: NextRequest, context: RouteContext) {
   } else {
     const rawLines = (need.details || "-").split("\n").map((line) => line.trim()).filter(Boolean);
     const normalized = rawLines.length > 0 ? rawLines.map((line) => (line.startsWith("-") || line.startsWith("•") ? line : `• ${line}`)) : ["• -"];
-    const lines = normalized.flatMap((line) => wrapTextByWidth(line, 500, regularFont, 9.8));
+    const lines = normalized.flatMap((line) => wrapTextByWidth(line, 500, boldFont, 9.8));
 
     for (const line of lines) {
       if (detailY < FOOTER_BLOCK_TOP + 8) {
@@ -416,7 +416,7 @@ export async function GET(request: NextRequest, context: RouteContext) {
         x: CONTENT_LEFT,
         y: detailY,
         size: 9.8,
-        font: regularFont,
+        font: boldFont,
         color: black,
       });
       detailY -= 12;
@@ -445,14 +445,14 @@ export async function GET(request: NextRequest, context: RouteContext) {
     });
 
     const commentText = need.reviewComment?.trim() ? `Commentaire: ${need.reviewComment}` : "Commentaire: -";
-    const commentLines = wrapTextByWidth(commentText, 360, regularFont, 9.2).slice(0, 2);
+    const commentLines = wrapTextByWidth(commentText, 360, boldFont, 9.2).slice(0, 2);
     let commentY = FOOTER_BLOCK_TOP - 34;
     commentLines.forEach((line) => {
       targetPage.drawText(line, {
         x: CONTENT_LEFT,
         y: commentY,
         size: 9.2,
-        font: regularFont,
+        font: boldFont,
         color: black,
       });
       commentY -= 11;
@@ -477,7 +477,7 @@ export async function GET(request: NextRequest, context: RouteContext) {
         x: CONTENT_LEFT,
         y: sealTextY,
         size: 9.2,
-        font: regularFont,
+        font: boldFont,
         color: black,
       });
     } else {
@@ -485,7 +485,7 @@ export async function GET(request: NextRequest, context: RouteContext) {
         x: CONTENT_LEFT,
         y: sealTextY,
         size: 9.2,
-        font: regularFont,
+        font: boldFont,
         color: black,
       });
     }

@@ -101,38 +101,38 @@ function drawHeader(logo: PDFImage | null, page: PDFPage, titleFont: PDFFont, te
   });
 }
 
-function drawFooter(page: PDFPage, fontRegular: PDFFont, printedBy: string) {
+function drawFooter(page: PDFPage, fontBold: PDFFont, printedBy: string) {
   const { width } = page.getSize();
 
   page.drawText(`Document officiel - Direction Générale`, {
     x: 38,
     y: 26,
     size: 8.2,
-    font: fontRegular,
+    font: fontBold,
     color: TEXT_BLACK,
   });
 
   const rightText = `Imprimé par: ${printedBy}`;
-  const rightWidth = fontRegular.widthOfTextAtSize(rightText, 8.2);
+  const rightWidth = fontBold.widthOfTextAtSize(rightText, 8.2);
   page.drawText(rightText, {
     x: width - rightWidth - 38,
     y: 26,
     size: 8.2,
-    font: fontRegular,
+    font: fontBold,
     color: TEXT_BLACK,
   });
 }
 
-function drawPageNumber(page: PDFPage, fontRegular: PDFFont, index: number, total: number) {
+function drawPageNumber(page: PDFPage, fontBold: PDFFont, index: number, total: number) {
   const { width } = page.getSize();
   const text = `Page ${index}/${total}`;
-  const textWidth = fontRegular.widthOfTextAtSize(text, 8.2);
+  const textWidth = fontBold.widthOfTextAtSize(text, 8.2);
 
   page.drawText(text, {
     x: (width - textWidth) / 2,
     y: 26,
     size: 8.2,
-    font: fontRegular,
+    font: fontBold,
     color: TEXT_BLACK,
   });
 }
@@ -168,7 +168,7 @@ function drawReferenceBox(page: PDFPage, fontBold: PDFFont, fontRegular: PDFFont
     x,
     y: y - 12,
     size: 8.5,
-    font: fontRegular,
+    font: fontBold,
     color: TEXT_BLACK,
   });
 
@@ -176,7 +176,7 @@ function drawReferenceBox(page: PDFPage, fontBold: PDFFont, fontRegular: PDFFont
     x,
     y: y - 24,
     size: 8.5,
-    font: fontRegular,
+    font: fontBold,
     color: TEXT_BLACK,
   });
 }
@@ -285,7 +285,7 @@ export async function GET(request: NextRequest, context: RouteContext) {
 
   let page = pdf.addPage([PAGE_WIDTH, PAGE_HEIGHT]);
   drawHeader(logoImage, page, fontBold, fontRegular);
-  drawFooter(page, fontRegular, printedBy);
+  drawFooter(page, fontBold, printedBy);
   drawReferenceBox(page, fontBold, fontRegular, post.id, post.createdAt);
 
   let y = PAGE_HEIGHT - 138;
@@ -321,7 +321,7 @@ export async function GET(request: NextRequest, context: RouteContext) {
     if (y < 140) {
       page = pdf.addPage([PAGE_WIDTH, PAGE_HEIGHT]);
       drawHeader(logoImage, page, fontBold, fontRegular);
-      drawFooter(page, fontRegular, printedBy);
+      drawFooter(page, fontBold, printedBy);
 
       page.drawText(`Suite du communiqué: ${post.title}`, {
         x: 38,
@@ -337,7 +337,7 @@ export async function GET(request: NextRequest, context: RouteContext) {
     page.drawText(line, {
       x: 38,
       y,
-      size: 11.8,
+      size: 12.2,
       font: fontBold,
       color: TEXT_BLACK,
     });
@@ -351,7 +351,7 @@ export async function GET(request: NextRequest, context: RouteContext) {
   }
 
   pages.forEach((pdfPage, index) => {
-    drawPageNumber(pdfPage, fontRegular, index + 1, pages.length);
+    drawPageNumber(pdfPage, fontBold, index + 1, pages.length);
   });
 
   const pdfBytes = await pdf.save();
