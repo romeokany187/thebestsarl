@@ -3,6 +3,7 @@ import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { requireApiModuleAccess } from "@/lib/rbac";
 import { isMailConfigured, sendMailBatch } from "@/lib/mail";
+import { buildNewsPdf } from "@/lib/news-pdf";
 
 const newsCreateSchema = z.object({
   title: z.string().min(3).max(180),
@@ -77,6 +78,8 @@ export async function POST(request: NextRequest) {
       try {
         const appUrl = process.env.NEXTAUTH_URL?.trim() || "";
         const newsUrl = appUrl ? `${appUrl}/news` : "/news";
+        const pdfBytes = await buildNewsPdf(created, created.author.name ?? created.author.email);
+
         await sendMailBatch({
           recipients: recipients.map((recipient) => ({ email: recipient.email, name: recipient.name })),
           subject: `[Communiqué] ${created.title}`,
@@ -95,6 +98,13 @@ export async function POST(request: NextRequest) {
             <p>${created.content.replace(/\n/g, "<br/>")}</p>
             <p><a href="${newsUrl}">Ouvrir le module Nouvelles</a></p>
           `,
+          attachments: [
+            {
+              filename: `communique-${created.id}.pdf`,
+              content: Buffer.from(pdfBytes),
+              contentType: "application/pdf",
+            },
+          ],
           replyTo: created.author.email,
         });
       } catch {

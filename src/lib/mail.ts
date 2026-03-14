@@ -11,6 +11,11 @@ type MailBatchPayload = {
   text: string;
   html?: string;
   replyTo?: string;
+  attachments?: Array<{
+    filename: string;
+    content: Buffer | Uint8Array | string;
+    contentType?: string;
+  }>;
 };
 
 declare global {
@@ -95,6 +100,7 @@ export async function sendMailBatch(payload: MailBatchPayload) {
         subject: payload.subject,
         text: payload.text,
         ...(payload.html ? { html: payload.html } : {}),
+        ...(payload.attachments?.length ? { attachments: payload.attachments } : {}),
       });
 
       sent.push(recipient.email);
