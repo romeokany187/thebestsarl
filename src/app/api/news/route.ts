@@ -102,7 +102,7 @@ export async function POST(request: NextRequest) {
 
         const delivery = await sendMailBatch({
           recipients: recipients.map((recipient) => ({ email: recipient.email, name: recipient.name })),
-          subject: `[Communiqué] ${created.title}`,
+          subject: `Communiqué - ${created.title}`,
           text: [
             "THEBEST SARL - Nouveau communiqué",
             "",
