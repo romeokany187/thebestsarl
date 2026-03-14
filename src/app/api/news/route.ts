@@ -54,10 +54,29 @@ export async function POST(request: NextRequest) {
   });
 
   const recipients = await prisma.user.findMany({
-    where: { id: { not: access.session.user.id } },
+    where: {
+      id: { not: access.session.user.id },
+      role: "EMPLOYEE",
+      teamId: { not: null },
+    },
     select: { id: true, name: true, email: true },
     orderBy: { name: "asc" },
   });
+
+  const mailResult: {
+    configured: boolean;
+    attempted: boolean;
+    recipients: number;
+    delivered: number;
+    failed: number;
+    error?: string;
+  } = {
+    configured: isMailConfigured(),
+    attempted: false,
+    recipients: recipients.length,
+    delivered: 0,
+    failed: 0,
+  };
 
   if (recipients.length > 0) {
     await prisma.userNotification.createMany({
@@ -74,13 +93,14 @@ export async function POST(request: NextRequest) {
       })),
     });
 
-    if (isMailConfigured()) {
+    if (mailResult.configured) {
       try {
+        mailResult.attempted = true;
         const appUrl = process.env.NEXTAUTH_URL?.trim() || "";
         const newsUrl = appUrl ? `${appUrl}/news` : "/news";
         const pdfBytes = await buildNewsPdf(created, created.author.name ?? created.author.email);
 
-        await sendMailBatch({
+        const delivery = await sendMailBatch({
           recipients: recipients.map((recipient) => ({ email: recipient.email, name: recipient.name })),
           subject: `[Communiqué] ${created.title}`,
           text: [
@@ -107,11 +127,30 @@ export async function POST(request: NextRequest) {
           ],
           replyTo: created.author.email,
         });
-      } catch {
+
+        mailResult.delivered = delivery.sent.length;
+        mailResult.failed = delivery.failed.length;
+
+        if (delivery.failed.length > 0) {
+          console.error("[news.publish] Echecs partiels email communiqué", {
+            newsId: created.id,
+            failed: delivery.failed,
+          });
+        }
+      } catch (error) {
+        mailResult.error = error instanceof Error ? error.message : "Erreur email inconnue";
+        console.error("[news.publish] Echec envoi email communiqué", {
+          newsId: created.id,
+          error: mailResult.error,
+        });
         // Ne pas bloquer la publication si l'email échoue.
       }
+    } else {
+      console.warn("[news.publish] SMTP non configuré: envoi email communiqué ignoré", {
+        newsId: created.id,
+      });
     }
   }
 
-  return NextResponse.json({ data: created }, { status: 201 });
+  return NextResponse.json({ data: created, mail: mailResult }, { status: 201 });
 }
