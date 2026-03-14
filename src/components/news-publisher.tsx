@@ -10,30 +10,61 @@ export function NewsPublisher() {
   const [loading, setLoading] = useState(false);
   const [status, setStatus] = useState("");
 
+  function getErrorMessage(payload: unknown) {
+    if (!payload || typeof payload !== "object") return "Échec de publication.";
+
+    const candidate = payload as {
+      error?: unknown;
+    };
+
+    if (typeof candidate.error === "string" && candidate.error.trim()) {
+      return candidate.error;
+    }
+
+    if (candidate.error && typeof candidate.error === "object") {
+      const maybeForm = candidate.error as { formErrors?: unknown };
+      if (Array.isArray(maybeForm.formErrors) && typeof maybeForm.formErrors[0] === "string") {
+        return maybeForm.formErrors[0];
+      }
+
+      const maybeMessage = candidate.error as { message?: unknown };
+      if (typeof maybeMessage.message === "string" && maybeMessage.message.trim()) {
+        return maybeMessage.message;
+      }
+    }
+
+    return "Échec de publication.";
+  }
+
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setLoading(true);
     setStatus("Publication en cours...");
 
-    const response = await fetch("/api/news", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ title, content }),
-    });
+    try {
+      const response = await fetch("/api/news", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ title, content }),
+      });
 
-    const payload = await response.json().catch(() => null);
+      const payload = await response.json().catch(() => null);
 
-    if (!response.ok) {
-      setStatus(payload?.error?.formErrors?.[0] ?? payload?.error ?? "Échec de publication.");
+      if (!response.ok) {
+        setStatus(getErrorMessage(payload));
+        setLoading(false);
+        return;
+      }
+
+      setStatus("Nouvelle publiée.");
+      setTitle("");
+      setContent("");
       setLoading(false);
-      return;
+      router.refresh();
+    } catch {
+      setStatus("Impossible de publier pour le moment. Réessayez.");
+      setLoading(false);
     }
-
-    setStatus("Nouvelle publiée.");
-    setTitle("");
-    setContent("");
-    setLoading(false);
-    router.refresh();
   }
 
   return (
