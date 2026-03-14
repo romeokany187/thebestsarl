@@ -39,6 +39,11 @@ export default async function ProfilePage() {
   ]);
 
   const mailRecipients = await prisma.user.findMany({
+    where: role === "ADMIN"
+      ? { role: "EMPLOYEE" }
+      : role === "EMPLOYEE"
+        ? { role: "ADMIN" }
+        : { id: "__none__" },
     select: {
       id: true,
       name: true,
@@ -50,8 +55,6 @@ export default async function ProfilePage() {
     orderBy: { name: "asc" },
     take: 500,
   });
-
-  const canBroadcastMails = role === "ADMIN" || role === "MANAGER";
 
   return (
     <AppShell role={role} accessNote="Profil connecté et inbox: informations du compte, notifications et activité récente.">
@@ -96,7 +99,6 @@ export default async function ProfilePage() {
       <div className="mb-4">
         <AppMailComposer
           currentUserId={userId}
-          canBroadcast={canBroadcastMails}
           recipients={mailRecipients.map((recipient) => ({
             id: recipient.id,
             name: recipient.name,

@@ -15,6 +15,10 @@ export async function POST(request: NextRequest) {
   const access = await requireApiModuleAccess("profile", ["ADMIN", "MANAGER", "EMPLOYEE", "ACCOUNTANT"]);
   if (access.error) return access.error;
 
+  if (access.role !== "ADMIN" && access.role !== "EMPLOYEE") {
+    return NextResponse.json({ error: "Messagerie réservée aux administrateurs et employés." }, { status: 403 });
+  }
+
   if (!isMailConfigured()) {
     return NextResponse.json(
       { error: "SMTP non configuré. Ajoutez SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS et MAIL_FROM_EMAIL." },
@@ -30,34 +34,35 @@ export async function POST(request: NextRequest) {
   }
 
   const isBroadcast = parsed.data.mode === "broadcast";
-  const canBroadcast = access.role === "ADMIN" || access.role === "MANAGER";
-  if (isBroadcast && !canBroadcast) {
-    return NextResponse.json({ error: "Diffusion globale réservée à l'administration et aux managers." }, { status: 403 });
+  if (isBroadcast) {
+    return NextResponse.json({ error: "Seuls les messages directs sont autorisés (admin ↔ employé)." }, { status: 403 });
   }
 
   const sender = await prisma.user.findUnique({
     where: { id: access.session.user.id },
-    select: { id: true, name: true, email: true },
+    select: { id: true, name: true, email: true, role: true },
   });
 
   if (!sender) {
     return NextResponse.json({ error: "Expéditeur introuvable." }, { status: 404 });
   }
 
-  const recipients = isBroadcast
-    ? await prisma.user.findMany({
-        where: { id: { not: sender.id } },
-        select: { id: true, name: true, email: true },
-        orderBy: { name: "asc" },
-      })
-    : await prisma.user.findMany({
-        where: { id: parsed.data.recipientUserId ?? "" },
-        select: { id: true, name: true, email: true },
-        take: 1,
-      });
+  const expectedRecipientRole = sender.role === "ADMIN" ? "EMPLOYEE" : "ADMIN";
+
+  const recipients = await prisma.user.findMany({
+    where: {
+      id: parsed.data.recipientUserId ?? "",
+      role: expectedRecipientRole,
+    },
+    select: { id: true, name: true, email: true, role: true },
+    take: 1,
+  });
 
   if (recipients.length === 0) {
-    return NextResponse.json({ error: "Destinataire introuvable." }, { status: 404 });
+    return NextResponse.json(
+      { error: `Destinataire introuvable. Un ${expectedRecipientRole.toLowerCase()} est requis.` },
+      { status: 404 },
+    );
   }
 
   const subject = parsed.data.subject.trim();
