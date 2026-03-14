@@ -25,18 +25,11 @@ export default async function ProfilePage() {
       })
     : null;
 
-  const [notifications, latestLogs] = await Promise.all([
-    prisma.userNotification.findMany({
-      where: { userId },
-      orderBy: { createdAt: "desc" },
-      take: 12,
-    }),
-    prisma.auditLog.findMany({
-      include: { actor: { select: { name: true } } },
-      orderBy: { createdAt: "desc" },
-      take: 6,
-    }),
-  ]);
+  const notifications = await prisma.userNotification.findMany({
+    where: { userId },
+    orderBy: { createdAt: "desc" },
+    take: 12,
+  });
 
   const mailRecipients = await prisma.user.findMany({
     where: role === "ADMIN"
@@ -110,7 +103,7 @@ export default async function ProfilePage() {
         />
       </div>
 
-      <div className="grid gap-4 lg:grid-cols-2">
+      <div className="grid gap-4 lg:grid-cols-1">
         <section className="rounded-2xl border border-black/10 bg-white p-5 shadow-sm dark:border-white/10 dark:bg-zinc-900">
           <h2 className="mb-4 text-lg font-semibold">Mes notifications</h2>
           <ul className="space-y-3 text-sm">
@@ -172,18 +165,6 @@ export default async function ProfilePage() {
                 Aucune notification pour le moment.
               </li>
             )}
-          </ul>
-        </section>
-
-        <section className="rounded-2xl border border-black/10 bg-white p-5 shadow-sm dark:border-white/10 dark:bg-zinc-900">
-          <h2 className="mb-4 text-lg font-semibold">Journal d&apos;activité</h2>
-          <ul className="space-y-3 text-sm">
-            {latestLogs.map((log) => (
-              <li key={log.id} className="rounded-xl border border-black/10 px-3 py-3 dark:border-white/10">
-                <p className="font-medium">{log.action}</p>
-                <p className="text-xs text-black/60 dark:text-white/60">{log.actor.name} • {new Date(log.createdAt).toLocaleString()}</p>
-              </li>
-            ))}
           </ul>
         </section>
       </div>

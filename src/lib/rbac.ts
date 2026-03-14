@@ -17,7 +17,6 @@ export type AppModule =
   | "payments"
   | "procurement"
   | "archives"
-  | "audit"
   | "news"
   | "settings";
 
@@ -101,10 +100,6 @@ export function hasModuleAccess(params: {
 
   if (module === "archives") {
     return true;
-  }
-
-  if (module === "audit") {
-    return jobTitle === "AUDITEUR";
   }
 
   return false;
