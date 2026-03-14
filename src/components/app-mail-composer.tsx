@@ -108,7 +108,8 @@ export function AppMailComposer({ recipients, currentUserId }: Props) {
       </div>
 
       {isOpen ? (
-        <section className="fixed bottom-20 right-5 z-50 w-[92vw] max-w-[390px] rounded-2xl border border-black/15 bg-white p-4 shadow-2xl dark:border-white/15 dark:bg-zinc-900">
+        <section className="fixed bottom-20 right-5 z-50 w-[92vw] max-w-[390px] overflow-hidden rounded-2xl border border-black/15 bg-white p-4 shadow-2xl dark:border-white/15 dark:bg-zinc-900">
+          <div className="flex max-h-[75vh] min-h-0 flex-col">
           <div className="mb-3 flex items-center justify-between gap-2">
             <h2 className="text-base font-semibold">Nouvelle conversation</h2>
             <button
@@ -120,13 +121,13 @@ export function AppMailComposer({ recipients, currentUserId }: Props) {
             </button>
           </div>
 
-          <form className="grid gap-3" onSubmit={onSubmit}>
+          <form className="grid min-h-0 flex-1 gap-3 overflow-y-auto pr-1" onSubmit={onSubmit}>
             <label className="grid gap-1 text-xs font-semibold uppercase tracking-wide text-black/60 dark:text-white/60">
               Destinataire
               <select
                 value={recipientUserId}
                 onChange={(event) => setRecipientUserId(event.target.value)}
-                className="rounded-md border px-3 py-2 text-sm font-normal"
+                className="w-full min-w-0 rounded-md border px-3 py-2 text-sm font-normal"
               >
                 {availableRecipients.map((recipient) => (
                   <option key={recipient.id} value={recipient.id}>
@@ -143,7 +144,7 @@ export function AppMailComposer({ recipients, currentUserId }: Props) {
               minLength={3}
               maxLength={180}
               required
-              className="rounded-md border px-3 py-2 text-sm"
+              className="w-full min-w-0 rounded-md border px-3 py-2 text-sm"
             />
 
             <textarea
@@ -154,10 +155,10 @@ export function AppMailComposer({ recipients, currentUserId }: Props) {
               maxLength={6000}
               required
               rows={5}
-              className="rounded-md border px-3 py-2 text-sm"
+              className="w-full min-w-0 rounded-md border px-3 py-2 text-sm"
             />
 
-            <div className="flex items-center justify-between gap-3">
+            <div className="sticky bottom-0 flex items-center justify-between gap-3 bg-white py-1 dark:bg-zinc-900">
               <p className="text-[11px] text-black/60 dark:text-white/60">{message.length}/6000</p>
               <button
                 type="submit"
@@ -170,6 +171,7 @@ export function AppMailComposer({ recipients, currentUserId }: Props) {
           </form>
 
           {status ? <p className="mt-3 text-xs text-black/70 dark:text-white/70">{status}</p> : null}
+          </div>
         </section>
       ) : null}
     </>
