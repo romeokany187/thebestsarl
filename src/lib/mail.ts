@@ -13,7 +13,7 @@ type MailBatchPayload = {
   replyTo?: string;
   attachments?: Array<{
     filename: string;
-    content: Buffer | Uint8Array | string;
+    content: Buffer | string;
     contentType?: string;
   }>;
 };
