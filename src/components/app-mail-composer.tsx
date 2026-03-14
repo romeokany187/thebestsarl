@@ -96,86 +96,82 @@ export function AppMailComposer({ recipients, currentUserId }: Props) {
   }
 
   return (
-    <section className="rounded-2xl border border-black/10 bg-white p-5 shadow-sm dark:border-white/10 dark:bg-zinc-900">
-      <div className="flex items-center justify-between gap-3">
-        <div>
-          <h2 className="text-lg font-semibold">Messagerie email interne</h2>
-          <p className="mt-1 text-xs text-black/65 dark:text-white/65">
-            Envoyez un email depuis l&apos;application. Les destinataires reçoivent aussi une notification interne.
-          </p>
-        </div>
+    <>
+      <div className="fixed bottom-5 right-5 z-50">
         <button
           type="button"
           onClick={() => setIsOpen((value) => !value)}
-          className="rounded-md border border-black/20 px-3 py-2 text-sm font-semibold hover:bg-black/5 dark:border-white/20 dark:hover:bg-white/10"
+          className="rounded-full bg-black px-4 py-3 text-sm font-semibold text-white shadow-lg hover:opacity-95 dark:bg-white dark:text-black"
         >
           {isOpen ? "Fermer" : "Écrire"}
         </button>
       </div>
 
       {isOpen ? (
-      <form className="mt-4 grid gap-3 rounded-xl border border-black/10 bg-black/2 p-3 dark:border-white/10 dark:bg-white/3" onSubmit={onSubmit}>
-        <div className="grid gap-2 sm:grid-cols-2">
-          <label className="grid gap-1 text-xs font-semibold uppercase tracking-wide text-black/60 dark:text-white/60">
-            Mode d&apos;envoi
-            <input
-              value="Destinataire unique"
-              readOnly
-              className="rounded-md border px-3 py-2 text-sm font-normal"
-            />
-          </label>
-
-          <label className="grid gap-1 text-xs font-semibold uppercase tracking-wide text-black/60 dark:text-white/60">
-            Destinataire
-            <select
-              value={recipientUserId}
-              onChange={(event) => setRecipientUserId(event.target.value)}
-              className="rounded-md border px-3 py-2 text-sm font-normal"
+        <section className="fixed bottom-20 right-5 z-50 w-[92vw] max-w-[390px] rounded-2xl border border-black/15 bg-white p-4 shadow-2xl dark:border-white/15 dark:bg-zinc-900">
+          <div className="mb-3 flex items-center justify-between gap-2">
+            <h2 className="text-base font-semibold">Nouvelle conversation</h2>
+            <button
+              type="button"
+              onClick={() => setIsOpen(false)}
+              className="rounded-md border border-black/20 px-2 py-1 text-xs font-semibold hover:bg-black/5 dark:border-white/20 dark:hover:bg-white/10"
             >
-              {availableRecipients.map((recipient) => (
-                <option key={recipient.id} value={recipient.id}>
-                  {recipient.name} • {recipient.email}
-                </option>
-              ))}
-            </select>
-          </label>
-        </div>
+              Fermer
+            </button>
+          </div>
 
-        <input
-          value={subject}
-          onChange={(event) => setSubject(event.target.value)}
-          placeholder="Objet du mail"
-          minLength={3}
-          maxLength={180}
-          required
-          className="rounded-md border px-3 py-2 text-sm"
-        />
+          <form className="grid gap-3" onSubmit={onSubmit}>
+            <label className="grid gap-1 text-xs font-semibold uppercase tracking-wide text-black/60 dark:text-white/60">
+              Destinataire
+              <select
+                value={recipientUserId}
+                onChange={(event) => setRecipientUserId(event.target.value)}
+                className="rounded-md border px-3 py-2 text-sm font-normal"
+              >
+                {availableRecipients.map((recipient) => (
+                  <option key={recipient.id} value={recipient.id}>
+                    {recipient.name} • {recipient.email}
+                  </option>
+                ))}
+              </select>
+            </label>
 
-        <textarea
-          value={message}
-          onChange={(event) => setMessage(event.target.value)}
-          placeholder="Message à envoyer..."
-          minLength={5}
-          maxLength={6000}
-          required
-          rows={6}
-          className="rounded-md border px-3 py-2 text-sm"
-        />
+            <input
+              value={subject}
+              onChange={(event) => setSubject(event.target.value)}
+              placeholder="Objet du mail"
+              minLength={3}
+              maxLength={180}
+              required
+              className="rounded-md border px-3 py-2 text-sm"
+            />
 
-        <div className="flex items-center justify-between gap-3">
-          <p className="text-[11px] text-black/60 dark:text-white/60">{message.length}/6000 caractères</p>
-          <button
-            type="submit"
-            disabled={isSending}
-            className="rounded-md bg-black px-3 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-60 dark:bg-white dark:text-black"
-          >
-            {isSending ? "Envoi..." : "Envoyer le mail"}
-          </button>
-        </div>
-      </form>
+            <textarea
+              value={message}
+              onChange={(event) => setMessage(event.target.value)}
+              placeholder="Message à envoyer..."
+              minLength={5}
+              maxLength={6000}
+              required
+              rows={5}
+              className="rounded-md border px-3 py-2 text-sm"
+            />
+
+            <div className="flex items-center justify-between gap-3">
+              <p className="text-[11px] text-black/60 dark:text-white/60">{message.length}/6000</p>
+              <button
+                type="submit"
+                disabled={isSending}
+                className="rounded-md bg-black px-3 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-60 dark:bg-white dark:text-black"
+              >
+                {isSending ? "Envoi..." : "Envoyer"}
+              </button>
+            </div>
+          </form>
+
+          {status ? <p className="mt-3 text-xs text-black/70 dark:text-white/70">{status}</p> : null}
+        </section>
       ) : null}
-
-      {status ? <p className="mt-3 text-xs text-black/70 dark:text-white/70">{status}</p> : null}
-    </section>
+    </>
   );
 }
