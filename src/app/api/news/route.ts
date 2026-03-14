@@ -107,15 +107,14 @@ export async function POST(request: NextRequest) {
             "THEBEST SARL - Nouveau communiqué",
             "",
             `Titre: ${created.title}`,
-            "",
-            created.content,
+            "Veuillez consulter le communiqué officiel en pièce jointe (PDF).",
             "",
             `Consulter: ${newsUrl}`,
           ].join("\n"),
           html: `
             <p><strong>THEBEST SARL - Nouveau communiqué</strong></p>
             <p><strong>Titre:</strong> ${created.title}</p>
-            <p>${created.content.replace(/\n/g, "<br/>")}</p>
+            <p>Veuillez consulter le communiqué officiel en pièce jointe (PDF).</p>
             <p><a href="${newsUrl}">Ouvrir le module Nouvelles</a></p>
           `,
           attachments: [
