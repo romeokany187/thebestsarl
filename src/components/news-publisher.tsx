@@ -56,7 +56,31 @@ export function NewsPublisher() {
         return;
       }
 
-      setStatus("Nouvelle publiée.");
+      const mail = payload?.mail as
+        | {
+            configured?: boolean;
+            attempted?: boolean;
+            recipients?: number;
+            delivered?: number;
+            failed?: number;
+            error?: string;
+          }
+        | undefined;
+
+      if (!mail) {
+        setStatus("Nouvelle publiée.");
+      } else if (!mail.configured) {
+        setStatus("Nouvelle publiée. SMTP non configuré en production.");
+      } else if (mail.error) {
+        setStatus(`Nouvelle publiée. Échec email: ${mail.error}`);
+      } else if (mail.attempted) {
+        setStatus(
+          `Nouvelle publiée. Emails: ${mail.delivered ?? 0}/${mail.recipients ?? 0} livrés, ${mail.failed ?? 0} échec(s).`,
+        );
+      } else {
+        setStatus("Nouvelle publiée.");
+      }
+
       setTitle("");
       setContent("");
       setLoading(false);
