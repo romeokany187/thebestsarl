@@ -93,7 +93,7 @@ export async function POST(request: NextRequest) {
         })
       )._sum.amount ?? 0
       : 0;
-    const requestedAgencyMarkupPercent = parsed.data.agencyMarkupPercent ?? 0;
+    const requestedAgencyMarkupAmount = parsed.data.agencyMarkupAmount ?? 0;
     let commissionBaseAmount = parsed.data.baseFareAmount ?? 0;
     let commissionCalculationStatus: CommissionCalculationStatus = CommissionCalculationStatus.FINAL;
     let baseFareAmount = parsed.data.baseFareAmount;
@@ -151,7 +151,7 @@ export async function POST(request: NextRequest) {
     }
 
     const commissionInputAmount = isAfterDepositMode ? parsed.data.amount : commissionBaseAmount;
-    const agencyMarkupAmount = isAfterDepositMode ? (parsed.data.agencyMarkupAmount ?? 0) : commissionBaseAmount * (requestedAgencyMarkupPercent / 100);
+    const agencyMarkupAmount = requestedAgencyMarkupAmount;
     const nextAirFastSaleNumber = isAirFast
       ? (await prisma.ticketSale.count({ where: { airlineId: parsed.data.airlineId } })) + 1
       : 0;
@@ -198,7 +198,7 @@ export async function POST(request: NextRequest) {
           ...parsed.data,
           currency: "USD",
           baseFareAmount,
-          agencyMarkupPercent: isAfterDepositMode ? 0 : requestedAgencyMarkupPercent,
+          agencyMarkupPercent: 0,
           agencyMarkupAmount,
           commissionBaseAmount,
           commissionCalculationStatus,

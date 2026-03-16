@@ -248,9 +248,6 @@ export default async function SalesPage({
                         (Compagnie: {companyCommissionAmount.toFixed(2)} • Majoration: {agencyMarkupAmount.toFixed(2)})
                       </span>
                       <span className="ml-1 text-xs text-black/60 dark:text-white/60">
-                        {ticket.agencyMarkupPercent > 0 ? `• Majoration ${ticket.agencyMarkupPercent.toFixed(2)}%` : ""}
-                      </span>
-                      <span className="ml-1 text-xs text-black/60 dark:text-white/60">
                         {ticket.commissionCalculationStatus === "ESTIMATED" ? "(estimée)" : "(définitive)"}
                       </span>
                     </td>

@@ -146,8 +146,7 @@ export async function PATCH(request: NextRequest, { params }: Params) {
       commissionCalculationStatus = CommissionCalculationStatus.ESTIMATED;
     }
 
-    const requestedAgencyMarkupPercent = parsed.data.agencyMarkupPercent ?? existing.agencyMarkupPercent;
-    const agencyMarkupAmount = isAfterDepositMode ? (parsed.data.agencyMarkupAmount ?? existing.agencyMarkupAmount) : commissionBaseAmount * (requestedAgencyMarkupPercent / 100);
+    const agencyMarkupAmount = parsed.data.agencyMarkupAmount ?? existing.agencyMarkupAmount;
 
     const commissionInputAmount = isAfterDepositMode ? nextTicket.amount : commissionBaseAmount;
     const airFastSaleOrder = isAirFast
@@ -206,7 +205,7 @@ export async function PATCH(request: NextRequest, { params }: Params) {
           currency: "USD",
           airlineId: nextTicket.airlineId,
           sellerId: nextTicket.sellerId,
-          agencyMarkupPercent: isAfterDepositMode ? 0 : requestedAgencyMarkupPercent,
+          agencyMarkupPercent: 0,
           agencyMarkupAmount,
           commissionBaseAmount,
           commissionCalculationStatus,

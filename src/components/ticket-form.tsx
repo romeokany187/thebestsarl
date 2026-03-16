@@ -40,7 +40,6 @@ type FormState = {
   saleNature: "CASH" | "CREDIT";
   paymentStatus: "PAID" | "UNPAID" | "PARTIAL";
   payerName: string;
-  agencyMarkupPercent: string;
   agencyMarkupAmount: string;
   notes: string;
 };
@@ -59,7 +58,6 @@ const EMPTY_FORM: FormState = {
   saleNature: "CASH" as const,
   paymentStatus: "UNPAID" as const,
   payerName: "",
-  agencyMarkupPercent: "0",
   agencyMarkupAmount: "0",
   notes: "",
 };
@@ -101,7 +99,6 @@ export function TicketForm({
         saleNature: ticket.saleNature,
         paymentStatus: ticket.paymentStatus,
         payerName: ticket.payerName ?? "",
-        agencyMarkupPercent: String(ticket.agencyMarkupPercent ?? 0),
         agencyMarkupAmount: String(ticket.agencyMarkupAmount ?? 0),
         notes: ticket.notes ?? "",
       });
@@ -174,7 +171,6 @@ export function TicketForm({
 
     const amount = Number(form.amount);
     const baseFareAmount = form.baseFareAmount.trim() ? Number(form.baseFareAmount) : undefined;
-    const agencyMarkupPercent = form.agencyMarkupPercent.trim() ? Number(form.agencyMarkupPercent) : 0;
     const agencyMarkupAmount = form.agencyMarkupAmount.trim() ? Number(form.agencyMarkupAmount) : 0;
 
     const payload = {
@@ -191,7 +187,7 @@ export function TicketForm({
       saleNature: form.saleNature,
       paymentStatus: form.paymentStatus,
       payerName: form.payerName,
-      agencyMarkupPercent,
+      agencyMarkupPercent: 0,
       agencyMarkupAmount,
       notes: form.notes || undefined,
     };
@@ -319,24 +315,13 @@ export function TicketForm({
         />
       </div>
 
-      <div className="grid gap-3 sm:grid-cols-3">
+      <div className="grid gap-3 sm:grid-cols-2">
         <input
           name="currency"
           required
           value={form.currency}
           onChange={(event) => updateField("currency", event.target.value)}
           placeholder="Devise (ex: USD)"
-          className="rounded-md border px-3 py-2"
-        />
-        <input
-          name="agencyMarkupPercent"
-          type="number"
-          step="0.01"
-          min="0"
-          max="100"
-          value={form.agencyMarkupPercent}
-          onChange={(event) => updateField("agencyMarkupPercent", event.target.value)}
-          placeholder="Majoration agence (%)"
           className="rounded-md border px-3 py-2"
         />
         <input
@@ -438,7 +423,7 @@ export function TicketForm({
         </p>
       ) : null}
       <p className="text-xs text-black/60 dark:text-white/60">
-        Règle standard: commission compagnie (%) sur le BaseFare + majoration agence (%) sur le BaseFare.
+        Règle standard: commission compagnie (%) sur le BaseFare + majoration agence en montant (devise).
       </p>
       {isAirFast ? (
         <p className="text-xs text-black/60 dark:text-white/60">
