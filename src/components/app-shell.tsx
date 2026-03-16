@@ -3,6 +3,7 @@ import { type AppModule, type AppRole, hasModuleAccess } from "@/lib/rbac";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/auth";
 import { LogoutButton } from "@/components/logout-button";
+import { ThemeToggle } from "@/components/theme-toggle";
 
 const links = [
   { href: "/", label: "Dashboard", module: "home" as AppModule, roles: ["ADMIN", "MANAGER", "EMPLOYEE", "ACCOUNTANT"] as AppRole[] },
@@ -141,6 +142,7 @@ export async function AppShell({
                   {roleLabel}
                 </span>
               ) : null}
+              <ThemeToggle />
               {session?.user?.email ? (
                 <div className="rounded-xl border border-black/10 bg-white px-3 py-1.5 text-right dark:border-white/10 dark:bg-zinc-900">
                   <p className="text-xs font-semibold leading-tight">{session.user.name ?? "Utilisateur"}</p>

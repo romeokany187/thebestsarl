@@ -239,7 +239,7 @@ export function TicketForm({
           required
           value={form.ticketNumber}
           onChange={(event) => updateField("ticketNumber", event.target.value)}
-          placeholder="Code billet (PNR)"
+          placeholder="Code billet / PNR (ex: AB12CD)"
           className="rounded-md border px-3 py-2"
         />
         <input
@@ -247,7 +247,7 @@ export function TicketForm({
           required
           value={form.customerName}
           onChange={(event) => updateField("customerName", event.target.value)}
-          placeholder="Client"
+          placeholder="Nom complet du client"
           className="rounded-md border px-3 py-2"
         />
       </div>
@@ -258,7 +258,7 @@ export function TicketForm({
           required
           value={form.route}
           onChange={(event) => updateField("route", event.target.value)}
-          placeholder="Itinéraire (ex: BZV-LFW)"
+          placeholder="Itinéraire (ex: BZV-CDG aller/retour)"
           className="rounded-md border px-3 py-2"
         />
         <select
@@ -303,7 +303,7 @@ export function TicketForm({
           required
           value={form.amount}
           onChange={(event) => updateField("amount", event.target.value)}
-          placeholder="Montant"
+          placeholder="Montant total du billet (ex: 450)"
           className="rounded-md border px-3 py-2"
         />
         <input
@@ -325,6 +325,7 @@ export function TicketForm({
           required
           value={form.currency}
           onChange={(event) => updateField("currency", event.target.value)}
+          placeholder="Devise (ex: USD)"
           className="rounded-md border px-3 py-2"
         />
         <input
@@ -449,7 +450,7 @@ export function TicketForm({
         name="notes"
         value={form.notes}
         onChange={(event) => updateField("notes", event.target.value)}
-        placeholder="Notes"
+        placeholder="Notes complémentaires (optionnel)"
         className="rounded-md border px-3 py-2"
       />
 

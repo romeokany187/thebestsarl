@@ -1,4 +1,5 @@
 @import "tailwindcss";
+@custom-variant dark (&:where(.dark, .dark *));
 
 :root {
   --background: #f5f7fb;
@@ -12,11 +13,9 @@
   --font-mono: var(--font-geist-mono);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0d111a;
-    --foreground: #eceff7;
-  }
+:root.dark {
+  --background: #0d111a;
+  --foreground: #eceff7;
 }
 
 body {
@@ -71,24 +70,23 @@ body {
   background-clip: padding-box;
 }
 
-@media (prefers-color-scheme: dark) {
-  .tickets-scroll {
-    scrollbar-color: rgba(236, 239, 247, 0.38) rgba(236, 239, 247, 0.12);
-  }
 
-  .tickets-scroll::-webkit-scrollbar-track {
-    background: rgba(236, 239, 247, 0.08);
-  }
+.dark .tickets-scroll {
+  scrollbar-color: rgba(236, 239, 247, 0.38) rgba(236, 239, 247, 0.12);
+}
 
-  .tickets-scroll::-webkit-scrollbar-thumb {
-    background: linear-gradient(180deg, rgba(236, 239, 247, 0.45), rgba(236, 239, 247, 0.28));
-    border: 2px solid transparent;
-    background-clip: padding-box;
-  }
+.dark .tickets-scroll::-webkit-scrollbar-track {
+  background: rgba(236, 239, 247, 0.08);
+}
 
-  .tickets-scroll::-webkit-scrollbar-thumb:hover {
-    background: linear-gradient(180deg, rgba(236, 239, 247, 0.62), rgba(236, 239, 247, 0.42));
-    border: 2px solid transparent;
-    background-clip: padding-box;
-  }
+.dark .tickets-scroll::-webkit-scrollbar-thumb {
+  background: linear-gradient(180deg, rgba(236, 239, 247, 0.45), rgba(236, 239, 247, 0.28));
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+
+.dark .tickets-scroll::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(180deg, rgba(236, 239, 247, 0.62), rgba(236, 239, 247, 0.42));
+  border: 2px solid transparent;
+  background-clip: padding-box;
 }
