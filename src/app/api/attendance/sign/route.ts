@@ -3,12 +3,54 @@ import { prisma } from "@/lib/prisma";
 import { requireApiModuleAccess } from "@/lib/rbac";
 import { attendanceSignSchema } from "@/lib/validators";
 
-const REFERENCE_SITE = {
+type TeamOfficeGeofence = {
+  names: string[];
+  latitude: number;
+  longitude: number;
+  radiusMeters: number;
+  label: string;
+};
+
+const TEAM_OFFICE_GEOFENCES: TeamOfficeGeofence[] = [
+  {
+    names: ["lubumbashi"],
+    latitude: -11.66473,
+    longitude: 27.48597,
+    radiusMeters: 200,
+    label: "Bureau Lubumbashi",
+  },
+  {
+    names: ["mbujimayi", "mbuji-mayi", "mbuji mayi"],
+    latitude: -6.13438,
+    longitude: 23.60965,
+    radiusMeters: 200,
+    label: "Bureau Mbuji-Mayi",
+  },
+];
+
+const DEFAULT_REFERENCE_SITE = {
   latitude: -4.30706,
   longitude: 15.30875,
   radiusMeters: 200,
   name: "Point de référence Marché Central",
 };
+
+function normalizeTeamName(value: string) {
+  return value
+    .trim()
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "");
+}
+
+function resolveTeamGeofence(teamName: string | null | undefined) {
+  if (!teamName) {
+    return null;
+  }
+
+  const normalized = normalizeTeamName(teamName);
+  return TEAM_OFFICE_GEOFENCES.find((item) => item.names.includes(normalized)) ?? null;
+}
 
 function toRadians(value: number) {
   return (value * Math.PI) / 180;
@@ -160,19 +202,32 @@ export async function POST(request: NextRequest) {
   const signTime = new Date();
   const day = new Date(signTime.toDateString());
   const { latitude, longitude, accuracyM, action } = parsed.data;
+  const userTeam = await prisma.user.findUnique({
+    where: { id: access.session.user.id },
+    select: { team: { select: { name: true } } },
+  });
+  const teamGeofence = resolveTeamGeofence(userTeam?.team?.name);
+  const referenceSite = teamGeofence
+    ? {
+      latitude: teamGeofence.latitude,
+      longitude: teamGeofence.longitude,
+      radiusMeters: teamGeofence.radiusMeters,
+      name: teamGeofence.label,
+    }
+    : DEFAULT_REFERENCE_SITE;
   const gpsResolvedAddress = await resolveAddressFromCoords(latitude, longitude);
 
   const distanceToReference = distanceMeters(
     latitude,
     longitude,
-    REFERENCE_SITE.latitude,
-    REFERENCE_SITE.longitude,
+    referenceSite.latitude,
+    referenceSite.longitude,
   );
-  const effectiveRadius = Math.max(REFERENCE_SITE.radiusMeters, Math.round(accuracyM ?? 0));
+  const effectiveRadius = Math.max(referenceSite.radiusMeters, Math.round(accuracyM ?? 0));
   const isInReferencePerimeter = distanceToReference <= effectiveRadius;
 
   const resolvedAddress = gpsResolvedAddress
-    ?? (isInReferencePerimeter ? REFERENCE_SITE.name : null);
+    ?? (isInReferencePerimeter ? referenceSite.name : null);
 
   let matchedSite: {
     name: string;
@@ -181,7 +236,7 @@ export async function POST(request: NextRequest) {
 
   if (isInReferencePerimeter) {
     matchedSite = {
-      name: REFERENCE_SITE.name,
+      name: referenceSite.name,
       distanceM: distanceToReference,
     };
   }
