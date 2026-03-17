@@ -156,13 +156,22 @@ function sparklinePath(values: number[], width: number, height: number) {
     .join(" ");
 }
 
-function detectAgencyFromRoute(route: string) {
-  const normalized = route.toUpperCase();
-  if (normalized.includes("LUBUMBASHI") || normalized.includes("FBM") || normalized.includes("L'SHI")) return "Lubumbashi";
-  if (normalized.includes("KINSHASA") || normalized.includes("FIH") || normalized.includes("N'DJILI")) return "Kinshasa";
-  if (normalized.includes("MBUJIMAYI") || normalized.includes("MJM")) return "Mbujimayi";
-  if (normalized.includes("LUSAKA") || normalized.includes("LUN") || normalized.includes("LUSI")) return "Lusaka/Lusi";
-  return "Autres";
+function detectAgencyFromPayer(payerName: string | null | undefined) {
+  const raw = (payerName ?? "").trim();
+  if (!raw) return "Autres";
+
+  const normalized = raw
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "");
+  const compact = normalized.replace(/[^a-z0-9]/g, "");
+
+  if (compact.includes("mbujimayi") || compact.includes("mbujimai")) return "Mbujimayi";
+  if (compact.includes("lubumbashi")) return "Lubumbashi";
+  if (compact.includes("kinshasa")) return "Kinshasa";
+  if (compact.includes("hkservice")) return "HKSERVICE";
+
+  return raw;
 }
 
 export default async function TicketsPage({
@@ -372,7 +381,7 @@ export default async function TicketsPage({
 
   const agencySales = Array.from(
     ticketsForMetrics.reduce((map, ticket) => {
-      const key = detectAgencyFromRoute(ticket.route);
+      const key = detectAgencyFromPayer(ticket.payerName);
       const existing = map.get(key) ?? { agency: key, tickets: 0, sales: 0, commissions: 0 };
       const commission = ticket.commissionAmount ?? ticket.amount * (ticket.commissionRateUsed / 100);
       existing.tickets += 1;
@@ -560,7 +569,7 @@ export default async function TicketsPage({
           <div className="rounded-xl border border-black/10 p-3 dark:border-white/10">
             <p className="text-xs font-semibold uppercase tracking-wide text-black/60 dark:text-white/60">Agence la plus performante</p>
             <p className="mt-1 text-sm font-semibold">{topAgency ? `${topAgency.agency} • ${topAgency.tickets} billets` : "Aucune donnée"}</p>
-            <p className="mb-2 text-[11px] text-black/60 dark:text-white/60">Calcul basé sur la route du billet</p>
+            <p className="mb-2 text-[11px] text-black/60 dark:text-white/60">Calcul basé sur le payant (équipe/agence/partenaire)</p>
             <div className="space-y-1.5">
               {topAgencyBars.map((item) => {
                 const widthPercent = maxTopAgencySales > 0 ? (item.sales / maxTopAgencySales) * 100 : 0;
