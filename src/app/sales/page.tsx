@@ -4,6 +4,7 @@ import { TicketRowActions } from "@/components/ticket-row-actions";
 import { prisma } from "@/lib/prisma";
 import { requirePageModuleAccess } from "@/lib/rbac";
 import { ensureAirlineCatalog } from "@/lib/airline-catalog";
+import { computeCaaCommissionMap } from "@/lib/caa-commission";
 
 export const dynamic = "force-dynamic";
 
@@ -99,22 +100,48 @@ export default async function SalesPage({
   const airFastAirline = airlines.find((airline) => airline.code === "FST");
   const caaTargetAmount = caaRule?.depositStockTargetAmount ?? 0;
   const caaBatchCommission = caaRule?.batchCommissionAmount ?? 0;
-  const caaConsumed = caaAirline
-    ? (
-      await prisma.ticketSale.aggregate({
-        where: {
-          ...roleTicketFilter,
-          airlineId: caaAirline.id,
-        },
-        _sum: { amount: true },
-      })
-    )._sum.amount ?? 0
+  const orderedCaaTicketsUntilPeriodEnd = caaAirline
+    ? await prisma.ticketSale.findMany({
+      where: {
+        ...roleTicketFilter,
+        airlineId: caaAirline.id,
+        soldAt: { lt: dateRange.endExclusive },
+      },
+      select: { id: true, soldAt: true, amount: true },
+      orderBy: [{ soldAt: "asc" }, { id: "asc" }],
+    })
+    : [];
+
+  const caaTicketsInPeriod = caaAirline
+    ? tickets.filter((ticket) => ticket.airlineId === caaAirline.id)
+    : [];
+
+  const caaCommissionMap = caaAirline
+    ? computeCaaCommissionMap({
+      periodTicketIds: caaTicketsInPeriod.map((ticket) => ticket.id),
+      orderedCaaTicketsUntilPeriodEnd,
+      targetAmount: caaTargetAmount,
+      batchCommissionAmount: caaBatchCommission,
+    })
+    : new Map<string, number>();
+
+  const commissionOf = (ticket: { id: string; airline: { code: string }; amount: number; commissionAmount: number | null; commissionRateUsed: number }) => {
+    if (ticket.airline.code === "CAA" && caaCommissionMap.has(ticket.id)) {
+      return caaCommissionMap.get(ticket.id) ?? 0;
+    }
+    return ticket.commissionAmount ?? ticket.amount * (ticket.commissionRateUsed / 100);
+  };
+
+  const caaConsumedInPeriod = caaTicketsInPeriod.reduce((sum, ticket) => sum + ticket.amount, 0);
+  const caaCommissionEarned = caaTicketsInPeriod.reduce((sum, ticket) => sum + commissionOf(ticket), 0);
+  const caaLotsReached = caaBatchCommission > 0 ? Math.round(caaCommissionEarned / caaBatchCommission) : 0;
+
+  const caaConsumedUntilEnd = caaAirline
+    ? orderedCaaTicketsUntilPeriodEnd.reduce((sum, ticket) => sum + ticket.amount, 0)
     : 0;
-  const caaLotsReached = caaTargetAmount > 0 ? Math.floor(caaConsumed / caaTargetAmount) : 0;
-  const caaCommissionEarned = caaLotsReached * caaBatchCommission;
-  const caaRemainder = caaTargetAmount > 0 ? caaConsumed % caaTargetAmount : 0;
+  const caaRemainder = caaTargetAmount > 0 ? caaConsumedUntilEnd % caaTargetAmount : 0;
   const caaRemainingToNextLot = caaTargetAmount > 0
-    ? caaConsumed === 0
+    ? caaConsumedUntilEnd === 0
       ? caaTargetAmount
       : caaRemainder === 0
         ? 0
@@ -195,7 +222,7 @@ export default async function SalesPage({
                   <div className="rounded-md border border-black/10 px-3 py-2 dark:border-white/10">
                     <p className="font-semibold">Suivi CAA</p>
                     <p className="text-black/60 dark:text-white/60">
-                      Cumul: {caaConsumed.toFixed(2)} USD • Lots: {caaLotsReached} • Commission: {caaCommissionEarned.toFixed(2)} USD • Reste: {caaRemainingToNextLot.toFixed(2)} USD
+                      Cumul période: {caaConsumedInPeriod.toFixed(2)} USD • Lots: {caaLotsReached} • Commission: {caaCommissionEarned.toFixed(2)} USD • Reste prochain lot: {caaRemainingToNextLot.toFixed(2)} USD
                     </p>
                   </div>
                 ) : null}
@@ -230,7 +257,7 @@ export default async function SalesPage({
             </thead>
             <tbody>
               {tickets.map((ticket) => {
-                const commissionAmount = ticket.commissionAmount ?? ticket.amount * (ticket.commissionRateUsed / 100);
+                const commissionAmount = commissionOf(ticket);
                 const agencyMarkupAmount = ticket.agencyMarkupAmount ?? 0;
                 const companyCommissionAmount = Math.max(0, commissionAmount - agencyMarkupAmount);
                 const netAfterCommission = ticket.amount + agencyMarkupAmount;
