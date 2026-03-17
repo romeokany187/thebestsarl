@@ -128,6 +128,45 @@ function compactDate(value: string) {
   return value ? value.slice(5) : "--";
 }
 
+function formatMonthLabel(value: Date) {
+  return new Intl.DateTimeFormat("fr-FR", {
+    month: "long",
+    year: "numeric",
+    timeZone: "UTC",
+  }).format(value);
+}
+
+function calculateGrowthPercent(current: number, reference: number) {
+  if (reference > 0) {
+    return ((current - reference) / reference) * 100;
+  }
+
+  return current > 0 ? 100 : 0;
+}
+
+function previousMonthRange(currentRange: { start: Date }) {
+  const start = new Date(Date.UTC(
+    currentRange.start.getUTCFullYear(),
+    currentRange.start.getUTCMonth() - 1,
+    1,
+    0,
+    0,
+    0,
+    0,
+  ));
+  const end = new Date(Date.UTC(
+    currentRange.start.getUTCFullYear(),
+    currentRange.start.getUTCMonth(),
+    1,
+    0,
+    0,
+    0,
+    0,
+  ));
+
+  return { start, end };
+}
+
 function buildDailyTimeline(start: Date, endExclusive: Date) {
   const days: string[] = [];
   const cursor = new Date(Date.UTC(start.getUTCFullYear(), start.getUTCMonth(), start.getUTCDate(), 0, 0, 0, 0));
@@ -195,8 +234,12 @@ export default async function TicketsPage({
   const range = dateRangeFromParams(resolvedSearchParams);
   const now = new Date();
   const currentDate = now.toISOString().slice(0, 10);
+  const currentMonth = now.toISOString().slice(0, 7);
   const currentStartDate = resolvedSearchParams.startDate ?? `${now.getUTCFullYear()}-01-01`;
   const currentEndDate = resolvedSearchParams.endDate ?? currentDate;
+  const selectedMonth = resolvedSearchParams.month ?? currentMonth;
+  const monthComparisonRange = range.mode === "month" ? previousMonthRange(range) : null;
+  const isMonthComparison = monthComparisonRange !== null;
   const { session, role } = await requirePageModuleAccess("tickets", ["ADMIN", "MANAGER", "EMPLOYEE", "ACCOUNTANT"]);
   const roleTicketFilter = role === "EMPLOYEE" ? { sellerId: session.user.id } : {};
 
@@ -210,7 +253,7 @@ export default async function TicketsPage({
     },
   };
 
-  const [ticketsForMetrics, airlineTracking, caaConsumedAggregate] = await Promise.all([
+  const [ticketsForMetrics, comparisonTickets, airlineTracking, caaConsumedAggregate] = await Promise.all([
     prisma.ticketSale.findMany({
       where: whereClause,
       include: {
@@ -219,6 +262,22 @@ export default async function TicketsPage({
       },
       orderBy: { soldAt: "desc" },
     }),
+    monthComparisonRange
+      ? prisma.ticketSale.findMany({
+        where: {
+          ...roleTicketFilter,
+          soldAt: {
+            gte: monthComparisonRange.start,
+            lt: monthComparisonRange.end,
+          },
+        },
+        include: {
+          airline: true,
+          seller: { select: { name: true } },
+        },
+        orderBy: { soldAt: "desc" },
+      })
+      : Promise.resolve([]),
     prisma.airline.findMany({
       where: { code: { in: ["CAA", "FST"] } },
       include: { commissionRules: { where: { isActive: true } } },
@@ -250,12 +309,9 @@ export default async function TicketsPage({
         : Math.max(0, caaTargetAmount - caaRemainder)
     : 0;
 
-  const periodCaaCommissionMap = caaAirline
-    ? computeCaaCommissionMap({
-      periodTicketIds: ticketsForMetrics
-        .filter((ticket) => ticket.airlineId === caaAirline.id)
-        .map((ticket) => ticket.id),
-      orderedCaaTicketsUntilPeriodEnd: await prisma.ticketSale.findMany({
+  const [orderedCurrentCaaTickets, orderedComparisonCaaTickets] = caaAirline
+    ? await Promise.all([
+      prisma.ticketSale.findMany({
         where: {
           ...roleTicketFilter,
           airlineId: caaAirline.id,
@@ -264,6 +320,37 @@ export default async function TicketsPage({
         select: { id: true, soldAt: true, amount: true },
         orderBy: [{ soldAt: "asc" }, { id: "asc" }],
       }),
+      monthComparisonRange
+        ? prisma.ticketSale.findMany({
+          where: {
+            ...roleTicketFilter,
+            airlineId: caaAirline.id,
+            soldAt: { lt: monthComparisonRange.end },
+          },
+          select: { id: true, soldAt: true, amount: true },
+          orderBy: [{ soldAt: "asc" }, { id: "asc" }],
+        })
+        : Promise.resolve([]),
+    ])
+    : [[], []];
+
+  const periodCaaCommissionMap = caaAirline
+    ? computeCaaCommissionMap({
+      periodTicketIds: ticketsForMetrics
+        .filter((ticket) => ticket.airlineId === caaAirline.id)
+        .map((ticket) => ticket.id),
+      orderedCaaTicketsUntilPeriodEnd: orderedCurrentCaaTickets,
+      targetAmount: caaTargetAmount,
+      batchCommissionAmount: caaBatchCommission,
+    })
+    : new Map<string, number>();
+
+  const comparisonCaaCommissionMap = caaAirline && monthComparisonRange
+    ? computeCaaCommissionMap({
+      periodTicketIds: comparisonTickets
+        .filter((ticket) => ticket.airlineId === caaAirline.id)
+        .map((ticket) => ticket.id),
+      orderedCaaTicketsUntilPeriodEnd: orderedComparisonCaaTickets,
       targetAmount: caaTargetAmount,
       batchCommissionAmount: caaBatchCommission,
     })
@@ -276,9 +363,19 @@ export default async function TicketsPage({
     return ticket.commissionAmount ?? ticket.amount * (ticket.commissionRateUsed / 100);
   };
 
+  const comparisonCommissionOf = (ticket: { id: string; airline: { code: string }; amount: number; commissionAmount: number | null; commissionRateUsed: number }) => {
+    if (ticket.airline.code === "CAA" && comparisonCaaCommissionMap.has(ticket.id)) {
+      return comparisonCaaCommissionMap.get(ticket.id) ?? 0;
+    }
+    return ticket.commissionAmount ?? ticket.amount * (ticket.commissionRateUsed / 100);
+  };
+
   const totalSales = ticketsForMetrics.reduce((sum, ticket) => sum + ticket.amount, 0);
   const totalCommissions = ticketsForMetrics.reduce((sum, ticket) => sum + metricCommissionOf(ticket), 0);
   const totalTickets = ticketsForMetrics.length;
+  const comparisonTotalSales = comparisonTickets.reduce((sum, ticket) => sum + ticket.amount, 0);
+  const comparisonTotalCommissions = comparisonTickets.reduce((sum, ticket) => sum + comparisonCommissionOf(ticket), 0);
+  const comparisonTotalTickets = comparisonTickets.length;
 
   const salesByAirline = Array.from(
     ticketsForMetrics.reduce((map, ticket) => {
@@ -315,6 +412,22 @@ export default async function TicketsPage({
     return map;
   }, new Map<string, { day: string; sales: number; commissions: number; tickets: number }>());
 
+  const comparisonDailyPerformanceMap = comparisonTickets.reduce((map, ticket) => {
+    const key = new Date(ticket.soldAt).toISOString().slice(0, 10);
+    const commission = comparisonCommissionOf(ticket);
+    const existing = map.get(key) ?? {
+      day: key,
+      sales: 0,
+      commissions: 0,
+      tickets: 0,
+    };
+    existing.sales += ticket.amount;
+    existing.commissions += commission;
+    existing.tickets += 1;
+    map.set(key, existing);
+    return map;
+  }, new Map<string, { day: string; sales: number; commissions: number; tickets: number }>());
+
   const dailyPerformance = buildDailyTimeline(startOfUtcDay(range.start), startOfUtcDay(range.end)).map((day) => {
     const existing = dailyPerformanceMap.get(day);
     if (existing) return existing;
@@ -325,6 +438,19 @@ export default async function TicketsPage({
       tickets: 0,
     };
   });
+
+  const comparisonDailyPerformance = monthComparisonRange
+    ? buildDailyTimeline(startOfUtcDay(monthComparisonRange.start), startOfUtcDay(monthComparisonRange.end)).map((day) => {
+      const existing = comparisonDailyPerformanceMap.get(day);
+      if (existing) return existing;
+      return {
+        day,
+        sales: 0,
+        commissions: 0,
+        tickets: 0,
+      };
+    })
+    : [];
 
   const cumulativeDailyPerformance = dailyPerformance.reduce((state, point) => {
     const sales = state.runningSales + point.sales;
@@ -352,20 +478,46 @@ export default async function TicketsPage({
     points: [] as Array<{ day: string; sales: number; commissions: number; tickets: number }>,
   }).points;
 
+  const comparisonCumulativeDailyPerformance = comparisonDailyPerformance.reduce((state, point) => {
+    const sales = state.runningSales + point.sales;
+    const commissions = state.runningCommissions + point.commissions;
+    const tickets = state.runningTickets + point.tickets;
+
+    return {
+      runningSales: sales,
+      runningCommissions: commissions,
+      runningTickets: tickets,
+      points: [
+        ...state.points,
+        {
+          day: point.day,
+          sales,
+          commissions,
+          tickets,
+        },
+      ],
+    };
+  }, {
+    runningSales: 0,
+    runningCommissions: 0,
+    runningTickets: 0,
+    points: [] as Array<{ day: string; sales: number; commissions: number; tickets: number }>,
+  }).points;
+
   const salesCurvePath = sparklinePath(cumulativeDailyPerformance.map((point) => point.sales), 280, 80);
   const commissionCurvePath = sparklinePath(cumulativeDailyPerformance.map((point) => point.commissions), 280, 80);
+  const comparisonSalesCurvePath = sparklinePath(comparisonCumulativeDailyPerformance.map((point) => point.sales), 280, 80);
+  const comparisonCommissionCurvePath = sparklinePath(comparisonCumulativeDailyPerformance.map((point) => point.commissions), 280, 80);
   const firstPointWithSales = cumulativeDailyPerformance.find((point) => point.sales > 0);
   const firstPointWithCommissions = cumulativeDailyPerformance.find((point) => point.commissions > 0);
   const salesStart = firstPointWithSales?.sales ?? cumulativeDailyPerformance[0]?.sales ?? 0;
   const salesEnd = cumulativeDailyPerformance[cumulativeDailyPerformance.length - 1]?.sales ?? 0;
-  const salesTrendPercent = salesStart > 0 ? ((salesEnd - salesStart) / salesStart) * 100 : salesEnd > 0 ? 100 : 0;
+  const salesTrendPercent = isMonthComparison ? calculateGrowthPercent(totalSales, comparisonTotalSales) : calculateGrowthPercent(salesEnd, salesStart);
   const commissionStart = firstPointWithCommissions?.commissions ?? cumulativeDailyPerformance[0]?.commissions ?? 0;
   const commissionEnd = cumulativeDailyPerformance[cumulativeDailyPerformance.length - 1]?.commissions ?? 0;
-  const commissionTrendPercent = commissionStart > 0
-    ? ((commissionEnd - commissionStart) / commissionStart) * 100
-    : commissionEnd > 0
-      ? 100
-      : 0;
+  const commissionTrendPercent = isMonthComparison
+    ? calculateGrowthPercent(totalCommissions, comparisonTotalCommissions)
+    : calculateGrowthPercent(commissionEnd, commissionStart);
 
   const topAirline = salesByAirline[0] ?? null;
   const topAirlineShare = totalTickets > 0 && topAirline ? (topAirline.tickets / totalTickets) * 100 : 0;
@@ -389,12 +541,48 @@ export default async function TicketsPage({
   const maxTopAirlineSales = topAirlineBars.reduce((max, item) => Math.max(max, item.sales), 0);
   const maxTopAgencySales = topAgencyBars.reduce((max, item) => Math.max(max, item.sales), 0);
 
-  const periodProgressPercent = salesStart > 0
-    ? ((salesEnd - salesStart) / salesStart) * 100
-    : salesEnd > 0
-      ? 100
-      : 0;
+  const comparisonSalesByAirline = Array.from(
+    comparisonTickets.reduce((map, ticket) => {
+      const key = ticket.airline.code;
+      const commission = comparisonCommissionOf(ticket);
+      const existing = map.get(key) ?? {
+        code: ticket.airline.code,
+        name: ticket.airline.name,
+        tickets: 0,
+        sales: 0,
+        commissions: 0,
+      };
+      existing.tickets += 1;
+      existing.sales += ticket.amount;
+      existing.commissions += commission;
+      map.set(key, existing);
+      return map;
+    }, new Map<string, { code: string; name: string; tickets: number; sales: number; commissions: number }>()),
+  ).sort((a, b) => b[1].sales - a[1].sales).map((item) => item[1]);
+
+  const comparisonAgencySales = Array.from(
+    comparisonTickets.reduce((map, ticket) => {
+      const key = detectAgencyFromPayer(ticket.payerName);
+      const existing = map.get(key) ?? { agency: key, tickets: 0, sales: 0, commissions: 0 };
+      const commission = comparisonCommissionOf(ticket);
+      existing.tickets += 1;
+      existing.sales += ticket.amount;
+      existing.commissions += commission;
+      map.set(key, existing);
+      return map;
+    }, new Map<string, { agency: string; tickets: number; sales: number; commissions: number }>()),
+  ).map((entry) => entry[1]).sort((a, b) => b.sales - a.sales);
+
+  const comparisonTopAirline = comparisonSalesByAirline[0] ?? null;
+  const comparisonTopAgency = comparisonAgencySales[0] ?? null;
+
+  const periodProgressPercent = isMonthComparison
+    ? calculateGrowthPercent(totalSales, comparisonTotalSales)
+    : calculateGrowthPercent(salesEnd, salesStart);
   const periodProgressLabel = `${periodProgressPercent >= 0 ? "+" : ""}${periodProgressPercent.toFixed(1)}%`;
+  const ticketsGrowthPercent = calculateGrowthPercent(totalTickets, comparisonTotalTickets);
+  const selectedMonthLabel = isMonthComparison ? formatMonthLabel(range.start) : null;
+  const previousMonthLabel = monthComparisonRange ? formatMonthLabel(monthComparisonRange.start) : null;
 
   const airFastAirline = airlineTracking.find((airline) => airline.code === "FST");
   const airFastTicketCount = airFastAirline
@@ -421,8 +609,7 @@ export default async function TicketsPage({
       </section>
 
       <section className="mb-6 rounded-2xl border border-black/10 bg-white p-4 dark:border-white/10 dark:bg-zinc-900">
-        <form method="GET" className="grid gap-3 lg:grid-cols-4 lg:items-end">
-          <input type="hidden" name="mode" value="date" />
+        <form method="GET" className="grid gap-3 lg:grid-cols-5 lg:items-end">
           <div>
             <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-black/60 dark:text-white/60">Du</label>
             <input
@@ -443,20 +630,52 @@ export default async function TicketsPage({
             />
           </div>
 
-          <div className="flex gap-2">
+          <div>
+            <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-black/60 dark:text-white/60">Mois à comparer</label>
+            <input
+              type="month"
+              name="month"
+              defaultValue={selectedMonth}
+              className="w-full rounded-md border border-black/15 bg-white px-3 py-2 text-sm dark:border-white/15 dark:bg-zinc-900"
+            />
+          </div>
+
+          <div className="flex flex-wrap gap-2 lg:col-span-2">
             <button
               type="submit"
+              name="mode"
+              value="date"
               className="rounded-md bg-black px-4 py-2 text-sm font-semibold text-white dark:bg-white dark:text-black"
             >
-              Afficher
+              Afficher période
+            </button>
+            <button
+              type="submit"
+              name="mode"
+              value="month"
+              className="rounded-md border border-black/15 bg-white px-4 py-2 text-sm font-semibold dark:border-white/15 dark:bg-zinc-900"
+            >
+              Comparer mois
             </button>
             <button
               type="submit"
               formAction="/api/tickets/report"
               formTarget="_blank"
+              name="mode"
+              value="date"
               className="rounded-md border border-black/15 bg-white px-4 py-2 text-sm font-semibold dark:border-white/15 dark:bg-zinc-900"
             >
-              Tirer PDF
+              PDF période
+            </button>
+            <button
+              type="submit"
+              formAction="/api/tickets/report"
+              formTarget="_blank"
+              name="mode"
+              value="month"
+              className="rounded-md border border-black/15 bg-white px-4 py-2 text-sm font-semibold dark:border-white/15 dark:bg-zinc-900"
+            >
+              PDF mois
             </button>
           </div>
         </form>
@@ -467,13 +686,27 @@ export default async function TicketsPage({
       </section>
 
       <div className="mb-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <KpiCard label="Billets vendus" value={String(totalTickets)} />
-        <KpiCard label="Ventes totales" value={`${totalSales.toFixed(2)} USD`} />
-        <KpiCard label="Commissions" value={`${totalCommissions.toFixed(2)} USD`} />
+        <KpiCard
+          label="Billets vendus"
+          value={String(totalTickets)}
+          hint={isMonthComparison ? `${previousMonthLabel}: ${comparisonTotalTickets} • Δ ${ticketsGrowthPercent >= 0 ? "+" : ""}${ticketsGrowthPercent.toFixed(1)}%` : undefined}
+        />
+        <KpiCard
+          label="Ventes totales"
+          value={`${totalSales.toFixed(2)} USD`}
+          hint={isMonthComparison ? `${previousMonthLabel}: ${comparisonTotalSales.toFixed(2)} USD` : undefined}
+        />
+        <KpiCard
+          label="Commissions"
+          value={`${totalCommissions.toFixed(2)} USD`}
+          hint={isMonthComparison ? `${previousMonthLabel}: ${comparisonTotalCommissions.toFixed(2)} USD` : undefined}
+        />
         <KpiCard
           label="Marge de progression"
           value={periodProgressLabel}
-          hint={`Début: ${salesStart.toFixed(2)} USD • Fin: ${salesEnd.toFixed(2)} USD`}
+          hint={isMonthComparison
+            ? `${selectedMonthLabel}: ${totalSales.toFixed(2)} USD • ${previousMonthLabel}: ${comparisonTotalSales.toFixed(2)} USD`
+            : `Début: ${salesStart.toFixed(2)} USD • Fin: ${salesEnd.toFixed(2)} USD`}
         />
       </div>
 
@@ -488,14 +721,22 @@ export default async function TicketsPage({
               </p>
             </div>
             <p className="text-sm font-semibold">{formatCurrency(salesEnd)}</p>
-            <p className="mb-2 text-[11px] text-black/60 dark:text-white/60">Cumul période • Début {formatCurrency(salesStart)}</p>
+            <p className="mb-2 text-[11px] text-black/60 dark:text-white/60">
+              {isMonthComparison
+                ? `${selectedMonthLabel} • M-1 ${previousMonthLabel}: ${formatCurrency(comparisonTotalSales)}`
+                : `Cumul période • Début ${formatCurrency(salesStart)}`}
+            </p>
             <svg viewBox="0 0 280 80" className="h-20 w-full">
+              {isMonthComparison && comparisonSalesCurvePath ? (
+                <path d={comparisonSalesCurvePath} fill="none" stroke="currentColor" strokeWidth="1.6" className="text-black/25 dark:text-white/25" />
+              ) : null}
               <path d={salesCurvePath} fill="none" stroke="currentColor" strokeWidth="2.2" className="text-black dark:text-white" />
             </svg>
             <div className="mt-1 flex justify-between text-[10px] text-black/45 dark:text-white/45">
               <span>{compactDate(cumulativeDailyPerformance[0]?.day ?? "")}</span>
               <span>{compactDate(cumulativeDailyPerformance[cumulativeDailyPerformance.length - 1]?.day ?? "")}</span>
             </div>
+            {isMonthComparison ? <p className="mt-1 text-[10px] text-black/45 dark:text-white/45">Ligne claire: {previousMonthLabel}</p> : null}
           </div>
 
           <div className="rounded-xl border border-black/10 p-3 dark:border-white/10">
@@ -506,20 +747,31 @@ export default async function TicketsPage({
               </p>
             </div>
             <p className="text-sm font-semibold">{formatCurrency(commissionEnd)}</p>
-            <p className="mb-2 text-[11px] text-black/60 dark:text-white/60">Cumul période • Début {formatCurrency(commissionStart)}</p>
+            <p className="mb-2 text-[11px] text-black/60 dark:text-white/60">
+              {isMonthComparison
+                ? `${selectedMonthLabel} • M-1 ${previousMonthLabel}: ${formatCurrency(comparisonTotalCommissions)}`
+                : `Cumul période • Début ${formatCurrency(commissionStart)}`}
+            </p>
             <svg viewBox="0 0 280 80" className="h-20 w-full">
+              {isMonthComparison && comparisonCommissionCurvePath ? (
+                <path d={comparisonCommissionCurvePath} fill="none" stroke="currentColor" strokeWidth="1.6" className="text-black/20 dark:text-white/20" />
+              ) : null}
               <path d={commissionCurvePath} fill="none" stroke="currentColor" strokeWidth="2.2" className="text-black/70 dark:text-white/70" />
             </svg>
             <div className="mt-1 flex justify-between text-[10px] text-black/45 dark:text-white/45">
               <span>{compactDate(cumulativeDailyPerformance[0]?.day ?? "")}</span>
               <span>{compactDate(cumulativeDailyPerformance[cumulativeDailyPerformance.length - 1]?.day ?? "")}</span>
             </div>
+            {isMonthComparison ? <p className="mt-1 text-[10px] text-black/45 dark:text-white/45">Ligne claire: {previousMonthLabel}</p> : null}
           </div>
 
           <div className="rounded-xl border border-black/10 p-3 dark:border-white/10">
             <p className="text-xs font-semibold uppercase tracking-wide text-black/60 dark:text-white/60">Compagnie la plus vendue</p>
             <p className="mt-1 text-sm font-semibold">{topAirline ? `${topAirline.code} • ${topAirline.tickets} billets` : "Aucune donnée"}</p>
-            <p className="mb-2 text-[11px] text-black/60 dark:text-white/60">Part de volume: {topAirlineShare.toFixed(1)}%</p>
+            <p className="mb-2 text-[11px] text-black/60 dark:text-white/60">
+              Part de volume: {topAirlineShare.toFixed(1)}%
+              {isMonthComparison && comparisonTopAirline ? ` • M-1: ${comparisonTopAirline.code} • ${comparisonTopAirline.tickets} billets` : ""}
+            </p>
             <div className="space-y-1.5">
               {topAirlineBars.map((item) => {
                 const widthPercent = maxTopAirlineSales > 0 ? (item.sales / maxTopAirlineSales) * 100 : 0;
@@ -541,7 +793,10 @@ export default async function TicketsPage({
           <div className="rounded-xl border border-black/10 p-3 dark:border-white/10">
             <p className="text-xs font-semibold uppercase tracking-wide text-black/60 dark:text-white/60">Agence la plus performante</p>
             <p className="mt-1 text-sm font-semibold">{topAgency ? `${topAgency.agency} • ${topAgency.tickets} billets` : "Aucune donnée"}</p>
-            <p className="mb-2 text-[11px] text-black/60 dark:text-white/60">Calcul basé sur le payant (équipe/agence/partenaire)</p>
+            <p className="mb-2 text-[11px] text-black/60 dark:text-white/60">
+              Calcul basé sur le payant (équipe/agence/partenaire)
+              {isMonthComparison && comparisonTopAgency ? ` • M-1: ${comparisonTopAgency.agency} • ${comparisonTopAgency.tickets} billets` : ""}
+            </p>
             <div className="space-y-1.5">
               {topAgencyBars.map((item) => {
                 const widthPercent = maxTopAgencySales > 0 ? (item.sales / maxTopAgencySales) * 100 : 0;
