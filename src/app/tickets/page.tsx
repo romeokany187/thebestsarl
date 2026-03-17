@@ -224,23 +224,7 @@ export default async function TicketsPage({
 
   await ensureAirlineCatalog(prisma);
 
-  const whereClause = {
-    ...roleTicketFilter,
-    soldAt: {
-      gte: range.start,
-      lt: range.end,
-    },
-  };
-
-  const [ticketsForMetrics, monitorCurrentTickets, comparisonTickets, airlineTracking, caaConsumedAggregate] = await Promise.all([
-    prisma.ticketSale.findMany({
-      where: whereClause,
-      include: {
-        airline: true,
-        seller: { select: { name: true } },
-      },
-      orderBy: { soldAt: "desc" },
-    }),
+  const [monitorCurrentTickets, comparisonTickets, airlineTracking, caaConsumedAggregate] = await Promise.all([
     prisma.ticketSale.findMany({
       where: {
         ...roleTicketFilter,
@@ -300,17 +284,8 @@ export default async function TicketsPage({
         : Math.max(0, caaTargetAmount - caaRemainder)
     : 0;
 
-  const [orderedCurrentCaaTickets, orderedMonitorCurrentCaaTickets, orderedComparisonCaaTickets] = caaAirline
+  const [orderedMonitorCurrentCaaTickets, orderedComparisonCaaTickets] = caaAirline
     ? await Promise.all([
-      prisma.ticketSale.findMany({
-        where: {
-          ...roleTicketFilter,
-          airlineId: caaAirline.id,
-          soldAt: { lt: range.end },
-        },
-        select: { id: true, soldAt: true, amount: true },
-        orderBy: [{ soldAt: "asc" }, { id: "asc" }],
-      }),
       prisma.ticketSale.findMany({
         where: {
           ...roleTicketFilter,
@@ -330,18 +305,7 @@ export default async function TicketsPage({
         orderBy: [{ soldAt: "asc" }, { id: "asc" }],
       }),
     ])
-    : [[], [], []];
-
-  const periodCaaCommissionMap = caaAirline
-    ? computeCaaCommissionMap({
-      periodTicketIds: ticketsForMetrics
-        .filter((ticket) => ticket.airlineId === caaAirline.id)
-        .map((ticket) => ticket.id),
-      orderedCaaTicketsUntilPeriodEnd: orderedCurrentCaaTickets,
-      targetAmount: caaTargetAmount,
-      batchCommissionAmount: caaBatchCommission,
-    })
-    : new Map<string, number>();
+    : [[], []];
 
   const monitorCurrentCaaCommissionMap = caaAirline
     ? computeCaaCommissionMap({
@@ -364,13 +328,6 @@ export default async function TicketsPage({
       batchCommissionAmount: caaBatchCommission,
     })
     : new Map<string, number>();
-
-  const metricCommissionOf = (ticket: { id: string; airline: { code: string }; amount: number; commissionAmount: number | null; commissionRateUsed: number }) => {
-    if (ticket.airline.code === "CAA" && periodCaaCommissionMap.has(ticket.id)) {
-      return periodCaaCommissionMap.get(ticket.id) ?? 0;
-    }
-    return ticket.commissionAmount ?? ticket.amount * (ticket.commissionRateUsed / 100);
-  };
 
   const monitorCurrentCommissionOf = (ticket: { id: string; airline: { code: string }; amount: number; commissionAmount: number | null; commissionRateUsed: number }) => {
     if (ticket.airline.code === "CAA" && monitorCurrentCaaCommissionMap.has(ticket.id)) {
