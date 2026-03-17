@@ -85,7 +85,8 @@ export default async function SalesPage({
           lt: dateRange.endExclusive,
         },
       },
-      include: { airline: true, seller: { select: { name: true } }, payments: true },
+      include: { airline: true, seller: { select: { name: true } }, payments: true, },
+
       orderBy: { soldAt: "desc" },
       take: 200,
     }),
@@ -236,7 +237,7 @@ export default async function SalesPage({
 
                 return (
                   <tr key={ticket.id} className="border-t border-black/5 dark:border-white/10">
-                    <td className="px-3 py-2">{ticket.seller.name}</td>
+                    <td className="px-3 py-2">{ticket.sellerName ?? ticket.seller?.name ?? "—"}</td>
                     <td className="px-3 py-2">{ticket.airline.code}</td>
                     <td className="px-3 py-2">{ticket.ticketNumber}</td>
                     <td className="px-3 py-2">{ticket.route}</td>

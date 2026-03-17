@@ -299,8 +299,9 @@ model TicketSale {
   currency           String        @default("USD")
   airlineId          String
   airline            Airline       @relation(fields: [airlineId], references: [id])
-  sellerId           String
-  seller             User          @relation("TicketSeller", fields: [sellerId], references: [id])
+  sellerId           String?
+  seller             User?         @relation("TicketSeller", fields: [sellerId], references: [id])
+  sellerName         String?
   saleNature         SaleNature    @default(CASH)
   paymentStatus      PaymentStatus @default(UNPAID)
   payerName          String?

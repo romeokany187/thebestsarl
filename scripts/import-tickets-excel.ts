@@ -1,6 +1,5 @@
-import { CommissionCalculationStatus, CommissionMode, JobTitle, PaymentStatus, PrismaClient, Role, SaleNature, TravelClass, type Prisma } from "@prisma/client";
+import { CommissionCalculationStatus, CommissionMode, PaymentStatus, PrismaClient, SaleNature, TravelClass, type Prisma } from "@prisma/client";
 import * as XLSX from "xlsx";
-import { hashSync } from "bcryptjs";
 
 const prisma = new PrismaClient();
 
@@ -227,18 +226,6 @@ function normalizePersonKey(value: string) {
     .replace(/\s+/g, " ");
 }
 
-function slugifyName(value: string) {
-  const clean = value
-    .trim()
-    .toLowerCase()
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .replace(/[^a-z0-9]+/g, ".")
-    .replace(/^\.+|\.+$/g, "")
-    .slice(0, 32);
-  return clean || "emetteur";
-}
-
 function isCaaLike(airline: { code: string; name: string }) {
   const code = airline.code.trim().toUpperCase();
   const name = normalizeHeader(airline.name);
@@ -410,7 +397,6 @@ async function main() {
 
   const userByEmail = new Map(users.map((user) => [user.email.trim().toLowerCase(), user]));
   const userByName = new Map(users.map((user) => [normalizePersonKey(user.name), user]));
-  const usedEmails = new Set(users.map((user) => user.email.trim().toLowerCase()));
 
   const airlineByCode = new Map(airlines.map((airline) => [airline.code.trim().toUpperCase(), airline]));
   const airlineByName = new Map(airlines.map((airline) => [airline.name.trim().toLowerCase(), airline]));
@@ -448,6 +434,10 @@ async function main() {
     const sellerEmail = input.sellerEmail?.trim().toLowerCase() ?? null;
     const sellerName = input.sellerName?.trim() ?? null;
 
+    if (!sellerEmail && !sellerName) {
+      return { id: null, email: null, name: null };
+    }
+
     if (sellerEmail && userByEmail.has(sellerEmail)) {
       return userByEmail.get(sellerEmail)!;
     }
@@ -464,46 +454,8 @@ async function main() {
       return userByEmail.get(fallbackEmail)!;
     }
 
-    if (!sellerName) {
-      throw new Error("Émetteur/vendeur absent.");
-    }
-
-    const sellerKey = normalizePersonKey(sellerName);
-    const slugBase = slugifyName(sellerName);
-    let email = `import.${slugBase}@thebest.local`;
-    let suffix = 1;
-    while (usedEmails.has(email)) {
-      email = `import.${slugBase}.${suffix}@thebest.local`;
-      suffix += 1;
-    }
-
-    if (args.dryRun) {
-      const drySeller = {
-        id: `dry-seller-${slugBase}`,
-        email,
-        name: sellerName,
-      };
-      userByEmail.set(email, drySeller);
-      userByName.set(sellerKey, drySeller);
-      usedEmails.add(email);
-      return drySeller;
-    }
-
-    const created = await prisma.user.create({
-      data: {
-        name: sellerName,
-        email,
-        passwordHash: hashSync("ImportTemp#2026", 10),
-        role: Role.EMPLOYEE,
-        jobTitle: JobTitle.COMMERCIAL,
-      },
-      select: { id: true, email: true, name: true },
-    });
-
-    userByEmail.set(created.email.toLowerCase(), created);
-    userByName.set(sellerKey, created);
-    usedEmails.add(created.email.toLowerCase());
-    return created;
+    // Aucun utilisateur correspondant trouvé — on stocke le nom brut sans créer de compte
+    return { id: null, email: null, name: sellerName };
   }
 
   for (const sheetName of sheetNames) {
@@ -621,7 +573,8 @@ async function main() {
           baseFareAmount,
           currency,
           airlineId: airline.id,
-          sellerId: seller.id,
+          ...(seller.id ? { sellerId: seller.id } : {}),
+          sellerName: seller.name ?? undefined,
           saleNature: parseSaleNature(pickValue(row, ["saleNature", "nature vente", "nature"])),
           paymentStatus: parsePaymentStatus(pickValue(row, ["paymentStatus", "statut paiement", "statut", "etat paiement"])),
           payerName: mapPayerToAgency(asString(pickValue(row, ["payerName", "payant", "nom payeur"]))),

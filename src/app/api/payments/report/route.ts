@@ -274,7 +274,7 @@ export async function GET(request: NextRequest) {
       row.ticket.ticketNumber.slice(0, 10),
       short(row.ticket.customerName, 26),
       row.ticket.airline.code,
-      short(row.ticket.seller.name, 14),
+      short(row.ticket.sellerName ?? row.ticket.seller?.name ?? "-", 14),
       `${row.amount.toFixed(2)} ${row.ticket.currency}`,
       short(row.method, 12),
       short(row.reference ?? "-", 16),

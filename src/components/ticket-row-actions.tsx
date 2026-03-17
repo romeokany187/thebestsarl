@@ -7,7 +7,7 @@ type Props = {
     id: string;
     ticketNumber: string;
     airlineId: string;
-    sellerId: string;
+    sellerId: string | null;
     customerName: string;
     route: string;
     travelClass: "ECONOMY" | "PREMIUM_ECONOMY" | "BUSINESS" | "FIRST";

@@ -338,7 +338,7 @@ export async function GET(request: NextRequest) {
       const commission = ticketCommission(ticket);
       const row = [
         new Date(ticket.soldAt).toISOString().slice(0, 10),
-        ticket.seller.name?.slice(0, 12) ?? "-",
+        (ticket.sellerName ?? ticket.seller?.name ?? "-").slice(0, 12),
         ticket.airline.code,
         ticket.ticketNumber.slice(0, 10),
         ticket.route.slice(0, 16),

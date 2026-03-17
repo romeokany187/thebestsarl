@@ -269,6 +269,7 @@ export async function GET(request: NextRequest, { params }: Params) {
         commissionAmount: true,
         commissionRateUsed: true,
         paymentStatus: true,
+        sellerName: true,
         seller: {
           select: { name: true },
         },
@@ -356,7 +357,7 @@ export async function GET(request: NextRequest, { params }: Params) {
 
   const sellerAggregation = new Map<string, { tickets: number; amount: number }>();
   tickets.forEach((ticket) => {
-    const sellerName = ticket.seller.name || "Inconnu";
+    const sellerName = ticket.sellerName ?? ticket.seller?.name ?? "Inconnu";
     const existing = sellerAggregation.get(sellerName) ?? { tickets: 0, amount: 0 };
     existing.tickets += 1;
     existing.amount += ticket.amount;
