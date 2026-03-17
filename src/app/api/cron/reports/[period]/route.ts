@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { PaymentStatus, PresenceLocationStatus, Role } from "@prisma/client";
+import { PaymentStatus, PresenceLocationStatus } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { isMailConfigured, sendMailBatch } from "@/lib/mail";
 
@@ -205,6 +205,16 @@ function isAuthorizedCronCall(request: NextRequest) {
   return readBearerToken(request) === secret;
 }
 
+function getReportsRecipient() {
+  const email =
+    process.env.REPORTS_TO_EMAIL?.trim()
+    || process.env.MAIL_FROM_EMAIL?.trim()
+    || process.env.SMTP_USER?.trim()
+    || "";
+
+  return email.toLowerCase();
+}
+
 export async function GET(request: NextRequest, { params }: Params) {
   const { period } = await params;
   const frequency = parseFrequency(period);
@@ -228,11 +238,7 @@ export async function GET(request: NextRequest, { params }: Params) {
 
   const range = getPreviousPeriodRange(frequency, new Date());
 
-  const [admins, attendanceRows, tickets] = await Promise.all([
-    prisma.user.findMany({
-      where: { role: Role.ADMIN },
-      select: { email: true, name: true },
-    }),
+  const [attendanceRows, tickets] = await Promise.all([
     prisma.attendance.findMany({
       where: {
         date: {
@@ -266,11 +272,13 @@ export async function GET(request: NextRequest, { params }: Params) {
     }),
   ]);
 
-  if (!admins.length) {
+  const reportsRecipient = getReportsRecipient();
+
+  if (!reportsRecipient) {
     return NextResponse.json({
       ok: true,
       skipped: true,
-      reason: "no_admin_recipients",
+      reason: "no_reports_recipient",
       frequency,
       range,
     });
@@ -418,7 +426,10 @@ export async function GET(request: NextRequest, { params }: Params) {
   `;
 
   const mailResult = await sendMailBatch({
-    recipients: admins,
+    recipients: [{
+      email: reportsRecipient,
+      name: "Application THEBEST SARL",
+    }],
     subject,
     text,
     html,

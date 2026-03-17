@@ -197,7 +197,7 @@ CRON_SECRET="change-me-cron-secret"
 
 ## Rapports automatiques (journalier / hebdomadaire / mensuel)
 
-Le système envoie automatiquement aux administrateurs un résumé des:
+Le système envoie automatiquement à l'adresse mail de l'application un résumé des:
 - présences (présents, retards, heures supp., bureau vs hors site),
 - ventes de billets,
 - statuts de paiement (payé / partiel / non payé).
@@ -205,6 +205,7 @@ Le système envoie automatiquement aux administrateurs un résumé des:
 Configuration:
 - définir `CRON_SECRET` dans Vercel (même valeur utilisée par les crons),
 - vérifier la configuration SMTP (`SMTP_*`, `MAIL_FROM_*`),
+- définir `REPORTS_TO_EMAIL` (si absent, fallback automatique vers `MAIL_FROM_EMAIL`, puis `SMTP_USER`),
 - le fichier `vercel.json` programme les appels suivants:
 	- `/api/cron/reports/daily`
 	- `/api/cron/reports/weekly`
