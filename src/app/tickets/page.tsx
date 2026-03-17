@@ -29,10 +29,10 @@ function parseYear(value?: string) {
 
 function dateRangeFromParams(params: SearchParams) {
   const now = new Date();
-  const defaultDay = now.toISOString().slice(0, 10);
+  const defaultStartOfYear = `${now.getUTCFullYear()}-01-01`;
 
   if (params.startDate || params.endDate) {
-    const startRaw = params.startDate ?? defaultDay;
+    const startRaw = params.startDate ?? defaultStartOfYear;
     const endRaw = params.endDate ?? startRaw;
     const start = new Date(`${startRaw}T00:00:00.000Z`);
     const end = new Date(`${endRaw}T00:00:00.000Z`);
@@ -51,6 +51,17 @@ function dateRangeFromParams(params: SearchParams) {
     : "date") as ReportMode;
 
   if (mode === "date") {
+    if (!params.date && !params.startDate && !params.endDate) {
+      const start = new Date(Date.UTC(now.getUTCFullYear(), 0, 1, 0, 0, 0, 0));
+      const end = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1, 0, 0, 0, 0));
+      return {
+        mode,
+        start,
+        end,
+        label: `Rapport du ${start.toISOString().slice(0, 10)} au ${new Date(end.getTime() - 1).toISOString().slice(0, 10)}`,
+      };
+    }
+
     const rawDate = params.date;
     const date = rawDate ? new Date(`${rawDate}T00:00:00.000Z`) : now;
     const year = date.getUTCFullYear();
@@ -184,8 +195,8 @@ export default async function TicketsPage({
   const range = dateRangeFromParams(resolvedSearchParams);
   const now = new Date();
   const currentDate = now.toISOString().slice(0, 10);
-  const currentStartDate = resolvedSearchParams.startDate ?? currentDate;
-  const currentEndDate = resolvedSearchParams.endDate ?? currentStartDate;
+  const currentStartDate = resolvedSearchParams.startDate ?? `${now.getUTCFullYear()}-01-01`;
+  const currentEndDate = resolvedSearchParams.endDate ?? currentDate;
   const { session, role } = await requirePageModuleAccess("tickets", ["ADMIN", "MANAGER", "EMPLOYEE", "ACCOUNTANT"]);
   const roleTicketFilter = role === "EMPLOYEE" ? { sellerId: session.user.id } : {};
 
@@ -199,36 +210,7 @@ export default async function TicketsPage({
     },
   };
 
-  const selectedDay = new Date(range.end.getTime() - 1);
-  const selectedDayStart = new Date(Date.UTC(
-    selectedDay.getUTCFullYear(),
-    selectedDay.getUTCMonth(),
-    selectedDay.getUTCDate(),
-    0,
-    0,
-    0,
-    0,
-  ));
-  const selectedDayEnd = new Date(Date.UTC(
-    selectedDay.getUTCFullYear(),
-    selectedDay.getUTCMonth(),
-    selectedDay.getUTCDate() + 1,
-    0,
-    0,
-    0,
-    0,
-  ));
-  const previousDayStart = new Date(Date.UTC(
-    selectedDay.getUTCFullYear(),
-    selectedDay.getUTCMonth(),
-    selectedDay.getUTCDate() - 1,
-    0,
-    0,
-    0,
-    0,
-  ));
-
-  const [ticketsForMetrics, ticketsForTrend, airlineTracking, selectedDaySales, previousDaySales, caaConsumedAggregate] = await Promise.all([
+  const [ticketsForMetrics, airlineTracking, caaConsumedAggregate] = await Promise.all([
     prisma.ticketSale.findMany({
       where: whereClause,
       include: {
@@ -237,41 +219,9 @@ export default async function TicketsPage({
       },
       orderBy: { soldAt: "desc" },
     }),
-    prisma.ticketSale.findMany({
-      where: roleTicketFilter,
-      select: {
-        id: true,
-        airlineId: true,
-        soldAt: true,
-        amount: true,
-        commissionAmount: true,
-        commissionRateUsed: true,
-      },
-      orderBy: { soldAt: "asc" },
-    }),
     prisma.airline.findMany({
       where: { code: { in: ["CAA", "FST"] } },
       include: { commissionRules: { where: { isActive: true } } },
-    }),
-    prisma.ticketSale.aggregate({
-      where: {
-        ...roleTicketFilter,
-        soldAt: {
-          gte: selectedDayStart,
-          lt: selectedDayEnd,
-        },
-      },
-      _sum: { amount: true },
-    }),
-    prisma.ticketSale.aggregate({
-      where: {
-        ...roleTicketFilter,
-        soldAt: {
-          gte: previousDayStart,
-          lt: selectedDayStart,
-        },
-      },
-      _sum: { amount: true },
     }),
     prisma.ticketSale.aggregate({
       where: {
@@ -319,29 +269,9 @@ export default async function TicketsPage({
     })
     : new Map<string, number>();
 
-  const trendCaaCommissionMap = caaAirline
-    ? computeCaaCommissionMap({
-      periodTicketIds: ticketsForTrend
-        .filter((ticket) => ticket.airlineId === caaAirline.id)
-        .map((ticket) => ticket.id),
-      orderedCaaTicketsUntilPeriodEnd: ticketsForTrend
-        .filter((ticket) => ticket.airlineId === caaAirline.id)
-        .map((ticket) => ({ id: ticket.id, soldAt: ticket.soldAt, amount: ticket.amount })),
-      targetAmount: caaTargetAmount,
-      batchCommissionAmount: caaBatchCommission,
-    })
-    : new Map<string, number>();
-
   const metricCommissionOf = (ticket: { id: string; airline: { code: string }; amount: number; commissionAmount: number | null; commissionRateUsed: number }) => {
     if (ticket.airline.code === "CAA" && periodCaaCommissionMap.has(ticket.id)) {
       return periodCaaCommissionMap.get(ticket.id) ?? 0;
-    }
-    return ticket.commissionAmount ?? ticket.amount * (ticket.commissionRateUsed / 100);
-  };
-
-  const trendCommissionOf = (ticket: { id: string; airlineId: string; amount: number; commissionAmount: number | null; commissionRateUsed: number }) => {
-    if (caaAirline && ticket.airlineId === caaAirline.id && trendCaaCommissionMap.has(ticket.id)) {
-      return trendCaaCommissionMap.get(ticket.id) ?? 0;
     }
     return ticket.commissionAmount ?? ticket.amount * (ticket.commissionRateUsed / 100);
   };
@@ -369,9 +299,9 @@ export default async function TicketsPage({
     }, new Map<string, { code: string; name: string; tickets: number; sales: number; commissions: number }>()),
   ).sort((a, b) => b[1].sales - a[1].sales).map((item) => item[1]);
 
-  const dailyPerformanceMap = ticketsForTrend.reduce((map, ticket) => {
+  const dailyPerformanceMap = ticketsForMetrics.reduce((map, ticket) => {
     const key = new Date(ticket.soldAt).toISOString().slice(0, 10);
-    const commission = trendCommissionOf(ticket);
+    const commission = metricCommissionOf(ticket);
     const existing = map.get(key) ?? {
       day: key,
       sales: 0,
@@ -385,20 +315,7 @@ export default async function TicketsPage({
     return map;
   }, new Map<string, { day: string; sales: number; commissions: number; tickets: number }>());
 
-  const historicalStart = ticketsForTrend.length > 0
-    ? startOfUtcDay(ticketsForTrend[0].soldAt)
-    : startOfUtcDay(range.start);
-  const tomorrowStart = startOfUtcDay(new Date(Date.UTC(
-    now.getUTCFullYear(),
-    now.getUTCMonth(),
-    now.getUTCDate() + 1,
-    0,
-    0,
-    0,
-    0,
-  )));
-
-  const dailyPerformance = buildDailyTimeline(historicalStart, tomorrowStart).map((day) => {
+  const dailyPerformance = buildDailyTimeline(startOfUtcDay(range.start), startOfUtcDay(range.end)).map((day) => {
     const existing = dailyPerformanceMap.get(day);
     if (existing) return existing;
     return {
@@ -409,27 +326,40 @@ export default async function TicketsPage({
     };
   });
 
-  let runningSales = 0;
-  let runningCommissions = 0;
-  let runningTickets = 0;
-  const cumulativeDailyPerformance = dailyPerformance.map((point) => {
-    runningSales += point.sales;
-    runningCommissions += point.commissions;
-    runningTickets += point.tickets;
+  const cumulativeDailyPerformance = dailyPerformance.reduce((state, point) => {
+    const sales = state.runningSales + point.sales;
+    const commissions = state.runningCommissions + point.commissions;
+    const tickets = state.runningTickets + point.tickets;
+
     return {
-      day: point.day,
-      sales: runningSales,
-      commissions: runningCommissions,
-      tickets: runningTickets,
+      runningSales: sales,
+      runningCommissions: commissions,
+      runningTickets: tickets,
+      points: [
+        ...state.points,
+        {
+          day: point.day,
+          sales,
+          commissions,
+          tickets,
+        },
+      ],
     };
-  });
+  }, {
+    runningSales: 0,
+    runningCommissions: 0,
+    runningTickets: 0,
+    points: [] as Array<{ day: string; sales: number; commissions: number; tickets: number }>,
+  }).points;
 
   const salesCurvePath = sparklinePath(cumulativeDailyPerformance.map((point) => point.sales), 280, 80);
   const commissionCurvePath = sparklinePath(cumulativeDailyPerformance.map((point) => point.commissions), 280, 80);
-  const salesStart = cumulativeDailyPerformance[0]?.sales ?? 0;
+  const firstPointWithSales = cumulativeDailyPerformance.find((point) => point.sales > 0);
+  const firstPointWithCommissions = cumulativeDailyPerformance.find((point) => point.commissions > 0);
+  const salesStart = firstPointWithSales?.sales ?? cumulativeDailyPerformance[0]?.sales ?? 0;
   const salesEnd = cumulativeDailyPerformance[cumulativeDailyPerformance.length - 1]?.sales ?? 0;
   const salesTrendPercent = salesStart > 0 ? ((salesEnd - salesStart) / salesStart) * 100 : salesEnd > 0 ? 100 : 0;
-  const commissionStart = cumulativeDailyPerformance[0]?.commissions ?? 0;
+  const commissionStart = firstPointWithCommissions?.commissions ?? cumulativeDailyPerformance[0]?.commissions ?? 0;
   const commissionEnd = cumulativeDailyPerformance[cumulativeDailyPerformance.length - 1]?.commissions ?? 0;
   const commissionTrendPercent = commissionStart > 0
     ? ((commissionEnd - commissionStart) / commissionStart) * 100
@@ -459,14 +389,12 @@ export default async function TicketsPage({
   const maxTopAirlineSales = topAirlineBars.reduce((max, item) => Math.max(max, item.sales), 0);
   const maxTopAgencySales = topAgencyBars.reduce((max, item) => Math.max(max, item.sales), 0);
 
-  const selectedDayTotal = selectedDaySales._sum.amount ?? 0;
-  const previousDayTotal = previousDaySales._sum.amount ?? 0;
-  const dayProgressPercent = previousDayTotal > 0
-    ? ((selectedDayTotal - previousDayTotal) / previousDayTotal) * 100
-    : selectedDayTotal > 0
+  const periodProgressPercent = salesStart > 0
+    ? ((salesEnd - salesStart) / salesStart) * 100
+    : salesEnd > 0
       ? 100
       : 0;
-  const dayProgressLabel = `${dayProgressPercent >= 0 ? "+" : ""}${dayProgressPercent.toFixed(1)}%`;
+  const periodProgressLabel = `${periodProgressPercent >= 0 ? "+" : ""}${periodProgressPercent.toFixed(1)}%`;
 
   const airFastAirline = airlineTracking.find((airline) => airline.code === "FST");
   const airFastTicketCount = airFastAirline
@@ -544,8 +472,8 @@ export default async function TicketsPage({
         <KpiCard label="Commissions" value={`${totalCommissions.toFixed(2)} USD`} />
         <KpiCard
           label="Marge de progression"
-          value={dayProgressLabel}
-          hint={`J: ${selectedDayTotal.toFixed(2)} USD • J-1: ${previousDayTotal.toFixed(2)} USD`}
+          value={periodProgressLabel}
+          hint={`Début: ${salesStart.toFixed(2)} USD • Fin: ${salesEnd.toFixed(2)} USD`}
         />
       </div>
 
@@ -560,7 +488,7 @@ export default async function TicketsPage({
               </p>
             </div>
             <p className="text-sm font-semibold">{formatCurrency(salesEnd)}</p>
-            <p className="mb-2 text-[11px] text-black/60 dark:text-white/60">Cumul historique • Début {formatCurrency(salesStart)}</p>
+            <p className="mb-2 text-[11px] text-black/60 dark:text-white/60">Cumul période • Début {formatCurrency(salesStart)}</p>
             <svg viewBox="0 0 280 80" className="h-20 w-full">
               <path d={salesCurvePath} fill="none" stroke="currentColor" strokeWidth="2.2" className="text-black dark:text-white" />
             </svg>
@@ -578,7 +506,7 @@ export default async function TicketsPage({
               </p>
             </div>
             <p className="text-sm font-semibold">{formatCurrency(commissionEnd)}</p>
-            <p className="mb-2 text-[11px] text-black/60 dark:text-white/60">Cumul historique • Début {formatCurrency(commissionStart)}</p>
+            <p className="mb-2 text-[11px] text-black/60 dark:text-white/60">Cumul période • Début {formatCurrency(commissionStart)}</p>
             <svg viewBox="0 0 280 80" className="h-20 w-full">
               <path d={commissionCurvePath} fill="none" stroke="currentColor" strokeWidth="2.2" className="text-black/70 dark:text-white/70" />
             </svg>
