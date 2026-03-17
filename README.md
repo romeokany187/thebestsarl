@@ -192,4 +192,26 @@ SMTP_USER="your-smtp-user@gmail.com"
 SMTP_PASS="your-gmail-app-password"
 MAIL_FROM_NAME="THEBEST SARL"
 MAIL_FROM_EMAIL="your-smtp-user@gmail.com"
+CRON_SECRET="change-me-cron-secret"
+```
+
+## Rapports automatiques (journalier / hebdomadaire / mensuel)
+
+Le système envoie automatiquement aux administrateurs un résumé des:
+- présences (présents, retards, heures supp., bureau vs hors site),
+- ventes de billets,
+- statuts de paiement (payé / partiel / non payé).
+
+Configuration:
+- définir `CRON_SECRET` dans Vercel (même valeur utilisée par les crons),
+- vérifier la configuration SMTP (`SMTP_*`, `MAIL_FROM_*`),
+- le fichier `vercel.json` programme les appels suivants:
+	- `/api/cron/reports/daily`
+	- `/api/cron/reports/weekly`
+	- `/api/cron/reports/monthly`
+
+Test manuel (local ou prod via curl):
+
+```bash
+curl -H "Authorization: Bearer <CRON_SECRET>" https://<your-domain>/api/cron/reports/daily
 ```
