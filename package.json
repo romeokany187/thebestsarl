@@ -9,7 +9,8 @@
     "lint": "eslint",
     "db:generate": "prisma generate",
     "db:push": "prisma db push",
-    "db:seed": "tsx prisma/seed.ts"
+    "db:seed": "tsx prisma/seed.ts",
+    "db:reset:operational": "tsx scripts/reset-operational-data.ts"
   },
   "dependencies": {
     "@pdf-lib/fontkit": "^1.1.1",
