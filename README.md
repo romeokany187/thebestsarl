@@ -144,6 +144,43 @@ GOOGLE_CLIENT_SECRET=<google-client-secret>
 - `npm run db:generate` : génération client Prisma
 - `npm run db:push` : synchronisation schéma DB
 - `npm run db:seed` : données de démonstration
+- `npm run db:import:tickets:excel -- <fichier.xlsx>` : import en masse des billets depuis Excel
+
+## Import en masse des billets depuis Excel
+
+Pour charger les billets historiques (janvier → hier) sans encodage manuel:
+
+1. Préparer un fichier Excel (`.xlsx`) avec une feuille contenant au minimum:
+	- `ticketNumber` (ou `PNR`),
+	- `amount` (ou `montant`/`prix`),
+	- vendeur (`sellerEmail` recommandé, sinon `sellerName`),
+	- compagnie (`airlineCode` ou `airlineName`),
+	- dates (`soldAt`/`date vente`, `travelDate`/`date voyage`).
+
+2. Lancer d'abord une simulation:
+
+```bash
+npm run db:import:tickets:excel -- ./imports/billets.xlsx --dry-run
+```
+
+3. Exécuter l'import réel:
+
+```bash
+npm run db:import:tickets:excel -- ./imports/billets.xlsx
+```
+
+Options utiles:
+
+```bash
+# feuille spécifique
+npm run db:import:tickets:excel -- ./imports/billets.xlsx --sheet Feuil1
+
+# vendeur par défaut si certaines lignes n'ont pas sellerEmail/sellerName
+npm run db:import:tickets:excel -- ./imports/billets.xlsx --default-seller-email commercial@thebestsarl.com
+
+# année cible pour le filtre janvier -> hier
+npm run db:import:tickets:excel -- ./imports/billets.xlsx --year 2026
+```
 
 ## Git + Vercel
 
