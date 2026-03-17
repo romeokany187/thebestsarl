@@ -32,21 +32,6 @@ type Totals = {
   commission: number;
 };
 
-type AirlineRuleLite = {
-  commissionMode: CommissionMode;
-  depositStockTargetAmount: number | null;
-  batchCommissionAmount: number | null;
-  startsAt: Date;
-  endsAt: Date | null;
-};
-
-type AirlineLite = {
-  id: string;
-  code: string;
-  name: string;
-  commissionRules: AirlineRuleLite[];
-};
-
 function parseArgs(): ParsedArgs {
   const args = process.argv.slice(2);
   const fileArg = args.find((arg) => !arg.startsWith("--"));
@@ -257,13 +242,7 @@ function slugifyName(value: string) {
 function isCaaLike(airline: { code: string; name: string }) {
   const code = airline.code.trim().toUpperCase();
   const name = normalizeHeader(airline.name);
-  return code === "CAA" || name === "caa";
-}
-
-function isAirCongoLike(airline: { code: string; name: string }) {
-  const code = airline.code.trim().toUpperCase();
-  const name = normalizeHeader(airline.name);
-  return code === "ACG" || name.includes("aircongo");
+  return code === "ACG" || code === "CAA" || name.includes("aircongo") || name.includes("caa");
 }
 
 function isAirFastLike(airline: { code: string; name: string }) {
@@ -421,24 +400,7 @@ async function main() {
 
   const [users, airlines, ticketCounts] = await Promise.all([
     prisma.user.findMany({ select: { id: true, email: true, name: true } }),
-    prisma.airline.findMany({
-      select: {
-        id: true,
-        code: true,
-        name: true,
-        commissionRules: {
-          where: { isActive: true },
-          orderBy: { startsAt: "desc" },
-          select: {
-            commissionMode: true,
-            depositStockTargetAmount: true,
-            batchCommissionAmount: true,
-            startsAt: true,
-            endsAt: true,
-          },
-        },
-      },
-    }),
+    prisma.airline.findMany({ select: { id: true, code: true, name: true } }),
     prisma.ticketSale.groupBy({ by: ["airlineId"], _count: { _all: true } }),
   ]);
 
@@ -454,8 +416,6 @@ async function main() {
   const airlineByName = new Map(airlines.map((airline) => [airline.name.trim().toLowerCase(), airline]));
   const usedAirlineCodes = new Set(airlines.map((airline) => airline.code.trim().toUpperCase()));
   const ticketCountByAirlineId = new Map(ticketCounts.map((entry) => [entry.airlineId, entry._count._all]));
-  const caaImportedSalesByAirline = new Map<string, Array<{ soldAtTs: number; amount: number; sequence: number }>>();
-  let importSequence = 0;
 
   const summary: ImportSummary = {
     sheetsProcessed: 0,
@@ -606,35 +566,20 @@ async function main() {
         const airlineNameRaw = asString(pickValue(row, ["airlineName", "compagnie", "airline"])) ?? "Compagnie inconnue";
         const airlineCode = airlineCodeRaw?.toUpperCase() ?? null;
 
-        let airline: AirlineLite | null = airlineCode ? airlineByCode.get(airlineCode) ?? null : null;
+        let airline = airlineCode ? airlineByCode.get(airlineCode) : null;
         if (!airline && airlineNameRaw) {
           airline = airlineByName.get(airlineNameRaw.toLowerCase()) ?? null;
         }
 
         if (!airline) {
           const code = airlineCode ?? makeAirlineCode(airlineNameRaw, usedAirlineCodes);
-          const createdAirline: AirlineLite = args.dryRun
-            ? { id: `dry-${code}`, code, name: airlineNameRaw, commissionRules: [] }
+          const createdAirline = args.dryRun
+            ? { id: `dry-${code}`, code, name: airlineNameRaw }
             : await prisma.airline.upsert({
               where: { code },
               update: { name: airlineNameRaw },
               create: { code, name: airlineNameRaw },
-              select: {
-                id: true,
-                code: true,
-                name: true,
-                commissionRules: {
-                  where: { isActive: true },
-                  orderBy: { startsAt: "desc" },
-                  select: {
-                    commissionMode: true,
-                    depositStockTargetAmount: true,
-                    batchCommissionAmount: true,
-                    startsAt: true,
-                    endsAt: true,
-                  },
-                },
-              },
+              select: { id: true, code: true, name: true },
             });
 
           airline = createdAirline;
@@ -642,61 +587,10 @@ async function main() {
           airlineByName.set(createdAirline.name.toLowerCase(), createdAirline);
         }
 
-        if (!airline) {
-          throw new Error("Compagnie introuvable après résolution.");
-        }
-
         let commissionAmount = commissionAmountFromFile;
         let commissionRateUsed = commissionRateFromFile ?? (commissionBaseAmount > 0 ? (commissionAmount / commissionBaseAmount) * 100 : 0);
 
         if (isCaaLike(airline)) {
-          importSequence += 1;
-          const soldAtTs = soldAt.getTime();
-          const activeCaaRule = (airline.commissionRules ?? []).find((rule) => {
-            if (rule.commissionMode !== CommissionMode.AFTER_DEPOSIT) return false;
-            if ((rule.depositStockTargetAmount ?? 0) <= 0) return false;
-            if ((rule.batchCommissionAmount ?? 0) <= 0) return false;
-            if (rule.startsAt > soldAt) return false;
-            if (rule.endsAt && rule.endsAt < soldAt) return false;
-            return true;
-          });
-
-          if (activeCaaRule) {
-            const historicalBefore = (
-              await prisma.ticketSale.aggregate({
-                where: {
-                  airlineId: airline.id,
-                  soldAt: { lt: soldAt },
-                },
-                _sum: { amount: true },
-              })
-            )._sum.amount ?? 0;
-
-            const inRunSales = caaImportedSalesByAirline.get(airline.id) ?? [];
-            const inRunBefore = inRunSales.reduce((sum, entry) => {
-              if (entry.soldAtTs < soldAtTs) return sum + entry.amount;
-              if (entry.soldAtTs === soldAtTs && entry.sequence < importSequence) return sum + entry.amount;
-              return sum;
-            }, 0);
-
-            const consumedBefore = historicalBefore + inRunBefore;
-            const targetAmount = activeCaaRule.depositStockTargetAmount ?? 0;
-            const batchAmount = activeCaaRule.batchCommissionAmount ?? 0;
-            const batchesBefore = Math.floor(consumedBefore / targetAmount);
-            const batchesAfter = Math.floor((consumedBefore + amount) / targetAmount);
-            const newBatches = Math.max(0, batchesAfter - batchesBefore);
-
-            commissionAmount = newBatches * batchAmount;
-            commissionRateUsed = amount > 0 ? (commissionAmount / amount) * 100 : 0;
-          } else {
-            commissionAmount = commissionAmountFromFile;
-            commissionRateUsed = commissionRateFromFile ?? (commissionBaseAmount > 0 ? (commissionAmount / commissionBaseAmount) * 100 : 0);
-          }
-
-          const existing = caaImportedSalesByAirline.get(airline.id) ?? [];
-          existing.push({ soldAtTs, amount, sequence: importSequence });
-          caaImportedSalesByAirline.set(airline.id, existing);
-        } else if (isAirCongoLike(airline)) {
           commissionAmount = commissionBaseAmount * 0.05;
           commissionRateUsed = 5;
         } else if (isAirFastLike(airline)) {
