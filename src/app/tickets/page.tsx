@@ -386,9 +386,6 @@ export default async function TicketsPage({
     return ticket.commissionAmount ?? ticket.amount * (ticket.commissionRateUsed / 100);
   };
 
-  const totalSales = ticketsForMetrics.reduce((sum, ticket) => sum + ticket.amount, 0);
-  const totalCommissions = ticketsForMetrics.reduce((sum, ticket) => sum + metricCommissionOf(ticket), 0);
-  const totalTickets = ticketsForMetrics.length;
   const monitorCurrentTotalSales = monitorCurrentTickets.reduce((sum, ticket) => sum + ticket.amount, 0);
   const monitorCurrentTotalCommissions = monitorCurrentTickets.reduce((sum, ticket) => sum + monitorCurrentCommissionOf(ticket), 0);
   const monitorCurrentTotalTickets = monitorCurrentTickets.length;
