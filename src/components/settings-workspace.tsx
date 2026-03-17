@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, useState } from "react";
 import type { AppRole } from "@/lib/rbac";
 
 type Props = {
@@ -16,34 +16,28 @@ export function SettingsWorkspace({ role, initialName, initialEmail }: Props) {
   const [profileStatus, setProfileStatus] = useState("");
   const [savingProfile, setSavingProfile] = useState(false);
 
-  const [exportFormat, setExportFormat] = useState<ExportFormat>("PDF");
+  const [exportFormat, setExportFormat] = useState<ExportFormat>(() => {
+    if (typeof window === "undefined") return "PDF";
+    const saved = localStorage.getItem("default-export-format");
+    return (saved === "PDF" || saved === "CSV" || saved === "XLSX") ? (saved as ExportFormat) : "PDF";
+  });
   const [prefsStatus, setPrefsStatus] = useState("");
   const [adminStatus, setAdminStatus] = useState("");
-  const [adminDefaultPeriod, setAdminDefaultPeriod] = useState("month");
-  const [adminStrictAudit, setAdminStrictAudit] = useState(true);
-  const [adminCompactTables, setAdminCompactTables] = useState(false);
-
-  useEffect(() => {
-    const savedExport = localStorage.getItem("default-export-format");
-
-    if (savedExport === "PDF" || savedExport === "CSV" || savedExport === "XLSX") {
-      setExportFormat(savedExport);
-    }
-
-    const savedPeriod = localStorage.getItem("admin-default-period");
-    const savedStrict = localStorage.getItem("admin-strict-audit");
-    const savedCompact = localStorage.getItem("admin-compact-tables");
-
-    if (savedPeriod === "date" || savedPeriod === "week" || savedPeriod === "month" || savedPeriod === "year") {
-      setAdminDefaultPeriod(savedPeriod);
-    }
-    if (savedStrict === "true" || savedStrict === "false") {
-      setAdminStrictAudit(savedStrict === "true");
-    }
-    if (savedCompact === "true" || savedCompact === "false") {
-      setAdminCompactTables(savedCompact === "true");
-    }
-  }, []);
+  const [adminDefaultPeriod, setAdminDefaultPeriod] = useState<string>(() => {
+    if (typeof window === "undefined") return "month";
+    const saved = localStorage.getItem("admin-default-period");
+    return (saved === "date" || saved === "week" || saved === "month" || saved === "year") ? saved : "month";
+  });
+  const [adminStrictAudit, setAdminStrictAudit] = useState<boolean>(() => {
+    if (typeof window === "undefined") return true;
+    const saved = localStorage.getItem("admin-strict-audit");
+    return saved === null ? true : saved === "true";
+  });
+  const [adminCompactTables, setAdminCompactTables] = useState<boolean>(() => {
+    if (typeof window === "undefined") return false;
+    const saved = localStorage.getItem("admin-compact-tables");
+    return saved === "true";
+  });
 
   function saveLocalPreferences(nextExport: ExportFormat) {
     localStorage.setItem("default-export-format", nextExport);
@@ -83,7 +77,7 @@ export function SettingsWorkspace({ role, initialName, initialEmail }: Props) {
     <div className="grid gap-4 md:grid-cols-2">
       <section className="rounded-2xl border border-black/10 bg-white p-5 shadow-sm dark:border-white/10 dark:bg-zinc-900">
         <h2 className="text-lg font-semibold">Profil utilisateur</h2>
-        <p className="mt-2 text-sm text-black/65 dark:text-white/65">Mettre à jour votre nom d'affichage.</p>
+        <p className="mt-2 text-sm text-black/65 dark:text-white/65">Mettre à jour votre nom d&apos;affichage.</p>
         <form onSubmit={onSaveProfile} className="mt-4 grid gap-2">
           <label className="text-xs font-semibold uppercase tracking-wide text-black/60 dark:text-white/60">Nom affiché</label>
           <input
@@ -113,7 +107,7 @@ export function SettingsWorkspace({ role, initialName, initialEmail }: Props) {
 
       <section className="rounded-2xl border border-black/10 bg-white p-5 shadow-sm dark:border-white/10 dark:bg-zinc-900">
         <h2 className="text-lg font-semibold">Exports</h2>
-        <p className="mt-2 text-sm text-black/65 dark:text-white/65">Définir le format d'export par défaut.</p>
+        <p className="mt-2 text-sm text-black/65 dark:text-white/65">Définir le format d&apos;export par défaut.</p>
         <div className="mt-4 grid gap-2">
           <label className="text-xs font-semibold uppercase tracking-wide text-black/60 dark:text-white/60">Format par défaut</label>
           <select

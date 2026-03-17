@@ -120,7 +120,7 @@ export function ReportsForm({ users }: { users: UserOption[] }) {
 
   useEffect(() => {
     if (!selectedAuthor) {
-      setReportTitle("");
+      setReportTitle(""); // eslint-disable-line react-hooks/set-state-in-effect
       return;
     }
 

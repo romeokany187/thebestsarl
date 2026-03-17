@@ -220,7 +220,7 @@ export default async function ArchivesPage({
         <ul className="space-y-2 text-sm text-black/70 dark:text-white/70">
           <li>1. Choisissez le <span className="font-semibold">mode</span>: Journalier, Hebdomadaire, Mensuel ou Annuel.</li>
           <li>2. Sélectionnez la <span className="font-semibold">date</span> correspondant au mode choisi.</li>
-          <li>3. Filtrez la <span className="font-semibold">catégorie</span> (dossier) ou laissez "Toutes".</li>
+          <li>3. Filtrez la <span className="font-semibold">catégorie</span> (dossier) ou laissez &ldquo;Toutes&rdquo;.</li>
           <li>4. Cliquez sur <span className="font-semibold">Générer PDF</span> pour obtenir le registre des documents archivés.</li>
         </ul>
       </section>

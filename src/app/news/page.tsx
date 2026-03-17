@@ -84,7 +84,7 @@ export default async function NewsPage() {
         <aside className="space-y-4">
           {role === "ADMIN" ? <NewsPublisher /> : null}
           <section className="rounded-2xl border border-black/10 bg-white p-4 shadow-sm dark:border-white/10 dark:bg-zinc-900">
-            <h2 className="text-sm font-semibold">Règles d'accès</h2>
+            <h2 className="text-sm font-semibold">Règles d&apos;accès</h2>
             <p className="mt-2 text-xs text-black/65 dark:text-white/65">
               Lecture: tous les profils autorisés.
             </p>

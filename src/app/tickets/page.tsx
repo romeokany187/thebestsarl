@@ -183,9 +183,7 @@ export default async function TicketsPage({
   const resolvedSearchParams = (await searchParams) ?? {};
   const range = dateRangeFromParams(resolvedSearchParams);
   const now = new Date();
-  const currentMonth = now.toISOString().slice(0, 7);
   const currentDate = now.toISOString().slice(0, 10);
-  const currentYear = String(now.getUTCFullYear());
   const currentStartDate = resolvedSearchParams.startDate ?? currentDate;
   const currentEndDate = resolvedSearchParams.endDate ?? currentStartDate;
   const { session, role } = await requirePageModuleAccess("tickets", ["ADMIN", "MANAGER", "EMPLOYEE", "ACCOUNTANT"]);

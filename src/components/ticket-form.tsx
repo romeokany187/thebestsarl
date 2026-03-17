@@ -142,7 +142,7 @@ export function TicketForm({
   );
 
   useEffect(() => {
-    setForm((prev) => {
+    setForm((prev) => { // eslint-disable-line react-hooks/set-state-in-effect
       if (!prev.payerName) {
         return { ...prev, payerName: clientPayerValue };
       }
@@ -224,7 +224,7 @@ export function TicketForm({
             onClick={resetForm}
             className="rounded-md border border-black/15 px-2 py-1 text-xs hover:bg-black/5 dark:border-white/20 dark:hover:bg-white/10"
           >
-            Annuler l'édition
+            Annuler l&apos;édition
           </button>
         ) : null}
       </div>
