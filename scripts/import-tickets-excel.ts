@@ -539,17 +539,25 @@ async function main() {
           airlineByName.set(createdAirline.name.toLowerCase(), createdAirline);
         }
 
-        let commissionAmount = commissionAmountFromFile;
-        let commissionRateUsed = commissionRateFromFile ?? (commissionBaseAmount > 0 ? (commissionAmount / commissionBaseAmount) * 100 : 0);
+        const isMarchImport = args.month === 3;
+        const hasCommissionFromFile = commissionAmountFromFile > 0;
 
-        if (isCaaLike(airline)) {
-          commissionAmount = commissionBaseAmount * 0.05;
-          commissionRateUsed = 5;
-        } else if (isAirFastLike(airline)) {
-          const nextAirfastTicketNumber = (ticketCountByAirlineId.get(airline.id) ?? 0) + 1;
-          ticketCountByAirlineId.set(airline.id, nextAirfastTicketNumber);
-          commissionAmount = nextAirfastTicketNumber % 13 === 0 ? amount : 0;
-          commissionRateUsed = nextAirfastTicketNumber % 13 === 0 ? 100 : 0;
+        let commissionAmount = 0;
+        let commissionRateUsed = 0;
+
+        if (!isMarchImport) {
+          if (hasCommissionFromFile) {
+            commissionAmount = commissionAmountFromFile;
+            commissionRateUsed = commissionRateFromFile ?? 0;
+          } else if (isCaaLike(airline)) {
+            commissionAmount = commissionBaseAmount * 0.05;
+            commissionRateUsed = 5;
+          } else if (isAirFastLike(airline)) {
+            const nextAirfastTicketNumber = (ticketCountByAirlineId.get(airline.id) ?? 0) + 1;
+            ticketCountByAirlineId.set(airline.id, nextAirfastTicketNumber);
+            commissionAmount = nextAirfastTicketNumber % 13 === 0 ? amount : 0;
+            commissionRateUsed = nextAirfastTicketNumber % 13 === 0 ? 100 : 0;
+          }
         }
 
         const seen = (pnrSequence.get(ticketNumber) ?? 0) + 1;
@@ -581,7 +589,7 @@ async function main() {
           agencyMarkupPercent: 0,
           agencyMarkupAmount,
           commissionBaseAmount,
-          commissionCalculationStatus: CommissionCalculationStatus.FINAL,
+          commissionCalculationStatus: isMarchImport ? CommissionCalculationStatus.ESTIMATED : CommissionCalculationStatus.FINAL,
           commissionRateUsed,
           commissionAmount,
           commissionModeApplied: CommissionMode.IMMEDIATE,
