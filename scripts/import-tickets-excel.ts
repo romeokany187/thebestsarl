@@ -1,5 +1,6 @@
-import { CommissionCalculationStatus, CommissionMode, PaymentStatus, PrismaClient, SaleNature, TravelClass, type Prisma } from "@prisma/client";
+import { CommissionCalculationStatus, CommissionMode, JobTitle, PaymentStatus, PrismaClient, Role, SaleNature, TravelClass, type Prisma } from "@prisma/client";
 import * as XLSX from "xlsx";
+import { hashSync } from "bcryptjs";
 
 const prisma = new PrismaClient();
 
@@ -11,9 +12,11 @@ type ParsedArgs = {
   dryRun: boolean;
   defaultSellerEmail?: string;
   year: number;
+  month: number;
 };
 
 type ImportSummary = {
+  sheetsProcessed: number;
   totalRows: number;
   skippedEmpty: number;
   skippedOutsideRange: number;
@@ -29,7 +32,9 @@ function parseArgs(): ParsedArgs {
   const dryRun = args.includes("--dry-run");
   const defaultSellerEmail = readFlagValue(args, "--default-seller-email")?.trim().toLowerCase();
   const yearRaw = readFlagValue(args, "--year");
+  const monthRaw = readFlagValue(args, "--month");
   const year = yearRaw ? Number.parseInt(yearRaw, 10) : new Date().getFullYear();
+  const month = monthRaw ? Number.parseInt(monthRaw, 10) : 1;
 
   if (!fileArg) {
     throw new Error("Usage: npm run db:import:tickets:excel -- <fichier.xlsx> [--sheet NomFeuille] [--year 2026] [--default-seller-email email@domaine.com] [--dry-run]");
@@ -39,12 +44,17 @@ function parseArgs(): ParsedArgs {
     throw new Error("Paramètre --year invalide.");
   }
 
+  if (!Number.isFinite(month) || month < 1 || month > 12) {
+    throw new Error("Paramètre --month invalide (1..12).");
+  }
+
   return {
     filePath: fileArg,
     sheetName,
     dryRun,
     defaultSellerEmail,
     year,
+    month,
   };
 }
 
@@ -61,6 +71,35 @@ function normalizeHeader(value: string) {
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
     .replace(/[^a-z0-9]/g, "");
+}
+
+function isLikelyDailySheet(name: string) {
+  const clean = name.trim();
+  return /^\d{1,2}\.\d{1,2}$/.test(clean) || /^\d{4}$/.test(clean);
+}
+
+function parseSheetDateFromName(sheetName: string, year: number) {
+  const clean = sheetName.trim();
+
+  const dotted = clean.match(/^(\d{1,2})\.(\d{1,2})$/);
+  if (dotted) {
+    const day = Number.parseInt(dotted[1], 10);
+    const month = Number.parseInt(dotted[2], 10);
+    if (day >= 1 && day <= 31 && month >= 1 && month <= 12) {
+      return new Date(Date.UTC(year, month - 1, day, 12, 0, 0, 0));
+    }
+  }
+
+  const compact = clean.match(/^(\d{2})(\d{2})$/);
+  if (compact) {
+    const day = Number.parseInt(compact[1], 10);
+    const month = Number.parseInt(compact[2], 10);
+    if (day >= 1 && day <= 31 && month >= 1 && month <= 12) {
+      return new Date(Date.UTC(year, month - 1, day, 12, 0, 0, 0));
+    }
+  }
+
+  return null;
 }
 
 function pickValue(row: Row, headers: string[]) {
@@ -151,18 +190,56 @@ function parsePaymentStatus(value: unknown): PaymentStatus {
     .toUpperCase()
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "");
-  if (["PAID", "PAYE", "PAYER", "PAYE(E)", "PAYE(E)"].includes(text)) return PaymentStatus.PAID;
+  if (["PAID", "PAYE", "PAYER", "PAYE(E)", "PAIE"].includes(text)) return PaymentStatus.PAID;
   if (["PARTIAL", "PARTIEL", "PARTIELLEMENT PAYE", "PARTIALLY PAID"].includes(text)) return PaymentStatus.PARTIAL;
+  if (["0", "NON PAYE", "IMPAYE", "UNPAID"].includes(text)) return PaymentStatus.UNPAID;
   return PaymentStatus.UNPAID;
 }
 
-function buildRange(year: number) {
+function buildRange(year: number, month: number) {
   const now = new Date();
-  const start = new Date(Date.UTC(year, 0, 1, 0, 0, 0, 0));
+  const start = new Date(Date.UTC(year, month - 1, 1, 0, 0, 0, 0));
+  const endOfMonth = new Date(Date.UTC(year, month, 0, 23, 59, 59, 999));
+
   const yesterday = new Date(now);
   yesterday.setUTCDate(yesterday.getUTCDate() - 1);
-  const end = new Date(Date.UTC(yesterday.getUTCFullYear(), yesterday.getUTCMonth(), yesterday.getUTCDate(), 23, 59, 59, 999));
+  const yesterdayEnd = new Date(Date.UTC(yesterday.getUTCFullYear(), yesterday.getUTCMonth(), yesterday.getUTCDate(), 23, 59, 59, 999));
+  const end = endOfMonth < yesterdayEnd ? endOfMonth : yesterdayEnd;
+
   return { start, end };
+}
+
+function normalizePersonKey(value: string) {
+  return value
+    .trim()
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/\s+/g, " ");
+}
+
+function slugifyName(value: string) {
+  const clean = value
+    .trim()
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]+/g, ".")
+    .replace(/^\.+|\.+$/g, "")
+    .slice(0, 32);
+  return clean || "emetteur";
+}
+
+function isCaaLike(airline: { code: string; name: string }) {
+  const code = airline.code.trim().toUpperCase();
+  const name = normalizeHeader(airline.name);
+  return code === "ACG" || code === "CAA" || name.includes("aircongo") || name.includes("caa");
+}
+
+function isAirFastLike(airline: { code: string; name: string }) {
+  const code = airline.code.trim().toUpperCase();
+  const name = normalizeHeader(airline.name);
+  return code === "FST" || name.includes("airfast") || name.includes("airfastcongo");
 }
 
 function makeAirlineCode(name: string, usedCodes: Set<string>) {
@@ -183,38 +260,83 @@ function makeAirlineCode(name: string, usedCodes: Set<string>) {
   return code;
 }
 
+function toRowsFromMatrix(sheet: XLSX.WorkSheet): Row[] {
+  const matrix = XLSX.utils.sheet_to_json<Array<unknown>>(sheet, { header: 1, raw: true, defval: null });
+  if (!matrix.length) return [];
+
+  let headerRowIndex = -1;
+  for (let i = 0; i < Math.min(matrix.length, 8); i += 1) {
+    const row = matrix[i] ?? [];
+    const normalized = row.map((cell) => normalizeHeader(String(cell ?? "")));
+    if (normalized.includes("pnr") && normalized.includes("emeteur") && normalized.includes("montant")) {
+      headerRowIndex = i;
+      break;
+    }
+  }
+
+  if (headerRowIndex === -1) {
+    return XLSX.utils.sheet_to_json<Row>(sheet, { defval: null, raw: true });
+  }
+
+  const headerRow = matrix[headerRowIndex] ?? [];
+  const headers = headerRow.map((cell, index) => {
+    const txt = asString(cell);
+    return txt ?? `col_${index}`;
+  });
+
+  const out: Row[] = [];
+  for (let i = headerRowIndex + 1; i < matrix.length; i += 1) {
+    const row = matrix[i] ?? [];
+    const obj: Row = {};
+    let hasAny = false;
+
+    headers.forEach((header, index) => {
+      const value = row[index] ?? null;
+      obj[header] = value;
+      if (!hasAny && asString(value)) {
+        hasAny = true;
+      }
+    });
+
+    if (hasAny) {
+      out.push(obj);
+    }
+  }
+
+  return out;
+}
+
 async function main() {
   const args = parseArgs();
-  const range = buildRange(args.year);
+  const range = buildRange(args.year, args.month);
 
   const workbook = XLSX.readFile(args.filePath, { cellDates: true });
-  const selectedSheet = args.sheetName ?? workbook.SheetNames[0];
+  const sheetNames = args.sheetName
+    ? [args.sheetName]
+    : workbook.SheetNames.filter((name) => isLikelyDailySheet(name));
 
-  if (!selectedSheet) {
-    throw new Error("Aucune feuille trouvée dans le fichier Excel.");
+  if (!sheetNames.length) {
+    throw new Error("Aucune feuille journalière détectée. Utilisez --sheet si nécessaire.");
   }
 
-  const sheet = workbook.Sheets[selectedSheet];
-  if (!sheet) {
-    throw new Error(`Feuille introuvable: ${selectedSheet}`);
-  }
-
-  const rows = XLSX.utils.sheet_to_json<Row>(sheet, { defval: null, raw: true });
-
-  const [users, airlines] = await Promise.all([
+  const [users, airlines, ticketCounts] = await Promise.all([
     prisma.user.findMany({ select: { id: true, email: true, name: true } }),
     prisma.airline.findMany({ select: { id: true, code: true, name: true } }),
+    prisma.ticketSale.groupBy({ by: ["airlineId"], _count: { _all: true } }),
   ]);
 
   const userByEmail = new Map(users.map((user) => [user.email.trim().toLowerCase(), user]));
-  const userByName = new Map(users.map((user) => [user.name.trim().toLowerCase(), user]));
+  const userByName = new Map(users.map((user) => [normalizePersonKey(user.name), user]));
+  const usedEmails = new Set(users.map((user) => user.email.trim().toLowerCase()));
 
   const airlineByCode = new Map(airlines.map((airline) => [airline.code.trim().toUpperCase(), airline]));
   const airlineByName = new Map(airlines.map((airline) => [airline.name.trim().toLowerCase(), airline]));
   const usedAirlineCodes = new Set(airlines.map((airline) => airline.code.trim().toUpperCase()));
+  const ticketCountByAirlineId = new Map(ticketCounts.map((entry) => [entry.airlineId, entry._count._all]));
 
   const summary: ImportSummary = {
-    totalRows: rows.length,
+    sheetsProcessed: 0,
+    totalRows: 0,
     skippedEmpty: 0,
     skippedOutsideRange: 0,
     created: 0,
@@ -224,142 +346,215 @@ async function main() {
 
   const errors: string[] = [];
 
-  for (let index = 0; index < rows.length; index += 1) {
-    const row = rows[index];
-    const line = index + 2;
+  async function resolveSeller(input: { sellerEmail: string | null; sellerName: string | null }) {
+    const sellerEmail = input.sellerEmail?.trim().toLowerCase() ?? null;
+    const sellerName = input.sellerName?.trim() ?? null;
 
-    const ticketNumber = asString(pickValue(row, ["ticketNumber", "ticket_number", "pnr", "code billet", "numero billet", "num billet"]));
-
-    if (!ticketNumber) {
-      summary.skippedEmpty += 1;
-      continue;
+    if (sellerEmail && userByEmail.has(sellerEmail)) {
+      return userByEmail.get(sellerEmail)!;
     }
 
-    try {
-      const soldAtRaw = pickValue(row, ["soldAt", "date vente", "sale date", "date"]);
-      const travelDateRaw = pickValue(row, ["travelDate", "date voyage", "departure date", "date depart"]);
-
-      const soldAt = asDate(soldAtRaw) ?? asDate(travelDateRaw) ?? new Date();
-      const travelDate = asDate(travelDateRaw) ?? soldAt;
-
-      if (!soldAt || !travelDate) {
-        throw new Error("Date de vente ou de voyage invalide.");
+    if (sellerName) {
+      const key = normalizePersonKey(sellerName);
+      if (userByName.has(key)) {
+        return userByName.get(key)!;
       }
+    }
 
-      if (soldAt < range.start || soldAt > range.end) {
-        summary.skippedOutsideRange += 1;
+    const fallbackEmail = args.defaultSellerEmail?.toLowerCase();
+    if (fallbackEmail && userByEmail.has(fallbackEmail)) {
+      return userByEmail.get(fallbackEmail)!;
+    }
+
+    if (!sellerName) {
+      throw new Error("Émetteur/vendeur absent.");
+    }
+
+    const sellerKey = normalizePersonKey(sellerName);
+    const slugBase = slugifyName(sellerName);
+    let email = `import.${slugBase}@thebest.local`;
+    let suffix = 1;
+    while (usedEmails.has(email)) {
+      email = `import.${slugBase}.${suffix}@thebest.local`;
+      suffix += 1;
+    }
+
+    if (args.dryRun) {
+      const drySeller = {
+        id: `dry-seller-${slugBase}`,
+        email,
+        name: sellerName,
+      };
+      userByEmail.set(email, drySeller);
+      userByName.set(sellerKey, drySeller);
+      usedEmails.add(email);
+      return drySeller;
+    }
+
+    const created = await prisma.user.create({
+      data: {
+        name: sellerName,
+        email,
+        passwordHash: hashSync("ImportTemp#2026", 10),
+        role: Role.EMPLOYEE,
+        jobTitle: JobTitle.COMMERCIAL,
+      },
+      select: { id: true, email: true, name: true },
+    });
+
+    userByEmail.set(created.email.toLowerCase(), created);
+    userByName.set(sellerKey, created);
+    usedEmails.add(created.email.toLowerCase());
+    return created;
+  }
+
+  for (const sheetName of sheetNames) {
+    const sheet = workbook.Sheets[sheetName];
+    if (!sheet) continue;
+
+    const rows = toRowsFromMatrix(sheet);
+    const sheetDate = parseSheetDateFromName(sheetName, args.year);
+    summary.sheetsProcessed += 1;
+
+    for (let index = 0; index < rows.length; index += 1) {
+      const row = rows[index];
+      summary.totalRows += 1;
+      const line = index + 2;
+
+      const ticketNumber = asString(pickValue(row, ["ticketNumber", "ticket_number", "pnr", "code billet", "numero billet", "num billet", "PNR"]));
+
+      if (!ticketNumber || ticketNumber.toUpperCase() === "PNR") {
+        summary.skippedEmpty += 1;
         continue;
       }
 
-      const customerName = asString(pickValue(row, ["customerName", "customer", "passenger", "nom client", "client", "nom passager"])) ?? "Client non renseigné";
-      const route = asString(pickValue(row, ["route", "itineraire", "trajet", "from-to"])) ?? "ROUTE-NR";
-      const amount = asNumber(pickValue(row, ["amount", "prix", "montant", "ticket amount"]));
-      if (!amount || amount <= 0) {
-        throw new Error("Montant billet invalide.");
-      }
+      try {
+        const soldAtRaw = pickValue(row, ["soldAt", "date vente", "sale date", "date"]);
+        const travelDateRaw = pickValue(row, ["travelDate", "date voyage", "departure date", "date depart"]);
 
-      const currency = (asString(pickValue(row, ["currency", "devise"])) ?? "USD").toUpperCase();
-      const baseFareAmount = asNumber(pickValue(row, ["baseFareAmount", "base fare", "basefare", "tarif de base"]));
-      const agencyMarkupAmount = asNumber(pickValue(row, ["agencyMarkupAmount", "majoration", "markup", "majoration agence"])) ?? 0;
+        const soldAt = sheetDate ?? asDate(soldAtRaw) ?? asDate(travelDateRaw) ?? new Date();
+        const travelDate = asDate(travelDateRaw) ?? soldAt;
 
-      const commissionAmount = asNumber(pickValue(row, ["commissionAmount", "commission", "commission brute"])) ?? 0;
-      const commissionRateFromFile = asNumber(pickValue(row, ["commissionRateUsed", "commissionRate", "taux commission"])) ?? null;
-
-      const commissionBaseAmount = baseFareAmount && baseFareAmount > 0 ? baseFareAmount : amount;
-      const commissionRateUsed = commissionRateFromFile ?? (commissionBaseAmount > 0 ? (commissionAmount / commissionBaseAmount) * 100 : 0);
-
-      const sellerEmail = asString(pickValue(row, ["sellerEmail", "commercialEmail", "agentEmail", "email vendeur", "email agent"]))?.toLowerCase();
-      const sellerName = asString(pickValue(row, ["sellerName", "commercial", "vendeur", "agent", "emetteur"]))?.toLowerCase();
-      const defaultSellerEmail = args.defaultSellerEmail?.toLowerCase();
-
-      const seller = (
-        (sellerEmail ? userByEmail.get(sellerEmail) : null)
-        ?? (sellerName ? userByName.get(sellerName) : null)
-        ?? (defaultSellerEmail ? userByEmail.get(defaultSellerEmail) : null)
-      );
-
-      if (!seller) {
-        throw new Error("Vendeur introuvable. Fournir sellerEmail/sellerName ou --default-seller-email.");
-      }
-
-      const airlineCodeRaw = asString(pickValue(row, ["airlineCode", "compagnieCode", "code compagnie", "code"]));
-      const airlineNameRaw = asString(pickValue(row, ["airlineName", "compagnie", "airline"])) ?? "Compagnie inconnue";
-      const airlineCode = airlineCodeRaw?.toUpperCase() ?? null;
-
-      let airline = airlineCode ? airlineByCode.get(airlineCode) : null;
-
-      if (!airline && airlineNameRaw) {
-        airline = airlineByName.get(airlineNameRaw.toLowerCase()) ?? null;
-      }
-
-      if (!airline) {
-        const code = airlineCode ?? makeAirlineCode(airlineNameRaw, usedAirlineCodes);
-        const createdAirline = args.dryRun
-          ? { id: `dry-${code}`, code, name: airlineNameRaw }
-          : await prisma.airline.upsert({
-            where: { code },
-            update: { name: airlineNameRaw },
-            create: { code, name: airlineNameRaw },
-            select: { id: true, code: true, name: true },
-          });
-
-        airline = createdAirline;
-        airlineByCode.set(createdAirline.code.toUpperCase(), createdAirline);
-        airlineByName.set(createdAirline.name.toLowerCase(), createdAirline);
-      }
-
-      const data: Prisma.TicketSaleUncheckedCreateInput = {
-        ticketNumber,
-        customerName,
-        route,
-        travelClass: parseTravelClass(pickValue(row, ["travelClass", "classe", "class"])),
-        travelDate,
-        soldAt,
-        amount,
-        baseFareAmount,
-        currency,
-        airlineId: airline.id,
-        sellerId: seller.id,
-        saleNature: parseSaleNature(pickValue(row, ["saleNature", "nature vente", "nature"])),
-        paymentStatus: parsePaymentStatus(pickValue(row, ["paymentStatus", "statut paiement", "statut", "etat paiement"])),
-        payerName: asString(pickValue(row, ["payerName", "payant", "nom payeur"])),
-        agencyMarkupPercent: 0,
-        agencyMarkupAmount,
-        commissionBaseAmount,
-        commissionCalculationStatus: CommissionCalculationStatus.FINAL,
-        commissionRateUsed,
-        commissionAmount,
-        commissionModeApplied: CommissionMode.IMMEDIATE,
-        notes: asString(pickValue(row, ["notes", "observation", "commentaire"])),
-      };
-
-      const existing = args.dryRun
-        ? null
-        : await prisma.ticketSale.findUnique({ where: { ticketNumber }, select: { id: true } });
-
-      if (args.dryRun) {
-        summary.created += 1;
-      } else {
-        await prisma.ticketSale.upsert({
-          where: { ticketNumber },
-          update: data,
-          create: data,
-        });
-        if (existing) {
-          summary.updated += 1;
-        } else {
-          summary.created += 1;
+        if (!soldAt || !travelDate) {
+          throw new Error("Date de vente ou de voyage invalide.");
         }
+
+        if (soldAt < range.start || soldAt > range.end) {
+          summary.skippedOutsideRange += 1;
+          continue;
+        }
+
+        const customerName = asString(pickValue(row, ["customerName", "customer", "passenger", "nom client", "client", "nom passager", "beneficiare", "beneficiaire"])) ?? "Client non renseigné";
+        const route = asString(pickValue(row, ["route", "itineraire", "trajet", "from-to", "itineriaire", "itinerare"])) ?? "ROUTE-NR";
+        const amount = asNumber(pickValue(row, ["amount", "prix", "montant", "ticket amount"]));
+        if (!amount || amount <= 0) {
+          throw new Error("Montant billet invalide.");
+        }
+
+        const currency = (asString(pickValue(row, ["currency", "devise"])) ?? "USD").toUpperCase();
+        const baseFareAmount = asNumber(pickValue(row, ["baseFareAmount", "base fare", "basefare", "tarif de base"]));
+        const agencyMarkupAmount = asNumber(pickValue(row, ["agencyMarkupAmount", "majoration", "markup", "majoration agence"])) ?? 0;
+
+        const commissionAmountFromFile = asNumber(pickValue(row, ["commissionAmount", "commission", "commission brute", "com", "comission", "commission mensuelle", "commission hebdo"])) ?? 0;
+        const commissionRateFromFile = asNumber(pickValue(row, ["commissionRateUsed", "commissionRate", "taux commission"])) ?? null;
+
+        const commissionBaseAmount = baseFareAmount && baseFareAmount > 0 ? baseFareAmount : amount;
+
+        const sellerEmail = asString(pickValue(row, ["sellerEmail", "commercialEmail", "agentEmail", "email vendeur", "email agent"]));
+        const sellerName = asString(pickValue(row, ["sellerName", "commercial", "vendeur", "agent", "emeteur", "emetteur", "emetteur/emitteur", "emitteur"]));
+        const seller = await resolveSeller({ sellerEmail, sellerName });
+
+        const airlineCodeRaw = asString(pickValue(row, ["airlineCode", "compagnieCode", "code compagnie", "code"]));
+        const airlineNameRaw = asString(pickValue(row, ["airlineName", "compagnie", "airline"])) ?? "Compagnie inconnue";
+        const airlineCode = airlineCodeRaw?.toUpperCase() ?? null;
+
+        let airline = airlineCode ? airlineByCode.get(airlineCode) : null;
+        if (!airline && airlineNameRaw) {
+          airline = airlineByName.get(airlineNameRaw.toLowerCase()) ?? null;
+        }
+
+        if (!airline) {
+          const code = airlineCode ?? makeAirlineCode(airlineNameRaw, usedAirlineCodes);
+          const createdAirline = args.dryRun
+            ? { id: `dry-${code}`, code, name: airlineNameRaw }
+            : await prisma.airline.upsert({
+              where: { code },
+              update: { name: airlineNameRaw },
+              create: { code, name: airlineNameRaw },
+              select: { id: true, code: true, name: true },
+            });
+
+          airline = createdAirline;
+          airlineByCode.set(createdAirline.code.toUpperCase(), createdAirline);
+          airlineByName.set(createdAirline.name.toLowerCase(), createdAirline);
+        }
+
+        let commissionAmount = commissionAmountFromFile;
+        let commissionRateUsed = commissionRateFromFile ?? (commissionBaseAmount > 0 ? (commissionAmount / commissionBaseAmount) * 100 : 0);
+
+        if (isCaaLike(airline)) {
+          commissionAmount = commissionBaseAmount * 0.05;
+          commissionRateUsed = 5;
+        } else if (isAirFastLike(airline)) {
+          const nextAirfastTicketNumber = (ticketCountByAirlineId.get(airline.id) ?? 0) + 1;
+          ticketCountByAirlineId.set(airline.id, nextAirfastTicketNumber);
+          commissionAmount = nextAirfastTicketNumber % 13 === 0 ? amount : 0;
+          commissionRateUsed = nextAirfastTicketNumber % 13 === 0 ? 100 : 0;
+        }
+
+        const data: Prisma.TicketSaleUncheckedCreateInput = {
+          ticketNumber,
+          customerName,
+          route,
+          travelClass: parseTravelClass(pickValue(row, ["travelClass", "classe", "class"])),
+          travelDate,
+          soldAt,
+          amount,
+          baseFareAmount,
+          currency,
+          airlineId: airline.id,
+          sellerId: seller.id,
+          saleNature: parseSaleNature(pickValue(row, ["saleNature", "nature vente", "nature"])),
+          paymentStatus: parsePaymentStatus(pickValue(row, ["paymentStatus", "statut paiement", "statut", "etat paiement"])),
+          payerName: asString(pickValue(row, ["payerName", "payant", "nom payeur"])),
+          agencyMarkupPercent: 0,
+          agencyMarkupAmount,
+          commissionBaseAmount,
+          commissionCalculationStatus: CommissionCalculationStatus.FINAL,
+          commissionRateUsed,
+          commissionAmount,
+          commissionModeApplied: CommissionMode.IMMEDIATE,
+          notes: asString(pickValue(row, ["notes", "observation", "commentaire"])),
+        };
+
+        const existing = args.dryRun
+          ? null
+          : await prisma.ticketSale.findUnique({ where: { ticketNumber }, select: { id: true } });
+
+        if (args.dryRun) {
+          summary.created += 1;
+        } else {
+          await prisma.ticketSale.upsert({
+            where: { ticketNumber },
+            update: data,
+            create: data,
+          });
+          if (existing) {
+            summary.updated += 1;
+          } else {
+            summary.created += 1;
+          }
+        }
+      } catch (error) {
+        summary.failed += 1;
+        errors.push(`[${sheetName}] Ligne ${line} (${ticketNumber}): ${error instanceof Error ? error.message : String(error)}`);
       }
-    } catch (error) {
-      summary.failed += 1;
-      errors.push(`Ligne ${line} (${ticketNumber}): ${error instanceof Error ? error.message : String(error)}`);
     }
   }
 
   console.log("Import billets terminé.");
   console.log(`Période traitée: ${range.start.toISOString().slice(0, 10)} -> ${range.end.toISOString().slice(0, 10)}`);
-  console.log(`Feuille: ${selectedSheet}`);
+  console.log(`Feuilles traitées: ${summary.sheetsProcessed}`);
   console.log(`Total lignes: ${summary.totalRows}`);
   console.log(`Ignorées (ticket vide): ${summary.skippedEmpty}`);
   console.log(`Ignorées (hors période): ${summary.skippedOutsideRange}`);
@@ -369,9 +564,9 @@ async function main() {
 
   if (errors.length > 0) {
     console.log("--- Détail erreurs ---");
-    errors.slice(0, 100).forEach((entry) => console.log(entry));
-    if (errors.length > 100) {
-      console.log(`... ${errors.length - 100} erreurs supplémentaires`);
+    errors.slice(0, 150).forEach((entry) => console.log(entry));
+    if (errors.length > 150) {
+      console.log(`... ${errors.length - 150} erreurs supplémentaires`);
     }
   }
 
