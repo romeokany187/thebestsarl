@@ -665,17 +665,17 @@ export default async function TicketsPage({
       <div className="mb-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <KpiCard
           label="Billets vendus"
-          value={String(totalTickets)}
+          value={String(monitorCurrentTotalTickets)}
           hint={`${previousMonthLabel}: ${comparisonTotalTickets} • Δ ${ticketsGrowthPercent >= 0 ? "+" : ""}${ticketsGrowthPercent.toFixed(1)}%`}
         />
         <KpiCard
           label="Ventes totales"
-          value={`${totalSales.toFixed(2)} USD`}
+          value={`${monitorCurrentTotalSales.toFixed(2)} USD`}
           hint={`${previousMonthLabel}: ${comparisonTotalSales.toFixed(2)} USD`}
         />
         <KpiCard
           label="Commissions"
-          value={`${totalCommissions.toFixed(2)} USD`}
+          value={`${monitorCurrentTotalCommissions.toFixed(2)} USD`}
           hint={`${previousMonthLabel}: ${comparisonTotalCommissions.toFixed(2)} USD`}
         />
         <KpiCard
