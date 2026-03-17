@@ -3,6 +3,7 @@ import { KpiCard } from "@/components/kpi-card";
 import { requirePageModuleAccess } from "@/lib/rbac";
 import { prisma } from "@/lib/prisma";
 import { ensureAirlineCatalog } from "@/lib/airline-catalog";
+import { computeCaaCommissionMap } from "@/lib/caa-commission";
 
 export const dynamic = "force-dynamic";
 
@@ -241,6 +242,8 @@ export default async function TicketsPage({
     prisma.ticketSale.findMany({
       where: roleTicketFilter,
       select: {
+        id: true,
+        airlineId: true,
         soldAt: true,
         amount: true,
         commissionAmount: true,
@@ -281,17 +284,78 @@ export default async function TicketsPage({
     }),
   ]);
 
+  const caaAirline = airlineTracking.find((airline) => airline.code === "CAA");
+  const caaRule = caaAirline?.commissionRules
+    .filter((rule) => rule.isActive && rule.commissionMode === "AFTER_DEPOSIT")
+    .sort((a, b) => b.startsAt.getTime() - a.startsAt.getTime())[0];
+  const caaTargetAmount = caaRule?.depositStockTargetAmount ?? 0;
+  const caaBatchCommission = caaRule?.batchCommissionAmount ?? 0;
+  const caaConsumed = caaConsumedAggregate._sum.amount ?? 0;
+  const caaLotsReached = caaTargetAmount > 0 ? Math.floor(caaConsumed / caaTargetAmount) : 0;
+  const caaCommissionEarned = caaLotsReached * caaBatchCommission;
+  const caaRemainder = caaTargetAmount > 0 ? caaConsumed % caaTargetAmount : 0;
+  const caaRemainingToNextLot = caaTargetAmount > 0
+    ? caaConsumed === 0
+      ? caaTargetAmount
+      : caaRemainder === 0
+        ? 0
+        : Math.max(0, caaTargetAmount - caaRemainder)
+    : 0;
+
+  const periodCaaCommissionMap = caaAirline
+    ? computeCaaCommissionMap({
+      periodTicketIds: ticketsForMetrics
+        .filter((ticket) => ticket.airlineId === caaAirline.id)
+        .map((ticket) => ticket.id),
+      orderedCaaTicketsUntilPeriodEnd: await prisma.ticketSale.findMany({
+        where: {
+          ...roleTicketFilter,
+          airlineId: caaAirline.id,
+          soldAt: { lt: range.end },
+        },
+        select: { id: true, soldAt: true, amount: true },
+        orderBy: [{ soldAt: "asc" }, { id: "asc" }],
+      }),
+      targetAmount: caaTargetAmount,
+      batchCommissionAmount: caaBatchCommission,
+    })
+    : new Map<string, number>();
+
+  const trendCaaCommissionMap = caaAirline
+    ? computeCaaCommissionMap({
+      periodTicketIds: ticketsForTrend
+        .filter((ticket) => ticket.airlineId === caaAirline.id)
+        .map((ticket) => ticket.id),
+      orderedCaaTicketsUntilPeriodEnd: ticketsForTrend
+        .filter((ticket) => ticket.airlineId === caaAirline.id)
+        .map((ticket) => ({ id: ticket.id, soldAt: ticket.soldAt, amount: ticket.amount })),
+      targetAmount: caaTargetAmount,
+      batchCommissionAmount: caaBatchCommission,
+    })
+    : new Map<string, number>();
+
+  const metricCommissionOf = (ticket: { id: string; airline: { code: string }; amount: number; commissionAmount: number | null; commissionRateUsed: number }) => {
+    if (ticket.airline.code === "CAA" && periodCaaCommissionMap.has(ticket.id)) {
+      return periodCaaCommissionMap.get(ticket.id) ?? 0;
+    }
+    return ticket.commissionAmount ?? ticket.amount * (ticket.commissionRateUsed / 100);
+  };
+
+  const trendCommissionOf = (ticket: { id: string; airlineId: string; amount: number; commissionAmount: number | null; commissionRateUsed: number }) => {
+    if (caaAirline && ticket.airlineId === caaAirline.id && trendCaaCommissionMap.has(ticket.id)) {
+      return trendCaaCommissionMap.get(ticket.id) ?? 0;
+    }
+    return ticket.commissionAmount ?? ticket.amount * (ticket.commissionRateUsed / 100);
+  };
+
   const totalSales = ticketsForMetrics.reduce((sum, ticket) => sum + ticket.amount, 0);
-  const totalCommissions = ticketsForMetrics.reduce(
-    (sum, ticket) => sum + (ticket.commissionAmount ?? ticket.amount * (ticket.commissionRateUsed / 100)),
-    0,
-  );
+  const totalCommissions = ticketsForMetrics.reduce((sum, ticket) => sum + metricCommissionOf(ticket), 0);
   const totalTickets = ticketsForMetrics.length;
 
   const salesByAirline = Array.from(
     ticketsForMetrics.reduce((map, ticket) => {
       const key = ticket.airline.code;
-      const commission = ticket.commissionAmount ?? ticket.amount * (ticket.commissionRateUsed / 100);
+      const commission = metricCommissionOf(ticket);
       const existing = map.get(key) ?? {
         code: ticket.airline.code,
         name: ticket.airline.name,
@@ -309,7 +373,7 @@ export default async function TicketsPage({
 
   const dailyPerformanceMap = ticketsForTrend.reduce((map, ticket) => {
     const key = new Date(ticket.soldAt).toISOString().slice(0, 10);
-    const commission = ticket.commissionAmount ?? ticket.amount * (ticket.commissionRateUsed / 100);
+    const commission = trendCommissionOf(ticket);
     const existing = map.get(key) ?? {
       day: key,
       sales: 0,
@@ -383,7 +447,7 @@ export default async function TicketsPage({
     ticketsForMetrics.reduce((map, ticket) => {
       const key = detectAgencyFromPayer(ticket.payerName);
       const existing = map.get(key) ?? { agency: key, tickets: 0, sales: 0, commissions: 0 };
-      const commission = ticket.commissionAmount ?? ticket.amount * (ticket.commissionRateUsed / 100);
+      const commission = metricCommissionOf(ticket);
       existing.tickets += 1;
       existing.sales += ticket.amount;
       existing.commissions += commission;
@@ -405,24 +469,6 @@ export default async function TicketsPage({
       ? 100
       : 0;
   const dayProgressLabel = `${dayProgressPercent >= 0 ? "+" : ""}${dayProgressPercent.toFixed(1)}%`;
-
-  const caaAirline = airlineTracking.find((airline) => airline.code === "CAA");
-  const caaRule = caaAirline?.commissionRules
-    .filter((rule) => rule.isActive && rule.commissionMode === "AFTER_DEPOSIT")
-    .sort((a, b) => b.startsAt.getTime() - a.startsAt.getTime())[0];
-  const caaTargetAmount = caaRule?.depositStockTargetAmount ?? 0;
-  const caaBatchCommission = caaRule?.batchCommissionAmount ?? 0;
-  const caaConsumed = caaConsumedAggregate._sum.amount ?? 0;
-  const caaLotsReached = caaTargetAmount > 0 ? Math.floor(caaConsumed / caaTargetAmount) : 0;
-  const caaCommissionEarned = caaLotsReached * caaBatchCommission;
-  const caaRemainder = caaTargetAmount > 0 ? caaConsumed % caaTargetAmount : 0;
-  const caaRemainingToNextLot = caaTargetAmount > 0
-    ? caaConsumed === 0
-      ? caaTargetAmount
-      : caaRemainder === 0
-        ? 0
-        : Math.max(0, caaTargetAmount - caaRemainder)
-    : 0;
 
   const airFastAirline = airlineTracking.find((airline) => airline.code === "FST");
   const airFastTicketCount = airFastAirline

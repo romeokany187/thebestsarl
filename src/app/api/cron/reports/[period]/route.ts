@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { PaymentStatus, PresenceLocationStatus } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { isMailConfigured, sendMailBatch } from "@/lib/mail";
+import { computeCaaCommissionMap } from "@/lib/caa-commission";
 
 type Frequency = "daily" | "weekly" | "monthly";
 type Params = { params: Promise<{ period: string }> };
@@ -261,6 +262,9 @@ export async function GET(request: NextRequest, { params }: Params) {
         },
       },
       select: {
+        id: true,
+        airlineId: true,
+        soldAt: true,
         amount: true,
         commissionAmount: true,
         commissionRateUsed: true,
@@ -271,6 +275,46 @@ export async function GET(request: NextRequest, { params }: Params) {
       },
     }),
   ]);
+
+  const caaAirline = await prisma.airline.findUnique({
+    where: { code: "CAA" },
+    select: {
+      id: true,
+      commissionRules: {
+        where: { isActive: true },
+        orderBy: { startsAt: "desc" },
+        select: {
+          commissionMode: true,
+          depositStockTargetAmount: true,
+          batchCommissionAmount: true,
+        },
+      },
+    },
+  });
+
+  const caaRule = caaAirline?.commissionRules.find((rule) => rule.commissionMode === "AFTER_DEPOSIT");
+  const caaCommissionMap = caaAirline && caaRule
+    ? computeCaaCommissionMap({
+      periodTicketIds: tickets.filter((ticket) => ticket.airlineId === caaAirline.id).map((ticket) => ticket.id),
+      orderedCaaTicketsUntilPeriodEnd: await prisma.ticketSale.findMany({
+        where: {
+          airlineId: caaAirline.id,
+          soldAt: { lt: range.end },
+        },
+        select: { id: true, soldAt: true, amount: true },
+        orderBy: [{ soldAt: "asc" }, { id: "asc" }],
+      }),
+      targetAmount: caaRule.depositStockTargetAmount ?? 0,
+      batchCommissionAmount: caaRule.batchCommissionAmount ?? 0,
+    })
+    : new Map<string, number>();
+
+  const ticketCommission = (ticket: { id: string; airlineId: string; amount: number; commissionAmount: number | null; commissionRateUsed: number }) => {
+    if (caaAirline && ticket.airlineId === caaAirline.id && caaCommissionMap.has(ticket.id)) {
+      return caaCommissionMap.get(ticket.id) ?? 0;
+    }
+    return ticket.commissionAmount ?? ticket.amount * (ticket.commissionRateUsed / 100);
+  };
 
   const reportsRecipient = getReportsRecipient();
 
@@ -294,10 +338,7 @@ export async function GET(request: NextRequest, { params }: Params) {
   };
 
   const totalSalesAmount = tickets.reduce((sum, ticket) => sum + ticket.amount, 0);
-  const totalCommission = tickets.reduce(
-    (sum, ticket) => sum + (ticket.commissionAmount ?? ticket.amount * (ticket.commissionRateUsed / 100)),
-    0,
-  );
+  const totalCommission = tickets.reduce((sum, ticket) => sum + ticketCommission(ticket), 0);
 
   const paidCount = tickets.filter((ticket) => ticket.paymentStatus === PaymentStatus.PAID).length;
   const partialCount = tickets.filter((ticket) => ticket.paymentStatus === PaymentStatus.PARTIAL).length;
