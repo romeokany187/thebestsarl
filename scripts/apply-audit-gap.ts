@@ -129,11 +129,16 @@ function parsePaymentStatus(value: unknown): PaymentStatus {
 
 function mapPayerToAgency(value: string | null) {
   const text = (value ?? "").trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-  if (text.includes("mbujimayi") || text.includes("mbujimai") || text.includes("mbuji mayi") || text.includes("mbuji-mayi")) {
+  const compact = text.replace(/[^a-z0-9]/g, "");
+
+  if (compact.includes("mbujimayi") || compact.includes("mbujimai")) {
     return "Agence MBUJIMAYI";
   }
-  if (text.includes("lubumbashi")) {
+  if (compact.includes("lubumbashi")) {
     return "Agence LUBUMBASHI";
+  }
+  if (compact.includes("hkservice")) {
+    return "HKSERVICE";
   }
   return "Agence de Kinshasa (Direction générale)";
 }
