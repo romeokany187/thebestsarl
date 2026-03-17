@@ -404,6 +404,10 @@ async function main() {
     prisma.ticketSale.groupBy({ by: ["airlineId"], _count: { _all: true } }),
   ]);
 
+  const existingTicketNumbers = new Set(
+    (await prisma.ticketSale.findMany({ select: { ticketNumber: true } })).map((ticket) => ticket.ticketNumber),
+  );
+
   const userByEmail = new Map(users.map((user) => [user.email.trim().toLowerCase(), user]));
   const userByName = new Map(users.map((user) => [normalizePersonKey(user.name), user]));
   const usedEmails = new Set(users.map((user) => user.email.trim().toLowerCase()));
@@ -598,7 +602,13 @@ async function main() {
 
         const seen = (pnrSequence.get(ticketNumber) ?? 0) + 1;
         pnrSequence.set(ticketNumber, seen);
-        const normalizedTicketNumber = seen === 1 ? ticketNumber : `${ticketNumber}-R${seen}`;
+
+        let suffix = seen;
+        let normalizedTicketNumber = suffix === 1 ? ticketNumber : `${ticketNumber}-R${suffix}`;
+        while (existingTicketNumbers.has(normalizedTicketNumber)) {
+          suffix += 1;
+          normalizedTicketNumber = `${ticketNumber}-R${suffix}`;
+        }
 
         const data: Prisma.TicketSaleUncheckedCreateInput = {
           ticketNumber: normalizedTicketNumber,
@@ -628,10 +638,6 @@ async function main() {
           ].filter(Boolean).join(" | ") || null,
         };
 
-        const existing = args.dryRun
-          ? null
-          : await prisma.ticketSale.findUnique({ where: { ticketNumber: normalizedTicketNumber }, select: { id: true } });
-
         januaryDailyTotals.tickets += 1;
         januaryDailyTotals.amount = round2(januaryDailyTotals.amount + amount);
         januaryDailyTotals.commission = round2(januaryDailyTotals.commission + commissionAmount);
@@ -639,16 +645,9 @@ async function main() {
         if (args.dryRun) {
           summary.created += 1;
         } else {
-          await prisma.ticketSale.upsert({
-            where: { ticketNumber },
-            update: data,
-            create: data,
-          });
-          if (existing) {
-            summary.updated += 1;
-          } else {
-            summary.created += 1;
-          }
+          await prisma.ticketSale.create({ data });
+          existingTicketNumbers.add(normalizedTicketNumber);
+          summary.created += 1;
         }
       } catch (error) {
         summary.failed += 1;
@@ -657,7 +656,6 @@ async function main() {
     }
   }
 
-  console.log("Import billets terminé.");
   console.log(`Période traitée: ${range.start.toISOString().slice(0, 10)} -> ${range.end.toISOString().slice(0, 10)}`);
   console.log(`Feuilles traitées: ${summary.sheetsProcessed}`);
   console.log(`Total lignes: ${summary.totalRows}`);
