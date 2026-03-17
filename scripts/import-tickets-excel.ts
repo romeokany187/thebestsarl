@@ -13,6 +13,7 @@ type ParsedArgs = {
   defaultSellerEmail?: string;
   year: number;
   month: number;
+  replaceMonth: boolean;
 };
 
 type ImportSummary = {
@@ -25,6 +26,12 @@ type ImportSummary = {
   failed: number;
 };
 
+type Totals = {
+  tickets: number;
+  amount: number;
+  commission: number;
+};
+
 function parseArgs(): ParsedArgs {
   const args = process.argv.slice(2);
   const fileArg = args.find((arg) => !arg.startsWith("--"));
@@ -33,11 +40,12 @@ function parseArgs(): ParsedArgs {
   const defaultSellerEmail = readFlagValue(args, "--default-seller-email")?.trim().toLowerCase();
   const yearRaw = readFlagValue(args, "--year");
   const monthRaw = readFlagValue(args, "--month");
+  const replaceMonth = args.includes("--replace-month");
   const year = yearRaw ? Number.parseInt(yearRaw, 10) : new Date().getFullYear();
   const month = monthRaw ? Number.parseInt(monthRaw, 10) : 1;
 
   if (!fileArg) {
-    throw new Error("Usage: npm run db:import:tickets:excel -- <fichier.xlsx> [--sheet NomFeuille] [--year 2026] [--default-seller-email email@domaine.com] [--dry-run]");
+    throw new Error("Usage: npm run db:import:tickets:excel -- <fichier.xlsx> [--sheet NomFeuille] [--year 2026] [--month 1] [--default-seller-email email@domaine.com] [--replace-month] [--dry-run]");
   }
 
   if (!Number.isFinite(year) || year < 2000 || year > 2100) {
@@ -55,6 +63,7 @@ function parseArgs(): ParsedArgs {
     defaultSellerEmail,
     year,
     month,
+    replaceMonth,
   };
 }
 
@@ -260,6 +269,71 @@ function makeAirlineCode(name: string, usedCodes: Set<string>) {
   return code;
 }
 
+function mapPayerToAgency(value: string | null) {
+  const text = (value ?? "").trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+  if (text.includes("mbujimayi") || text.includes("mbuji mayi") || text.includes("mbuji-mayi")) {
+    return "Agence MBUJIMAYI";
+  }
+  if (text.includes("lubumbashi")) {
+    return "Agence LUBUMBASHI";
+  }
+  return "Agence de Kinshasa (Direction générale)";
+}
+
+function readSheetRows(sheet: XLSX.WorkSheet) {
+  return XLSX.utils.sheet_to_json<Array<unknown>>(sheet, { header: 1, raw: true, defval: null });
+}
+
+function round2(value: number) {
+  return Math.round(value * 100) / 100;
+}
+
+function extractTotalsFromSummarySheet(sheet: XLSX.WorkSheet): Totals | null {
+  const rows = readSheetRows(sheet);
+  if (!rows.length) return null;
+
+  let headerIndex = -1;
+  for (let i = 0; i < Math.min(rows.length, 12); i += 1) {
+    const row = rows[i] ?? [];
+    const normalized = row.map((cell) => normalizeHeader(String(cell ?? "")));
+    const hasTickets = normalized.some((value) => value === "billets" || value.includes("billets"));
+    const hasAmount = normalized.some((value) => value === "montants" || value === "totaux" || value.includes("montant"));
+    const hasCommission = normalized.some((value) => value.includes("commission"));
+    if (hasTickets && hasAmount && hasCommission) {
+      headerIndex = i;
+      break;
+    }
+  }
+
+  if (headerIndex === -1) return null;
+
+  const header = rows[headerIndex] ?? [];
+  const normalizedHeader = header.map((cell) => normalizeHeader(String(cell ?? "")));
+
+  const ticketsCol = normalizedHeader.findIndex((value) => value === "billets" || value.includes("billets"));
+  const amountCol = normalizedHeader.findIndex((value) => value === "montants" || value === "totaux" || value.includes("montant"));
+  const commissionCol = normalizedHeader.findIndex((value) => value.includes("commission"));
+
+  if (ticketsCol < 0 || amountCol < 0 || commissionCol < 0) return null;
+
+  for (let i = headerIndex + 1; i < rows.length; i += 1) {
+    const row = rows[i] ?? [];
+    const firstText = String(row[0] ?? row[1] ?? "").toUpperCase();
+    if (!firstText.includes("TOTAL")) continue;
+
+    const tickets = asNumber(row[ticketsCol]) ?? 0;
+    const amount = asNumber(row[amountCol]) ?? 0;
+    const commission = asNumber(row[commissionCol]) ?? 0;
+    return {
+      tickets,
+      amount: round2(amount),
+      commission: round2(commission),
+    };
+  }
+
+  return null;
+}
+
 function toRowsFromMatrix(sheet: XLSX.WorkSheet): Row[] {
   const matrix = XLSX.utils.sheet_to_json<Array<unknown>>(sheet, { header: 1, raw: true, defval: null });
   if (!matrix.length) return [];
@@ -345,6 +419,21 @@ async function main() {
   };
 
   const errors: string[] = [];
+  const januaryDailyTotals: Totals = { tickets: 0, amount: 0, commission: 0 };
+  const pnrSequence = new Map<string, number>();
+
+  if (args.replaceMonth && !args.dryRun) {
+    const existingMonthTickets = await prisma.ticketSale.findMany({
+      where: { soldAt: { gte: range.start, lte: range.end } },
+      select: { id: true },
+    });
+    const ticketIds = existingMonthTickets.map((ticket) => ticket.id);
+
+    if (ticketIds.length > 0) {
+      await prisma.payment.deleteMany({ where: { ticketId: { in: ticketIds } } });
+      await prisma.ticketSale.deleteMany({ where: { id: { in: ticketIds } } });
+    }
+  }
 
   async function resolveSeller(input: { sellerEmail: string | null; sellerName: string | null }) {
     const sellerEmail = input.sellerEmail?.trim().toLowerCase() ?? null;
@@ -502,8 +591,12 @@ async function main() {
           commissionRateUsed = nextAirfastTicketNumber % 13 === 0 ? 100 : 0;
         }
 
+        const seen = (pnrSequence.get(ticketNumber) ?? 0) + 1;
+        pnrSequence.set(ticketNumber, seen);
+        const normalizedTicketNumber = seen === 1 ? ticketNumber : `${ticketNumber}-R${seen}`;
+
         const data: Prisma.TicketSaleUncheckedCreateInput = {
-          ticketNumber,
+          ticketNumber: normalizedTicketNumber,
           customerName,
           route,
           travelClass: parseTravelClass(pickValue(row, ["travelClass", "classe", "class"])),
@@ -516,7 +609,7 @@ async function main() {
           sellerId: seller.id,
           saleNature: parseSaleNature(pickValue(row, ["saleNature", "nature vente", "nature"])),
           paymentStatus: parsePaymentStatus(pickValue(row, ["paymentStatus", "statut paiement", "statut", "etat paiement"])),
-          payerName: asString(pickValue(row, ["payerName", "payant", "nom payeur"])),
+          payerName: mapPayerToAgency(asString(pickValue(row, ["payerName", "payant", "nom payeur"]))),
           agencyMarkupPercent: 0,
           agencyMarkupAmount,
           commissionBaseAmount,
@@ -524,12 +617,19 @@ async function main() {
           commissionRateUsed,
           commissionAmount,
           commissionModeApplied: CommissionMode.IMMEDIATE,
-          notes: asString(pickValue(row, ["notes", "observation", "commentaire"])),
+          notes: [
+            asString(pickValue(row, ["notes", "observation", "commentaire"])),
+            seen > 1 ? `PNR source: ${ticketNumber}` : null,
+          ].filter(Boolean).join(" | ") || null,
         };
 
         const existing = args.dryRun
           ? null
-          : await prisma.ticketSale.findUnique({ where: { ticketNumber }, select: { id: true } });
+          : await prisma.ticketSale.findUnique({ where: { ticketNumber: normalizedTicketNumber }, select: { id: true } });
+
+        januaryDailyTotals.tickets += 1;
+        januaryDailyTotals.amount = round2(januaryDailyTotals.amount + amount);
+        januaryDailyTotals.commission = round2(januaryDailyTotals.commission + commissionAmount);
 
         if (args.dryRun) {
           summary.created += 1;
@@ -561,6 +661,55 @@ async function main() {
   console.log(`Créées: ${summary.created}`);
   console.log(`Mises à jour: ${summary.updated}`);
   console.log(`Échecs: ${summary.failed}`);
+
+  const weeklySheets = workbook.SheetNames.filter((name) => /semaine/i.test(name) && /jan/i.test(name));
+  const weeklyTotals = weeklySheets
+    .map((sheetName) => {
+      const sheet = workbook.Sheets[sheetName];
+      if (!sheet) return null;
+      const totals = extractTotalsFromSummarySheet(sheet);
+      if (!totals) return null;
+      return { sheetName, totals };
+    })
+    .filter((entry): entry is { sheetName: string; totals: Totals } => Boolean(entry));
+
+  const weeklyAggregate: Totals = weeklyTotals.reduce(
+    (acc, entry) => ({
+      tickets: acc.tickets + entry.totals.tickets,
+      amount: round2(acc.amount + entry.totals.amount),
+      commission: round2(acc.commission + entry.totals.commission),
+    }),
+    { tickets: 0, amount: 0, commission: 0 },
+  );
+
+  const monthlySheetName = workbook.SheetNames.find((name) => normalizeHeader(name).includes("rapportjanvier"));
+  const monthlyTotals = monthlySheetName
+    ? extractTotalsFromSummarySheet(workbook.Sheets[monthlySheetName])
+    : null;
+
+  const weeklyVsDailyOk =
+    weeklyAggregate.tickets === januaryDailyTotals.tickets
+    && round2(weeklyAggregate.amount) === round2(januaryDailyTotals.amount)
+    && round2(weeklyAggregate.commission) === round2(januaryDailyTotals.commission);
+
+  const monthlyVsDailyOk = monthlyTotals
+    ? (
+      monthlyTotals.tickets === januaryDailyTotals.tickets
+      && round2(monthlyTotals.amount) === round2(januaryDailyTotals.amount)
+      && round2(monthlyTotals.commission) === round2(januaryDailyTotals.commission)
+    )
+    : false;
+
+  console.log("--- Contrôle de concordance Janvier ---");
+  console.log(`Cumul journalier importé: billets=${januaryDailyTotals.tickets}, montant=${januaryDailyTotals.amount}, commission=${januaryDailyTotals.commission}`);
+  console.log(`Cumul feuilles hebdo: billets=${weeklyAggregate.tickets}, montant=${weeklyAggregate.amount}, commission=${weeklyAggregate.commission}`);
+  if (monthlyTotals) {
+    console.log(`Total feuille mensuelle (${monthlySheetName}): billets=${monthlyTotals.tickets}, montant=${monthlyTotals.amount}, commission=${monthlyTotals.commission}`);
+  } else {
+    console.log("Total feuille mensuelle: introuvable");
+  }
+  console.log(`Hebdo vs journalier: ${weeklyVsDailyOk ? "OK" : "ECART"}`);
+  console.log(`Mensuel vs journalier: ${monthlyVsDailyOk ? "OK" : "ECART"}`);
 
   if (errors.length > 0) {
     console.log("--- Détail erreurs ---");
