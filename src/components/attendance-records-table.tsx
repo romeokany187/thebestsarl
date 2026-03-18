@@ -94,7 +94,7 @@ export function AttendanceRecordsTable({ initialRecords, startDate, endDate, use
               <th className="px-3 py-2 text-left">Sortie</th>
               <th className="px-3 py-2 text-left">Signé à</th>
               <th className="px-3 py-2 text-left">Localisation détectée</th>
-              <th className="px-3 py-2 text-left">Adresse détectée</th>
+              <th className="px-3 py-2 text-left">Adresse approximative</th>
               <th className="px-3 py-2 text-left">Retard</th>
               <th className="px-3 py-2 text-left">Heures supp.</th>
             </tr>

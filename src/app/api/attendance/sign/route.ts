@@ -339,8 +339,8 @@ export async function POST(request: NextRequest) {
     : null;
 
   const signNote = isClockOut
-    ? `${isAtOffice ? "Sortie signée au bureau." : "Sortie signée hors bureau."} ${timingNote}${resolvedAddress ? ` Adresse: ${resolvedAddress}.` : ""}`
-    : `${isAtOffice ? "Entrée signée au bureau." : "Entrée signée hors bureau."}${resolvedAddress ? ` Adresse: ${resolvedAddress}.` : ""}`;
+    ? `${isAtOffice ? "Sortie signée au bureau." : "Sortie signée hors bureau."} ${timingNote}${resolvedAddress ? ` Adresse approximative: ${resolvedAddress}.` : ""}`
+    : `${isAtOffice ? "Entrée signée au bureau." : "Entrée signée hors bureau."}${resolvedAddress ? ` Adresse approximative: ${resolvedAddress}.` : ""}`;
 
   const record = await prisma.attendance.upsert({
     where: {

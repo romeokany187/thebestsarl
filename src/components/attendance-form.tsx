@@ -90,7 +90,7 @@ export function AttendanceForm({ role }: { role: AppRole }) {
           ? `${result.metadata.locationStatus} - ${result.metadata.matchedSiteName}`
           : result.metadata.locationStatus;
         const officeText = result.metadata.isAtOffice ? "Au bureau" : "Hors bureau";
-        const addressText = result.metadata.resolvedAddress ? ` • ${result.metadata.resolvedAddress}` : "";
+        const addressText = result.metadata.resolvedAddress ? ` • Adresse approximative: ${result.metadata.resolvedAddress}` : "";
         setStatus(
           `${action === "CLOCK_IN" ? "Entrée" : "Sortie"} signée à ${signedAt} (${officeText} • ${locationLabel}${addressText}).`,
         );
