@@ -10,7 +10,7 @@ type EditableTicket = {
   id: string;
   ticketNumber: string;
   airlineId: string;
-  sellerId: string;
+  sellerId: string | null;
   customerName: string;
   route: string;
   travelClass: "ECONOMY" | "PREMIUM_ECONOMY" | "BUSINESS" | "FIRST";
@@ -95,7 +95,7 @@ export function TicketForm({
         baseFareAmount: ticket.baseFareAmount ? String(ticket.baseFareAmount) : "",
         currency: ticket.currency,
         airlineId: ticket.airlineId,
-        sellerId: ticket.sellerId,
+        sellerId: ticket.sellerId ?? "",
         saleNature: ticket.saleNature,
         paymentStatus: ticket.paymentStatus,
         payerName: ticket.payerName ?? "",
@@ -183,7 +183,7 @@ export function TicketForm({
       ...(baseFareAmount !== undefined ? { baseFareAmount } : {}),
       currency: form.currency,
       airlineId: form.airlineId,
-      sellerId: form.sellerId,
+      ...(form.sellerId.trim() ? { sellerId: form.sellerId } : {}),
       saleNature: form.saleNature,
       paymentStatus: form.paymentStatus,
       payerName: form.payerName,
@@ -353,7 +353,7 @@ export function TicketForm({
         </select>
         <select
           name="sellerId"
-          required
+          required={!editTicketId}
           value={form.sellerId}
           onChange={(event) => updateField("sellerId", event.target.value)}
           className="rounded-md border px-3 py-2"
