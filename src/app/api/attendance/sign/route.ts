@@ -92,7 +92,72 @@ function expectedEndTime(signTime: Date) {
   };
 }
 
+function formatNominatimAddress(address: Record<string, string | undefined> | undefined) {
+  if (!address) {
+    return null;
+  }
+
+  const houseNumber = address.house_number ?? null;
+  const avenue =
+    address.road
+    ?? address.residential
+    ?? address.street
+    ?? address.pedestrian
+    ?? address.path
+    ?? null;
+  const quarter =
+    address.suburb
+    ?? address.neighbourhood
+    ?? address.quarter
+    ?? null;
+  const commune =
+    address.city_district
+    ?? address.municipality
+    ?? address.borough
+    ?? address.township
+    ?? null;
+
+  const detailed = [
+    houseNumber ? `N° ${houseNumber}` : null,
+    avenue ? `Avenue ${avenue}` : null,
+    quarter ? `Quartier ${quarter}` : null,
+    commune ? `Commune ${commune}` : null,
+  ]
+    .filter(Boolean)
+    .join(", ");
+
+  return detailed || null;
+}
+
 async function resolveAddressFromCoords(latitude: number, longitude: number) {
+  const googleMapsApiKey = process.env.GOOGLE_MAPS_API_KEY;
+
+  if (googleMapsApiKey) {
+    try {
+      const url = new URL("https://maps.googleapis.com/maps/api/geocode/json");
+      url.searchParams.set("latlng", `${latitude},${longitude}`);
+      url.searchParams.set("language", "fr");
+      url.searchParams.set("region", "cd");
+      url.searchParams.set("key", googleMapsApiKey);
+
+      const response = await fetch(url.toString(), {
+        cache: "no-store",
+      });
+
+      if (response.ok) {
+        const payload = await response.json();
+        if (payload?.status === "OK" && Array.isArray(payload.results) && payload.results.length > 0) {
+          const formattedAddress = payload.results[0]?.formatted_address;
+          if (typeof formattedAddress === "string" && formattedAddress.trim().length > 0) {
+            return formattedAddress.trim();
+          }
+        }
+      }
+    } catch {
+      // fallback below
+    }
+  }
+
   try {
     const url = new URL("https://nominatim.openstreetmap.org/reverse");
     url.searchParams.set("format", "jsonv2");
@@ -113,37 +178,7 @@ async function resolveAddressFromCoords(latitude: number, longitude: number) {
     }
 
     const payload = await response.json();
-    const address = payload?.address;
-
-    const houseNumber = address?.house_number ?? null;
-    const avenue =
-      address?.road
-      ?? address?.residential
-      ?? address?.street
-      ?? address?.pedestrian
-      ?? address?.path
-      ?? null;
-    const quarter =
-      address?.suburb
-      ?? address?.neighbourhood
-      ?? address?.quarter
-      ?? null;
-    const commune =
-      address?.city_district
-      ?? address?.municipality
-      ?? address?.borough
-      ?? address?.township
-      ?? null;
-    const detailed = [
-      houseNumber ? `N° ${houseNumber}` : null,
-      avenue ? `Avenue ${avenue}` : null,
-      quarter ? `Quartier ${quarter}` : null,
-      commune ? `Commune ${commune}` : null,
-    ]
-      .filter(Boolean)
-      .join(", ");
-
-    return detailed || null;
+    return formatNominatimAddress(payload?.address);
   } catch {
     return null;
   }

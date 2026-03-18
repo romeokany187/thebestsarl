@@ -125,6 +125,7 @@ NEXTAUTH_URL=https://<your-domain>
 NEXTAUTH_SECRET=<strong-secret>
 GOOGLE_CLIENT_ID=<google-client-id>
 GOOGLE_CLIENT_SECRET=<google-client-secret>
+GOOGLE_MAPS_API_KEY=<google-maps-geocoding-api-key>
 ```
 
 4. Déployer puis exécuter la synchro Prisma (CI/CD ou local pointé vers prod)
