@@ -93,38 +93,98 @@ function expectedEndTime(signTime: Date) {
 }
 
 async function resolveAddressFromCoords(latitude: number, longitude: number) {
-  const googleMapsApiKey = process.env.GOOGLE_MAPS_API_KEY;
+  const formatNominatimAddress = (address: Record<string, string | undefined> | undefined) => {
+    if (!address) {
+      return null;
+    }
 
-  if (!googleMapsApiKey) {
-    return null;
-  }
+    const houseNumber = address.house_number ?? null;
+    const avenue =
+      address.road
+      ?? address.residential
+      ?? address.street
+      ?? address.pedestrian
+      ?? address.path
+      ?? null;
+    const quarter =
+      address.suburb
+      ?? address.neighbourhood
+      ?? address.quarter
+      ?? null;
+    const commune =
+      address.city_district
+      ?? address.municipality
+      ?? address.borough
+      ?? address.township
+      ?? null;
+
+    const detailed = [
+      houseNumber ? `N° ${houseNumber}` : null,
+      avenue ? `Avenue ${avenue}` : null,
+      quarter ? `Quartier ${quarter}` : null,
+      commune ? `Commune ${commune}` : null,
+    ]
+      .filter(Boolean)
+      .join(", ");
+
+    return detailed || null;
+  };
+
+  const formatBigDataCloudAddress = (payload: Record<string, unknown>) => {
+    const locality = typeof payload.locality === "string" ? payload.locality : null;
+    const city = typeof payload.city === "string" ? payload.city : null;
+    const subdivision = typeof payload.principalSubdivision === "string" ? payload.principalSubdivision : null;
+    const country = typeof payload.countryName === "string" ? payload.countryName : null;
+
+    const label = [locality ?? city, subdivision, country]
+      .filter(Boolean)
+      .join(", ");
+
+    return label || null;
+  };
 
   try {
-    const url = new URL("https://maps.googleapis.com/maps/api/geocode/json");
-    url.searchParams.set("latlng", `${latitude},${longitude}`);
-    url.searchParams.set("language", "fr");
-    url.searchParams.set("region", "cd");
-    url.searchParams.set("key", googleMapsApiKey);
+    const nominatimUrl = new URL("https://nominatim.openstreetmap.org/reverse");
+    nominatimUrl.searchParams.set("format", "jsonv2");
+    nominatimUrl.searchParams.set("lat", String(latitude));
+    nominatimUrl.searchParams.set("lon", String(longitude));
+    nominatimUrl.searchParams.set("addressdetails", "1");
 
-    const response = await fetch(url.toString(), {
+    const nominatimResponse = await fetch(nominatimUrl.toString(), {
+      headers: {
+        "Accept-Language": "fr",
+        "User-Agent": "THEBEST-SARL/1.0 (attendance)",
+      },
       cache: "no-store",
     });
 
-    if (!response.ok) {
+    if (nominatimResponse.ok) {
+      const payload = await nominatimResponse.json();
+      const nominatimAddress = formatNominatimAddress(payload?.address);
+      if (nominatimAddress) {
+        return nominatimAddress;
+      }
+    }
+  } catch {
+    // fallback below
+  }
+
+  try {
+    const bigDataCloudUrl = new URL("https://api-bdc.net/data/reverse-geocode-client");
+    bigDataCloudUrl.searchParams.set("latitude", String(latitude));
+    bigDataCloudUrl.searchParams.set("longitude", String(longitude));
+    bigDataCloudUrl.searchParams.set("localityLanguage", "fr");
+
+    const bigDataCloudResponse = await fetch(bigDataCloudUrl.toString(), {
+      cache: "no-store",
+    });
+
+    if (!bigDataCloudResponse.ok) {
       return null;
     }
 
-    const payload = await response.json();
-    if (payload?.status !== "OK" || !Array.isArray(payload.results) || payload.results.length === 0) {
-      return null;
-    }
-
-    const formattedAddress = payload.results[0]?.formatted_address;
-    if (typeof formattedAddress !== "string" || formattedAddress.trim().length === 0) {
-      return null;
-    }
-
-    return formattedAddress.trim();
+    const payload = await bigDataCloudResponse.json();
+    return formatBigDataCloudAddress(payload as Record<string, unknown>);
   } catch {
     return null;
   }
