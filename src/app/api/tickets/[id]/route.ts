@@ -79,6 +79,8 @@ export async function PATCH(request: NextRequest, { params }: Params) {
       agencyMarkupAmount: parsed.data.agencyMarkupAmount ?? existing.agencyMarkupAmount,
     };
 
+    const agencyMarkupAmount = parsed.data.agencyMarkupAmount ?? existing.agencyMarkupAmount;
+
     const rule = pickCommissionRule(
       targetAirline.commissionRules,
       nextTicket.route,
@@ -86,9 +88,65 @@ export async function PATCH(request: NextRequest, { params }: Params) {
     );
 
     if (!rule) {
+      const history = await prisma.ticketSale.findMany({
+        where: {
+          airlineId: nextAirlineId,
+          id: { not: existing.id },
+          commissionAmount: { gt: 0 },
+          commissionCalculationStatus: CommissionCalculationStatus.FINAL,
+        },
+        select: {
+          amount: true,
+          commissionBaseAmount: true,
+          commissionRateUsed: true,
+        },
+        orderBy: { soldAt: "desc" },
+        take: 120,
+      });
+
+      const validRates = history
+        .map((ticket) => ticket.commissionRateUsed)
+        .filter((value) => Number.isFinite(value) && value > 0);
+      const inferredRate = validRates.length > 0
+        ? validRates.reduce((sum, value) => sum + value, 0) / validRates.length
+        : null;
+
+      const validRatios = history
+        .filter((ticket) => ticket.amount > 0 && ticket.commissionBaseAmount > 0)
+        .map((ticket) => ticket.commissionBaseAmount / ticket.amount)
+        .filter((ratio) => Number.isFinite(ratio) && ratio > 0);
+      const inferredBaseFareRatio = validRatios.length > 0
+        ? clamp(validRatios.reduce((sum, value) => sum + value, 0) / validRatios.length, 0.2, 0.95)
+        : 0.6;
+
+      const fallbackBaseFareAmount = nextTicket.baseFareAmount
+        ?? nextTicket.amount * inferredBaseFareRatio;
+      const fallbackRate = inferredRate ?? (existing.commissionRateUsed > 0 ? existing.commissionRateUsed : 0);
+      const fallbackCommissionAmount = fallbackBaseFareAmount > 0
+        ? (fallbackBaseFareAmount * fallbackRate) / 100 + agencyMarkupAmount
+        : 0;
+
+      const updatedWithoutRule = await prisma.ticketSale.update({
+        where: { id },
+        data: {
+          ...parsed.data,
+          currency: "USD",
+          airlineId: nextTicket.airlineId,
+          sellerId: nextTicket.sellerId,
+          agencyMarkupPercent: 0,
+          agencyMarkupAmount,
+          commissionBaseAmount: fallbackBaseFareAmount,
+          commissionCalculationStatus: CommissionCalculationStatus.ESTIMATED,
+          commissionRateUsed: fallbackRate,
+          commissionAmount: fallbackCommissionAmount,
+          commissionModeApplied: CommissionMode.IMMEDIATE,
+        },
+      });
+
       return NextResponse.json({
-        error: "Aucune règle de commission active trouvée pour cette compagnie, itinéraire et classe.",
-      }, { status: 400 });
+        data: updatedWithoutRule,
+        warning: "Aucune règle active trouvée pour cette compagnie. Commission estimée via historique.",
+      });
     }
 
     const isAirCongo = targetAirline.code === "ACG";
@@ -145,8 +203,6 @@ export async function PATCH(request: NextRequest, { params }: Params) {
       commissionBaseAmount = nextTicket.amount * ratio;
       commissionCalculationStatus = CommissionCalculationStatus.ESTIMATED;
     }
-
-    const agencyMarkupAmount = parsed.data.agencyMarkupAmount ?? existing.agencyMarkupAmount;
 
     const commissionInputAmount = isAfterDepositMode ? nextTicket.amount : commissionBaseAmount;
     const airFastSaleOrder = isAirFast
