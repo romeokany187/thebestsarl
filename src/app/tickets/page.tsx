@@ -169,19 +169,38 @@ function startOfUtcDay(value: Date) {
   return new Date(Date.UTC(value.getUTCFullYear(), value.getUTCMonth(), value.getUTCDate(), 0, 0, 0, 0));
 }
 
-function sparklinePath(values: number[], width: number, height: number) {
-  if (values.length === 0) return "";
+function sparklineGeometry(values: number[], width: number, height: number) {
+  if (values.length === 0) {
+    return {
+      linePath: "",
+      areaPath: "",
+      lastPoint: null as { x: number; y: number } | null,
+    };
+  }
+
   const max = Math.max(...values, 1);
   const min = Math.min(...values, 0);
   const range = Math.max(max - min, 1);
 
-  return values
-    .map((value, index) => {
-      const x = values.length === 1 ? 0 : (index / (values.length - 1)) * width;
-      const y = height - ((value - min) / range) * height;
-      return `${index === 0 ? "M" : "L"}${x.toFixed(2)} ${y.toFixed(2)}`;
-    })
+  const points = values.map((value, index) => {
+    const x = values.length === 1 ? 0 : (index / (values.length - 1)) * width;
+    const y = height - ((value - min) / range) * height;
+    return { x, y };
+  });
+
+  const linePath = points
+    .map((point, index) => `${index === 0 ? "M" : "L"}${point.x.toFixed(2)} ${point.y.toFixed(2)}`)
     .join(" ");
+
+  const first = points[0];
+  const last = points[points.length - 1];
+  const areaPath = `${linePath} L${last.x.toFixed(2)} ${height.toFixed(2)} L${first.x.toFixed(2)} ${height.toFixed(2)} Z`;
+
+  return {
+    linePath,
+    areaPath,
+    lastPoint: last,
+  };
 }
 
 function detectAgencyFromPayer(payerName: string | null | undefined) {
@@ -477,10 +496,10 @@ export default async function TicketsPage({
     points: [] as Array<{ day: string; sales: number; commissions: number; tickets: number }>,
   }).points;
 
-  const salesCurvePath = sparklinePath(cumulativeDailyPerformance.map((point) => point.sales), 280, 80);
-  const commissionCurvePath = sparklinePath(cumulativeDailyPerformance.map((point) => point.commissions), 280, 80);
-  const comparisonSalesCurvePath = sparklinePath(comparisonCumulativeDailyPerformance.map((point) => point.sales), 280, 80);
-  const comparisonCommissionCurvePath = sparklinePath(comparisonCumulativeDailyPerformance.map((point) => point.commissions), 280, 80);
+  const salesGraph = sparklineGeometry(cumulativeDailyPerformance.map((point) => point.sales), 280, 80);
+  const comparisonSalesGraph = sparklineGeometry(comparisonCumulativeDailyPerformance.map((point) => point.sales), 280, 80);
+  const commissionGraph = sparklineGeometry(cumulativeDailyPerformance.map((point) => point.commissions), 280, 80);
+  const comparisonCommissionGraph = sparklineGeometry(comparisonCumulativeDailyPerformance.map((point) => point.commissions), 280, 80);
   const salesEnd = cumulativeDailyPerformance[cumulativeDailyPerformance.length - 1]?.sales ?? 0;
   const salesTrendPercent = calculateGrowthPercent(monitorCurrentTotalSales, comparisonTotalSales);
   const commissionEnd = cumulativeDailyPerformance[cumulativeDailyPerformance.length - 1]?.commissions ?? 0;
@@ -642,52 +661,78 @@ export default async function TicketsPage({
       <section className="mb-6 rounded-2xl border border-black/10 bg-white p-4 dark:border-white/10 dark:bg-zinc-900">
         <h2 className="mb-3 text-sm font-semibold">Moniteur de performance</h2>
         <div className="grid gap-3 md:grid-cols-2">
-          <div className="rounded-xl border border-black/10 p-3 dark:border-white/10">
+          <div className="rounded-xl border border-zinc-800 bg-zinc-950 p-3 text-zinc-100 dark:border-zinc-800 dark:bg-zinc-950">
             <div className="mb-2 flex items-center justify-between">
-              <p className="text-xs font-semibold uppercase tracking-wide text-black/60 dark:text-white/60">Progression ventes cumulées</p>
+              <p className="text-xs font-semibold uppercase tracking-wide text-zinc-400">Progression ventes cumulées</p>
               <p className={`text-xs font-semibold ${salesTrendPercent >= 0 ? "text-emerald-600" : "text-red-600"}`}>
                 {salesTrendPercent >= 0 ? "+" : ""}{salesTrendPercent.toFixed(1)}%
               </p>
             </div>
-            <p className="text-sm font-semibold">{formatCurrency(salesEnd)}</p>
-            <p className="mb-2 text-[11px] text-black/60 dark:text-white/60">
+            <p className="text-sm font-semibold text-zinc-100">{formatCurrency(salesEnd)}</p>
+            <p className="mb-2 text-[11px] text-zinc-400">
               {selectedMonthLabel} • M-1 {previousMonthLabel}: {formatCurrency(comparisonTotalSales)}
             </p>
             <svg viewBox="0 0 280 80" className="h-20 w-full">
-              {comparisonSalesCurvePath ? (
-                <path d={comparisonSalesCurvePath} fill="none" stroke="currentColor" strokeWidth="1.6" className="text-black/25 dark:text-white/25" />
+              <defs>
+                <linearGradient id="salesAreaGradient" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor="#fb7185" stopOpacity="0.35" />
+                  <stop offset="100%" stopColor="#fb7185" stopOpacity="0.02" />
+                </linearGradient>
+              </defs>
+              <line x1="0" y1="10" x2="280" y2="10" stroke="rgba(255,255,255,0.16)" strokeWidth="1" />
+              <line x1="0" y1="40" x2="280" y2="40" stroke="rgba(255,255,255,0.12)" strokeWidth="1" />
+              <line x1="0" y1="70" x2="280" y2="70" stroke="rgba(255,255,255,0.10)" strokeWidth="1" />
+              {comparisonSalesGraph.linePath ? (
+                <path d={comparisonSalesGraph.linePath} fill="none" stroke="#fda4af" strokeOpacity="0.38" strokeWidth="1.4" />
               ) : null}
-              <path d={salesCurvePath} fill="none" stroke="currentColor" strokeWidth="2.2" className="text-black dark:text-white" />
+              {salesGraph.areaPath ? <path d={salesGraph.areaPath} fill="url(#salesAreaGradient)" /> : null}
+              {salesGraph.linePath ? <path d={salesGraph.linePath} fill="none" stroke="#fb7185" strokeWidth="2.2" /> : null}
+              {salesGraph.lastPoint ? (
+                <circle cx={salesGraph.lastPoint.x} cy={salesGraph.lastPoint.y} r="3.4" fill="#fb7185" stroke="#fecdd3" strokeWidth="1" />
+              ) : null}
             </svg>
-            <div className="mt-1 flex justify-between text-[10px] text-black/45 dark:text-white/45">
+            <div className="mt-1 flex justify-between text-[10px] text-zinc-500">
               <span>{compactDate(cumulativeDailyPerformance[0]?.day ?? "")}</span>
               <span>{compactDate(cumulativeDailyPerformance[cumulativeDailyPerformance.length - 1]?.day ?? "")}</span>
             </div>
-            <p className="mt-1 text-[10px] text-black/45 dark:text-white/45">Ligne claire: {previousMonthLabel}</p>
+            <p className="mt-1 text-[10px] text-zinc-500">Ligne claire: {previousMonthLabel}</p>
           </div>
 
-          <div className="rounded-xl border border-black/10 p-3 dark:border-white/10">
+          <div className="rounded-xl border border-zinc-800 bg-zinc-950 p-3 text-zinc-100 dark:border-zinc-800 dark:bg-zinc-950">
             <div className="mb-2 flex items-center justify-between">
-              <p className="text-xs font-semibold uppercase tracking-wide text-black/60 dark:text-white/60">Progression commissions cumulées</p>
+              <p className="text-xs font-semibold uppercase tracking-wide text-zinc-400">Progression commissions cumulées</p>
               <p className={`text-xs font-semibold ${commissionTrendPercent >= 0 ? "text-emerald-600" : "text-red-600"}`}>
                 {commissionTrendPercent >= 0 ? "+" : ""}{commissionTrendPercent.toFixed(1)}%
               </p>
             </div>
-            <p className="text-sm font-semibold">{formatCurrency(commissionEnd)}</p>
-            <p className="mb-2 text-[11px] text-black/60 dark:text-white/60">
+            <p className="text-sm font-semibold text-zinc-100">{formatCurrency(commissionEnd)}</p>
+            <p className="mb-2 text-[11px] text-zinc-400">
               {selectedMonthLabel} • M-1 {previousMonthLabel}: {formatCurrency(comparisonTotalCommissions)}
             </p>
             <svg viewBox="0 0 280 80" className="h-20 w-full">
-              {comparisonCommissionCurvePath ? (
-                <path d={comparisonCommissionCurvePath} fill="none" stroke="currentColor" strokeWidth="1.6" className="text-black/20 dark:text-white/20" />
+              <defs>
+                <linearGradient id="commissionAreaGradient" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor="#f97316" stopOpacity="0.32" />
+                  <stop offset="100%" stopColor="#f97316" stopOpacity="0.02" />
+                </linearGradient>
+              </defs>
+              <line x1="0" y1="10" x2="280" y2="10" stroke="rgba(255,255,255,0.16)" strokeWidth="1" />
+              <line x1="0" y1="40" x2="280" y2="40" stroke="rgba(255,255,255,0.12)" strokeWidth="1" />
+              <line x1="0" y1="70" x2="280" y2="70" stroke="rgba(255,255,255,0.10)" strokeWidth="1" />
+              {comparisonCommissionGraph.linePath ? (
+                <path d={comparisonCommissionGraph.linePath} fill="none" stroke="#fdba74" strokeOpacity="0.38" strokeWidth="1.4" />
               ) : null}
-              <path d={commissionCurvePath} fill="none" stroke="currentColor" strokeWidth="2.2" className="text-black/70 dark:text-white/70" />
+              {commissionGraph.areaPath ? <path d={commissionGraph.areaPath} fill="url(#commissionAreaGradient)" /> : null}
+              {commissionGraph.linePath ? <path d={commissionGraph.linePath} fill="none" stroke="#f97316" strokeWidth="2.2" /> : null}
+              {commissionGraph.lastPoint ? (
+                <circle cx={commissionGraph.lastPoint.x} cy={commissionGraph.lastPoint.y} r="3.4" fill="#f97316" stroke="#fdba74" strokeWidth="1" />
+              ) : null}
             </svg>
-            <div className="mt-1 flex justify-between text-[10px] text-black/45 dark:text-white/45">
+            <div className="mt-1 flex justify-between text-[10px] text-zinc-500">
               <span>{compactDate(cumulativeDailyPerformance[0]?.day ?? "")}</span>
               <span>{compactDate(cumulativeDailyPerformance[cumulativeDailyPerformance.length - 1]?.day ?? "")}</span>
             </div>
-            <p className="mt-1 text-[10px] text-black/45 dark:text-white/45">Ligne claire: {previousMonthLabel}</p>
+            <p className="mt-1 text-[10px] text-zinc-500">Ligne claire: {previousMonthLabel}</p>
           </div>
 
           <div className="rounded-xl border border-black/10 p-3 dark:border-white/10">
