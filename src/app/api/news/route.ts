@@ -55,8 +55,7 @@ export async function POST(request: NextRequest) {
   const recipients = await prisma.user.findMany({
     where: {
       id: { not: access.session.user.id },
-      role: "EMPLOYEE",
-      teamId: { not: null },
+      role: { in: ["ADMIN", "MANAGER", "EMPLOYEE", "ACCOUNTANT"] },
     },
     select: { id: true, name: true, email: true },
     orderBy: { name: "asc" },
@@ -86,6 +85,7 @@ export async function POST(request: NextRequest) {
         type: "NEWS",
         metadata: {
           newsId: created.id,
+          newsTitle: created.title,
           authorId: created.author.id,
           authorName: created.author.name,
         },
