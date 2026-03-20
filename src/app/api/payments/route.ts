@@ -15,7 +15,7 @@ export async function POST(request: NextRequest) {
   const access = await requireApiModuleAccess("payments", ["ADMIN", "MANAGER", "ACCOUNTANT", "EMPLOYEE"]);
   if (access.error) return access.error;
 
-  if (!canProcessPayments(access.session.user.jobTitle ?? "")) {
+  if (access.role !== "ADMIN" && !canProcessPayments(access.session.user.jobTitle ?? "")) {
     return NextResponse.json({ error: "Fonction non autorisée pour enregistrer des paiements." }, { status: 403 });
   }
 

@@ -5,7 +5,6 @@ import { PaymentEntryForm } from "@/components/payment-entry-form";
 import { canProcessPayments } from "@/lib/assignment";
 import { requirePageModuleAccess } from "@/lib/rbac";
 import { prisma } from "@/lib/prisma";
-import { redirect } from "next/navigation";
 
 type ReportMode = "date" | "month" | "year" | "semester";
 
@@ -141,11 +140,9 @@ export default async function PaymentsPage({
   searchParams?: Promise<SearchParams>;
 }) {
   const { role, session } = await requirePageModuleAccess("payments", ["ADMIN", "MANAGER", "ACCOUNTANT", "EMPLOYEE"]);
-  const canOperatePayments = canProcessPayments(session.user.jobTitle ?? "");
-
-  if (role !== "ADMIN" && !canOperatePayments) {
-    redirect("/");
-  }
+  // Lecture : tout rôle ayant passé requirePageModuleAccess (CAISSIERE, COMPTABLE, DIRECTION_GENERALE…)
+  // Écriture : ADMIN, ou jobTitle caissière / comptable
+  const canWrite = role === "ADMIN" || canProcessPayments(session.user.jobTitle ?? "");
   const resolvedSearchParams = (await searchParams) ?? {};
   const range = dateRangeFromParams(resolvedSearchParams);
 
@@ -336,7 +333,7 @@ export default async function PaymentsPage({
         </p>
       </section>
 
-      {canOperatePayments ? <PaymentEntryForm tickets={paymentTickets} /> : null}
+      {canWrite ? <PaymentEntryForm tickets={paymentTickets} /> : null}
 
       <div className="mb-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <KpiCard label="Total facturé" value={`${totalTicketAmount.toFixed(2)} USD`} />
