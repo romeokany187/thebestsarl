@@ -3,7 +3,6 @@ import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { requireApiModuleAccess } from "@/lib/rbac";
 import { isMailConfigured, sendMailBatch } from "@/lib/mail";
-import { buildNewsPdf } from "@/lib/news-pdf";
 
 const newsCreateSchema = z.object({
   title: z.string().min(3).max(180),
@@ -98,32 +97,22 @@ export async function POST(request: NextRequest) {
         mailResult.attempted = true;
         const appUrl = process.env.NEXTAUTH_URL?.trim() || "";
         const newsUrl = appUrl ? `${appUrl}/news` : "/news";
-        const pdfBytes = await buildNewsPdf(created, created.author.name ?? created.author.email);
 
         const delivery = await sendMailBatch({
-          recipients: recipients.map((recipient) => ({ email: recipient.email, name: recipient.name })),
+          recipients: [{ email: created.author.email, name: created.author.name }],
+          ccRecipients: recipients.map((recipient) => ({ email: recipient.email, name: recipient.name })),
+          sendMode: "single-cc",
           subject: `Communiqué - ${created.title}`,
           text: [
             "THEBEST SARL - Nouveau communiqué",
             "",
             `Titre: ${created.title}`,
-            "Veuillez consulter le communiqué officiel en pièce jointe (PDF).",
+            "",
+            "Contenu:",
+            created.content,
             "",
             `Consulter: ${newsUrl}`,
           ].join("\n"),
-          html: `
-            <p><strong>THEBEST SARL - Nouveau communiqué</strong></p>
-            <p><strong>Titre:</strong> ${created.title}</p>
-            <p>Veuillez consulter le communiqué officiel en pièce jointe (PDF).</p>
-            <p><a href="${newsUrl}">Ouvrir le module Nouvelles</a></p>
-          `,
-          attachments: [
-            {
-              filename: `communique-${created.id}.pdf`,
-              content: Buffer.from(pdfBytes),
-              contentType: "application/pdf",
-            },
-          ],
           replyTo: created.author.email,
         });
 

@@ -7,6 +7,8 @@ type MailRecipient = {
 
 type MailBatchPayload = {
   recipients: MailRecipient[];
+  ccRecipients?: MailRecipient[];
+  sendMode?: "individual" | "single-cc";
   subject: string;
   text: string;
   html?: string;
@@ -84,8 +86,52 @@ export async function sendMailBatch(payload: MailBatchPayload) {
     .filter((recipient) => recipient.email.length > 0)
     .filter((recipient, index, list) => list.findIndex((item) => item.email === recipient.email) === index);
 
+  const uniqueCcRecipients = (payload.ccRecipients ?? [])
+    .map((recipient) => ({ ...recipient, email: recipient.email.trim().toLowerCase() }))
+    .filter((recipient) => recipient.email.length > 0)
+    .filter((recipient, index, list) => list.findIndex((item) => item.email === recipient.email) === index);
+
   const sent: string[] = [];
   const failed: Array<{ email: string; error: string }> = [];
+
+  if (payload.sendMode === "single-cc") {
+    const ccList = uniqueCcRecipients.length > 0 ? uniqueCcRecipients : uniqueRecipients;
+
+    try {
+      await transporter.sendMail({
+        from: `${config.fromName} <${config.fromEmail}>`,
+        to: `${config.fromName} <${config.fromEmail}>`,
+        ...(ccList.length > 0
+          ? {
+              cc: ccList.map((recipient) => (
+                recipient.name?.trim() ? `${recipient.name} <${recipient.email}>` : recipient.email
+              )),
+            }
+          : {}),
+        replyTo: payload.replyTo,
+        subject: payload.subject,
+        text: payload.text,
+        ...(payload.html ? { html: payload.html } : {}),
+        ...(payload.attachments?.length ? { attachments: payload.attachments } : {}),
+      });
+
+      sent.push(...ccList.map((recipient) => recipient.email));
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : "Erreur inconnue";
+      ccList.forEach((recipient) => {
+        failed.push({
+          email: recipient.email,
+          error: errorMessage,
+        });
+      });
+    }
+
+    return {
+      total: ccList.length,
+      sent,
+      failed,
+    };
+  }
 
   for (const recipient of uniqueRecipients) {
     try {
