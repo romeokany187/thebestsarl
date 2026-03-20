@@ -125,7 +125,10 @@ export default async function ReportsPage() {
       </section>
 
       {role === "ADMIN" ? (
-        <AdminReportsSections sections={adminSectionsData} />
+        <AdminReportsSections
+          sections={adminSectionsData}
+          managers={managers.map((manager) => ({ id: manager.id, name: manager.name }))}
+        />
       ) : (
         <div className="grid gap-6 lg:grid-cols-[380px,1fr]">
           {canCreateReport ? (

@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useMemo, useState } from "react";
+import { ApprovalForm } from "@/components/approval-form";
 
 type ReportSectionItem = {
   id: string;
@@ -21,6 +22,11 @@ type ReportSection = {
   description: string;
   accentClass: string;
   reports: ReportSectionItem[];
+};
+
+type ManagerOption = {
+  id: string;
+  name: string;
 };
 
 function formatDate(value: string | null) {
@@ -71,7 +77,13 @@ function fileIcon() {
   );
 }
 
-export function AdminReportsSections({ sections }: { sections: ReportSection[] }) {
+export function AdminReportsSections({
+  sections,
+  managers,
+}: {
+  sections: ReportSection[];
+  managers: ManagerOption[];
+}) {
   const [activeSectionKey, setActiveSectionKey] = useState<string | null>(null);
 
   const activeSection = useMemo(
@@ -189,6 +201,8 @@ export function AdminReportsSections({ sections }: { sections: ReportSection[] }
                             Ouvrir / Imprimer
                           </Link>
                         </div>
+
+                        <ApprovalForm reportId={report.id} managers={managers} />
                       </article>
                     </div>
                   ))}
