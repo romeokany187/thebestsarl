@@ -2,7 +2,6 @@ import { PaymentStatus } from "@prisma/client";
 import { AppShell } from "@/components/app-shell";
 import { KpiCard } from "@/components/kpi-card";
 import { PaymentEntryForm } from "@/components/payment-entry-form";
-import { canProcessPayments } from "@/lib/assignment";
 import { requirePageModuleAccess } from "@/lib/rbac";
 import { prisma } from "@/lib/prisma";
 
@@ -139,10 +138,10 @@ export default async function PaymentsPage({
 }: {
   searchParams?: Promise<SearchParams>;
 }) {
-  const { role, session } = await requirePageModuleAccess("payments", ["ADMIN", "MANAGER", "ACCOUNTANT", "EMPLOYEE"]);
-  // Lecture : tout rôle ayant passé requirePageModuleAccess (CAISSIERE, COMPTABLE, DIRECTION_GENERALE…)
-  // Écriture : ADMIN, ou jobTitle caissière / comptable
-  const canWrite = role === "ADMIN" || canProcessPayments(session.user.jobTitle ?? "");
+  const { role, session } = await requirePageModuleAccess("payments", ["ADMIN", "ACCOUNTANT", "EMPLOYEE"]);
+  // Lecture : CAISSIERE, COMPTABLE, ADMIN
+  // Écriture : CAISSIERE uniquement
+  const canWrite = session.user.jobTitle === "CAISSIERE";
   const resolvedSearchParams = (await searchParams) ?? {};
   const range = dateRangeFromParams(resolvedSearchParams);
 

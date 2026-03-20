@@ -88,9 +88,7 @@ export function hasModuleAccess(params: {
 
   if (module === "payments") {
     return jobTitle === "CAISSIERE"
-      || jobTitle === "COMPTABLE"
-      || jobTitle === "DIRECTION_GENERALE"
-      || teamIncludes(teamName, ["CAISSE", "PAYMENT", "PAIEMENT", "COMPTA"]);
+      || jobTitle === "COMPTABLE";
   }
 
   if (module === "procurement") {
