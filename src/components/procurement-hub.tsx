@@ -190,7 +190,7 @@ export function ProcurementHub({
       return;
     }
 
-    setNeedStatus("État de besoin émis et transféré à la Direction/Finance.");
+    setNeedStatus("État de besoin émis et transféré à la Direction Générale.");
     form.reset();
     setNeedLines([{ designation: "", description: "", quantity: "1", unitPrice: "0" }]);
     await refreshData();
@@ -268,7 +268,7 @@ export function ProcurementHub({
           <section className="rounded-xl border border-black/10 bg-white p-4 dark:border-white/10 dark:bg-zinc-900">
             <h2 className="text-base font-semibold">Émettre un état de besoin</h2>
             <p className="mt-1 text-xs text-black/60 dark:text-white/60">
-              Le document est transmis à la Direction Générale et à la Finance pour validation.
+              Le document est transmis à la Direction Générale (inbox) pour décision.
             </p>
 
             {canCreateNeed ? (
@@ -370,9 +370,9 @@ export function ProcurementHub({
           </section>
 
           <section className="rounded-xl border border-black/10 bg-white p-4 dark:border-white/10 dark:bg-zinc-900">
-            <h2 className="text-base font-semibold">Validation Direction / Finance</h2>
+            <h2 className="text-base font-semibold">Validation Direction Générale</h2>
             <p className="mt-1 text-xs text-black/60 dark:text-white/60">
-              Un état approuvé revient avec statut Approuvé et sceau documentaire.
+              Validation réalisée par la Direction Générale via inbox.
             </p>
 
             {canApproveNeed ? (
@@ -394,7 +394,7 @@ export function ProcurementHub({
               </form>
             ) : (
               <p className="mt-3 rounded-md border border-dashed border-black/20 px-3 py-2 text-xs text-black/70 dark:border-white/20 dark:text-white/70">
-                Validation réservée à la Direction et à la Finance.
+                Validation réservée à la Direction Générale.
               </p>
             )}
 

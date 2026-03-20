@@ -86,10 +86,7 @@ export async function POST(request: NextRequest) {
   const validators = await prisma.user.findMany({
     where: {
       id: { not: me.id },
-      OR: [
-        { role: "ADMIN" },
-        { jobTitle: { in: ["DIRECTION_GENERALE", "CAISSIERE", "COMPTABLE", "AUDITEUR"] } },
-      ],
+      role: "ADMIN",
     },
     select: { id: true },
     take: 160,

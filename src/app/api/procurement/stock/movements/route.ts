@@ -47,10 +47,12 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Seul le service approvisionnement peut gérer la fiche stock." }, { status: 403 });
   }
 
+  let linkedNeed: { id: string; title: string; status: string } | null = null;
+
   if (parsed.data.needRequestId) {
     const need = await prisma.needRequest.findUnique({
       where: { id: parsed.data.needRequestId },
-      select: { id: true, status: true },
+      select: { id: true, title: true, status: true },
     });
 
     if (!need) {
@@ -60,9 +62,13 @@ export async function POST(request: NextRequest) {
     if (need.status !== "APPROVED") {
       return NextResponse.json({ error: "L'état de besoin doit être approuvé avant mouvement de stock." }, { status: 400 });
     }
+
+    linkedNeed = need;
   }
 
   try {
+    let shouldNotifyExecution = false;
+
     const result = await prisma.$transaction(async (tx) => {
       let item = await tx.stockItem.findUnique({
         where: {
@@ -101,6 +107,15 @@ export async function POST(request: NextRequest) {
         data: { currentQuantity: nextQty },
       });
 
+      const outCountBefore = parsed.data.needRequestId && parsed.data.movementType === "OUT"
+        ? await tx.stockMovement.count({
+            where: {
+              needRequestId: parsed.data.needRequestId,
+              movementType: "OUT",
+            },
+          })
+        : 0;
+
       const movement = await tx.stockMovement.create({
         data: {
           stockItemId: item.id,
@@ -113,8 +128,37 @@ export async function POST(request: NextRequest) {
         },
       });
 
+      if (parsed.data.needRequestId && parsed.data.movementType === "OUT" && outCountBefore === 0) {
+        shouldNotifyExecution = true;
+      }
+
       return { updatedItem, movement };
     });
+
+    if (shouldNotifyExecution && linkedNeed) {
+      const directionUsers = await prisma.user.findMany({
+        where: { role: "ADMIN" },
+        select: { id: true },
+        take: 80,
+      });
+
+      if (directionUsers.length > 0) {
+        await prisma.userNotification.createMany({
+          data: directionUsers.map((direction) => ({
+            userId: direction.id,
+            title: "EDB exécuté",
+            message: `L'état de besoin \"${linkedNeed.title}\" est exécuté. Fonds libérés et dossier finalisé.`,
+            type: "PROCUREMENT_EXECUTED",
+            metadata: {
+              needRequestId: linkedNeed.id,
+              needStatus: linkedNeed.status,
+              needTitle: linkedNeed.title,
+              source: "INBOX_EXECUTED",
+            },
+          })),
+        });
+      }
+    }
 
     return NextResponse.json({ data: result }, { status: 201 });
   } catch (error: unknown) {

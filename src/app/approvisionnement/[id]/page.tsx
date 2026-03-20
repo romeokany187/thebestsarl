@@ -35,11 +35,21 @@ export default async function NeedReadPage(context: PageContext) {
     include: {
       requester: { select: { id: true, name: true, email: true, jobTitle: true } },
       reviewedBy: { select: { id: true, name: true, role: true } },
+      stockMovements: {
+        where: { movementType: "OUT" },
+        select: { id: true, createdAt: true },
+        orderBy: { createdAt: "desc" },
+        take: 1,
+      },
     },
   });
 
   if (!need) notFound();
   const quote = parseNeedQuote(need.details);
+  const executedMovement = need.stockMovements[0] ?? null;
+  const displayStatus = need.status === "APPROVED" && executedMovement
+    ? "Approuvé et exécuté"
+    : statusLabel(need.status);
 
   return (
     <AppShell role={role} accessNote="Lecture d'état de besoin avec impression PDF disponible pour tous les profils." >
@@ -47,7 +57,7 @@ export default async function NeedReadPage(context: PageContext) {
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Lecture de l&apos;état de besoin</h1>
           <p className="text-sm text-black/60 dark:text-white/60">
-            Référence: EDB-{need.id.slice(0, 8).toUpperCase()} • Statut: {statusLabel(need.status)}
+            Référence: EDB-{need.id.slice(0, 8).toUpperCase()} • Statut: {displayStatus}
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -85,6 +95,7 @@ export default async function NeedReadPage(context: PageContext) {
           <p><span className="font-semibold">Validé par:</span> {need.reviewedBy?.name ?? "-"}</p>
           <p><span className="font-semibold">Date validation:</span> {formatDate(need.approvedAt ?? need.reviewedAt)}</p>
           <p><span className="font-semibold">Sceau:</span> {need.sealedAt ? `Scellé le ${formatDate(need.sealedAt)}` : "Non scellé"}</p>
+          <p><span className="font-semibold">Exécution:</span> {executedMovement ? `Exécuté le ${formatDate(executedMovement.createdAt)}` : "En attente d'exécution"}</p>
         </div>
 
         <section className="mt-4">

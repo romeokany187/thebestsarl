@@ -15,8 +15,7 @@ export default async function ProfilePage() {
   const userId = roleSession.user.id;
   const currentJobTitle = roleSession.user.jobTitle ?? "AGENT_TERRAIN";
   const capabilities = assignmentCapabilities(currentJobTitle);
-  const canValidateNeedsFromInbox = role === "ADMIN"
-    || ["DIRECTION_GENERALE", "CAISSIERE", "COMPTABLE", "AUDITEUR"].includes(currentJobTitle);
+  const canValidateNeedsFromInbox = role === "ADMIN";
 
   const user = session?.user?.email
     ? await prisma.user.findUnique({

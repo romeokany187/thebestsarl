@@ -39,7 +39,7 @@ export default async function ApprovisionnementPage() {
 
   const isAdminReadOnly = role === "ADMIN";
   const canCreateNeed = !isAdminReadOnly && (role === "MANAGER" || me?.jobTitle === "APPROVISIONNEMENT_MARKETING");
-  const canApproveNeed = !isAdminReadOnly && (role === "MANAGER" || role === "ACCOUNTANT");
+  const canApproveNeed = false;
   const canManageStock = !isAdminReadOnly && (role === "MANAGER" || me?.jobTitle === "APPROVISIONNEMENT_MARKETING");
 
   return (
@@ -47,7 +47,7 @@ export default async function ApprovisionnementPage() {
       role={role}
       accessNote={isAdminReadOnly
         ? "Mode lecture: consultation des états de besoin, fiche stock et rapports PDF uniquement."
-        : "Approvisionnement: émission des états de besoin, circuit de validation Direction/Finance, puis suivi de la fiche stock avec traçabilité des justificatifs."}
+        : "Approvisionnement: émission des états de besoin, validation Direction Générale via inbox, puis exécution financière et suivi stock avec traçabilité."}
     >
       <section className="mb-6">
         <h1 className="text-2xl font-semibold tracking-tight">Approvisionnement</h1>

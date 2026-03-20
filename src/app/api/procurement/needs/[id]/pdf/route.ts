@@ -115,6 +115,12 @@ export async function GET(request: NextRequest, context: RouteContext) {
     include: {
       requester: { select: { id: true, name: true, jobTitle: true, email: true } },
       reviewedBy: { select: { id: true, name: true, role: true } },
+      stockMovements: {
+        where: { movementType: "OUT" },
+        select: { id: true, createdAt: true },
+        orderBy: { createdAt: "desc" },
+        take: 1,
+      },
     },
   });
 
@@ -153,6 +159,10 @@ export async function GET(request: NextRequest, context: RouteContext) {
   const black = rgb(0, 0, 0);
   const quote = parseNeedQuote(need.details);
   const grid = rgb(0.82, 0.82, 0.82);
+  const executionMovement = need.stockMovements[0] ?? null;
+  const statusLabel = need.status === "APPROVED" && executionMovement
+    ? "APPROUVÉ ET EXÉCUTÉ"
+    : need.status;
 
   const drawHeader = (page: import("pdf-lib").PDFPage, continuation = false) => {
     if (logo) {
@@ -260,7 +270,7 @@ export async function GET(request: NextRequest, context: RouteContext) {
     color: black,
   });
 
-  page.drawText(`Statut: ${need.status}`, {
+  page.drawText(`Statut: ${statusLabel}`, {
     x: 378,
     y,
     size: 10.5,
@@ -286,6 +296,7 @@ export async function GET(request: NextRequest, context: RouteContext) {
     ["Soumis le", formatDate(need.submittedAt)],
     ["Validé par", need.reviewedBy?.name ?? "-"],
     ["Date validation", formatDate(need.approvedAt ?? need.reviewedAt)],
+    ["Exécution", executionMovement ? formatDate(executionMovement.createdAt) : "En attente d'exécution"],
   ] as const;
 
   for (const [label, value] of details) {
@@ -476,6 +487,16 @@ export async function GET(request: NextRequest, context: RouteContext) {
         font: boldFont,
         color: black,
       });
+
+      if (executionMovement) {
+        targetPage.drawText(`Mention finale: APPROUVÉ ET EXÉCUTÉ (${formatDate(executionMovement.createdAt)})`, {
+          x: CONTENT_LEFT,
+          y: sealTextY - 12,
+          size: 9.2,
+          font: boldFont,
+          color: black,
+        });
+      }
     } else {
       targetPage.drawText("Document non scellé (en attente d'approbation).", {
         x: CONTENT_LEFT,
