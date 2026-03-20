@@ -259,12 +259,11 @@ export async function GET(request: NextRequest) {
 
   try {
     const regularBytes = await readFile(path.join(process.cwd(), "public/fonts/Montserrat-Regular.ttf"));
-    const boldBytes = await readFile(path.join(process.cwd(), "public/fonts/Montserrat-Bold.ttf"));
     fontRegular = await pdf.embedFont(regularBytes);
-    fontBold = await pdf.embedFont(boldBytes);
+    fontBold = fontRegular;
   } catch {
     return NextResponse.json(
-      { error: "Police Montserrat introuvable. Vérifiez public/fonts/Montserrat-Regular.ttf et Montserrat-Bold.ttf." },
+      { error: "Police Montserrat Regular introuvable. Vérifiez public/fonts/Montserrat-Regular.ttf." },
       { status: 500 },
     );
   }

@@ -224,11 +224,10 @@ export async function buildNewsPdf(post: NewsPostForPdf, printedBy: string) {
   let fontBold: PDFFont;
   try {
     const regularBytes = await readFile(path.join(process.cwd(), "public/fonts/Montserrat-Regular.ttf"));
-    const boldBytes = await readFile(path.join(process.cwd(), "public/fonts/Montserrat-Bold.ttf"));
     fontRegular = await pdf.embedFont(regularBytes);
-    fontBold = await pdf.embedFont(boldBytes);
+    fontBold = fontRegular;
   } catch {
-    throw new Error("Police Montserrat introuvable. Vérifiez public/fonts/Montserrat-Regular.ttf et Montserrat-Bold.ttf.");
+    throw new Error("Police Montserrat Regular introuvable. Vérifiez public/fonts/Montserrat-Regular.ttf.");
   }
 
   const logoImage = await embedOptionalImage(pdf, [

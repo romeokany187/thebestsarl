@@ -91,20 +91,13 @@ export default async function ReportPrintPage({ params }: PageProps) {
           font-style: normal;
           font-display: swap;
         }
-        @font-face {
-          font-family: 'Montserrat';
-          src: url('/fonts/Montserrat-Bold.ttf') format('truetype');
-          font-weight: 700;
-          font-style: normal;
-          font-display: swap;
-        }
         @media print {
           @page { size: A4; margin: 14mm; }
           .no-print { display: none !important; }
           .print-card { box-shadow: none !important; border-color: #ffffff !important; }
         }
         .print-card { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-        .print-card, .print-card * { font-family: 'Montserrat', Arial, sans-serif !important; }
+        .print-card, .print-card * { font-family: 'Montserrat', Arial, sans-serif !important; font-weight: 400 !important; }
       `}</style>
 
       <div className="mx-auto flex min-h-screen w-full max-w-4xl flex-col bg-white px-8 py-6 print-card" style={{ fontFamily: "Montserrat, Arial, sans-serif" }}>

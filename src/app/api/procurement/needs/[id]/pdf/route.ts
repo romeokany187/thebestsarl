@@ -130,17 +130,13 @@ export async function GET(request: NextRequest, context: RouteContext) {
     "public/fonts/Montserrat-Regular.ttf",
     "public/branding/fonts/Montserrat-Regular.ttf",
   ]);
-  const montserratBold = await readFirstExistingFile([
-    "public/fonts/Montserrat-Bold.ttf",
-    "public/branding/fonts/Montserrat-Bold.ttf",
-  ]);
 
-  if (!montserratRegular || !montserratBold) {
-    return NextResponse.json({ error: "Polices Montserrat introuvables sur le serveur." }, { status: 500 });
+  if (!montserratRegular) {
+    return NextResponse.json({ error: "Police Montserrat Regular introuvable sur le serveur." }, { status: 500 });
   }
 
   const regularFont = await pdf.embedFont(montserratRegular);
-  const boldFont = await pdf.embedFont(montserratBold);
+  const boldFont = regularFont;
 
   const logo = await embedOptionalImage(pdf, [
     "public/logo thebest.png",

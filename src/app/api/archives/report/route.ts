@@ -128,17 +128,13 @@ export async function GET(request: NextRequest) {
     "public/fonts/Montserrat-Regular.ttf",
     "public/branding/fonts/Montserrat-Regular.ttf",
   ]);
-  const montserratBold = await readFirstExistingFile([
-    "public/fonts/Montserrat-Bold.ttf",
-    "public/branding/fonts/Montserrat-Bold.ttf",
-  ]);
 
-  if (!montserratRegular || !montserratBold) {
-    return NextResponse.json({ error: "Polices Montserrat introuvables sur le serveur." }, { status: 500 });
+  if (!montserratRegular) {
+    return NextResponse.json({ error: "Police Montserrat Regular introuvable sur le serveur." }, { status: 500 });
   }
 
   const font = await pdf.embedFont(montserratRegular);
-  const bold = await pdf.embedFont(montserratBold);
+  const bold = font;
   const textBlack = rgb(0, 0, 0);
   let page = pdf.addPage([842, 595]);
 
