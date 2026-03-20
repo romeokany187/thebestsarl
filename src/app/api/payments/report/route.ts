@@ -201,12 +201,15 @@ export async function GET(request: NextRequest) {
   const generatedBy = access.session.user.name ?? access.session.user.email ?? "Utilisateur";
   const periodStart = range.start.toISOString().slice(0, 10);
   const periodEnd = new Date(range.end.getTime() - 1).toISOString().slice(0, 10);
+  const mode = request.nextUrl.searchParams.get("mode") ?? "date";
+  const exactPeriodLabel = mode === "date"
+    ? `Date exacte: ${periodStart}`
+    : `Période exacte: ${periodStart} au ${periodEnd}`;
 
   const subtitle = airline
     ? `${range.label} • ${airline.code} - ${airline.name}`
     : `${range.label} • Toutes compagnies`;
 
-  const mode = request.nextUrl.searchParams.get("mode") ?? "date";
   const detailLabel = mode === "month"
     ? "Synthèse mensuelle"
     : mode === "week"
@@ -222,7 +225,7 @@ export async function GET(request: NextRequest) {
       color: textBlack,
     });
     page.drawText(subtitle, { x: 24, y: 550, size: 9, font, color: textBlack });
-    page.drawText(`Période exacte: ${periodStart} au ${periodEnd}`, { x: 24, y: 538, size: 8.2, font, color: textBlack });
+    page.drawText(exactPeriodLabel, { x: 24, y: 538, size: 8.2, font, color: textBlack });
     page.drawLine({ start: { x: 24, y: 532 }, end: { x: 818, y: 532 }, thickness: 0.8, color: lineGray });
   };
 

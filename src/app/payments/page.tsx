@@ -161,6 +161,9 @@ export default async function PaymentsPage({
   const currentMonth = resolvedSearchParams.month ?? currentDate.slice(0, 7);
   const currentStartDate = range.start.toISOString().slice(0, 10);
   const currentEndDate = new Date(range.end.getTime() - 1).toISOString().slice(0, 10);
+  const exactPeriodLabel = uiMode === "date"
+    ? `Date: ${currentStartDate}`
+    : `Période du ${currentStartDate} au ${currentEndDate}`;
   const selectedAirlineId = resolvedSearchParams.airlineId && resolvedSearchParams.airlineId !== "ALL"
     ? resolvedSearchParams.airlineId
     : undefined;
@@ -328,7 +331,7 @@ export default async function PaymentsPage({
           </a>
         </div>
         <p className="mt-3 text-xs text-black/60 dark:text-white/60">
-          {range.label} • Période du {range.start.toISOString().slice(0, 10)} au {new Date(range.end.getTime() - 1).toISOString().slice(0, 10)}
+          {range.label} • {exactPeriodLabel}
         </p>
       </section>
 
