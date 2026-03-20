@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { ArchiveFolder } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { requireApiModuleAccess } from "@/lib/rbac";
-import { createArchiveDocumentWithGlobalReference } from "@/lib/archive";
+import { canWriteArchiveFolder, createArchiveDocumentWithGlobalReference, parseArchiveFolder } from "@/lib/archive";
 
 const allowedMimeTypes = new Set([
   "application/pdf",
@@ -13,32 +13,13 @@ const allowedMimeTypes = new Set([
 ]);
 
 function parseFolder(value: FormDataEntryValue | null) {
-  if (typeof value !== "string") {
-    return null;
-  }
-
-  if (
-    value === "DGI"
-    || value === "CNSS_ONEM"
-    || value === "ADMINISTRATIF"
-    || value === "NOTES_LETTRES_INTERNES"
-    || value === "FACTURES_RECUS"
-    || value === "DGRK"
-  ) {
-    return value as ArchiveFolder;
-  }
-
-  return null;
+  return typeof value === "string" ? parseArchiveFolder(value) : null;
 }
 
 export async function POST(request: NextRequest) {
   const access = await requireApiModuleAccess("archives", ["ADMIN", "MANAGER", "EMPLOYEE", "ACCOUNTANT"]);
   if (access.error) {
     return access.error;
-  }
-
-  if ((access.session.user.jobTitle ?? "") !== "RELATION_PUBLIQUE") {
-    return NextResponse.json({ error: "Archivage réservé au service RH & Relations publiques." }, { status: 403 });
   }
 
   try {
@@ -49,6 +30,10 @@ export async function POST(request: NextRequest) {
 
     if (!folder) {
       return NextResponse.json({ error: "Dossier invalide." }, { status: 400 });
+    }
+
+    if (!canWriteArchiveFolder(access.role, access.session.user.jobTitle ?? null, folder)) {
+      return NextResponse.json({ error: "Archivage interdit pour cette catégorie." }, { status: 403 });
     }
 
     const title = typeof titleValue === "string" ? titleValue.trim() : "";

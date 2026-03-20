@@ -1,16 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireApiModuleAccess } from "@/lib/rbac";
+import { canWriteArchiveFolder } from "@/lib/archive";
 
 export async function POST(request: NextRequest) {
   const access = await requireApiModuleAccess("archives", ["ADMIN", "MANAGER", "EMPLOYEE", "ACCOUNTANT"]);
   if (access.error) {
     return access.error;
-  }
-
-  if ((access.session.user.jobTitle ?? "") !== "RELATION_PUBLIQUE") {
-    const fallback = new URL("/archives?deleteError=1", request.url);
-    return NextResponse.redirect(fallback, { status: 303 });
   }
 
   const formData = await request.formData();
@@ -24,11 +20,16 @@ export async function POST(request: NextRequest) {
 
   const existing = await prisma.archiveDocument.findUnique({
     where: { id },
-    select: { id: true, origin: true },
+    select: { id: true, origin: true, folder: true },
   });
 
   if (!existing || existing.origin === "SYSTEM") {
     const blocked = new URL(`/archives?folder=${folder}&deleteError=1`, request.url);
+    return NextResponse.redirect(blocked, { status: 303 });
+  }
+
+  if (!canWriteArchiveFolder(access.role, access.session.user.jobTitle ?? null, existing.folder)) {
+    const blocked = new URL(`/archives?folder=${existing.folder}&deleteError=1`, request.url);
     return NextResponse.redirect(blocked, { status: 303 });
   }
 

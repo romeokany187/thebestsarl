@@ -6,23 +6,9 @@ import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { prisma } from "@/lib/prisma";
 import { requireApiModuleAccess } from "@/lib/rbac";
-import { archiveFolderLabel } from "@/lib/archive";
+import { archiveFolderLabel, canReadArchiveFolder, getAccessibleArchiveFolders, parseArchiveFolder } from "@/lib/archive";
 
 type ReportMode = "date" | "week" | "month" | "year";
-
-function parseFolder(value: string | null): ArchiveFolder | undefined {
-  if (
-    value === "DGI"
-    || value === "CNSS_ONEM"
-    || value === "ADMINISTRATIF"
-    || value === "NOTES_LETTRES_INTERNES"
-    || value === "FACTURES_RECUS"
-    || value === "DGRK"
-  ) {
-    return value;
-  }
-  return undefined;
-}
 
 function parseYear(value: string | null) {
   if (!value) return null;
@@ -101,12 +87,16 @@ export async function GET(request: NextRequest) {
     return access.error;
   }
 
-  const folder = parseFolder(request.nextUrl.searchParams.get("folder"));
+  const accessibleFolders = getAccessibleArchiveFolders(access.role, access.session.user.jobTitle ?? null).map((folder) => folder.key);
+  const folder = parseArchiveFolder(request.nextUrl.searchParams.get("folder"));
+  if (folder && !canReadArchiveFolder(access.role, access.session.user.jobTitle ?? null, folder)) {
+    return NextResponse.json({ error: "Accès interdit à cette catégorie d'archives." }, { status: 403 });
+  }
   const range = dateRangeFromParams(request.nextUrl.searchParams);
 
   const documents = await prisma.archiveDocument.findMany({
     where: {
-      ...(folder ? { folder } : {}),
+      folder: folder ? folder : { in: accessibleFolders },
       createdAt: { gte: range.start, lt: range.end },
     },
     orderBy: { createdAt: "desc" },
@@ -142,7 +132,7 @@ export async function GET(request: NextRequest) {
     const title = `THEBEST SARL - Registre Archives PDF${continuation ? " (suite)" : ""}`;
     page.drawText(title, { x: 24, y: 566, size: 13, font: bold, color: textBlack });
     page.drawText(`Période: ${range.label}`, { x: 24, y: 550, size: 9, font, color: textBlack });
-    page.drawText(`Catégorie: ${folder ? archiveFolderLabel(folder) : "Toutes"}`, { x: 280, y: 550, size: 9, font, color: textBlack });
+    page.drawText(`Catégorie: ${folder ? archiveFolderLabel(folder) : "Catégories autorisées"}`, { x: 280, y: 550, size: 9, font, color: textBlack });
     page.drawText(`Documents: ${documents.length}`, { x: 640, y: 550, size: 9, font, color: textBlack });
     page.drawLine({ start: { x: 24, y: 544 }, end: { x: 818, y: 544 }, thickness: 0.8, color: rgb(0.82, 0.82, 0.82) });
 

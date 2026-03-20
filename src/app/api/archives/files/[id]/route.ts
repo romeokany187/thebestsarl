@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireApiModuleAccess } from "@/lib/rbac";
+import { canReadArchiveFolder } from "@/lib/archive";
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -15,6 +16,7 @@ export async function GET(_request: Request, { params }: Params) {
   const document = await prisma.archiveDocument.findUnique({
     where: { id },
     select: {
+      folder: true,
       originalFileName: true,
       mimeType: true,
       fileData: true,
@@ -24,6 +26,10 @@ export async function GET(_request: Request, { params }: Params) {
 
   if (!document) {
     return NextResponse.json({ error: "Document introuvable." }, { status: 404 });
+  }
+
+  if (!canReadArchiveFolder(access.role, access.session.user.jobTitle ?? null, document.folder)) {
+    return NextResponse.json({ error: "Accès interdit à ce document d'archives." }, { status: 403 });
   }
 
   if (!document.fileData) {

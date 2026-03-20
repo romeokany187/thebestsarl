@@ -2,7 +2,14 @@ import { AppShell } from "@/components/app-shell";
 import Link from "next/link";
 import { ArchiveFolder } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
-import { ARCHIVE_FOLDERS, archiveFolderLabel, normalizeLegacyArchiveReferences, syncSystemArchiveDocuments } from "@/lib/archive";
+import {
+  archiveFolderLabel,
+  canWriteArchiveFolder,
+  getAccessibleArchiveFolders,
+  normalizeLegacyArchiveReferences,
+  parseArchiveFolder,
+  syncSystemArchiveDocuments,
+} from "@/lib/archive";
 import { requirePageModuleAccess } from "@/lib/rbac";
 
 export const dynamic = "force-dynamic";
@@ -13,20 +20,6 @@ type SearchParams = {
   deleted?: string;
   deleteError?: string;
 };
-
-function parseFolder(value?: string): ArchiveFolder {
-  if (
-    value === "DGI"
-    || value === "CNSS_ONEM"
-    || value === "ADMINISTRATIF"
-    || value === "NOTES_LETTRES_INTERNES"
-    || value === "FACTURES_RECUS"
-    || value === "DGRK"
-  ) {
-    return value;
-  }
-  return "NOTES_LETTRES_INTERNES";
-}
 
 function fileTypeLabel(mimeType: string) {
   if (mimeType === "application/pdf") return "PDF";
@@ -48,8 +41,13 @@ export default async function ArchivesPage({
 }) {
   const { role, session } = await requirePageModuleAccess("archives", ["ADMIN", "MANAGER", "EMPLOYEE", "ACCOUNTANT"]);
   const resolvedSearchParams = (await searchParams) ?? {};
-  const selectedFolder = parseFolder(resolvedSearchParams.folder);
-  const canArchiveWrite = (session.user.jobTitle ?? "") === "RELATION_PUBLIQUE";
+  const accessibleFolders = getAccessibleArchiveFolders(role, session.user.jobTitle ?? null);
+  const fallbackFolder = accessibleFolders[0]?.key ?? "NOTES_LETTRES_INTERNES";
+  const requestedFolder = parseArchiveFolder(resolvedSearchParams.folder);
+  const selectedFolder = requestedFolder && accessibleFolders.some((folder) => folder.key === requestedFolder)
+    ? requestedFolder
+    : fallbackFolder;
+  const canArchiveWrite = canWriteArchiveFolder(role, session.user.jobTitle ?? null, selectedFolder);
 
   await normalizeLegacyArchiveReferences(prisma);
   await syncSystemArchiveDocuments(prisma);
@@ -73,6 +71,9 @@ export default async function ArchivesPage({
     }),
     prisma.archiveDocument.groupBy({
       by: ["folder"],
+      where: {
+        folder: { in: accessibleFolders.map((folder) => folder.key) },
+      },
       _count: { _all: true },
     }),
   ]);
@@ -87,8 +88,8 @@ export default async function ArchivesPage({
     <AppShell
       role={role}
       accessNote={canArchiveWrite
-        ? "Archives: lecture et archivage des documents (upload/suppression) réservés au service RH & Relations publiques."
-        : "Mode lecture: consultation des documents archivés et génération des rapports PDF."}
+        ? "Archives: lecture et archivage autorisés selon les catégories accessibles à votre profil."
+        : "Mode lecture: consultation et export PDF limités aux catégories accessibles à votre profil."}
     >
       <section className="mb-6">
         <h1 className="text-2xl font-semibold tracking-tight">Archives</h1>
@@ -119,7 +120,7 @@ export default async function ArchivesPage({
       <section className="mb-6 rounded-2xl border border-black/10 bg-white p-4 shadow-sm dark:border-white/10 dark:bg-zinc-900">
         <h2 className="mb-3 text-base font-semibold">Classeur de dossiers</h2>
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          {ARCHIVE_FOLDERS.map((folder) => {
+          {accessibleFolders.map((folder) => {
             const isActive = folder.key === selectedFolder;
             const count = folderCountMap.get(folder.key) ?? 0;
 
@@ -204,7 +205,7 @@ export default async function ArchivesPage({
             <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-black/60 dark:text-white/60">Catégorie</label>
             <select name="folder" defaultValue={selectedFolder} className="w-full rounded-md border px-3 py-2 text-sm">
               <option value="">Toutes</option>
-              {ARCHIVE_FOLDERS.map((folder) => (
+              {accessibleFolders.map((folder) => (
                 <option key={folder.key} value={folder.key}>{folder.label}</option>
               ))}
             </select>
@@ -229,7 +230,7 @@ export default async function ArchivesPage({
         <div className="border-b border-black/10 px-4 py-3 dark:border-white/10">
           <h2 className="text-base font-semibold">Registre des archives - {archiveFolderLabel(selectedFolder)}</h2>
         </div>
-        <div className="h-[420px] overflow-auto overscroll-contain">
+        <div className="h-105 overflow-auto overscroll-contain">
           <table className="min-w-full text-sm">
             <thead className="bg-black/5 dark:bg-white/10">
               <tr>

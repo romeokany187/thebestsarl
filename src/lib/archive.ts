@@ -1,24 +1,77 @@
 import { ArchiveFolder, ArchiveOrigin, PrismaClient } from "@prisma/client";
 
+type ArchiveAppRole = "ADMIN" | "MANAGER" | "EMPLOYEE" | "ACCOUNTANT";
+type ArchiveAccessScope = "ALL" | "DIRECTION" | "FINANCE";
+
+const ARCHIVE_FOLDER_SCOPES: Record<ArchiveFolder, ArchiveAccessScope> = {
+  DGI: "FINANCE",
+  CNSS_ONEM: "FINANCE",
+  ADMINISTRATIF: "DIRECTION",
+  NOTES_LETTRES_INTERNES: "ALL",
+  FACTURES_RECUS: "FINANCE",
+  DGRK: "DIRECTION",
+};
+
 export const ARCHIVE_FOLDERS: Array<{
   key: ArchiveFolder;
   label: string;
   description: string;
 }> = [
-  { key: "DGI", label: "Dossiers DGI", description: "Documents fiscaux et correspondances DGI." },
-  { key: "CNSS_ONEM", label: "Dossiers CNSS & ONEM", description: "Pièces sociales et obligations ONEM/CNSS." },
-  { key: "ADMINISTRATIF", label: "Dossier administratifs", description: "Documents administratifs généraux." },
+  { key: "DGI", label: "Dossiers DGI", description: "Documents fiscaux et correspondances DGI. Accès Finance." },
+  { key: "CNSS_ONEM", label: "Dossiers CNSS & ONEM", description: "Pièces sociales et obligations ONEM/CNSS. Accès Finance." },
+  { key: "ADMINISTRATIF", label: "Dossier administratifs", description: "Documents administratifs sensibles. Accès Direction." },
   {
     key: "NOTES_LETTRES_INTERNES",
     label: "Dossier notes et lettres internes",
-    description: "Communiqués, rapports et notes internes produits par l'application.",
+    description: "Communiqués, rapports et notes internes produits par l'application. Visible par tous.",
   },
-  { key: "FACTURES_RECUS", label: "Dossier factures et reçus", description: "Factures, reçus et pièces de caisse." },
-  { key: "DGRK", label: "Dossier DGRK", description: "Correspondances et pièces DGRK." },
+  { key: "FACTURES_RECUS", label: "Dossier factures et reçus", description: "Factures, reçus et pièces de caisse. Accès Finance." },
+  { key: "DGRK", label: "Dossier DGRK", description: "Correspondances et pièces DGRK. Accès Direction." },
 ];
 
 export function archiveFolderLabel(folder: ArchiveFolder) {
   return ARCHIVE_FOLDERS.find((item) => item.key === folder)?.label ?? folder;
+}
+
+export function parseArchiveFolder(value?: string | null): ArchiveFolder | null {
+  if (
+    value === "DGI"
+    || value === "CNSS_ONEM"
+    || value === "ADMINISTRATIF"
+    || value === "NOTES_LETTRES_INTERNES"
+    || value === "FACTURES_RECUS"
+    || value === "DGRK"
+  ) {
+    return value;
+  }
+
+  return null;
+}
+
+export function archiveFolderScope(folder: ArchiveFolder) {
+  return ARCHIVE_FOLDER_SCOPES[folder];
+}
+
+export function canReadArchiveFolder(role: ArchiveAppRole, jobTitle: string | null | undefined, folder: ArchiveFolder) {
+  const scope = archiveFolderScope(folder);
+
+  if (scope === "ALL") {
+    return true;
+  }
+
+  if (scope === "DIRECTION") {
+    return role === "ADMIN" || (jobTitle ?? "") === "DIRECTION_GENERALE";
+  }
+
+  return role === "ACCOUNTANT" || (jobTitle ?? "") === "CAISSIERE" || (jobTitle ?? "") === "COMPTABLE";
+}
+
+export function canWriteArchiveFolder(role: ArchiveAppRole, jobTitle: string | null | undefined, folder: ArchiveFolder) {
+  return canReadArchiveFolder(role, jobTitle, folder);
+}
+
+export function getAccessibleArchiveFolders(role: ArchiveAppRole, jobTitle: string | null | undefined) {
+  return ARCHIVE_FOLDERS.filter((folder) => canReadArchiveFolder(role, jobTitle, folder.key));
 }
 
 function createReferenceFromSequence(sequence: number) {
