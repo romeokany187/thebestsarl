@@ -185,6 +185,32 @@ export async function GET(request: NextRequest) {
     page.drawText(text, { x, y: yy, size, font, color: rgb(0, 0, 0) });
   };
 
+  const fitText = (text: string, size: number, maxWidth: number) => {
+    if (font.widthOfTextAtSize(text, size) <= maxWidth) return text;
+    const ellipsis = "…";
+    let output = text;
+    while (output.length > 0 && font.widthOfTextAtSize(`${output}${ellipsis}`, size) > maxWidth) {
+      output = output.slice(0, -1);
+    }
+    return output.length > 0 ? `${output}${ellipsis}` : "";
+  };
+
+  const drawCellText = (
+    text: string,
+    x: number,
+    cellWidth: number,
+    yy: number,
+    size = 8,
+    align: "left" | "right" = "left",
+  ) => {
+    const padding = 2;
+    const maxWidth = Math.max(0, cellWidth - padding * 2);
+    const safeText = fitText(text, size, maxWidth);
+    const textWidth = font.widthOfTextAtSize(safeText, size);
+    const textX = align === "right" ? x + cellWidth - padding - textWidth : x + padding;
+    drawTextAt(safeText, textX, yy, size);
+  };
+
   const drawRule = (thickness = 0.5) => {
     page.drawLine({
       start: { x: margin, y },
@@ -257,12 +283,42 @@ export async function GET(request: NextRequest) {
     drawTextAt(`Commission: ${fmtNumber(totalCommission)} USD`, margin + 260, y, 10);
   } else {
     const headers = ["DATE/PERIODE", "BILLETS", ...airlineColumns, "MONTANTS", "COMMISSION"];
-    const columns = headers.length;
-    const colW = (width - 2 * margin) / columns;
-    const xOf = (i: number) => margin + i * colW;
+    const airlineCount = airlineColumns.length;
+    const usableWidth = width - 2 * margin;
+
+    const billetsW = 50;
+    const montantsW = 78;
+    const commissionW = 78;
+    const minAirlineW = 40;
+    const maxAirlineW = 56;
+
+    let airlineW = airlineCount > 0
+      ? (usableWidth - billetsW - montantsW - commissionW - 160) / airlineCount
+      : 0;
+    airlineW = Math.max(minAirlineW, Math.min(maxAirlineW, airlineW));
+
+    let firstColW = usableWidth - billetsW - montantsW - commissionW - airlineW * airlineCount;
+    if (firstColW < 130) {
+      firstColW = 130;
+      const remainingForAirlines = usableWidth - billetsW - montantsW - commissionW - firstColW;
+      airlineW = airlineCount > 0 ? Math.max(34, remainingForAirlines / airlineCount) : 0;
+    }
+
+    const widths = [firstColW, billetsW, ...airlineColumns.map(() => airlineW), montantsW, commissionW];
+    const xs: number[] = [];
+    let cursor = margin;
+    widths.forEach((w) => {
+      xs.push(cursor);
+      cursor += w;
+    });
+    const xOf = (i: number) => xs[i];
+    const wOf = (i: number) => widths[i];
 
     ensureSpace(2);
-    headers.forEach((header, idx) => drawTextAt(header, xOf(idx), y, 8));
+    headers.forEach((header, idx) => {
+      const align = idx >= 2 ? "right" : "left";
+      drawCellText(header, xOf(idx), wOf(idx), y, 8, align);
+    });
     y -= rowH;
     drawRule();
     y -= 4;
@@ -277,14 +333,21 @@ export async function GET(request: NextRequest) {
       const totalLineAmount = Array.from(airlineMap.values()).reduce((sum, value) => sum + value.amount, 0);
       const totalLineCommission = Array.from(airlineMap.values()).reduce((sum, value) => sum + value.commission, 0);
 
-      drawTextAt(label, xOf(0), y, 8);
-      drawTextAt(String(totalBillets), xOf(1), y, 8);
+      drawCellText(label, xOf(0), wOf(0), y, 8, "left");
+      drawCellText(String(totalBillets), xOf(1), wOf(1), y, 8, "right");
       airlineColumns.forEach((code, codeIdx) => {
         const amount = airlineMap.get(code)?.amount ?? 0;
-        drawTextAt(amount > 0 ? fmtNumber(amount) : "-", xOf(2 + codeIdx), y, 8);
+        drawCellText(amount > 0 ? fmtNumber(amount) : "-", xOf(2 + codeIdx), wOf(2 + codeIdx), y, 8, "right");
       });
-      drawTextAt(fmtNumber(totalLineAmount), xOf(2 + airlineColumns.length), y, 8);
-      drawTextAt(fmtNumber(totalLineCommission), xOf(3 + airlineColumns.length), y, 8);
+      drawCellText(fmtNumber(totalLineAmount), xOf(2 + airlineColumns.length), wOf(2 + airlineColumns.length), y, 8, "right");
+      drawCellText(
+        fmtNumber(totalLineCommission),
+        xOf(3 + airlineColumns.length),
+        wOf(3 + airlineColumns.length),
+        y,
+        8,
+        "right",
+      );
 
       y -= rowH;
       drawRule(0.25);
@@ -294,14 +357,21 @@ export async function GET(request: NextRequest) {
     ensureSpace(4);
     drawRule(1.1);
     y -= 10;
-    drawTextAt("TOTAL GENERAL", xOf(0), y, 9);
-    drawTextAt(String(totalCount), xOf(1), y, 9);
+    drawCellText("TOTAL GENERAL", xOf(0), wOf(0), y, 9, "left");
+    drawCellText(String(totalCount), xOf(1), wOf(1), y, 9, "right");
     airlineColumns.forEach((code, codeIdx) => {
       const amount = airlineTotals.get(code)?.amount ?? 0;
-      drawTextAt(amount > 0 ? fmtNumber(amount) : "-", xOf(2 + codeIdx), y, 9);
+      drawCellText(amount > 0 ? fmtNumber(amount) : "-", xOf(2 + codeIdx), wOf(2 + codeIdx), y, 9, "right");
     });
-    drawTextAt(fmtNumber(totalAmount), xOf(2 + airlineColumns.length), y, 9);
-    drawTextAt(fmtNumber(totalCommission), xOf(3 + airlineColumns.length), y, 9);
+    drawCellText(fmtNumber(totalAmount), xOf(2 + airlineColumns.length), wOf(2 + airlineColumns.length), y, 9, "right");
+    drawCellText(
+      fmtNumber(totalCommission),
+      xOf(3 + airlineColumns.length),
+      wOf(3 + airlineColumns.length),
+      y,
+      9,
+      "right",
+    );
   }
 
   const bytes = await pdf.save();
