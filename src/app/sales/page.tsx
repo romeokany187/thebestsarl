@@ -1,4 +1,5 @@
 import { AppShell } from "@/components/app-shell";
+import { KpiCard } from "@/components/kpi-card";
 import { TicketForm } from "@/components/ticket-form";
 import { TicketRowActions } from "@/components/ticket-row-actions";
 import { prisma } from "@/lib/prisma";
@@ -160,6 +161,17 @@ export default async function SalesPage({
     : 0;
   const airFastBonusReached = airFastAirline ? Math.floor(airFastTicketCount / 13) : 0;
 
+  const totalBillets = tickets.length;
+  const totalCA = tickets.reduce((sum, ticket) => sum + ticket.amount, 0);
+  const totalCommission = tickets.reduce((sum, ticket) => sum + commissionOf(ticket), 0);
+  const totalNet = tickets.reduce((sum, ticket) => sum + ticket.amount + (ticket.agencyMarkupAmount ?? 0), 0);
+  const totalNonPaye = tickets
+    .filter((ticket) => ticket.paymentStatus === "UNPAID" || ticket.paymentStatus === "PARTIAL")
+    .reduce((sum, ticket) => sum + ticket.amount, 0);
+  const periodLabel = dateRange.startRaw === dateRange.endRaw
+    ? dateRange.startRaw
+    : `${dateRange.startRaw} → ${dateRange.endRaw}`;
+
   return (
     <AppShell role={role} accessNote={accessNote}>
       <section className="mb-6">
@@ -167,6 +179,14 @@ export default async function SalesPage({
         <p className="text-sm text-black/60 dark:text-white/60">
           Suivi des billets avec commission calculée par compagnie, itinéraire et classe.
         </p>
+      </section>
+
+      <section className="mb-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+        <KpiCard label="Billets" value={String(totalBillets)} hint={`Période: ${periodLabel}`} />
+        <KpiCard label="Chiffre d'affaires" value={`${totalCA.toFixed(2)} USD`} hint="Total billets vendus" />
+        <KpiCard label="Commission" value={`${totalCommission.toFixed(2)} USD`} hint="Commission totale générée" />
+        <KpiCard label="Net agence" value={`${totalNet.toFixed(2)} USD`} hint="CA + majorations" />
+        <KpiCard label="À encaisser" value={`${totalNonPaye.toFixed(2)} USD`} hint="Non payés + partiels" />
       </section>
 
       <section className="mb-6 rounded-xl border border-black/10 bg-white p-4 dark:border-white/10 dark:bg-zinc-900">
