@@ -302,29 +302,6 @@ export async function GET(request: NextRequest) {
     });
     drawTextAt(fmtNumber(totalAmount), xOf(2 + airlineColumns.length), y, 9);
     drawTextAt(fmtNumber(totalCommission), xOf(3 + airlineColumns.length), y, 9);
-
-    y -= 20;
-    ensureSpace(8);
-    drawTextAt("DONNEES PAR AGENCE", margin, y, 10);
-    y -= rowH;
-    drawRule();
-    y -= 6;
-    drawTextAt("AGENCE", margin, y, 8);
-    drawTextAt("BILLETS", margin + 250, y, 8);
-    drawTextAt("MONTANTS", margin + 330, y, 8);
-    y -= rowH;
-    drawRule(0.4);
-    y -= 3;
-
-    Array.from(byAgency.entries()).sort(([a], [b]) => a.localeCompare(b)).forEach(([agency, data]) => {
-      ensureSpace(2);
-      drawTextAt(agency, margin, y, 8);
-      drawTextAt(String(data.count), margin + 250, y, 8);
-      drawTextAt(`${fmtNumber(data.amount)} USD`, margin + 330, y, 8);
-      y -= rowH;
-      drawRule(0.2);
-      y -= 2;
-    });
   }
 
   const bytes = await pdf.save();
