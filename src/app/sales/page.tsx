@@ -1,5 +1,6 @@
 import { AppShell } from "@/components/app-shell";
 import { KpiCard } from "@/components/kpi-card";
+import { SalesReportButton } from "@/components/sales-report-button";
 import { TicketForm } from "@/components/ticket-form";
 import { TicketRowActions } from "@/components/ticket-row-actions";
 import { prisma } from "@/lib/prisma";
@@ -190,7 +191,7 @@ export default async function SalesPage({
       </section>
 
       <section className="mb-6 rounded-xl border border-black/10 bg-white p-4 dark:border-white/10 dark:bg-zinc-900">
-        <form method="GET" className="grid gap-3 sm:grid-cols-3 sm:items-end">
+        <form method="GET" className="grid gap-3 sm:grid-cols-4 sm:items-end">
           <div>
             <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-black/60 dark:text-white/60">Du</label>
             <input
@@ -210,6 +211,7 @@ export default async function SalesPage({
             />
           </div>
           <button type="submit" className="rounded-md bg-black px-4 py-2 text-sm font-semibold text-white dark:bg-white dark:text-black">Rechercher</button>
+          <SalesReportButton startDate={dateRange.startRaw} endDate={dateRange.endRaw} />
         </form>
       </section>
 
