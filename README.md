@@ -125,12 +125,12 @@ NEXTAUTH_URL=https://<your-domain>
 NEXTAUTH_SECRET=<strong-secret>
 GOOGLE_CLIENT_ID=<google-client-id>
 GOOGLE_CLIENT_SECRET=<google-client-secret>
-GOOGLE_MAPS_API_KEY=<google-maps-geocoding-api-key>
 ```
 
 Note importante pour la présence:
-- la résolution d'adresse GPS utilise uniquement Google Maps Geocoding,
-- si `GOOGLE_MAPS_API_KEY` est absente/invalide, l'adresse n'est pas affichée (pas de fallback externe) pour éviter des adresses erronées.
+- la résolution d'adresse GPS utilise des services gratuits (Nominatim OpenStreetMap puis BigDataCloud en secours),
+- aucune clé API payante n'est requise pour ce flux,
+- ces services gratuits n'ont pas de SLA garanti; en cas d'indisponibilité l'adresse peut être absente.
 
 4. Déployer puis exécuter la synchro Prisma (CI/CD ou local pointé vers prod)
 
