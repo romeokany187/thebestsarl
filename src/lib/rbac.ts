@@ -18,7 +18,8 @@ export type AppModule =
   | "procurement"
   | "archives"
   | "news"
-  | "settings";
+  | "settings"
+  | "audit";
 
 const ALL_ROLES: AppRole[] = ["ADMIN", "MANAGER", "EMPLOYEE", "ACCOUNTANT"];
 
