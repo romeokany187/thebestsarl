@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { PDFDocument, PDFPage, rgb, degrees } from "pdf-lib";
+import { PDFDocument, rgb } from "pdf-lib";
 import fontkit from "@pdf-lib/fontkit";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
@@ -9,15 +9,25 @@ import { requireApiModuleAccess } from "@/lib/rbac";
 type SearchParams = {
   startDate?: string;
   endDate?: string;
-  mode?: "week" | "month";
 };
+
+type ReportKind = "DAILY" | "WEEKLY" | "MONTHLY";
 
 function parseSearchParams(url: URL): SearchParams {
   return {
     startDate: url.searchParams.get("startDate") ?? undefined,
     endDate: url.searchParams.get("endDate") ?? undefined,
-    mode: (url.searchParams.get("mode") as "week" | "month") ?? "month",
   };
+}
+
+function fmtNumber(value: number) {
+  return value.toFixed(2);
+}
+
+function normalizeStatus(status: string) {
+  if (status === "PAID") return "PAYE";
+  if (status === "PARTIAL") return "PARTIEL";
+  return "NON PAYE";
 }
 
 function dateRangeFromParams(params: SearchParams) {
@@ -35,11 +45,29 @@ function dateRangeFromParams(params: SearchParams) {
     end,
     startRaw,
     endRaw,
-    label:
-      params.mode === "week"
-        ? `Rapport hebdomadaire du ${startRaw} au ${endRaw}`
-        : `Rapport mensuel du ${startRaw} au ${endRaw}`,
   };
+}
+
+function inferReportKind(start: Date, endExclusive: Date): ReportKind {
+  const ms = endExclusive.getTime() - start.getTime();
+  const days = Math.max(1, Math.round(ms / (24 * 60 * 60 * 1000)));
+  if (days === 1) return "DAILY";
+  if (days <= 7) return "WEEKLY";
+  return "MONTHLY";
+}
+
+function weekLabel(start: Date, endExclusive: Date) {
+  const end = new Date(endExclusive.getTime() - 1);
+  return `SEMAINE DU ${start.toISOString().slice(0, 10)} AU ${end.toISOString().slice(0, 10)}`;
+}
+
+function getWeekStart(baseStart: Date, date: Date) {
+  const diffMs = date.getTime() - baseStart.getTime();
+  const diffDays = Math.max(0, Math.floor(diffMs / (24 * 60 * 60 * 1000)));
+  const block = Math.floor(diffDays / 7);
+  const start = new Date(baseStart);
+  start.setUTCDate(baseStart.getUTCDate() + block * 7);
+  return start;
 }
 
 export async function GET(request: NextRequest) {
@@ -50,6 +78,7 @@ export async function GET(request: NextRequest) {
 
   const params = parseSearchParams(request.nextUrl);
   const dateRange = dateRangeFromParams(params);
+  const reportKind = inferReportKind(dateRange.start, dateRange.end);
 
   const tickets = await prisma.ticketSale.findMany({
     where: {
@@ -66,13 +95,18 @@ export async function GET(request: NextRequest) {
     orderBy: [{ soldAt: "asc" }, { airline: { code: "asc" } }],
   });
 
-  // Group by date and airline for summary rows
-  const byDateAirline = new Map<string, Map<string, { count: number; amount: number; commission: number }>>();
+  // Common aggregates
   const byAgency = new Map<string, { count: number; amount: number }>();
   const airlineTotals = new Map<string, { count: number; amount: number; commission: number }>();
+  const byDateAirline = new Map<string, Map<string, { count: number; amount: number; commission: number }>>();
+  const byWeekAirline = new Map<string, Map<string, { count: number; amount: number; commission: number }>>();
 
   for (const ticket of tickets) {
     const dateStr = new Date(ticket.soldAt).toISOString().slice(0, 10);
+    const weekStart = getWeekStart(dateRange.start, new Date(ticket.soldAt));
+    const weekEndExclusive = new Date(weekStart);
+    weekEndExclusive.setUTCDate(weekEndExclusive.getUTCDate() + 7);
+    const weekKey = weekLabel(weekStart, weekEndExclusive);
     const airlineCode = ticket.airline.code;
     const agencyKey = ticket.seller?.team?.name ?? "Sans agence";
 
@@ -89,6 +123,18 @@ export async function GET(request: NextRequest) {
     row.count += 1;
     row.amount += ticket.amount;
     row.commission += ticket.commissionAmount ?? 0;
+
+    if (!byWeekAirline.has(weekKey)) {
+      byWeekAirline.set(weekKey, new Map());
+    }
+    const weekMap = byWeekAirline.get(weekKey)!;
+    if (!weekMap.has(airlineCode)) {
+      weekMap.set(airlineCode, { count: 0, amount: 0, commission: 0 });
+    }
+    const weekRow = weekMap.get(airlineCode)!;
+    weekRow.count += 1;
+    weekRow.amount += ticket.amount;
+    weekRow.commission += ticket.commissionAmount ?? 0;
 
     // Airline totals
     if (!airlineTotals.has(airlineCode)) {
@@ -123,147 +169,161 @@ export async function GET(request: NextRequest) {
 
   let page = pdf.addPage([595, 842]);
   const width = page.getWidth();
-  const margin = 15;
-  let y = 800;
+  const margin = 20;
+  let y = 805;
+  const rowH = 13;
 
-  const drawText = (text: string, x: number, size: number, bold = false) => {
-    if (y < 40) {
+  const ensureSpace = (rows: number) => {
+    if (y - rows * rowH < 45) {
       page = pdf.addPage([595, 842]);
-      y = 800;
+      y = 805;
     }
-    page.drawText(text, { x, y, size, font, color: rgb(0, 0, 0) });
-    y -= size * 1.5;
   };
 
-  const drawLine = () => {
-    if (y < 40) {
-      page = pdf.addPage([595, 842]);
-      y = 800;
-    }
+  const drawTextAt = (text: string, x: number, yy: number, size = 8) => {
+    page.drawText(text, { x, y: yy, size, font, color: rgb(0, 0, 0) });
+  };
+
+  const drawRule = (thickness = 0.5) => {
     page.drawLine({
       start: { x: margin, y },
       end: { x: width - margin, y },
-      thickness: 0.5,
-      color: rgb(0.8, 0.8, 0.8),
+      thickness,
+      color: rgb(0.75, 0.75, 0.75),
     });
-    y -= 8;
   };
 
-  const drawBoldLine = () => {
-    if (y < 40) {
-      page = pdf.addPage([595, 842]);
-      y = 800;
-    }
-    page.drawLine({
-      start: { x: margin, y },
-      end: { x: width - margin, y },
-      thickness: 1.2,
-      color: rgb(0, 0, 0),
+  const title = reportKind === "DAILY"
+    ? `RAPPORT VENTE BILLETS ${dateRange.startRaw}`
+    : reportKind === "WEEKLY"
+      ? `RAPPORT DE LA SEMAINE DU ${dateRange.startRaw} AU ${dateRange.endRaw}`
+      : `RAPPORT MENSUEL DU ${dateRange.startRaw} AU ${dateRange.endRaw}`;
+
+  drawTextAt(title, margin, y, 14);
+  y -= 16;
+  drawRule(1);
+  y -= 12;
+
+  const preferredAirlines = ["CAA", "AIRCONGO", "ETHIOPIAN", "MG", "KP", "KENYA", "SA", "UR"];
+  const allCodes = Array.from(new Set(tickets.map((ticket) => ticket.airline.code.toUpperCase())));
+  const extraCodes = allCodes.filter((code) => !preferredAirlines.includes(code)).sort();
+  const airlineColumns = [...preferredAirlines.filter((code) => allCodes.includes(code)), ...extraCodes];
+
+  if (reportKind === "DAILY") {
+    const headers = ["N°", "EMETEUR", "COMPAGNIE", "BENEFICIAIRE", "PNR", "ITINERAIRE", "MONTANT", "NATURE", "PAYANT", "STATUT", "COM."];
+    const widths = [24, 62, 54, 78, 48, 54, 44, 42, 52, 42, 30];
+    const xs: number[] = [];
+    let cursor = margin;
+    widths.forEach((w) => {
+      xs.push(cursor);
+      cursor += w;
     });
+
+    ensureSpace(2);
+    headers.forEach((header, idx) => drawTextAt(header, xs[idx], y, 7));
+    y -= rowH;
+    drawRule();
+    y -= 4;
+
+    tickets.forEach((ticket, index) => {
+      ensureSpace(2);
+      const values = [
+        String(index + 1),
+        ticket.sellerName ?? ticket.seller?.name ?? "-",
+        ticket.airline.code,
+        ticket.customerName,
+        ticket.ticketNumber,
+        ticket.route,
+        fmtNumber(ticket.amount),
+        ticket.saleNature,
+        ticket.payerName ?? "-",
+        normalizeStatus(ticket.paymentStatus),
+        fmtNumber(ticket.commissionAmount ?? 0),
+      ];
+      values.forEach((value, idx) => drawTextAt(value.slice(0, 22), xs[idx], y, 7));
+      y -= rowH;
+      drawRule(0.25);
+      y -= 2;
+    });
+
+    ensureSpace(3);
+    drawRule(1);
     y -= 10;
-  };
+    drawTextAt(`Nbr billets: ${totalCount}`, margin + 260, y, 9);
+    y -= rowH;
+    drawTextAt(`Total Général: ${fmtNumber(totalAmount)} USD`, margin + 260, y, 9);
+    y -= rowH;
+    drawTextAt(`Commission: ${fmtNumber(totalCommission)} USD`, margin + 260, y, 9);
+  } else {
+    const headers = ["DATE/PERIODE", "BILLETS", ...airlineColumns, "MONTANTS", "COMMISSION"];
+    const columns = headers.length;
+    const colW = (width - 2 * margin) / columns;
+    const xOf = (i: number) => margin + i * colW;
 
-  // Title
-  drawText(dateRange.label.toUpperCase(), margin, 14, true);
-  y -= 5;
-  drawBoldLine();
+    ensureSpace(2);
+    headers.forEach((header, idx) => drawTextAt(header, xOf(idx), y, 7));
+    y -= rowH;
+    drawRule();
+    y -= 4;
 
-  // Get all airlines
-  const allAirlines = Array.from(new Set(tickets.map((t) => t.airline.code))).sort();
+    const lines = reportKind === "WEEKLY"
+      ? Array.from(byDateAirline.entries()).sort(([a], [b]) => a.localeCompare(b))
+      : Array.from(byWeekAirline.entries()).sort(([a], [b]) => a.localeCompare(b));
 
-  // Table: Daily summary header
-  const colWidth = (width - 2 * margin) / (2 + allAirlines.length);
-  const dateCol = margin;
-  const billetCol = margin + colWidth;
-  const airlineStartCol = margin + colWidth * 2;
+    lines.forEach(([label, airlineMap]) => {
+      ensureSpace(2);
+      const totalBillets = Array.from(airlineMap.values()).reduce((sum, value) => sum + value.count, 0);
+      const totalLineAmount = Array.from(airlineMap.values()).reduce((sum, value) => sum + value.amount, 0);
+      const totalLineCommission = Array.from(airlineMap.values()).reduce((sum, value) => sum + value.commission, 0);
 
-  drawText("DATE", dateCol, 8, true);
-  drawText("BILLETS", billetCol, 8, true);
-  allAirlines.forEach((airline, i) => {
-    drawText(airline, airlineStartCol + i * colWidth, 8, true);
-  });
+      drawTextAt(label, xOf(0), y, 7);
+      drawTextAt(String(totalBillets), xOf(1), y, 7);
+      airlineColumns.forEach((code, codeIdx) => {
+        const amount = airlineMap.get(code)?.amount ?? 0;
+        drawTextAt(amount > 0 ? fmtNumber(amount) : "-", xOf(2 + codeIdx), y, 7);
+      });
+      drawTextAt(fmtNumber(totalLineAmount), xOf(2 + airlineColumns.length), y, 7);
+      drawTextAt(fmtNumber(totalLineCommission), xOf(3 + airlineColumns.length), y, 7);
 
-  drawLine();
-
-  // Daily summary rows
-  for (const [dateStr, airlineMap] of Array.from(byDateAirline.entries()).sort()) {
-    if (y < 50) {
-      page = pdf.addPage([595, 842]);
-      y = 800;
-    }
-
-    let totalDayBillets = 0;
-    const values: number[] = []; // per airline
-
-    allAirlines.forEach((airline) => {
-      const data = airlineMap.get(airline);
-      const count = data?.count ?? 0;
-      values.push(count);
-      totalDayBillets += count;
+      y -= rowH;
+      drawRule(0.25);
+      y -= 2;
     });
 
-    drawText(dateStr, dateCol, 8);
-    drawText(`${totalDayBillets}`, billetCol, 8);
-    values.forEach((val, i) => {
-      drawText(`${val}`, airlineStartCol + i * colWidth, 8);
+    ensureSpace(4);
+    drawRule(1.1);
+    y -= 10;
+    drawTextAt("TOTAL GENERAL", xOf(0), y, 9);
+    drawTextAt(String(totalCount), xOf(1), y, 9);
+    airlineColumns.forEach((code, codeIdx) => {
+      const amount = airlineTotals.get(code)?.amount ?? 0;
+      drawTextAt(amount > 0 ? fmtNumber(amount) : "-", xOf(2 + codeIdx), y, 9);
     });
-    drawLine();
-  }
+    drawTextAt(fmtNumber(totalAmount), xOf(2 + airlineColumns.length), y, 9);
+    drawTextAt(fmtNumber(totalCommission), xOf(3 + airlineColumns.length), y, 9);
 
-  drawBoldLine();
+    y -= 20;
+    ensureSpace(8);
+    drawTextAt("DONNEES PAR AGENCE", margin, y, 10);
+    y -= rowH;
+    drawRule();
+    y -= 6;
+    drawTextAt("AGENCE", margin, y, 8);
+    drawTextAt("BILLETS", margin + 250, y, 8);
+    drawTextAt("MONTANTS", margin + 330, y, 8);
+    y -= rowH;
+    drawRule(0.4);
+    y -= 3;
 
-  // Airline totals
-  drawText("TOTAUX PAR COMPAGNIE", margin, 10, true);
-  y -= 5;
-  drawLine();
-
-  for (const airline of allAirlines) {
-    const data = airlineTotals.get(airline);
-    if (!data) continue;
-
-    if (y < 50) {
-      page = pdf.addPage([595, 842]);
-      y = 800;
-    }
-
-    drawText(`${airline}`, margin, 8);
-    drawText(`${data.count}`, billetCol, 8);
-    drawText(`${data.amount.toFixed(2)} USD`, airlineStartCol, 8);
-    drawText(`${data.commission.toFixed(2)} USD`, airlineStartCol + colWidth, 8);
-    drawLine();
-  }
-
-  drawBoldLine();
-
-  // Total general
-  drawText("TOTAL GENERAL", margin, 11, true);
-  drawText(`${totalCount}`, billetCol, 11, true);
-  drawText(`${totalAmount.toFixed(2)} USD`, airlineStartCol, 11, true);
-  drawText(`${totalCommission.toFixed(2)} USD`, airlineStartCol + colWidth, 11, true);
-
-  y -= 15;
-  drawBoldLine();
-
-  // Agency summary
-  drawText("DONNEES PAR AGENCE", margin, 10, true);
-  y -= 5;
-  drawLine();
-
-  drawText("AGENCE", margin, 8, true);
-  drawText("BILLETS", billetCol, 8, true);
-  drawText("MONTANTS", airlineStartCol, 8, true);
-  drawLine();
-
-  for (const [agency, data] of Array.from(byAgency.entries()).sort()) {
-    if (y < 50) {
-      page = pdf.addPage([595, 842]);
-      y = 800;
-    }
-
-    drawText(agency, margin, 8);
-    drawText(`${data.count}`, billetCol, 8);
-    drawText(`${data.amount.toFixed(2)} USD`, airlineStartCol, 8);
-    drawLine();
+    Array.from(byAgency.entries()).sort(([a], [b]) => a.localeCompare(b)).forEach(([agency, data]) => {
+      ensureSpace(2);
+      drawTextAt(agency, margin, y, 8);
+      drawTextAt(String(data.count), margin + 250, y, 8);
+      drawTextAt(`${fmtNumber(data.amount)} USD`, margin + 330, y, 8);
+      y -= rowH;
+      drawRule(0.2);
+      y -= 2;
+    });
   }
 
   const bytes = await pdf.save();
