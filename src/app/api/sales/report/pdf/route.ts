@@ -167,16 +167,17 @@ export async function GET(request: NextRequest) {
   );
   const font = await pdf.embedFont(fontFile);
 
-  let page = pdf.addPage([595, 842]);
+  let page = pdf.addPage([842, 595]);
   const width = page.getWidth();
+  const height = page.getHeight();
   const margin = 20;
-  let y = 805;
-  const rowH = 13;
+  let y = height - 28;
+  const rowH = 15;
 
   const ensureSpace = (rows: number) => {
     if (y - rows * rowH < 45) {
-      page = pdf.addPage([595, 842]);
-      y = 805;
+      page = pdf.addPage([842, 595]);
+      y = height - 28;
     }
   };
 
@@ -199,10 +200,10 @@ export async function GET(request: NextRequest) {
       ? `RAPPORT DE LA SEMAINE DU ${dateRange.startRaw} AU ${dateRange.endRaw}`
       : `RAPPORT MENSUEL DU ${dateRange.startRaw} AU ${dateRange.endRaw}`;
 
-  drawTextAt(title, margin, y, 14);
+  drawTextAt(title, margin, y, 16);
   y -= 16;
   drawRule(1);
-  y -= 12;
+  y -= 14;
 
   const preferredAirlines = ["CAA", "AIRCONGO", "ETHIOPIAN", "MG", "KP", "KENYA", "SA", "UR"];
   const allCodes = Array.from(new Set(tickets.map((ticket) => ticket.airline.code.toUpperCase())));
@@ -220,7 +221,7 @@ export async function GET(request: NextRequest) {
     });
 
     ensureSpace(2);
-    headers.forEach((header, idx) => drawTextAt(header, xs[idx], y, 7));
+    headers.forEach((header, idx) => drawTextAt(header, xs[idx], y, 8));
     y -= rowH;
     drawRule();
     y -= 4;
@@ -240,7 +241,7 @@ export async function GET(request: NextRequest) {
         normalizeStatus(ticket.paymentStatus),
         fmtNumber(ticket.commissionAmount ?? 0),
       ];
-      values.forEach((value, idx) => drawTextAt(value.slice(0, 22), xs[idx], y, 7));
+      values.forEach((value, idx) => drawTextAt(value.slice(0, 26), xs[idx], y, 8));
       y -= rowH;
       drawRule(0.25);
       y -= 2;
@@ -249,11 +250,11 @@ export async function GET(request: NextRequest) {
     ensureSpace(3);
     drawRule(1);
     y -= 10;
-    drawTextAt(`Nbr billets: ${totalCount}`, margin + 260, y, 9);
+    drawTextAt(`Nbr billets: ${totalCount}`, margin + 260, y, 10);
     y -= rowH;
-    drawTextAt(`Total Général: ${fmtNumber(totalAmount)} USD`, margin + 260, y, 9);
+    drawTextAt(`Total Général: ${fmtNumber(totalAmount)} USD`, margin + 260, y, 10);
     y -= rowH;
-    drawTextAt(`Commission: ${fmtNumber(totalCommission)} USD`, margin + 260, y, 9);
+    drawTextAt(`Commission: ${fmtNumber(totalCommission)} USD`, margin + 260, y, 10);
   } else {
     const headers = ["DATE/PERIODE", "BILLETS", ...airlineColumns, "MONTANTS", "COMMISSION"];
     const columns = headers.length;
@@ -261,7 +262,7 @@ export async function GET(request: NextRequest) {
     const xOf = (i: number) => margin + i * colW;
 
     ensureSpace(2);
-    headers.forEach((header, idx) => drawTextAt(header, xOf(idx), y, 7));
+    headers.forEach((header, idx) => drawTextAt(header, xOf(idx), y, 8));
     y -= rowH;
     drawRule();
     y -= 4;
@@ -276,14 +277,14 @@ export async function GET(request: NextRequest) {
       const totalLineAmount = Array.from(airlineMap.values()).reduce((sum, value) => sum + value.amount, 0);
       const totalLineCommission = Array.from(airlineMap.values()).reduce((sum, value) => sum + value.commission, 0);
 
-      drawTextAt(label, xOf(0), y, 7);
-      drawTextAt(String(totalBillets), xOf(1), y, 7);
+      drawTextAt(label, xOf(0), y, 8);
+      drawTextAt(String(totalBillets), xOf(1), y, 8);
       airlineColumns.forEach((code, codeIdx) => {
         const amount = airlineMap.get(code)?.amount ?? 0;
-        drawTextAt(amount > 0 ? fmtNumber(amount) : "-", xOf(2 + codeIdx), y, 7);
+        drawTextAt(amount > 0 ? fmtNumber(amount) : "-", xOf(2 + codeIdx), y, 8);
       });
-      drawTextAt(fmtNumber(totalLineAmount), xOf(2 + airlineColumns.length), y, 7);
-      drawTextAt(fmtNumber(totalLineCommission), xOf(3 + airlineColumns.length), y, 7);
+      drawTextAt(fmtNumber(totalLineAmount), xOf(2 + airlineColumns.length), y, 8);
+      drawTextAt(fmtNumber(totalLineCommission), xOf(3 + airlineColumns.length), y, 8);
 
       y -= rowH;
       drawRule(0.25);

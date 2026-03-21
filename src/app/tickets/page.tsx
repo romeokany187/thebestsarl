@@ -625,7 +625,7 @@ export default async function TicketsPage({
               formTarget="_blank"
               className="rounded-md border border-black/15 bg-white px-4 py-2 text-sm font-semibold dark:border-white/15 dark:bg-zinc-900"
             >
-              Tirer rapport (Journalier/Hebdo/Mensuel)
+              Tirer PDF
             </button>
           </div>
         </form>
