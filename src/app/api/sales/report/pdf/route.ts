@@ -66,24 +66,46 @@ export async function GET(request: NextRequest) {
     orderBy: [{ soldAt: "asc" }, { airline: { code: "asc" } }],
   });
 
-  // Group by airline for summary
-  const totals = new Map<string, { count: number; amount: number; commission: number }>();
+  // Group by date and airline for summary rows
+  const byDateAirline = new Map<string, Map<string, { count: number; amount: number; commission: number }>>();
   const byAgency = new Map<string, { count: number; amount: number }>();
+  const airlineTotals = new Map<string, { count: number; amount: number; commission: number }>();
 
   for (const ticket of tickets) {
-    const airlineKey = ticket.airline.code;
+    const dateStr = new Date(ticket.soldAt).toISOString().slice(0, 10);
+    const airlineCode = ticket.airline.code;
     const agencyKey = ticket.seller?.team?.name ?? "Sans agence";
 
-    const current = totals.get(airlineKey) ?? { count: 0, amount: 0, commission: 0 };
-    current.count += 1;
-    current.amount += ticket.amount;
-    current.commission += ticket.commissionAmount ?? 0;
-    totals.set(airlineKey, current);
+    // Group by date -> airline
+    if (!byDateAirline.has(dateStr)) {
+      byDateAirline.set(dateStr, new Map());
+    }
+    const dateMap = byDateAirline.get(dateStr)!;
 
-    const agencyCurrent = byAgency.get(agencyKey) ?? { count: 0, amount: 0 };
-    agencyCurrent.count += 1;
-    agencyCurrent.amount += ticket.amount;
-    byAgency.set(agencyKey, agencyCurrent);
+    if (!dateMap.has(airlineCode)) {
+      dateMap.set(airlineCode, { count: 0, amount: 0, commission: 0 });
+    }
+    const row = dateMap.get(airlineCode)!;
+    row.count += 1;
+    row.amount += ticket.amount;
+    row.commission += ticket.commissionAmount ?? 0;
+
+    // Airline totals
+    if (!airlineTotals.has(airlineCode)) {
+      airlineTotals.set(airlineCode, { count: 0, amount: 0, commission: 0 });
+    }
+    const airlineTotal = airlineTotals.get(airlineCode)!;
+    airlineTotal.count += 1;
+    airlineTotal.amount += ticket.amount;
+    airlineTotal.commission += ticket.commissionAmount ?? 0;
+
+    // Agency totals
+    if (!byAgency.has(agencyKey)) {
+      byAgency.set(agencyKey, { count: 0, amount: 0 });
+    }
+    const agencyData = byAgency.get(agencyKey)!;
+    agencyData.count += 1;
+    agencyData.amount += ticket.amount;
   }
 
   const totalCount = tickets.length;
@@ -101,133 +123,137 @@ export async function GET(request: NextRequest) {
 
   let page = pdf.addPage([595, 842]);
   const width = page.getWidth();
-  const margin = 20;
-  const colWidth = (width - 2 * margin) / 6;
+  const margin = 15;
   let y = 800;
 
   const drawText = (text: string, x: number, size: number, bold = false) => {
+    if (y < 40) {
+      page = pdf.addPage([595, 842]);
+      y = 800;
+    }
     page.drawText(text, { x, y, size, font, color: rgb(0, 0, 0) });
+    y -= size * 1.5;
+  };
+
+  const drawLine = () => {
+    if (y < 40) {
+      page = pdf.addPage([595, 842]);
+      y = 800;
+    }
+    page.drawLine({
+      start: { x: margin, y },
+      end: { x: width - margin, y },
+      thickness: 0.5,
+      color: rgb(0.8, 0.8, 0.8),
+    });
+    y -= 8;
+  };
+
+  const drawBoldLine = () => {
+    if (y < 40) {
+      page = pdf.addPage([595, 842]);
+      y = 800;
+    }
+    page.drawLine({
+      start: { x: margin, y },
+      end: { x: width - margin, y },
+      thickness: 1.2,
+      color: rgb(0, 0, 0),
+    });
+    y -= 10;
   };
 
   // Title
-  drawText(dateRange.label.toUpperCase(), margin, 16, true);
-  y -= 30;
+  drawText(dateRange.label.toUpperCase(), margin, 14, true);
+  y -= 5;
+  drawBoldLine();
 
-  // Table header
-  const headers = ["DATE", "COMPAGNIE", "BILLETS", "MONTANTS", "COMMISSION", "AGENT"];
-  const headerX = [margin, margin + colWidth, margin + colWidth * 2, margin + colWidth * 3, margin + colWidth * 4, margin + colWidth * 5];
+  // Get all airlines
+  const allAirlines = Array.from(new Set(tickets.map((t) => t.airline.code))).sort();
 
-  page.drawLine({
-    start: { x: margin, y: y + 5 },
-    end: { x: width - margin, y: y + 5 },
-    thickness: 1,
-    color: rgb(0.2, 0.2, 0.2),
+  // Table: Daily summary header
+  const colWidth = (width - 2 * margin) / (2 + allAirlines.length);
+  const dateCol = margin;
+  const billetCol = margin + colWidth;
+  const airlineStartCol = margin + colWidth * 2;
+
+  drawText("DATE", dateCol, 8, true);
+  drawText("BILLETS", billetCol, 8, true);
+  allAirlines.forEach((airline, i) => {
+    drawText(airline, airlineStartCol + i * colWidth, 8, true);
   });
 
-  headers.forEach((header, i) => {
-    drawText(header, headerX[i], 9, true);
-  });
+  drawLine();
 
-  y -= 15;
-
-  // Table rows
-  for (const ticket of tickets) {
+  // Daily summary rows
+  for (const [dateStr, airlineMap] of Array.from(byDateAirline.entries()).sort()) {
     if (y < 50) {
       page = pdf.addPage([595, 842]);
       y = 800;
     }
 
-    const date = new Date(ticket.soldAt).toISOString().slice(0, 10);
-    const values = [
-      date,
-      ticket.airline.code,
-      "1",
-      `${ticket.amount.toFixed(2)}`,
-      `${(ticket.commissionAmount ?? 0).toFixed(2)}`,
-      ticket.seller?.name ?? "-",
-    ];
+    let totalDayBillets = 0;
+    const values: number[] = []; // per airline
 
+    allAirlines.forEach((airline) => {
+      const data = airlineMap.get(airline);
+      const count = data?.count ?? 0;
+      values.push(count);
+      totalDayBillets += count;
+    });
+
+    drawText(dateStr, dateCol, 8);
+    drawText(`${totalDayBillets}`, billetCol, 8);
     values.forEach((val, i) => {
-      drawText(val, headerX[i], 8);
+      drawText(`${val}`, airlineStartCol + i * colWidth, 8);
     });
-
-    page.drawLine({
-      start: { x: margin, y: y - 3 },
-      end: { x: width - margin, y: y - 3 },
-      thickness: 0.3,
-      color: rgb(0.9, 0.9, 0.9),
-    });
-
-    y -= 12;
+    drawLine();
   }
 
-  // Subtotals by airline
-  y -= 10;
-  page.drawLine({
-    start: { x: margin, y: y + 3 },
-    end: { x: width - margin, y: y + 3 },
-    thickness: 1.5,
-    color: rgb(0, 0, 0),
-  });
-  y -= 15;
+  drawBoldLine();
 
+  // Airline totals
   drawText("TOTAUX PAR COMPAGNIE", margin, 10, true);
-  y -= 12;
+  y -= 5;
+  drawLine();
 
-  for (const [airline, data] of Array.from(totals.entries()).sort()) {
+  for (const airline of allAirlines) {
+    const data = airlineTotals.get(airline);
+    if (!data) continue;
+
     if (y < 50) {
       page = pdf.addPage([595, 842]);
       y = 800;
     }
 
-    const values = [
-      airline,
-      `${data.count}`,
-      `${data.amount.toFixed(2)} USD`,
-      `${data.commission.toFixed(2)} USD`,
-    ];
-
-    drawText(airline, margin, 8);
-    drawText(`${data.count}`, margin + colWidth * 2, 8);
-    drawText(`${data.amount.toFixed(2)} USD`, margin + colWidth * 3, 8);
-    drawText(`${data.commission.toFixed(2)} USD`, margin + colWidth * 4, 8);
-
-    y -= 12;
+    drawText(`${airline}`, margin, 8);
+    drawText(`${data.count}`, billetCol, 8);
+    drawText(`${data.amount.toFixed(2)} USD`, airlineStartCol, 8);
+    drawText(`${data.commission.toFixed(2)} USD`, airlineStartCol + colWidth, 8);
+    drawLine();
   }
+
+  drawBoldLine();
 
   // Total general
-  y -= 10;
-  page.drawLine({
-    start: { x: margin, y: y + 3 },
-    end: { x: width - margin, y: y + 3 },
-    thickness: 1.5,
-    color: rgb(0, 0, 0),
-  });
-  y -= 15;
-
   drawText("TOTAL GENERAL", margin, 11, true);
-  drawText(`${totalCount}`, margin + colWidth * 2, 11, true);
-  drawText(`${totalAmount.toFixed(2)} USD`, margin + colWidth * 3, 11, true);
-  drawText(`${totalCommission.toFixed(2)} USD`, margin + colWidth * 4, 11, true);
+  drawText(`${totalCount}`, billetCol, 11, true);
+  drawText(`${totalAmount.toFixed(2)} USD`, airlineStartCol, 11, true);
+  drawText(`${totalCommission.toFixed(2)} USD`, airlineStartCol + colWidth, 11, true);
 
-  // Summary by agency
-  y -= 20;
-  page.drawLine({
-    start: { x: margin, y: y + 3 },
-    end: { x: width - margin, y: y + 3 },
-    thickness: 1,
-    color: rgb(0.2, 0.2, 0.2),
-  });
   y -= 15;
+  drawBoldLine();
 
+  // Agency summary
   drawText("DONNEES PAR AGENCE", margin, 10, true);
-  y -= 12;
+  y -= 5;
+  drawLine();
 
-  drawText("AGENCE", margin, 9, true);
-  drawText("BILLETS", margin + colWidth * 2, 9, true);
-  drawText("MONTANTS", margin + colWidth * 3, 9, true);
+  drawText("AGENCE", margin, 8, true);
+  drawText("BILLETS", billetCol, 8, true);
+  drawText("MONTANTS", airlineStartCol, 8, true);
+  drawLine();
 
-  y -= 12;
   for (const [agency, data] of Array.from(byAgency.entries()).sort()) {
     if (y < 50) {
       page = pdf.addPage([595, 842]);
@@ -235,10 +261,9 @@ export async function GET(request: NextRequest) {
     }
 
     drawText(agency, margin, 8);
-    drawText(`${data.count}`, margin + colWidth * 2, 8);
-    drawText(`${data.amount.toFixed(2)} USD`, margin + colWidth * 3, 8);
-
-    y -= 12;
+    drawText(`${data.count}`, billetCol, 8);
+    drawText(`${data.amount.toFixed(2)} USD`, airlineStartCol, 8);
+    drawLine();
   }
 
   const bytes = await pdf.save();
