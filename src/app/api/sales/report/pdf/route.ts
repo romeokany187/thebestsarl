@@ -250,7 +250,7 @@ export async function GET(request: NextRequest) {
     headers.forEach((header, idx) => drawTextAt(header, xs[idx], y, 8));
     y -= rowH;
     drawRule();
-    y -= 4;
+    y -= 9;
 
     tickets.forEach((ticket, index) => {
       ensureSpace(2);
@@ -270,7 +270,7 @@ export async function GET(request: NextRequest) {
       values.forEach((value, idx) => drawTextAt(value.slice(0, 26), xs[idx], y, 8));
       y -= rowH;
       drawRule(0.25);
-      y -= 4;
+      y -= 9;
     });
 
     ensureSpace(3);
@@ -321,7 +321,7 @@ export async function GET(request: NextRequest) {
     });
     y -= rowH;
     drawRule();
-    y -= 4;
+    y -= 9;
 
     const lines = reportKind === "WEEKLY"
       ? Array.from(byDateAirline.entries()).sort(([a], [b]) => a.localeCompare(b))
@@ -351,7 +351,7 @@ export async function GET(request: NextRequest) {
 
       y -= rowH;
       drawRule(0.25);
-      y -= 4;
+      y -= 9;
     });
 
     ensureSpace(4);
