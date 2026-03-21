@@ -244,7 +244,7 @@ export async function GET(request: NextRequest) {
       values.forEach((value, idx) => drawTextAt(value.slice(0, 26), xs[idx], y, 8));
       y -= rowH;
       drawRule(0.25);
-      y -= 2;
+      y -= 4;
     });
 
     ensureSpace(3);
@@ -288,7 +288,7 @@ export async function GET(request: NextRequest) {
 
       y -= rowH;
       drawRule(0.25);
-      y -= 2;
+      y -= 4;
     });
 
     ensureSpace(4);
