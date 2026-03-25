@@ -57,7 +57,7 @@ export default async function SalesPage({
   const canCreateTicket = role === "ADMIN" || role === "MANAGER" || role === "EMPLOYEE";
   const canManageTickets = role === "ADMIN" || role === "EMPLOYEE";
   const canImportTickets = canImportTicketWorkbook(role, session.user.canImportTicketWorkbook);
-  const canReplaceImportedMonth = role === "ADMIN" || role === "MANAGER";
+  const canReplaceImportedPeriod = role === "ADMIN" || role === "MANAGER";
   const accessNote = canCreateTicket
     ? role === "EMPLOYEE"
       ? "Accès commercial personnel: création et suivi de vos ventes."
@@ -218,7 +218,7 @@ export default async function SalesPage({
             {canImportTickets ? (
               <TicketImportForm
                 defaultSellerEmail={session.user.email ?? ""}
-                canReplaceMonth={canReplaceImportedMonth}
+                canReplacePeriod={canReplaceImportedPeriod}
                 initialHistory={importHistory}
               />
             ) : null}

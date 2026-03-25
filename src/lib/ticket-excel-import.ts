@@ -4,14 +4,20 @@ import { prisma } from "@/lib/prisma";
 
 type Row = Record<string, unknown>;
 
+export type ImportPeriodMode = "DAY" | "MONTH" | "YEAR" | "CUSTOM";
+
 export type TicketWorkbookImportOptions = {
   fileBuffer: Buffer;
   sheetName?: string;
   dryRun?: boolean;
   defaultSellerEmail?: string;
   year: number;
-  month: number;
-  replaceMonth?: boolean;
+  month?: number;
+  periodMode?: ImportPeriodMode;
+  date?: string;
+  startDate?: string;
+  endDate?: string;
+  replaceExistingPeriod?: boolean;
   includePreview?: boolean;
   maxPreviewRows?: number;
 };
@@ -58,10 +64,13 @@ export type TicketImportHistoryEntry = {
   actorEmail: string;
   fileName: string | null;
   mode: "PREVIEW" | "IMPORT";
+  periodMode: ImportPeriodMode | null;
   year: number | null;
   month: number | null;
+  rangeStart: string | null;
+  rangeEnd: string | null;
   sheetName: string | null;
-  replaceMonth: boolean;
+  replaceExistingPeriod: boolean;
   dryRun: boolean;
   createdCount: number;
   failedCount: number;
@@ -200,17 +209,100 @@ function parsePaymentStatus(value: unknown): PaymentStatus {
   return PaymentStatus.UNPAID;
 }
 
-function buildRange(year: number, month: number) {
+function parseIsoDate(value: string) {
+  const parsed = value.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!parsed) {
+    throw new Error("Date invalide. Format attendu: AAAA-MM-JJ.");
+  }
+
+  const year = Number.parseInt(parsed[1], 10);
+  const month = Number.parseInt(parsed[2], 10);
+  const day = Number.parseInt(parsed[3], 10);
+  const date = new Date(Date.UTC(year, month - 1, day, 0, 0, 0, 0));
+  if (
+    Number.isNaN(date.getTime())
+    || date.getUTCFullYear() !== year
+    || date.getUTCMonth() !== month - 1
+    || date.getUTCDate() !== day
+  ) {
+    throw new Error("Date invalide. Format attendu: AAAA-MM-JJ.");
+  }
+
+  return date;
+}
+
+function withUtcDayEnd(date: Date) {
+  return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate(), 23, 59, 59, 999));
+}
+
+function capRangeEnd(end: Date) {
   const now = new Date();
-  const start = new Date(Date.UTC(year, month - 1, 1, 0, 0, 0, 0));
-  const endOfMonth = new Date(Date.UTC(year, month, 0, 23, 59, 59, 999));
+  const todayEnd = withUtcDayEnd(now);
+  return end < todayEnd ? end : todayEnd;
+}
 
-  const yesterday = new Date(now);
-  yesterday.setUTCDate(yesterday.getUTCDate() - 1);
-  const yesterdayEnd = new Date(Date.UTC(yesterday.getUTCFullYear(), yesterday.getUTCMonth(), yesterday.getUTCDate(), 23, 59, 59, 999));
-  const end = endOfMonth < yesterdayEnd ? endOfMonth : yesterdayEnd;
+function finalizeRange(periodMode: ImportPeriodMode, start: Date, end: Date, anchorYear: number) {
+  const cappedEnd = capRangeEnd(end);
+  if (cappedEnd < start) {
+    throw new Error("La période cible ne peut pas être entièrement dans le futur.");
+  }
 
-  return { start, end };
+  return {
+    periodMode,
+    start,
+    end: cappedEnd,
+    anchorYear,
+  };
+}
+
+function buildRange(options: Pick<TicketWorkbookImportOptions, "periodMode" | "year" | "month" | "date" | "startDate" | "endDate">) {
+  const periodMode = options.periodMode ?? "MONTH";
+
+  if (periodMode === "DAY") {
+    if (!options.date) {
+      throw new Error("Date requise pour une importation journalière.");
+    }
+
+    const start = parseIsoDate(options.date);
+    return finalizeRange(periodMode, start, withUtcDayEnd(start), start.getUTCFullYear());
+  }
+
+  if (periodMode === "YEAR") {
+    if (!options.year || options.year < 2000 || options.year > 2100) {
+      throw new Error("Année invalide.");
+    }
+
+    const start = new Date(Date.UTC(options.year, 0, 1, 0, 0, 0, 0));
+    const end = new Date(Date.UTC(options.year, 11, 31, 23, 59, 59, 999));
+    return finalizeRange(periodMode, start, end, options.year);
+  }
+
+  if (periodMode === "CUSTOM") {
+    if (!options.startDate || !options.endDate) {
+      throw new Error("Dates de début et de fin requises pour une plage personnalisée.");
+    }
+
+    const start = parseIsoDate(options.startDate);
+    const end = withUtcDayEnd(parseIsoDate(options.endDate));
+    if (end < start) {
+      throw new Error("La date de fin doit être supérieure ou égale à la date de début.");
+    }
+
+    return finalizeRange(periodMode, start, end, start.getUTCFullYear());
+  }
+
+  if (!options.year || options.year < 2000 || options.year > 2100) {
+    throw new Error("Année invalide.");
+  }
+
+  if (!options.month || options.month < 1 || options.month > 12) {
+    throw new Error("Mois invalide.");
+  }
+
+  const start = new Date(Date.UTC(options.year, options.month - 1, 1, 0, 0, 0, 0));
+  const endOfMonth = new Date(Date.UTC(options.year, options.month, 0, 23, 59, 59, 999));
+
+  return finalizeRange(periodMode, start, endOfMonth, options.year);
 }
 
 function normalizePersonKey(value: string) {
@@ -341,10 +433,15 @@ function asHistoryEntry(log: {
     actorEmail: log.actor.email,
     fileName: typeof payload.fileName === "string" ? payload.fileName : null,
     mode: payload.mode === "IMPORT" ? "IMPORT" : "PREVIEW",
+    periodMode: payload.periodMode === "DAY" || payload.periodMode === "YEAR" || payload.periodMode === "CUSTOM" || payload.periodMode === "MONTH"
+      ? payload.periodMode
+      : null,
     year: typeof payload.year === "number" ? payload.year : null,
     month: typeof payload.month === "number" ? payload.month : null,
+    rangeStart: typeof payload.rangeStart === "string" ? payload.rangeStart : null,
+    rangeEnd: typeof payload.rangeEnd === "string" ? payload.rangeEnd : null,
     sheetName: typeof payload.sheetName === "string" ? payload.sheetName : null,
-    replaceMonth: Boolean(payload.replaceMonth),
+    replaceExistingPeriod: Boolean(payload.replaceExistingPeriod ?? payload.replaceMonth),
     dryRun: Boolean(payload.dryRun),
     createdCount: typeof summary.created === "number" ? summary.created : 0,
     failedCount: typeof summary.failed === "number" ? summary.failed : 0,
@@ -356,11 +453,14 @@ export async function recordTicketWorkbookImportLog(input: {
   actorId: string;
   actorName: string;
   fileName: string | null;
+  periodMode: ImportPeriodMode;
   year: number;
-  month: number;
+  month?: number;
+  rangeStart: string;
+  rangeEnd: string;
   sheetName?: string;
   dryRun: boolean;
-  replaceMonth: boolean;
+  replaceExistingPeriod: boolean;
   result: TicketWorkbookImportResult;
 }) {
   const created = await prisma.auditLog.create({
@@ -372,11 +472,14 @@ export async function recordTicketWorkbookImportLog(input: {
       payload: {
         actorName: input.actorName,
         fileName: input.fileName,
+        periodMode: input.periodMode,
         year: input.year,
-        month: input.month,
+        month: input.month ?? null,
+        rangeStart: input.rangeStart,
+        rangeEnd: input.rangeEnd,
         sheetName: input.sheetName ?? null,
         dryRun: input.dryRun,
-        replaceMonth: input.replaceMonth,
+        replaceExistingPeriod: input.replaceExistingPeriod,
         mode: input.dryRun ? "PREVIEW" : "IMPORT",
         summary: input.result.summary,
         range: input.result.range,
@@ -438,10 +541,10 @@ export async function listTicketWorkbookImportHistory(
 
 export async function importTicketWorkbookFromBuffer(options: TicketWorkbookImportOptions): Promise<TicketWorkbookImportResult> {
   const dryRun = options.dryRun ?? false;
-  const replaceMonth = options.replaceMonth ?? false;
+  const replaceExistingPeriod = options.replaceExistingPeriod ?? false;
   const includePreview = options.includePreview ?? dryRun;
   const maxPreviewRows = options.maxPreviewRows ?? 120;
-  const range = buildRange(options.year, options.month);
+  const range = buildRange(options);
   const workbook = XLSX.read(options.fileBuffer, { type: "buffer", cellDates: true });
   const sheetNames = options.sheetName
     ? [options.sheetName]
@@ -481,12 +584,12 @@ export async function importTicketWorkbookFromBuffer(options: TicketWorkbookImpo
   const previewRows: TicketWorkbookImportPreviewRow[] = [];
   let previewTruncated = false;
 
-  if (replaceMonth && !dryRun) {
-    const existingMonthTickets = await prisma.ticketSale.findMany({
+  if (replaceExistingPeriod && !dryRun) {
+    const existingPeriodTickets = await prisma.ticketSale.findMany({
       where: { soldAt: { gte: range.start, lte: range.end } },
       select: { id: true },
     });
-    const ticketIds = existingMonthTickets.map((ticket) => ticket.id);
+    const ticketIds = existingPeriodTickets.map((ticket) => ticket.id);
 
     if (ticketIds.length > 0) {
       await prisma.payment.deleteMany({ where: { ticketId: { in: ticketIds } } });
@@ -526,7 +629,7 @@ export async function importTicketWorkbookFromBuffer(options: TicketWorkbookImpo
     if (!sheet) continue;
 
     const rows = toRowsFromMatrix(sheet);
-    const sheetDate = parseSheetDateFromName(sheetName, options.year);
+    const sheetDate = parseSheetDateFromName(sheetName, range.anchorYear);
     summary.sheetsProcessed += 1;
 
     for (let index = 0; index < rows.length; index += 1) {
@@ -635,7 +738,7 @@ export async function importTicketWorkbookFromBuffer(options: TicketWorkbookImpo
           airlineByName.set(createdAirline.name.toLowerCase(), createdAirline);
         }
 
-        const isMarchImport = options.month === 3;
+        const isMarchImport = range.start.getUTCMonth() === 2 && range.end.getUTCMonth() === 2;
         const hasCommissionFromFile = commissionAmountFromFile > 0;
 
         let commissionAmount = 0;

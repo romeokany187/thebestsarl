@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireApiModuleAccess } from "@/lib/rbac";
 import { canImportTicketWorkbook } from "@/lib/assignment";
-import { importTicketWorkbookFromBuffer, listTicketWorkbookImportHistory, recordTicketWorkbookImportLog } from "@/lib/ticket-excel-import";
+import { type ImportPeriodMode, importTicketWorkbookFromBuffer, listTicketWorkbookImportHistory, recordTicketWorkbookImportLog } from "@/lib/ticket-excel-import";
 
 export const runtime = "nodejs";
 
@@ -19,6 +19,17 @@ function parseInteger(value: FormDataEntryValue | null) {
   if (typeof value !== "string") return null;
   const parsed = Number.parseInt(value, 10);
   return Number.isFinite(parsed) ? parsed : null;
+}
+
+function parsePeriodMode(value: FormDataEntryValue | null): ImportPeriodMode {
+  if (typeof value !== "string") return "MONTH";
+  if (value === "DAY" || value === "YEAR" || value === "CUSTOM") return value;
+  return "MONTH";
+}
+
+function parseIsoDate(value: FormDataEntryValue | null) {
+  if (typeof value !== "string" || !value.trim()) return undefined;
+  return value.trim();
 }
 
 export async function GET(request: NextRequest) {
@@ -66,22 +77,26 @@ export async function POST(request: NextRequest) {
   try {
     const formData = await request.formData();
     const file = formData.get("file");
+    const periodMode = parsePeriodMode(formData.get("periodMode"));
     const year = parseInteger(formData.get("year"));
     const month = parseInteger(formData.get("month"));
+    const date = parseIsoDate(formData.get("date"));
+    const startDate = parseIsoDate(formData.get("startDate"));
+    const endDate = parseIsoDate(formData.get("endDate"));
     const sheetNameValue = formData.get("sheetName");
     const defaultSellerEmailValue = formData.get("defaultSellerEmail");
     const dryRun = parseBoolean(formData.get("dryRun"));
-    const replaceMonthRequested = parseBoolean(formData.get("replaceMonth"));
+    const replaceExistingPeriodRequested = parseBoolean(formData.get("replaceExistingPeriod")) || parseBoolean(formData.get("replaceMonth"));
 
     if (!(file instanceof File)) {
       return NextResponse.json({ error: "Le fichier Excel est requis." }, { status: 400 });
     }
 
-    if (!year || year < 2000 || year > 2100) {
+    if ((periodMode === "MONTH" || periodMode === "YEAR") && (!year || year < 2000 || year > 2100)) {
       return NextResponse.json({ error: "Année invalide." }, { status: 400 });
     }
 
-    if (!month || month < 1 || month > 12) {
+    if (periodMode === "MONTH" && (!month || month < 1 || month > 12)) {
       return NextResponse.json({ error: "Mois invalide." }, { status: 400 });
     }
 
@@ -99,8 +114,8 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Formats autorisés: XLSX, XLS." }, { status: 400 });
     }
 
-    if (replaceMonthRequested && access.role === "EMPLOYEE") {
-      return NextResponse.json({ error: "Le remplacement complet du mois est réservé à la supervision." }, { status: 403 });
+    if (replaceExistingPeriodRequested && access.role === "EMPLOYEE") {
+      return NextResponse.json({ error: "Le remplacement complet de la période est réservé à la supervision." }, { status: 403 });
     }
 
     const buffer = Buffer.from(await file.arrayBuffer());
@@ -114,22 +129,31 @@ export async function POST(request: NextRequest) {
       sheetName,
       dryRun,
       defaultSellerEmail: typedDefaultSellerEmail,
-      year,
+      periodMode,
+      year: year ?? new Date().getUTCFullYear(),
       month,
-      replaceMonth: replaceMonthRequested,
+      date,
+      startDate,
+      endDate,
+      replaceExistingPeriod: replaceExistingPeriodRequested,
       includePreview: true,
       maxPreviewRows: 160,
     });
+
+    const resultStart = new Date(`${result.range.start}T00:00:00.000Z`);
 
     const historyEntry = await recordTicketWorkbookImportLog({
       actorId: access.session.user.id,
       actorName: access.session.user.name ?? access.session.user.email ?? "Utilisateur",
       fileName: file.name,
-      year,
-      month,
+      periodMode,
+      year: resultStart.getUTCFullYear(),
+      month: periodMode === "MONTH" ? (month ?? resultStart.getUTCMonth() + 1) : undefined,
+      rangeStart: result.range.start,
+      rangeEnd: result.range.end,
       sheetName,
       dryRun,
-      replaceMonth: replaceMonthRequested,
+      replaceExistingPeriod: replaceExistingPeriodRequested,
       result,
     });
 
@@ -137,7 +161,7 @@ export async function POST(request: NextRequest) {
       data: {
         ...result,
         dryRun,
-        replaceMonth: replaceMonthRequested,
+        replaceExistingPeriod: replaceExistingPeriodRequested,
         historyEntry,
       },
     });

@@ -10,10 +10,13 @@ type HistoryEntry = {
   actorEmail: string;
   fileName: string | null;
   mode: "PREVIEW" | "IMPORT";
+  periodMode: "DAY" | "MONTH" | "YEAR" | "CUSTOM" | null;
   year: number | null;
   month: number | null;
+  rangeStart: string | null;
+  rangeEnd: string | null;
   sheetName: string | null;
-  replaceMonth: boolean;
+  replaceExistingPeriod: boolean;
   dryRun: boolean;
   createdCount: number;
   failedCount: number;
@@ -34,7 +37,7 @@ type ImportResult = {
   range: { start: string; end: string };
   sheetNames: string[];
   dryRun: boolean;
-  replaceMonth: boolean;
+  replaceExistingPeriod: boolean;
   previewRows: Array<{
     sheet: string;
     line: number;
@@ -56,41 +59,60 @@ type ImportResult = {
 
 type FormState = {
   file: File | null;
+  periodMode: "DAY" | "MONTH" | "YEAR" | "CUSTOM";
   year: string;
   month: string;
+  date: string;
+  startDate: string;
+  endDate: string;
   sheetName: string;
   defaultSellerEmail: string;
   dryRun: boolean;
-  replaceMonth: boolean;
+  replaceExistingPeriod: boolean;
 };
 
-function currentMonthDefaults() {
+function currentPeriodDefaults() {
   const now = new Date();
+  const today = now.toISOString().slice(0, 10);
   return {
     year: String(now.getUTCFullYear()),
     month: String(now.getUTCMonth() + 1),
+    date: today,
+    startDate: today,
+    endDate: today,
   };
+}
+
+function periodModeLabel(mode: HistoryEntry["periodMode"]) {
+  if (mode === "DAY") return "Jour";
+  if (mode === "YEAR") return "Année";
+  if (mode === "CUSTOM") return "Plage";
+  return "Mois";
 }
 
 export function TicketImportForm({
   defaultSellerEmail,
-  canReplaceMonth,
+  canReplacePeriod,
   initialHistory,
 }: {
   defaultSellerEmail: string;
-  canReplaceMonth: boolean;
+  canReplacePeriod: boolean;
   initialHistory: HistoryEntry[];
 }) {
   const router = useRouter();
-  const defaults = currentMonthDefaults();
+  const defaults = currentPeriodDefaults();
   const [form, setForm] = useState<FormState>({
     file: null,
+    periodMode: "MONTH",
     year: defaults.year,
     month: defaults.month,
+    date: defaults.date,
+    startDate: defaults.startDate,
+    endDate: defaults.endDate,
     sheetName: "",
     defaultSellerEmail,
     dryRun: true,
-    replaceMonth: false,
+    replaceExistingPeriod: false,
   });
   const [status, setStatus] = useState<string>("Simulation recommandée avant import réel.");
   const [statusType, setStatusType] = useState<"idle" | "loading" | "success" | "error">("idle");
@@ -106,13 +128,17 @@ export function TicketImportForm({
       : "no-file";
     return [
       fileSignature,
+      form.periodMode,
       form.year.trim(),
       form.month.trim(),
+      form.date.trim(),
+      form.startDate.trim(),
+      form.endDate.trim(),
       form.sheetName.trim(),
       form.defaultSellerEmail.trim().toLowerCase(),
-      canReplaceMonth && form.replaceMonth ? "replace" : "append",
+      canReplacePeriod && form.replaceExistingPeriod ? "replace" : "append",
     ].join("|");
-  }, [canReplaceMonth, form.defaultSellerEmail, form.file, form.month, form.replaceMonth, form.sheetName, form.year]);
+  }, [canReplacePeriod, form.date, form.defaultSellerEmail, form.endDate, form.file, form.month, form.periodMode, form.replaceExistingPeriod, form.sheetName, form.startDate, form.year]);
 
   const previewValidated = previewSignature.length > 0 && previewSignature === currentSignature;
 
@@ -140,8 +166,22 @@ export function TicketImportForm({
 
     const payload = new FormData();
     payload.append("file", form.file);
-    payload.append("year", form.year);
-    payload.append("month", form.month);
+    payload.append("periodMode", form.periodMode);
+    if (form.year.trim()) {
+      payload.append("year", form.year);
+    }
+    if (form.month.trim()) {
+      payload.append("month", form.month);
+    }
+    if (form.date.trim()) {
+      payload.append("date", form.date);
+    }
+    if (form.startDate.trim()) {
+      payload.append("startDate", form.startDate);
+    }
+    if (form.endDate.trim()) {
+      payload.append("endDate", form.endDate);
+    }
     payload.append("dryRun", String(form.dryRun));
     if (form.sheetName.trim()) {
       payload.append("sheetName", form.sheetName.trim());
@@ -149,8 +189,8 @@ export function TicketImportForm({
     if (form.defaultSellerEmail.trim()) {
       payload.append("defaultSellerEmail", form.defaultSellerEmail.trim());
     }
-    if (canReplaceMonth && form.replaceMonth) {
-      payload.append("replaceMonth", "true");
+    if (canReplacePeriod && form.replaceExistingPeriod) {
+      payload.append("replaceExistingPeriod", "true");
     }
 
     const response = await fetch("/api/tickets/import", {
@@ -205,7 +245,7 @@ export function TicketImportForm({
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `preview-billets-${form.year}-${String(form.month).padStart(2, "0")}.csv`;
+    a.download = `preview-billets-${result.range.start}-${result.range.end}.csv`;
     a.click();
     URL.revokeObjectURL(url);
   }
@@ -243,7 +283,48 @@ export function TicketImportForm({
         className="w-full rounded-md border border-black/15 px-3 py-2 text-sm dark:border-white/20"
       />
 
-      <div className="grid gap-3 sm:grid-cols-2">
+      <label className="grid gap-1 text-xs font-semibold uppercase tracking-wide text-black/60 dark:text-white/60">
+        Type de période
+        <select
+          value={form.periodMode}
+          onChange={(event) => update("periodMode", event.target.value as FormState["periodMode"])}
+          className="rounded-md border border-black/15 px-3 py-2 text-sm font-normal text-black dark:border-white/20 dark:bg-zinc-900 dark:text-white"
+        >
+          <option value="DAY">Jour</option>
+          <option value="MONTH">Mois</option>
+          <option value="YEAR">Année</option>
+          <option value="CUSTOM">Plage personnalisée</option>
+        </select>
+      </label>
+
+      {form.periodMode === "MONTH" ? (
+        <div className="grid gap-3 sm:grid-cols-2">
+          <label className="grid gap-1 text-xs font-semibold uppercase tracking-wide text-black/60 dark:text-white/60">
+            Année
+            <input
+              type="number"
+              min="2000"
+              max="2100"
+              value={form.year}
+              onChange={(event) => update("year", event.target.value)}
+              className="rounded-md border border-black/15 px-3 py-2 text-sm font-normal text-black dark:border-white/20 dark:bg-zinc-900 dark:text-white"
+            />
+          </label>
+          <label className="grid gap-1 text-xs font-semibold uppercase tracking-wide text-black/60 dark:text-white/60">
+            Mois
+            <input
+              type="number"
+              min="1"
+              max="12"
+              value={form.month}
+              onChange={(event) => update("month", event.target.value)}
+              className="rounded-md border border-black/15 px-3 py-2 text-sm font-normal text-black dark:border-white/20 dark:bg-zinc-900 dark:text-white"
+            />
+          </label>
+        </div>
+      ) : null}
+
+      {form.periodMode === "YEAR" ? (
         <label className="grid gap-1 text-xs font-semibold uppercase tracking-wide text-black/60 dark:text-white/60">
           Année
           <input
@@ -255,18 +336,42 @@ export function TicketImportForm({
             className="rounded-md border border-black/15 px-3 py-2 text-sm font-normal text-black dark:border-white/20 dark:bg-zinc-900 dark:text-white"
           />
         </label>
+      ) : null}
+
+      {form.periodMode === "DAY" ? (
         <label className="grid gap-1 text-xs font-semibold uppercase tracking-wide text-black/60 dark:text-white/60">
-          Mois
+          Jour ciblé
           <input
-            type="number"
-            min="1"
-            max="12"
-            value={form.month}
-            onChange={(event) => update("month", event.target.value)}
+            type="date"
+            value={form.date}
+            onChange={(event) => update("date", event.target.value)}
             className="rounded-md border border-black/15 px-3 py-2 text-sm font-normal text-black dark:border-white/20 dark:bg-zinc-900 dark:text-white"
           />
         </label>
-      </div>
+      ) : null}
+
+      {form.periodMode === "CUSTOM" ? (
+        <div className="grid gap-3 sm:grid-cols-2">
+          <label className="grid gap-1 text-xs font-semibold uppercase tracking-wide text-black/60 dark:text-white/60">
+            Début
+            <input
+              type="date"
+              value={form.startDate}
+              onChange={(event) => update("startDate", event.target.value)}
+              className="rounded-md border border-black/15 px-3 py-2 text-sm font-normal text-black dark:border-white/20 dark:bg-zinc-900 dark:text-white"
+            />
+          </label>
+          <label className="grid gap-1 text-xs font-semibold uppercase tracking-wide text-black/60 dark:text-white/60">
+            Fin
+            <input
+              type="date"
+              value={form.endDate}
+              onChange={(event) => update("endDate", event.target.value)}
+              className="rounded-md border border-black/15 px-3 py-2 text-sm font-normal text-black dark:border-white/20 dark:bg-zinc-900 dark:text-white"
+            />
+          </label>
+        </div>
+      ) : null}
 
       <input
         type="text"
@@ -307,16 +412,16 @@ export function TicketImportForm({
         </div>
       ) : null}
 
-      {canReplaceMonth ? (
+      {canReplacePeriod ? (
         <label className="flex items-start gap-2 text-sm">
           <input
             type="checkbox"
-            checked={form.replaceMonth}
-            onChange={(event) => update("replaceMonth", event.target.checked)}
+            checked={form.replaceExistingPeriod}
+            onChange={(event) => update("replaceExistingPeriod", event.target.checked)}
             className="mt-0.5"
             disabled={form.dryRun}
           />
-          <span>Remplacer les ventes déjà enregistrées pour le mois ciblé avant réimport.</span>
+          <span>Remplacer les ventes déjà enregistrées pour la période ciblée avant réimport.</span>
         </label>
       ) : null}
 
@@ -468,7 +573,7 @@ export function TicketImportForm({
                     <td className="px-2 py-1.5">{entry.actorName}</td>
                     <td className="px-2 py-1.5">{entry.mode}</td>
                     <td className="px-2 py-1.5">{entry.fileName ?? "—"}</td>
-                    <td className="px-2 py-1.5">{entry.year && entry.month ? `${entry.year}-${String(entry.month).padStart(2, "0")}` : "—"}</td>
+                    <td className="px-2 py-1.5">{entry.rangeStart && entry.rangeEnd ? `${periodModeLabel(entry.periodMode)} • ${entry.rangeStart} → ${entry.rangeEnd}` : "—"}</td>
                     <td className="px-2 py-1.5">{entry.createdCount}</td>
                     <td className="px-2 py-1.5">{entry.failedCount}</td>
                     <td className="px-2 py-1.5">{entry.totalRows}</td>
