@@ -90,6 +90,88 @@ function periodModeLabel(mode: HistoryEntry["periodMode"]) {
   return "Mois";
 }
 
+function normalizeLooseText(value: string) {
+  return value
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "");
+}
+
+function detectPeriodHintFromFileName(fileName: string): { month?: number; year?: number } | null {
+  const normalized = normalizeLooseText(fileName);
+
+  const monthByName: Array<[RegExp, number]> = [
+    [/janv|janvier/, 1],
+    [/fev|fevr|fevrier/, 2],
+    [/mars/, 3],
+    [/avr|avril/, 4],
+    [/mai/, 5],
+    [/juin/, 6],
+    [/juil|juillet/, 7],
+    [/aout|août/, 8],
+    [/sept|septembre/, 9],
+    [/oct|octobre/, 10],
+    [/nov|novembre/, 11],
+    [/dec|decembre/, 12],
+  ];
+
+  let month: number | undefined;
+  for (const [pattern, value] of monthByName) {
+    if (pattern.test(normalized)) {
+      month = value;
+      break;
+    }
+  }
+
+  const yearMatch = normalized.match(/\b(20\d{2})\b/);
+  const year = yearMatch ? Number.parseInt(yearMatch[1], 10) : undefined;
+
+  if (!month) {
+    const ymd = normalized.match(/\b(20\d{2})[-_\s.\/](\d{1,2})\b/);
+    if (ymd) {
+      const numericMonth = Number.parseInt(ymd[2], 10);
+      if (numericMonth >= 1 && numericMonth <= 12) {
+        month = numericMonth;
+      }
+    }
+  }
+
+  if (!month && !year) return null;
+  return { month, year };
+}
+
+function selectedPeriodSummary(form: FormState) {
+  if (form.periodMode === "MONTH") {
+    const year = Number.parseInt(form.year, 10);
+    const month = Number.parseInt(form.month, 10);
+    if (!Number.isFinite(year) || !Number.isFinite(month)) return null;
+    return { start: new Date(Date.UTC(year, month - 1, 1)), end: new Date(Date.UTC(year, month, 0, 23, 59, 59, 999)) };
+  }
+
+  if (form.periodMode === "YEAR") {
+    const year = Number.parseInt(form.year, 10);
+    if (!Number.isFinite(year)) return null;
+    return { start: new Date(Date.UTC(year, 0, 1)), end: new Date(Date.UTC(year, 11, 31, 23, 59, 59, 999)) };
+  }
+
+  if (form.periodMode === "DAY") {
+    if (!form.date) return null;
+    const date = new Date(`${form.date}T00:00:00.000Z`);
+    if (Number.isNaN(date.getTime())) return null;
+    return { start: date, end: new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate(), 23, 59, 59, 999)) };
+  }
+
+  if (form.periodMode === "CUSTOM") {
+    if (!form.startDate || !form.endDate) return null;
+    const start = new Date(`${form.startDate}T00:00:00.000Z`);
+    const end = new Date(`${form.endDate}T23:59:59.999Z`);
+    if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) return null;
+    return { start, end };
+  }
+
+  return null;
+}
+
 export function TicketImportForm({
   defaultSellerEmail,
   canReplacePeriod,
@@ -140,6 +222,33 @@ export function TicketImportForm({
   }, [form.date, form.defaultSellerEmail, form.endDate, form.file, form.month, form.periodMode, form.sheetName, form.startDate, form.year]);
 
   const previewValidated = previewSignature.length > 0 && previewSignature === currentSignature;
+
+  const filePeriodWarning = useMemo(() => {
+    if (!form.file) return null;
+
+    const hint = detectPeriodHintFromFileName(form.file.name);
+    const selected = selectedPeriodSummary(form);
+    if (!hint || !selected) return null;
+
+    if (hint.year !== undefined) {
+      const yearInRange = hint.year >= selected.start.getUTCFullYear() && hint.year <= selected.end.getUTCFullYear();
+      if (!yearInRange) {
+        return `Le fichier semble pointer sur l'année ${hint.year}, mais la période sélectionnée est différente.`;
+      }
+    }
+
+    if (hint.month !== undefined) {
+      const startYm = selected.start.getUTCFullYear() * 12 + selected.start.getUTCMonth();
+      const endYm = selected.end.getUTCFullYear() * 12 + selected.end.getUTCMonth();
+      const referenceYear = hint.year ?? selected.start.getUTCFullYear();
+      const hintYm = referenceYear * 12 + (hint.month - 1);
+      if (hintYm < startYm || hintYm > endYm) {
+        return `Le nom du fichier semble indiquer le mois ${String(hint.month).padStart(2, "0")}${hint.year ? `/${hint.year}` : ""}, mais il n'est pas inclus dans la période choisie.`;
+      }
+    }
+
+    return null;
+  }, [form]);
 
   function update<K extends keyof FormState>(key: K, value: FormState[K]) {
     setForm((current) => ({ ...current, [key]: value }));
@@ -369,6 +478,12 @@ export function TicketImportForm({
               className="rounded-md border border-black/15 px-3 py-2 text-sm font-normal text-black dark:border-white/20 dark:bg-zinc-900 dark:text-white"
             />
           </label>
+        </div>
+      ) : null}
+
+      {filePeriodWarning ? (
+        <div className="rounded-md bg-amber-100 px-3 py-2 text-xs text-amber-700 dark:bg-amber-950/40 dark:text-amber-200">
+          {filePeriodWarning}
         </div>
       ) : null}
 
