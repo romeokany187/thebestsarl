@@ -131,7 +131,7 @@ export async function POST(request: NextRequest) {
       defaultSellerEmail: typedDefaultSellerEmail,
       periodMode,
       year: year ?? new Date().getUTCFullYear(),
-      month,
+      month: month ?? undefined,
       date,
       startDate,
       endDate,
