@@ -738,26 +738,22 @@ export async function importTicketWorkbookFromBuffer(options: TicketWorkbookImpo
           airlineByName.set(createdAirline.name.toLowerCase(), createdAirline);
         }
 
-        const isMarchImport = range.start.getUTCMonth() === 2 && range.end.getUTCMonth() === 2;
-        const hasCommissionFromFile = commissionAmountFromFile > 0;
+        let commissionAmount = Math.max(0, commissionAmountFromFile);
 
-        let commissionAmount = 0;
-        let commissionRateUsed = 0;
+        if (isCaaLike(airline)) {
+          commissionAmount += commissionBaseAmount * 0.05;
+        }
 
-        if (!isMarchImport) {
-          if (hasCommissionFromFile) {
-            commissionAmount = commissionAmountFromFile;
-            commissionRateUsed = commissionRateFromFile ?? 0;
-          } else if (isCaaLike(airline)) {
-            commissionAmount = commissionBaseAmount * 0.05;
-            commissionRateUsed = 5;
-          } else if (isAirFastLike(airline)) {
-            const nextAirfastTicketNumber = (ticketCountByAirlineId.get(airline.id) ?? 0) + 1;
-            ticketCountByAirlineId.set(airline.id, nextAirfastTicketNumber);
-            commissionAmount = nextAirfastTicketNumber % 13 === 0 ? amount : 0;
-            commissionRateUsed = nextAirfastTicketNumber % 13 === 0 ? 100 : 0;
+        if (isAirFastLike(airline)) {
+          const nextAirfastTicketNumber = (ticketCountByAirlineId.get(airline.id) ?? 0) + 1;
+          ticketCountByAirlineId.set(airline.id, nextAirfastTicketNumber);
+          if (nextAirfastTicketNumber % 13 === 0) {
+            commissionAmount += amount;
           }
         }
+
+        const commissionRateUsed = commissionRateFromFile
+          ?? (commissionBaseAmount > 0 ? (commissionAmount / commissionBaseAmount) * 100 : 0);
 
         const seen = (pnrSequence.get(ticketNumber) ?? 0) + 1;
         pnrSequence.set(ticketNumber, seen);
@@ -788,7 +784,7 @@ export async function importTicketWorkbookFromBuffer(options: TicketWorkbookImpo
           agencyMarkupPercent: 0,
           agencyMarkupAmount,
           commissionBaseAmount,
-          commissionCalculationStatus: isMarchImport ? CommissionCalculationStatus.ESTIMATED : CommissionCalculationStatus.FINAL,
+          commissionCalculationStatus: CommissionCalculationStatus.FINAL,
           commissionRateUsed,
           commissionAmount,
           commissionModeApplied: CommissionMode.IMMEDIATE,
