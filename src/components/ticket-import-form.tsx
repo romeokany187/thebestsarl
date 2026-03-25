@@ -136,9 +136,8 @@ export function TicketImportForm({
       form.endDate.trim(),
       form.sheetName.trim(),
       form.defaultSellerEmail.trim().toLowerCase(),
-      canReplacePeriod && form.replaceExistingPeriod ? "replace" : "append",
     ].join("|");
-  }, [canReplacePeriod, form.date, form.defaultSellerEmail, form.endDate, form.file, form.month, form.periodMode, form.replaceExistingPeriod, form.sheetName, form.startDate, form.year]);
+  }, [form.date, form.defaultSellerEmail, form.endDate, form.file, form.month, form.periodMode, form.sheetName, form.startDate, form.year]);
 
   const previewValidated = previewSignature.length > 0 && previewSignature === currentSignature;
 
