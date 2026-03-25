@@ -314,12 +314,6 @@ function normalizePersonKey(value: string) {
     .replace(/\s+/g, " ");
 }
 
-function isCaaLike(airline: { code: string; name: string }) {
-  const code = airline.code.trim().toUpperCase();
-  const name = normalizeHeader(airline.name);
-  return code === "ACG" || code === "CAA" || name.includes("aircongo") || name.includes("caa");
-}
-
 function isAirFastLike(airline: { code: string; name: string }) {
   const code = airline.code.trim().toUpperCase();
   const name = normalizeHeader(airline.name);
@@ -554,20 +548,41 @@ export async function importTicketWorkbookFromBuffer(options: TicketWorkbookImpo
     throw new Error("Aucune feuille journalière détectée. Utilisez un nom de feuille explicite si nécessaire.");
   }
 
-  const [users, airlines, ticketCounts, existingTickets] = await Promise.all([
+  const [users, airlines] = await Promise.all([
     prisma.user.findMany({ select: { id: true, email: true, name: true } }),
-    prisma.airline.findMany({ select: { id: true, code: true, name: true } }),
-    prisma.ticketSale.groupBy({ by: ["airlineId"], _count: { _all: true } }),
-    prisma.ticketSale.findMany({ select: { ticketNumber: true } }),
+    prisma.airline.findMany({
+      select: {
+        id: true,
+        code: true,
+        name: true,
+        commissionRules: {
+          where: { isActive: true, commissionMode: CommissionMode.AFTER_DEPOSIT },
+          select: {
+            id: true,
+            startsAt: true,
+            endsAt: true,
+            depositStockTargetAmount: true,
+            batchCommissionAmount: true,
+          },
+        },
+      },
+    }),
   ]);
 
-  const existingTicketNumbers = new Set(existingTickets.map((ticket) => ticket.ticketNumber));
   const userByEmail = new Map(users.map((user) => [user.email.trim().toLowerCase(), user]));
   const userByName = new Map(users.map((user) => [normalizePersonKey(user.name), user]));
   const airlineByCode = new Map(airlines.map((airline) => [airline.code.trim().toUpperCase(), airline]));
   const airlineByName = new Map(airlines.map((airline) => [airline.name.trim().toLowerCase(), airline]));
   const usedAirlineCodes = new Set(airlines.map((airline) => airline.code.trim().toUpperCase()));
-  const ticketCountByAirlineId = new Map(ticketCounts.map((entry) => [entry.airlineId, entry._count._all]));
+  const now = new Date();
+  const afterDepositRuleByAirlineId = new Map(
+    airlines.map((airline) => {
+      const rule = airline.commissionRules
+        .filter((candidate) => candidate.startsAt <= now && (!candidate.endsAt || candidate.endsAt >= now))
+        .sort((a, b) => b.startsAt.getTime() - a.startsAt.getTime())[0] ?? null;
+      return [airline.id, rule] as const;
+    }),
+  );
 
   const summary: TicketWorkbookImportSummary = {
     sheetsProcessed: 0,
@@ -596,6 +611,17 @@ export async function importTicketWorkbookFromBuffer(options: TicketWorkbookImpo
       await prisma.ticketSale.deleteMany({ where: { id: { in: ticketIds } } });
     }
   }
+
+  const [ticketCounts, existingTickets, consumedByAirline] = await Promise.all([
+    prisma.ticketSale.groupBy({ by: ["airlineId"], _count: { _all: true } }),
+    prisma.ticketSale.findMany({ select: { ticketNumber: true } }),
+    prisma.ticketSale.groupBy({ by: ["airlineId"], _sum: { amount: true } }),
+  ]);
+
+  const ticketCountByAirlineId = new Map(ticketCounts.map((entry) => [entry.airlineId, entry._count._all]));
+  const existingTicketNumbers = new Set(existingTickets.map((ticket) => ticket.ticketNumber));
+  const consumedAmountByAirlineId = new Map(consumedByAirline.map((entry) => [entry.airlineId, entry._sum.amount ?? 0]));
+  const touchedAfterDepositRuleIds = new Set<string>();
 
   async function resolveSeller(input: { sellerEmail: string | null; sellerName: string | null }) {
     const sellerEmail = input.sellerEmail?.trim().toLowerCase() ?? null;
@@ -725,12 +751,12 @@ export async function importTicketWorkbookFromBuffer(options: TicketWorkbookImpo
         if (!airline) {
           const code = airlineCode ?? makeAirlineCode(airlineNameRaw, usedAirlineCodes);
           const createdAirline = dryRun
-            ? { id: `dry-${code}`, code, name: airlineNameRaw }
+            ? { id: `dry-${code}`, code, name: airlineNameRaw, commissionRules: [] }
             : await prisma.airline.upsert({
               where: { code },
               update: { name: airlineNameRaw },
               create: { code, name: airlineNameRaw },
-              select: { id: true, code: true, name: true },
+              select: { id: true, code: true, name: true, commissionRules: { select: { id: true, startsAt: true, endsAt: true, depositStockTargetAmount: true, batchCommissionAmount: true } } },
             });
 
           airline = createdAirline;
@@ -740,8 +766,22 @@ export async function importTicketWorkbookFromBuffer(options: TicketWorkbookImpo
 
         let commissionAmount = Math.max(0, commissionAmountFromFile);
 
-        if (isCaaLike(airline)) {
-          commissionAmount += commissionBaseAmount * 0.05;
+        const afterDepositRule = afterDepositRuleByAirlineId.get(airline.id) ?? null;
+        if (afterDepositRule) {
+          const targetAmount = afterDepositRule.depositStockTargetAmount ?? 0;
+          const batchAmount = afterDepositRule.batchCommissionAmount ?? 0;
+          if (targetAmount > 0 && batchAmount > 0) {
+            const consumedBefore = consumedAmountByAirlineId.get(airline.id) ?? 0;
+            const consumedAfter = consumedBefore + amount;
+            const batchesBefore = Math.floor(consumedBefore / targetAmount);
+            const batchesAfter = Math.floor(consumedAfter / targetAmount);
+            const newBatches = Math.max(0, batchesAfter - batchesBefore);
+            commissionAmount += newBatches * batchAmount;
+            consumedAmountByAirlineId.set(airline.id, consumedAfter);
+            if (newBatches > 0) {
+              touchedAfterDepositRuleIds.add(afterDepositRule.id);
+            }
+          }
         }
 
         if (isAirFastLike(airline)) {
@@ -844,6 +884,28 @@ export async function importTicketWorkbookFromBuffer(options: TicketWorkbookImpo
         }
       }
     }
+  }
+
+  if (!dryRun && touchedAfterDepositRuleIds.size > 0) {
+    const updates = [...touchedAfterDepositRuleIds].map(async (ruleId) => {
+      const rule = airlines
+        .flatMap((airline) => airline.commissionRules)
+        .find((candidate) => candidate.id === ruleId);
+      if (!rule) return;
+
+      const ownerAirline = airlines.find((airline) => airline.commissionRules.some((candidate) => candidate.id === ruleId));
+      if (!ownerAirline) return;
+
+      const consumedAmount = consumedAmountByAirlineId.get(ownerAirline.id);
+      if (consumedAmount === undefined) return;
+
+      await prisma.commissionRule.update({
+        where: { id: ruleId },
+        data: { depositStockConsumedAmount: consumedAmount },
+      });
+    });
+
+    await Promise.all(updates);
   }
 
   return {
