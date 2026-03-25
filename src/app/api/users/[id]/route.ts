@@ -9,7 +9,8 @@ const userUpdateSchema = z.object({
   jobTitle: z.nativeEnum(JobTitle).optional(),
   teamId: z.string().min(1).nullable().optional(),
   role: z.nativeEnum(Role).optional(),
-}).refine((value) => value.jobTitle !== undefined || value.teamId !== undefined || value.role !== undefined, {
+  canImportTicketWorkbook: z.boolean().optional(),
+}).refine((value) => value.jobTitle !== undefined || value.teamId !== undefined || value.role !== undefined || value.canImportTicketWorkbook !== undefined, {
   message: "Aucune donnée à mettre à jour.",
 });
 
@@ -58,6 +59,7 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
       teamId: true,
       team: { select: { id: true, name: true } },
       jobTitle: true,
+      canImportTicketWorkbook: true,
     },
   });
   if (!existing) {
@@ -80,6 +82,7 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
         ...(parsed.data.jobTitle !== undefined ? { jobTitle: parsed.data.jobTitle } : {}),
         ...(parsed.data.teamId !== undefined ? { teamId: parsed.data.teamId } : {}),
         ...(parsed.data.role !== undefined ? { role: parsed.data.role } : {}),
+        ...(parsed.data.canImportTicketWorkbook !== undefined ? { canImportTicketWorkbook: parsed.data.canImportTicketWorkbook } : {}),
       },
       select: {
         id: true,
@@ -87,6 +90,7 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
         email: true,
         role: true,
         jobTitle: true,
+        canImportTicketWorkbook: true,
         team: { select: { id: true, name: true } },
       },
     });
@@ -94,8 +98,9 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
     const teamChanged = parsed.data.teamId !== undefined && parsed.data.teamId !== existing.teamId;
     const jobChanged = parsed.data.jobTitle !== undefined && parsed.data.jobTitle !== existing.jobTitle;
     const roleChanged = parsed.data.role !== undefined && parsed.data.role !== existing.role;
+    const importPermissionChanged = parsed.data.canImportTicketWorkbook !== undefined && parsed.data.canImportTicketWorkbook !== existing.canImportTicketWorkbook;
 
-    if (teamChanged || jobChanged || roleChanged) {
+    if (teamChanged || jobChanged || roleChanged || importPermissionChanged) {
       const title = "Nouvelle affectation";
       const fromTeam = existing.team?.name ?? "Sans équipe";
       const toTeam = user.team?.name ?? "Sans équipe";
@@ -108,6 +113,7 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
       if (teamChanged) messageParts.push(`Équipe ${fromTeam} → ${toTeam}`);
       if (jobChanged) messageParts.push(`Fonction ${fromJob} → ${toJob}`);
       if (roleChanged) messageParts.push(`Rôle ${fromRole} → ${toRole}`);
+      if (importPermissionChanged) messageParts.push(`Import Excel billets ${existing.canImportTicketWorkbook ? "autorisé" : "interdit"} → ${user.canImportTicketWorkbook ? "autorisé" : "interdit"}`);
 
       assignmentMessage = `Votre affectation a été mise à jour: ${messageParts.join("; ")}.`;
 
@@ -124,6 +130,9 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
             toJob,
             fromRole,
             toRole,
+            importPermissionChanged,
+            fromCanImportTicketWorkbook: existing.canImportTicketWorkbook,
+            toCanImportTicketWorkbook: user.canImportTicketWorkbook,
             changedBy: actor.id,
           },
         },

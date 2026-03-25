@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from "next/server";
-import { ArchiveFolder } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { requireApiModuleAccess } from "@/lib/rbac";
 import { canWriteArchiveFolder, createArchiveDocumentWithGlobalReference, parseArchiveFolder } from "@/lib/archive";

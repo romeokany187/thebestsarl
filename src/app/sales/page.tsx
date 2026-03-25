@@ -1,10 +1,13 @@
 import { AppShell } from "@/components/app-shell";
 import { TicketForm } from "@/components/ticket-form";
+import { TicketImportForm } from "@/components/ticket-import-form";
 import { TicketRowActions } from "@/components/ticket-row-actions";
 import { prisma } from "@/lib/prisma";
 import { requirePageModuleAccess } from "@/lib/rbac";
 import { ensureAirlineCatalog } from "@/lib/airline-catalog";
 import { computeCaaCommissionMap } from "@/lib/caa-commission";
+import { canImportTicketWorkbook } from "@/lib/assignment";
+import { listTicketWorkbookImportHistory } from "@/lib/ticket-excel-import";
 
 export const dynamic = "force-dynamic";
 
@@ -53,6 +56,8 @@ export default async function SalesPage({
   const roleTicketFilter = role === "EMPLOYEE" ? { sellerId: session.user.id } : {};
   const canCreateTicket = role === "ADMIN" || role === "MANAGER" || role === "EMPLOYEE";
   const canManageTickets = role === "ADMIN" || role === "EMPLOYEE";
+  const canImportTickets = canImportTicketWorkbook(role, session.user.canImportTicketWorkbook);
+  const canReplaceImportedMonth = role === "ADMIN" || role === "MANAGER";
   const accessNote = canCreateTicket
     ? role === "EMPLOYEE"
       ? "Accès commercial personnel: création et suivi de vos ventes."
@@ -61,7 +66,7 @@ export default async function SalesPage({
 
   await ensureAirlineCatalog(prisma);
 
-  const [users, airlines, teams, tickets] = await Promise.all([
+  const [users, airlines, teams, tickets, importHistory] = await Promise.all([
     prisma.user.findMany({
       where:
         role === "EMPLOYEE"
@@ -91,6 +96,7 @@ export default async function SalesPage({
       orderBy: { soldAt: "desc" },
       take: 200,
     }),
+    canImportTickets ? listTicketWorkbookImportHistory() : Promise.resolve([]),
   ]);
 
   const caaAirline = airlines.find((airline) => airline.code === "CAA");
@@ -195,19 +201,28 @@ export default async function SalesPage({
 
       <div className="grid gap-6 lg:grid-cols-[400px,1fr]">
         {canCreateTicket ? (
-          <TicketForm
-            users={users}
-            airlines={airlines.map((airline) => ({
-              id: airline.id,
-              name: airline.name,
-              code: airline.code,
-            }))}
-            teams={teams.map((team) => ({
-              id: team.id,
-              name: team.name,
-              kind: team.kind,
-            }))}
-          />
+          <div className="grid gap-6">
+            <TicketForm
+              users={users}
+              airlines={airlines.map((airline) => ({
+                id: airline.id,
+                name: airline.name,
+                code: airline.code,
+              }))}
+              teams={teams.map((team) => ({
+                id: team.id,
+                name: team.name,
+                kind: team.kind,
+              }))}
+            />
+            {canImportTickets ? (
+              <TicketImportForm
+                defaultSellerEmail={session.user.email ?? ""}
+                canReplaceMonth={canReplaceImportedMonth}
+                initialHistory={importHistory}
+              />
+            ) : null}
+          </div>
         ) : (
           <section className="rounded-xl border border-black/10 bg-white p-4 text-sm text-black/70 dark:border-white/10 dark:bg-zinc-900 dark:text-white/70">
             Accès en lecture seule: vous pouvez consulter les ventes mais pas enregistrer de nouveaux billets.

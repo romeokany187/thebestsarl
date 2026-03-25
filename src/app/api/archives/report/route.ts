@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from "next/server";
-import { ArchiveFolder } from "@prisma/client";
 import { PDFDocument, rgb } from "pdf-lib";
 import fontkit from "@pdf-lib/fontkit";
 import { readFile } from "node:fs/promises";

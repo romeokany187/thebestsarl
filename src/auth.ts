@@ -34,17 +34,23 @@ export const authOptions: NextAuthOptions = {
             passwordHash: "",
             role: isAdminEmail ? "ADMIN" : "EMPLOYEE",
             jobTitle: isAdminEmail ? "DIRECTION_GENERALE" : "AGENT_TERRAIN",
+            canImportTicketWorkbook: isAdminEmail,
           },
         });
       } else if (isAdminEmail && existing.role !== "ADMIN") {
         await prisma.user.update({
           where: { id: existing.id },
-          data: { role: "ADMIN", jobTitle: "DIRECTION_GENERALE" },
+          data: { role: "ADMIN", jobTitle: "DIRECTION_GENERALE", canImportTicketWorkbook: true },
         });
       } else if (isAdminEmail && existing.jobTitle !== "DIRECTION_GENERALE") {
         await prisma.user.update({
           where: { id: existing.id },
-          data: { jobTitle: "DIRECTION_GENERALE" },
+          data: { jobTitle: "DIRECTION_GENERALE", canImportTicketWorkbook: true },
+        });
+      } else if (isAdminEmail && !existing.canImportTicketWorkbook) {
+        await prisma.user.update({
+          where: { id: existing.id },
+          data: { canImportTicketWorkbook: true },
         });
       }
 
@@ -58,7 +64,14 @@ export const authOptions: NextAuthOptions = {
       if (token.email) {
         const dbUser = await prisma.user.findUnique({
           where: { email: token.email },
-          select: { id: true, name: true, role: true, jobTitle: true, team: { select: { name: true } } },
+          select: {
+            id: true,
+            name: true,
+            role: true,
+            jobTitle: true,
+            canImportTicketWorkbook: true,
+            team: { select: { name: true } },
+          },
         });
 
         if (dbUser) {
@@ -67,6 +80,7 @@ export const authOptions: NextAuthOptions = {
           token.role = dbUser.role;
           token.jobTitle = dbUser.jobTitle;
           token.teamName = dbUser.team?.name ?? null;
+          token.canImportTicketWorkbook = dbUser.canImportTicketWorkbook;
         }
       }
 
@@ -78,6 +92,7 @@ export const authOptions: NextAuthOptions = {
         session.user.role = token.role as string;
         session.user.jobTitle = token.jobTitle as string;
         session.user.teamName = (token.teamName as string | null) ?? null;
+        session.user.canImportTicketWorkbook = Boolean(token.canImportTicketWorkbook);
         session.user.name = token.name ?? session.user.name;
         session.user.email = token.email ?? session.user.email;
       }

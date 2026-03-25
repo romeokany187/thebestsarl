@@ -15,6 +15,7 @@ export async function GET() {
       email: true,
       role: true,
       jobTitle: true,
+      canImportTicketWorkbook: true,
       team: { select: { name: true } },
     },
     orderBy: { name: "asc" },

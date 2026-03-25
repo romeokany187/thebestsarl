@@ -55,6 +55,10 @@ export function canSellTickets(jobTitle: string) {
   return jobTitle === "COMMERCIAL" || jobTitle === "DIRECTION_GENERALE";
 }
 
+export function canImportTicketWorkbook(role: string, explicitPermission?: boolean | null) {
+  return role === "ADMIN" || Boolean(explicitPermission);
+}
+
 export function canProcessPayments(jobTitle: string) {
   return jobTitle === "COMPTABLE" || jobTitle === "CAISSIERE";
 }

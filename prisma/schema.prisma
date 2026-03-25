@@ -138,6 +138,7 @@ model User {
   passwordHash  String
   role          Role
   jobTitle      JobTitle      @default(AGENT_TERRAIN)
+  canImportTicketWorkbook Boolean @default(false)
   teamId        String?
   team          Team?         @relation(fields: [teamId], references: [id])
   reports       WorkerReport[] @relation("ReportAuthor")
