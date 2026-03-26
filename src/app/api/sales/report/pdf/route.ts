@@ -115,7 +115,7 @@ function sparklinePoints(values: number[], width: number, height: number) {
 
   return values.map((value, index) => {
     const x = values.length === 1 ? 0 : (index / (values.length - 1)) * width;
-    const y = height - ((value - min) / range) * height;
+    const y = ((value - min) / range) * height;
     return { x, y };
   });
 }
@@ -673,9 +673,9 @@ export async function GET(request: NextRequest) {
   }) => {
     const cardX = PM;
     const cardW = PW - PM * 2;
-    const cardH = 172;
+    const cardH = 186;
     const chartX = cardX + 18;
-    const chartY = pY - cardH + 24;
+    const chartY = pY - cardH + 36;
     const chartW = cardW - 36;
     const chartH = 62;
     const trend = signed(pct(opts.currentValue, opts.previousValue));
@@ -769,11 +769,11 @@ export async function GET(request: NextRequest) {
       });
     }
 
-    drawPortraitText(dateRange.startRaw.slice(5), chartX, chartY - 14, 8);
-    drawPortraitText(dateRange.endRaw.slice(5), chartX + chartW - 24, chartY - 14, 8);
-    drawPortraitText(`Ligne claire: ${opts.previousPeriodLabel}`, chartX, chartY - 28, 8);
+    drawPortraitText(dateRange.startRaw.slice(5), chartX, chartY - 10, 8);
+    drawPortraitText(dateRange.endRaw.slice(5), chartX + chartW - 24, chartY - 10, 8);
+    drawPortraitText(`Ligne claire: ${opts.previousPeriodLabel}`, chartX, chartY - 22, 8);
 
-    pY -= cardH + 14;
+    pY -= cardH + 22;
   };
 
   // ─── Report title label ─────────────────────────────────────────────────────
@@ -788,12 +788,12 @@ export async function GET(request: NextRequest) {
           : `RAPPORT DE PERFORMANCE DU ${dateRange.startRaw} AU ${dateRange.endRaw}`;
 
   // ─── Portrait page 1: header ────────────────────────────────────────────────
-  const logoBox = 52;
+  const logoBox = 74;
   if (logoImage) {
     const logoDims = logoImage.scaleToFit(logoBox, logoBox);
     pPage.drawImage(logoImage, {
       x: PM,
-      y: pY - logoDims.height + 6,
+      y: pY - logoDims.height + 10,
       width: logoDims.width,
       height: logoDims.height,
     });
@@ -842,6 +842,8 @@ export async function GET(request: NextRequest) {
     unit: "USD",
     mainColor: { r: 0.95, g: 0.45, b: 0.1 },
   });
+
+  pY -= 8;
 
   // 2. Points forts
   drawPortraitSection("2. Points forts", executiveAnalysis.strengths);
