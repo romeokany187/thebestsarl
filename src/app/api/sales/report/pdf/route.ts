@@ -82,6 +82,44 @@ function getWeekStart(baseStart: Date, date: Date) {
   return start;
 }
 
+function startOfUtcDay(value: Date) {
+  return new Date(Date.UTC(value.getUTCFullYear(), value.getUTCMonth(), value.getUTCDate(), 0, 0, 0, 0));
+}
+
+function buildDailyTimeline(start: Date, endExclusive: Date) {
+  const days: string[] = [];
+  const cursor = new Date(Date.UTC(start.getUTCFullYear(), start.getUTCMonth(), start.getUTCDate(), 0, 0, 0, 0));
+  const end = new Date(Date.UTC(
+    endExclusive.getUTCFullYear(),
+    endExclusive.getUTCMonth(),
+    endExclusive.getUTCDate(),
+    0,
+    0,
+    0,
+    0,
+  ));
+
+  while (cursor < end) {
+    days.push(cursor.toISOString().slice(0, 10));
+    cursor.setUTCDate(cursor.getUTCDate() + 1);
+  }
+
+  return days;
+}
+
+function sparklinePoints(values: number[], width: number, height: number) {
+  if (values.length === 0) return [] as Array<{ x: number; y: number }>;
+  const max = Math.max(...values, 1);
+  const min = Math.min(...values, 0);
+  const range = Math.max(max - min, 1);
+
+  return values.map((value, index) => {
+    const x = values.length === 1 ? 0 : (index / (values.length - 1)) * width;
+    const y = height - ((value - min) / range) * height;
+    return { x, y };
+  });
+}
+
 function pct(current: number, previous: number) {
   if (previous > 0) return ((current - previous) / previous) * 100;
   return current > 0 ? 100 : 0;
@@ -369,6 +407,7 @@ export async function GET(request: NextRequest) {
       },
     },
     select: {
+      soldAt: true,
       amount: true,
       commissionAmount: true,
     },
@@ -442,6 +481,51 @@ export async function GET(request: NextRequest) {
   const paymentPaid = tickets.filter((ticket) => ticket.paymentStatus === "PAID").length;
   const paymentPartial = tickets.filter((ticket) => ticket.paymentStatus === "PARTIAL").length;
   const paymentUnpaid = tickets.filter((ticket) => ticket.paymentStatus === "UNPAID").length;
+
+  const currentDailyMap = tickets.reduce((map, ticket) => {
+    const day = new Date(ticket.soldAt).toISOString().slice(0, 10);
+    const existing = map.get(day) ?? { sales: 0, commissions: 0 };
+    existing.sales += ticket.amount;
+    existing.commissions += ticket.commissionAmount ?? 0;
+    map.set(day, existing);
+    return map;
+  }, new Map<string, { sales: number; commissions: number }>());
+
+  const comparisonDailyMap = previousTickets.reduce((map, ticket) => {
+    const day = new Date(ticket.soldAt).toISOString().slice(0, 10);
+    const existing = map.get(day) ?? { sales: 0, commissions: 0 };
+    existing.sales += ticket.amount;
+    existing.commissions += ticket.commissionAmount ?? 0;
+    map.set(day, existing);
+    return map;
+  }, new Map<string, { sales: number; commissions: number }>());
+
+  const currentTimeline = buildDailyTimeline(startOfUtcDay(dateRange.start), startOfUtcDay(dateRange.end));
+  const comparisonTimeline = buildDailyTimeline(startOfUtcDay(previousRangeStart), startOfUtcDay(previousRangeEnd));
+
+  let currentRunningSales = 0;
+  let currentRunningCommissions = 0;
+  const currentCumulativeSales: number[] = [];
+  const currentCumulativeCommissions: number[] = [];
+  currentTimeline.forEach((day) => {
+    const row = currentDailyMap.get(day);
+    currentRunningSales += row?.sales ?? 0;
+    currentRunningCommissions += row?.commissions ?? 0;
+    currentCumulativeSales.push(currentRunningSales);
+    currentCumulativeCommissions.push(currentRunningCommissions);
+  });
+
+  let comparisonRunningSales = 0;
+  let comparisonRunningCommissions = 0;
+  const comparisonCumulativeSales: number[] = [];
+  const comparisonCumulativeCommissions: number[] = [];
+  comparisonTimeline.forEach((day) => {
+    const row = comparisonDailyMap.get(day);
+    comparisonRunningSales += row?.sales ?? 0;
+    comparisonRunningCommissions += row?.commissions ?? 0;
+    comparisonCumulativeSales.push(comparisonRunningSales);
+    comparisonCumulativeCommissions.push(comparisonRunningCommissions);
+  });
 
   const sortedAirlinesForAnalysis = Array.from(airlineTotals.entries())
     .map(([code, data]) => ({ code, amount: data.amount, count: data.count, commission: data.commission }))
@@ -577,35 +661,119 @@ export async function GET(request: NextRequest) {
     pY -= 10;
   };
 
-  const makeTextBar = (current: number, previous: number, slots = 16) => {
-    const maxValue = Math.max(current, previous, 1);
-    const currentSlots = Math.max(0, Math.round((current / maxValue) * slots));
-    const previousSlots = Math.max(0, Math.round((previous / maxValue) * slots));
-    return {
-      currentBar: "█".repeat(currentSlots) + "░".repeat(Math.max(0, slots - currentSlots)),
-      previousBar: "█".repeat(previousSlots) + "░".repeat(Math.max(0, slots - previousSlots)),
-    };
-  };
-
-  const drawPerformanceComparisonCard = (opts: {
+  const drawPerformanceSparkCard = (opts: {
     title: string;
-    current: number;
-    previous: number;
+    currentValue: number;
+    previousValue: number;
+    currentSeries: number[];
+    previousSeries: number[];
+    previousPeriodLabel: string;
     unit: string;
+    mainColor: { r: number; g: number; b: number };
   }) => {
-    const lineH = bodySize + 5;
-    const trend = signed(pct(opts.current, opts.previous));
-    const bars = makeTextBar(opts.current, opts.previous, 16);
+    const cardX = PM;
+    const cardW = PW - PM * 2;
+    const cardH = 172;
+    const chartX = cardX + 18;
+    const chartY = pY - cardH + 24;
+    const chartW = cardW - 36;
+    const chartH = 62;
+    const trend = signed(pct(opts.currentValue, opts.previousValue));
 
-    pEnsureSpace(lineH * 4 + 24);
-    drawPortraitText(opts.title.toUpperCase(), PM, pY, 12, true);
-    pY -= lineH;
-    drawPortraitText(`ACTUEL    ${bars.currentBar}  ${opts.current.toFixed(2)} ${opts.unit}`, PM, pY, bodySize);
-    pY -= lineH;
-    drawPortraitText(`PRECEDENT ${bars.previousBar}  ${opts.previous.toFixed(2)} ${opts.unit}`, PM, pY, bodySize);
-    pY -= lineH;
-    drawPortraitText(`TENDANCE  ${trend}`, PM, pY, bodySize, true);
-    pY -= 20;
+    pEnsureSpace(cardH + 16);
+
+    pPage.drawRectangle({
+      x: cardX,
+      y: pY - cardH,
+      width: cardW,
+      height: cardH,
+      color: rgb(0.985, 0.985, 0.985),
+      borderColor: rgb(0.84, 0.84, 0.84),
+      borderWidth: 1,
+    });
+
+    drawPortraitText(opts.title.toUpperCase(), cardX + 14, pY - 22, 11, true);
+    drawPortraitText(
+      trend,
+      cardX + cardW - 14 - fontBold.widthOfTextAtSize(trend, 11),
+      pY - 22,
+      11,
+      true,
+    );
+    drawPortraitText(`${opts.currentValue.toFixed(2)} ${opts.unit}`, cardX + 14, pY - 46, 22, true);
+    drawPortraitText(
+      `${dateRange.startRaw} → ${dateRange.endRaw} · Réf ${opts.previousPeriodLabel}: ${opts.previousValue.toFixed(2)} ${opts.unit}`,
+      cardX + 14,
+      pY - 63,
+      9,
+    );
+
+    [0, 0.5, 1].forEach((ratio) => {
+      const gy = chartY + chartH * ratio;
+      pPage.drawLine({
+        start: { x: chartX, y: gy },
+        end: { x: chartX + chartW, y: gy },
+        thickness: 0.6,
+        color: rgb(0.9, 0.9, 0.9),
+      });
+    });
+
+    const currentPts = sparklinePoints(opts.currentSeries, chartW, chartH);
+    const previousPts = sparklinePoints(opts.previousSeries, chartW, chartH);
+
+    for (let i = 1; i < previousPts.length; i++) {
+      pPage.drawLine({
+        start: { x: chartX + previousPts[i - 1].x, y: chartY + previousPts[i - 1].y },
+        end: { x: chartX + previousPts[i].x, y: chartY + previousPts[i].y },
+        thickness: 1,
+        color: rgb(0.82, 0.82, 0.82),
+      });
+    }
+
+    const accent = rgb(opts.mainColor.r, opts.mainColor.g, opts.mainColor.b);
+    const fill = rgb(
+      Math.min(1, opts.mainColor.r + 0.22),
+      Math.min(1, opts.mainColor.g + 0.22),
+      Math.min(1, opts.mainColor.b + 0.22),
+    );
+
+    if (currentPts.length > 1) {
+      for (let i = 1; i < currentPts.length; i++) {
+        pPage.drawRectangle({
+          x: chartX + currentPts[i - 1].x,
+          y: chartY,
+          width: Math.max(1, currentPts[i].x - currentPts[i - 1].x),
+          height: Math.max(0, chartH - currentPts[i].y),
+          color: fill,
+          opacity: 0.18,
+        });
+      }
+    }
+
+    for (let i = 1; i < currentPts.length; i++) {
+      pPage.drawLine({
+        start: { x: chartX + currentPts[i - 1].x, y: chartY + currentPts[i - 1].y },
+        end: { x: chartX + currentPts[i].x, y: chartY + currentPts[i].y },
+        thickness: 1.8,
+        color: accent,
+      });
+    }
+
+    if (currentPts.length > 0) {
+      const last = currentPts[currentPts.length - 1];
+      pPage.drawCircle({
+        x: chartX + last.x,
+        y: chartY + last.y,
+        size: 2.4,
+        color: accent,
+      });
+    }
+
+    drawPortraitText(dateRange.startRaw.slice(5), chartX, chartY - 14, 8);
+    drawPortraitText(dateRange.endRaw.slice(5), chartX + chartW - 24, chartY - 14, 8);
+    drawPortraitText(`Ligne claire: ${opts.previousPeriodLabel}`, chartX, chartY - 28, 8);
+
+    pY -= cardH + 14;
   };
 
   // ─── Report title label ─────────────────────────────────────────────────────
@@ -653,43 +821,42 @@ export async function GET(request: NextRequest) {
   pY -= titleSize + 10;
   drawPortraitBody(executiveAnalysis.summary);
 
-  // 2. Tableau performance comparée
-  pEnsureSpace(120);
-  drawPortraitText("2. TABLEAU DE PERFORMANCE COMPAREE", PM, pY, titleSize, true);
-  pY -= titleSize + 12;
-  drawPerformanceComparisonCard({
-    title: "Billets vendus",
-    current: totalCount,
-    previous: previousCount,
-    unit: "billets",
-  });
-  drawPerformanceComparisonCard({
-    title: "Chiffre d'affaires",
-    current: totalAmount,
-    previous: previousAmount,
+  drawPerformanceSparkCard({
+    title: "Progression ventes cumulées",
+    currentValue: totalAmount,
+    previousValue: previousAmount,
+    currentSeries: currentCumulativeSales,
+    previousSeries: comparisonCumulativeSales,
+    previousPeriodLabel: `${previousRangeStart.toISOString().slice(0, 10)} → ${new Date(previousRangeEnd.getTime() - 1).toISOString().slice(0, 10)}`,
     unit: "USD",
+    mainColor: { r: 1, g: 0.34, b: 0.48 },
   });
-  drawPerformanceComparisonCard({
-    title: "Commissions",
-    current: totalCommission,
-    previous: previousCommission,
+
+  drawPerformanceSparkCard({
+    title: "Progression commissions cumulées",
+    currentValue: totalCommission,
+    previousValue: previousCommission,
+    currentSeries: currentCumulativeCommissions,
+    previousSeries: comparisonCumulativeCommissions,
+    previousPeriodLabel: `${previousRangeStart.toISOString().slice(0, 10)} → ${new Date(previousRangeEnd.getTime() - 1).toISOString().slice(0, 10)}`,
     unit: "USD",
+    mainColor: { r: 0.95, g: 0.45, b: 0.1 },
   });
 
-  // 3. Points forts
-  drawPortraitSection("3. Points forts", executiveAnalysis.strengths);
+  // 2. Points forts
+  drawPortraitSection("2. Points forts", executiveAnalysis.strengths);
 
-  // 4. Points faibles
-  drawPortraitSection("4. Points faibles", executiveAnalysis.weaknesses);
+  // 3. Points faibles
+  drawPortraitSection("3. Points faibles", executiveAnalysis.weaknesses);
 
-  // 5. Avancées
-  drawPortraitSection("5. Avancees", executiveAnalysis.advances);
+  // 4. Avancées
+  drawPortraitSection("4. Avancees", executiveAnalysis.advances);
 
-  // 6. Régressions
-  drawPortraitSection("6. Regressions", executiveAnalysis.regressions);
+  // 5. Régressions
+  drawPortraitSection("5. Regressions", executiveAnalysis.regressions);
 
-  // 7. Recommandations
-  drawPortraitSection("7. Recommandations", executiveAnalysis.recommendations);
+  // 6. Recommandations
+  drawPortraitSection("6. Recommandations", executiveAnalysis.recommendations);
 
   // ─── Landscape page: data table ─────────────────────────────────────────────
   const preferredAirlines = ["CAA", "AIRCONGO", "ETHIOPIAN", "MG", "KP", "KENYA", "SA", "UR"];
