@@ -481,6 +481,8 @@ export async function GET(request: NextRequest) {
   ]);
   const fontRegular = await pdf.embedFont(fontFile);
   const fontBold = await pdf.embedFont(fontBoldFile);
+  const logoFile = await readFile(path.join(process.cwd(), "public/logo thebest.png")).catch(() => null);
+  const logoImage = logoFile ? await pdf.embedPng(logoFile).catch(() => null) : null;
 
   // ─── Portrait constants ─────────────────────────────────────────────────────
   const PW = 595;
@@ -505,13 +507,11 @@ export async function GET(request: NextRequest) {
     pPage.drawText(text, { x, y: yy, size, font: bold ? fontBold : fontRegular, color: rgb(0, 0, 0) });
   };
 
-  const drawPortraitRule = (thickness = 0.5, color = rgb(0.7, 0.7, 0.7)) => {
-    pPage.drawLine({
-      start: { x: PM, y: pY },
-      end: { x: PW - PM, y: pY },
-      thickness,
-      color,
-    });
+  const drawPortraitCentered = (text: string, yy: number, size: number, bold = false) => {
+    const usedFont = bold ? fontBold : fontRegular;
+    const textWidth = usedFont.widthOfTextAtSize(text, size);
+    const x = Math.max(PM, (PW - textWidth) / 2);
+    drawPortraitText(text, x, yy, size, bold);
   };
 
   const wrapPortrait = (text: string, size: number, maxWidth: number, bold = false): string[] => {
@@ -548,9 +548,7 @@ export async function GET(request: NextRequest) {
 
     // Section heading
     drawPortraitText(heading.toUpperCase(), PM, pY, titleSize, true);
-    pY -= titleSize + 4;
-    drawPortraitRule(1, rgb(0.2, 0.2, 0.2));
-    pY -= 8;
+    pY -= titleSize + 10;
 
     // Bullets
     for (const bullet of bullets) {
@@ -579,6 +577,37 @@ export async function GET(request: NextRequest) {
     pY -= 10;
   };
 
+  const makeTextBar = (current: number, previous: number, slots = 16) => {
+    const maxValue = Math.max(current, previous, 1);
+    const currentSlots = Math.max(0, Math.round((current / maxValue) * slots));
+    const previousSlots = Math.max(0, Math.round((previous / maxValue) * slots));
+    return {
+      currentBar: "█".repeat(currentSlots) + "░".repeat(Math.max(0, slots - currentSlots)),
+      previousBar: "█".repeat(previousSlots) + "░".repeat(Math.max(0, slots - previousSlots)),
+    };
+  };
+
+  const drawPerformanceComparisonCard = (opts: {
+    title: string;
+    current: number;
+    previous: number;
+    unit: string;
+  }) => {
+    const lineH = bodySize + 5;
+    const trend = signed(pct(opts.current, opts.previous));
+    const bars = makeTextBar(opts.current, opts.previous, 16);
+
+    pEnsureSpace(lineH * 4 + 24);
+    drawPortraitText(opts.title.toUpperCase(), PM, pY, 12, true);
+    pY -= lineH;
+    drawPortraitText(`ACTUEL    ${bars.currentBar}  ${opts.current.toFixed(2)} ${opts.unit}`, PM, pY, bodySize);
+    pY -= lineH;
+    drawPortraitText(`PRECEDENT ${bars.previousBar}  ${opts.previous.toFixed(2)} ${opts.unit}`, PM, pY, bodySize);
+    pY -= lineH;
+    drawPortraitText(`TENDANCE  ${trend}`, PM, pY, bodySize, true);
+    pY -= 20;
+  };
+
   // ─── Report title label ─────────────────────────────────────────────────────
   const reportTitle = reportKind === "DAILY"
     ? `RAPPORT DE VENTE DU ${dateRange.startRaw}`
@@ -591,63 +620,76 @@ export async function GET(request: NextRequest) {
           : `RAPPORT DE PERFORMANCE DU ${dateRange.startRaw} AU ${dateRange.endRaw}`;
 
   // ─── Portrait page 1: header ────────────────────────────────────────────────
-  // Company name
-  drawPortraitText("THE BEST S.A.R.L", PM, pY, 20, true);
-  pY -= 28;
+  const logoBox = 52;
+  if (logoImage) {
+    const logoDims = logoImage.scaleToFit(logoBox, logoBox);
+    pPage.drawImage(logoImage, {
+      x: PM,
+      y: pY - logoDims.height + 6,
+      width: logoDims.width,
+      height: logoDims.height,
+    });
+  }
 
-  // Report title
-  drawPortraitText(reportTitle, PM, pY, titleSize, true);
-  pY -= titleSize + 6;
+  drawPortraitCentered("THE BEST S.A.R.L", pY - 4, 22, true);
+  pY -= 34;
 
-  // Generated at
+  drawPortraitCentered(reportTitle, pY, titleSize, true);
+  pY -= titleSize + 10;
+
   const generatedAt = new Date().toLocaleString("fr-FR", { timeZone: "Africa/Kinshasa" });
-  drawPortraitText(`Généré le ${generatedAt}`, PM, pY, 10);
-  pY -= 14;
-
-  // Totals summary line
-  drawPortraitText(
-    `Billets : ${totalCount}   |   Total : ${fmtNumber(totalAmount)} USD   |   Commission : ${fmtNumber(totalCommission)} USD`,
-    PM,
-    pY,
-    10,
-  );
-  pY -= 10;
-
-  drawPortraitRule(2, rgb(0.1, 0.1, 0.1));
-  pY -= 22;
+  drawPortraitCentered(`Généré le ${generatedAt}`, pY, 10);
+  pY -= 28;
 
   // ─── Portrait pages: AI executive analysis ──────────────────────────────────
   // Analyse executive title
   pEnsureSpace(titleSize + 20);
   drawPortraitText("ANALYSE EXECUTIVE", PM, pY, titleSize, true);
-  pY -= titleSize + 4;
-  drawPortraitRule(1.5, rgb(0.1, 0.1, 0.1));
-  pY -= 6;
-  drawPortraitText(executiveAnalysis.title, PM, pY, bodySize, false);
-  pY -= bodySize + bodyLeading + 16;
+  pY -= titleSize + 16;
 
   // 1. Synthèse
   pEnsureSpace(titleSize + 20);
   drawPortraitText("1. SYNTHESE", PM, pY, titleSize, true);
-  pY -= titleSize + 4;
-  drawPortraitRule(1, rgb(0.2, 0.2, 0.2));
-  pY -= 8;
+  pY -= titleSize + 10;
   drawPortraitBody(executiveAnalysis.summary);
 
-  // 2. Points forts
-  drawPortraitSection("2. Points forts", executiveAnalysis.strengths);
+  // 2. Tableau performance comparée
+  pEnsureSpace(120);
+  drawPortraitText("2. TABLEAU DE PERFORMANCE COMPAREE", PM, pY, titleSize, true);
+  pY -= titleSize + 12;
+  drawPerformanceComparisonCard({
+    title: "Billets vendus",
+    current: totalCount,
+    previous: previousCount,
+    unit: "billets",
+  });
+  drawPerformanceComparisonCard({
+    title: "Chiffre d'affaires",
+    current: totalAmount,
+    previous: previousAmount,
+    unit: "USD",
+  });
+  drawPerformanceComparisonCard({
+    title: "Commissions",
+    current: totalCommission,
+    previous: previousCommission,
+    unit: "USD",
+  });
 
-  // 3. Points faibles
-  drawPortraitSection("3. Points faibles", executiveAnalysis.weaknesses);
+  // 3. Points forts
+  drawPortraitSection("3. Points forts", executiveAnalysis.strengths);
 
-  // 4. Avancées
-  drawPortraitSection("4. Avancees", executiveAnalysis.advances);
+  // 4. Points faibles
+  drawPortraitSection("4. Points faibles", executiveAnalysis.weaknesses);
 
-  // 5. Régressions
-  drawPortraitSection("5. Regressions", executiveAnalysis.regressions);
+  // 5. Avancées
+  drawPortraitSection("5. Avancees", executiveAnalysis.advances);
 
-  // 6. Recommandations
-  drawPortraitSection("6. Recommandations", executiveAnalysis.recommendations);
+  // 6. Régressions
+  drawPortraitSection("6. Regressions", executiveAnalysis.regressions);
+
+  // 7. Recommandations
+  drawPortraitSection("7. Recommandations", executiveAnalysis.recommendations);
 
   // ─── Landscape page: data table ─────────────────────────────────────────────
   const preferredAirlines = ["CAA", "AIRCONGO", "ETHIOPIAN", "MG", "KP", "KENYA", "SA", "UR"];
