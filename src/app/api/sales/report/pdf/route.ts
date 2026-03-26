@@ -877,8 +877,11 @@ export async function GET(request: NextRequest) {
   const LM = 20;
   let lY = LH - 28;
   const rowH = 15;
+  const TABLE_CENTER_MIN_TOP = 70;
+  const TABLE_CENTER_MAX_HEIGHT = 420;
   const centeredStartY = (estimatedHeight: number) => {
-    return Math.min(LH - 28, Math.max(70, (LH + estimatedHeight) / 2));
+    const effectiveHeight = Math.min(Math.max(estimatedHeight, 0), TABLE_CENTER_MAX_HEIGHT);
+    return Math.min(LH - 28, Math.max(TABLE_CENTER_MIN_TOP, (LH + effectiveHeight) / 2));
   };
 
   const lEnsureSpace = (rows: number) => {
