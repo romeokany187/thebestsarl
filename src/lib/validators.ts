@@ -214,6 +214,8 @@ export const approvalSchema = z.object({
 export const needRequestSchema = z.object({
   title: z.string().min(3).max(180),
   category: z.string().min(2).max(80),
+  urgencyLevel: z.enum(["CRITIQUE", "ELEVEE", "NORMALE", "FAIBLE"]),
+  beneficiaryTeam: z.enum(["KINSHASA", "LUBUMBASHI", "MBUJIMAYI"]),
   details: z.string().min(10).max(4000).optional(),
   quantity: z.number().positive().optional(),
   unit: z.string().min(1).max(20).optional(),

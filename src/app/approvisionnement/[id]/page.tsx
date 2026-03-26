@@ -50,6 +50,22 @@ export default async function NeedReadPage(context: PageContext) {
   const displayStatus = need.status === "APPROVED" && executedMovement
     ? "Approuvé et exécuté"
     : statusLabel(need.status);
+  const urgencyLabel = quote?.urgencyLevel === "CRITIQUE"
+    ? "Critique"
+    : quote?.urgencyLevel === "ELEVEE"
+      ? "Élevée"
+      : quote?.urgencyLevel === "NORMALE"
+        ? "Normale"
+        : quote?.urgencyLevel === "FAIBLE"
+          ? "Faible"
+          : "-";
+  const beneficiaryLabel = quote?.beneficiaryTeam === "KINSHASA"
+    ? "Kinshasa"
+    : quote?.beneficiaryTeam === "LUBUMBASHI"
+      ? "Lubumbashi"
+      : quote?.beneficiaryTeam === "MBUJIMAYI"
+        ? "Mbujimayi"
+        : "-";
 
   return (
     <AppShell role={role} accessNote="Lecture d'état de besoin avec impression PDF disponible pour tous les profils." >
@@ -96,6 +112,8 @@ export default async function NeedReadPage(context: PageContext) {
           <p><span className="font-semibold">Date validation:</span> {formatDate(need.approvedAt ?? need.reviewedAt)}</p>
           <p><span className="font-semibold">Sceau:</span> {need.sealedAt ? `Scellé le ${formatDate(need.sealedAt)}` : "Non scellé"}</p>
           <p><span className="font-semibold">Exécution:</span> {executedMovement ? `Exécuté le ${formatDate(executedMovement.createdAt)}` : "En attente d'exécution"}</p>
+          <p><span className="font-semibold">Niveau d&apos;urgence:</span> {urgencyLabel}</p>
+          <p><span className="font-semibold">Équipe bénéficiaire:</span> {beneficiaryLabel}</p>
         </div>
 
         <section className="mt-4">

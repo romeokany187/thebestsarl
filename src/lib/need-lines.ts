@@ -10,6 +10,8 @@ export type NeedDetailsQuote = {
   format: "QUOTE_V1";
   items: NeedLine[];
   totalGeneral: number;
+  urgencyLevel?: "CRITIQUE" | "ELEVEE" | "NORMALE" | "FAIBLE";
+  beneficiaryTeam?: "KINSHASA" | "LUBUMBASHI" | "MBUJIMAYI";
 };
 
 function round2(value: number) {
@@ -38,6 +40,10 @@ export function normalizeNeedLines(
 
 export function quoteFromItems(
   items: Array<{ designation: string; description?: string; quantity: number; unitPrice: number }>,
+  options?: {
+    urgencyLevel?: "CRITIQUE" | "ELEVEE" | "NORMALE" | "FAIBLE";
+    beneficiaryTeam?: "KINSHASA" | "LUBUMBASHI" | "MBUJIMAYI";
+  },
 ): NeedDetailsQuote {
   const normalized = normalizeNeedLines(items);
   const totalGeneral = round2(normalized.reduce((sum, item) => sum + item.lineTotal, 0));
@@ -46,6 +52,8 @@ export function quoteFromItems(
     format: "QUOTE_V1",
     items: normalized,
     totalGeneral,
+    urgencyLevel: options?.urgencyLevel,
+    beneficiaryTeam: options?.beneficiaryTeam,
   };
 }
 
@@ -59,6 +67,8 @@ export function parseNeedQuote(details: string | null | undefined): NeedDetailsQ
   try {
     const payload = JSON.parse(details) as {
       format?: string;
+      urgencyLevel?: string;
+      beneficiaryTeam?: string;
       items?: Array<{
         designation?: string;
         description?: string;
@@ -95,6 +105,19 @@ export function parseNeedQuote(details: string | null | undefined): NeedDetailsQ
       format: "QUOTE_V1",
       items,
       totalGeneral: round2(Number(payload.totalGeneral ?? items.reduce((sum, item) => sum + item.lineTotal, 0))),
+      urgencyLevel:
+        payload.urgencyLevel === "CRITIQUE"
+        || payload.urgencyLevel === "ELEVEE"
+        || payload.urgencyLevel === "NORMALE"
+        || payload.urgencyLevel === "FAIBLE"
+          ? payload.urgencyLevel
+          : undefined,
+      beneficiaryTeam:
+        payload.beneficiaryTeam === "KINSHASA"
+        || payload.beneficiaryTeam === "LUBUMBASHI"
+        || payload.beneficiaryTeam === "MBUJIMAYI"
+          ? payload.beneficiaryTeam
+          : undefined,
     };
   } catch {
     return null;

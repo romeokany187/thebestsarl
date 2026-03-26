@@ -52,6 +52,45 @@ type NeedLineForm = {
   unitPrice: string;
 };
 
+type NeedUrgencyLevel = "CRITIQUE" | "ELEVEE" | "NORMALE" | "FAIBLE";
+type NeedBeneficiaryTeam = "KINSHASA" | "LUBUMBASHI" | "MBUJIMAYI";
+
+const URGENCY_LABEL: Record<NeedUrgencyLevel, string> = {
+  CRITIQUE: "Critique",
+  ELEVEE: "Élevée",
+  NORMALE: "Normale",
+  FAIBLE: "Faible",
+};
+
+const BENEFICIARY_LABEL: Record<NeedBeneficiaryTeam, string> = {
+  KINSHASA: "Kinshasa",
+  LUBUMBASHI: "Lubumbashi",
+  MBUJIMAYI: "Mbujimayi",
+};
+
+function parseNeedMeta(details: string) {
+  try {
+    const parsed = JSON.parse(details) as {
+      urgencyLevel?: string;
+      beneficiaryTeam?: string;
+    };
+    const urgencyLevel = parsed.urgencyLevel;
+    const beneficiaryTeam = parsed.beneficiaryTeam;
+    return {
+      urgencyLevel:
+        urgencyLevel === "CRITIQUE" || urgencyLevel === "ELEVEE" || urgencyLevel === "NORMALE" || urgencyLevel === "FAIBLE"
+          ? urgencyLevel
+          : null,
+      beneficiaryTeam:
+        beneficiaryTeam === "KINSHASA" || beneficiaryTeam === "LUBUMBASHI" || beneficiaryTeam === "MBUJIMAYI"
+          ? beneficiaryTeam
+          : null,
+    };
+  } catch {
+    return { urgencyLevel: null, beneficiaryTeam: null };
+  }
+}
+
 function statusLabel(status: NeedStatus) {
   if (status === "SUBMITTED") return "Soumis";
   if (status === "APPROVED") return "Approuvé";
@@ -179,6 +218,8 @@ export function ProcurementHub({
       body: JSON.stringify({
         title: String(formData.get("title") ?? ""),
         category: String(formData.get("category") ?? ""),
+        urgencyLevel: String(formData.get("urgencyLevel") ?? "NORMALE"),
+        beneficiaryTeam: String(formData.get("beneficiaryTeam") ?? "KINSHASA"),
         currency: String(formData.get("currency") ?? "XAF").trim() || "XAF",
         items,
       }),
@@ -275,6 +316,19 @@ export function ProcurementHub({
               <form onSubmit={submitNeed} className="mt-3 grid gap-2">
                 <input name="title" required placeholder="Objet du besoin" className="rounded-md border px-3 py-2 text-sm" />
                 <input name="category" required placeholder="Catégorie" className="rounded-md border px-3 py-2 text-sm" />
+                <div className="grid gap-2 sm:grid-cols-2">
+                  <select name="urgencyLevel" defaultValue="NORMALE" required className="rounded-md border px-3 py-2 text-sm">
+                    <option value="CRITIQUE">Urgence critique</option>
+                    <option value="ELEVEE">Urgence élevée</option>
+                    <option value="NORMALE">Urgence normale</option>
+                    <option value="FAIBLE">Urgence faible</option>
+                  </select>
+                  <select name="beneficiaryTeam" defaultValue="KINSHASA" required className="rounded-md border px-3 py-2 text-sm">
+                    <option value="KINSHASA">Équipe bénéficiaire: Kinshasa</option>
+                    <option value="LUBUMBASHI">Équipe bénéficiaire: Lubumbashi</option>
+                    <option value="MBUJIMAYI">Équipe bénéficiaire: Mbujimayi</option>
+                  </select>
+                </div>
                 <div className="rounded-lg border border-black/10 p-3 dark:border-white/10">
                   <div className="flex items-center justify-between gap-2">
                     <p className="text-[11px] font-semibold uppercase tracking-wide text-black/60 dark:text-white/60">
@@ -430,6 +484,8 @@ export function ProcurementHub({
               <tr>
                 <th className="px-3 py-2 text-left font-semibold">Objet</th>
                 <th className="px-3 py-2 text-left font-semibold">Demandeur</th>
+                <th className="px-3 py-2 text-left font-semibold">Urgence</th>
+                <th className="px-3 py-2 text-left font-semibold">Équipe cible</th>
                 <th className="px-3 py-2 text-left font-semibold">Montant</th>
                 <th className="px-3 py-2 text-left font-semibold">Statut</th>
                 <th className="px-3 py-2 text-left font-semibold">Date</th>
@@ -438,9 +494,14 @@ export function ProcurementHub({
             </thead>
             <tbody>
               {needs.slice(0, 30).map((need) => (
+                (() => {
+                  const meta = parseNeedMeta(need.details);
+                  return (
                 <tr key={need.id} className="border-t border-black/10 dark:border-white/10">
                   <td className="px-3 py-2 font-medium">{need.title}</td>
                   <td className="px-3 py-2">{need.requester.name}</td>
+                  <td className="px-3 py-2 text-xs font-semibold">{meta.urgencyLevel ? URGENCY_LABEL[meta.urgencyLevel] : "-"}</td>
+                  <td className="px-3 py-2 text-xs">{meta.beneficiaryTeam ? BENEFICIARY_LABEL[meta.beneficiaryTeam] : "-"}</td>
                   <td className="px-3 py-2">
                     {typeof need.estimatedAmount === "number"
                       ? `${new Intl.NumberFormat("fr-FR").format(need.estimatedAmount)} ${need.currency ?? "XAF"}`
@@ -471,10 +532,12 @@ export function ProcurementHub({
                     </div>
                   </td>
                 </tr>
+                  );
+                })()
               ))}
               {needs.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="px-3 py-8 text-center text-sm text-black/60 dark:text-white/60">
+                  <td colSpan={8} className="px-3 py-8 text-center text-sm text-black/60 dark:text-white/60">
                     Aucun état de besoin pour le moment.
                   </td>
                 </tr>

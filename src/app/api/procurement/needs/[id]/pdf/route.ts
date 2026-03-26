@@ -160,6 +160,22 @@ export async function GET(request: NextRequest, context: RouteContext) {
   const quote = parseNeedQuote(need.details);
   const grid = rgb(0.82, 0.82, 0.82);
   const executionMovement = need.stockMovements[0] ?? null;
+  const urgencyLabel = quote?.urgencyLevel === "CRITIQUE"
+    ? "Critique"
+    : quote?.urgencyLevel === "ELEVEE"
+      ? "Élevée"
+      : quote?.urgencyLevel === "NORMALE"
+        ? "Normale"
+        : quote?.urgencyLevel === "FAIBLE"
+          ? "Faible"
+          : "-";
+  const beneficiaryLabel = quote?.beneficiaryTeam === "KINSHASA"
+    ? "Kinshasa"
+    : quote?.beneficiaryTeam === "LUBUMBASHI"
+      ? "Lubumbashi"
+      : quote?.beneficiaryTeam === "MBUJIMAYI"
+        ? "Mbujimayi"
+        : "-";
   const statusLabel = need.status === "APPROVED" && executionMovement
     ? "APPROUVÉ ET EXÉCUTÉ"
     : need.status;
@@ -297,6 +313,8 @@ export async function GET(request: NextRequest, context: RouteContext) {
     ["Validé par", need.reviewedBy?.name ?? "-"],
     ["Date validation", formatDate(need.approvedAt ?? need.reviewedAt)],
     ["Exécution", executionMovement ? formatDate(executionMovement.createdAt) : "En attente d'exécution"],
+    ["Niveau d'urgence", urgencyLabel],
+    ["Équipe bénéficiaire", beneficiaryLabel],
   ] as const;
 
   for (const [label, value] of details) {

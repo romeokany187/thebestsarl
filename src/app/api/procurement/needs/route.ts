@@ -62,7 +62,15 @@ export async function POST(request: NextRequest) {
         quantity: parsed.data.quantity ?? 1,
         unitPrice: parsed.data.estimatedAmount ?? 0,
       },
-    ]);
+    ], {
+      urgencyLevel: parsed.data.urgencyLevel,
+      beneficiaryTeam: parsed.data.beneficiaryTeam,
+    });
+
+  if (parsed.data.items?.length) {
+    quote.urgencyLevel = parsed.data.urgencyLevel;
+    quote.beneficiaryTeam = parsed.data.beneficiaryTeam;
+  }
 
   if (quote.items.length === 0) {
     return NextResponse.json({ error: "Ajoutez au moins une ligne valide dans le devis (désignation, quantité, prix unitaire)." }, { status: 400 });
