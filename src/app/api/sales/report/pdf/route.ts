@@ -70,7 +70,9 @@ function inferReportKind(start: Date, endExclusive: Date): ReportKind {
 
 function weekLabel(start: Date, endExclusive: Date) {
   const end = new Date(endExclusive.getTime() - 1);
-  return `SEMAINE DU ${start.toISOString().slice(0, 10)} AU ${end.toISOString().slice(0, 10)}`;
+  const startShort = start.toISOString().slice(5, 10);
+  const endShort = end.toISOString().slice(5, 10);
+  return `Semaine du ${startShort} au ${endShort}`;
 }
 
 function getWeekStart(baseStart: Date, date: Date) {
@@ -296,26 +298,29 @@ async function generateExecutiveAnalysis(input: {
 
   const systemPrompt = [
     "Tu es directeur de la stratégie et analyste financier senior d'une agence de voyages aériens de référence en Afrique centrale.",
-    "Tu rédiges des analyses executives de haut niveau, substantielles, factuelless, rigoureuses et présentables à un conseil d'administration, aux associés et aux autorités régulatrices.",
-    "Chaque section doit être DÉVELOPPÉE : au moins 4 à 6 phrases ou puces denses par rubrique. Pas de superficialité ni de généralités vides.",
-    "Cite systématiquement les chiffres clés de la période dans chaque section. Contextualise les tendances avec des interprétations causales concrètes.",
-    "Dans les recommandations, propose des mesures concrètes avec responsables suggérés, délais et KPIs de suivi.",
-    "N'invente aucun chiffre au-delà des données fournies. Réponds STRICTEMENT en JSON valide sans aucun texte additionnel.",
+    "Tu rédiges des analyses executives EXTRÊMEMENT DOCUMENTÉES, factuelless, rigoureuses et présentables à un conseil d'administration, aux associés et aux autorités régulatrices.",
+    "CHAQUE puce/phrase DOIT CITER EXPLICITEMENT les chiffres et données issues du payload. Pas de généralités. Pas de suppositions.",
+    "Structure chaque puce comme: [ASSERTION OBSERVÉE] (chiffre 1: X, chiffre 2: Y) → [INTERPRÉTATION CAUSALE] avec données à l'appui.",
+    "Exemple BON: 'Les commissions ont reculé de -20.3% (2604.50 USD vs 3735.40 USD période référence), attestant une érosion de la marge directement liée à la baisse du volume compagnies premium (-15 billets CAA).'",
+    "Exemple MAUVAIS: 'La marge commissionnelle a diminué. Il faut surveiller.'",
+    "Chaque section doit avoir 4 à 6 puces, CHACUNE SOLIDEMENT ARGUMENTÉE AVEC DONNÉES NUMÉRIQUES DIRECTES.",
+    "N'invente aucun chiffre. N'ajoute aucune interprétation au-delà des données fournies. Réponds STRICTEMENT en JSON valide sans texte additionnel.",
   ].join(" ");
 
   const userPrompt = [
-    "Produis une analyse exécutive complète et détaillée en français avec ce schéma JSON EXACT:",
+    "Produis une analyse exécutive EXTRÊMEMENT DOCUMENTÉE en français avec ce schéma JSON EXACT:",
     "{",
     '  "title": "string (titre court du rapport avec période)",',
-    '  "summary": "string (MINIMUM 6 phrases: contexte opérationnel, chiffres clés période, comparaison période précédente, qualité encaissement, structure commissions, conclusion direction)",',
-    '  "strengths": ["string (4 à 6 puces développées chacune en 2-3 phrases avec chiffres)"],',
-    '  "weaknesses": ["string (4 à 6 puces développées chacune en 2-3 phrases avec analyse causale)"],',
-    '  "advances": ["string (4 à 6 puces développées: description de la progression et son impact business)"],',
-    '  "regressions": ["string (4 à 6 puces développées: description du recul, causes probables, impact estimé)"],',
-    '  "recommendations": ["string (4 à 6 actions concrètes avec: quoi faire, qui porte la responsabilité, délai cible, KPI de succès)"]',
+    '  "summary": "string (MINIMUM 6 phrases denses: contexte opérationnel, chiffres clés période CITES, comparaison vs période précédente CHIFFRÉE, taux encaissement, impact commissions CAA/autres, conclusion direction)",',
+    '  "strengths": ["string (4-6 puces: CHACUNE CITE les données du payload - chiffres précis, compagnies nommées, % de croissance, impact absolu)"],',
+    '  "weaknesses": ["string (4-6 puces: CHACUNE CITE données concrètes - montants, taux %, causes observées, impact estimé)"],',
+    '  "advances": ["string (4-6 puces: DONNÉES CHIFFRÉES de progression - billets +X, montant +Y USD, justification par données factuelles)"],',
+    '  "regressions": ["string (4-6 puces: DONNÉES CHIFFRÉES de recul - montants absolus, %, causes détectables dans données, impact business)"],',
+    '  "recommendations": ["string (4-6 actions CONCRÈTES: action précise, responsable ou département, délai (jours/semaines), KPI mesurable lié aux données)"]',
     "}",
     "",
-    "IMPERATIF: Chaque puce doit être substantielle (2 à 3 phrases au minimum). Pas de bullet point vague de type 'surveiller les ventes'.",
+    "CONTRAINTE STRICTE: CHAQUE puce = [OBSERVABLE FACTUEL cité du payload] + [IMPACT QUANTIFIÉ] + [CAUSE ou INTERPRÉTATION fondée sur données].",
+    "Pas de généralité vague type 'surveiller', 'améliorer', 'augmenter'. Chaque affirmation doit être supportée par un chiffre du payload.",
     "Données de la période analysée:",
     JSON.stringify(payload),
   ].join("\n");
@@ -869,7 +874,7 @@ export async function GET(request: NextRequest) {
   let lPage = pdf.addPage([842, 595]);
   const LW = lPage.getWidth();
   const LH = lPage.getHeight();
-  const LM = 20;
+  const LM = 60;
   let lY = LH - 28;
   const rowH = 15;
 
@@ -921,8 +926,11 @@ export async function GET(request: NextRequest) {
     });
   };
 
-  // Table header title
-  drawLandText(reportTitle, LM, lY, 12, true);
+  // Table header title - Annexe
+  const tableTitle = `Annexe 1 - Tableau des ventes (${dateRange.startRaw} → ${dateRange.endRaw})`;
+  const tableTitleWidth = fontBold.widthOfTextAtSize(tableTitle, 12);
+  const tableTitleX = Math.max(LM, (LW - tableTitleWidth) / 2);
+  drawLandText(tableTitle, tableTitleX, lY, 12, true);
   lY -= 16;
   drawLandRule(1);
   lY -= 14;
