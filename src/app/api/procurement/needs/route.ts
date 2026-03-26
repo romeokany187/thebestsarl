@@ -53,8 +53,15 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Seul le service approvisionnement peut émettre un état de besoin." }, { status: 403 });
   }
 
+  const quoteOptions = {
+    urgencyLevel: parsed.data.urgencyLevel,
+    beneficiaryTeam: parsed.data.beneficiaryTeam,
+    beneficiaryPersonId: parsed.data.beneficiaryPersonId,
+    beneficiaryPersonName: parsed.data.beneficiaryPersonName,
+  };
+
   const quote = parsed.data.items?.length
-    ? quoteFromItems(parsed.data.items)
+    ? quoteFromItems(parsed.data.items, quoteOptions)
     : quoteFromItems([
       {
         designation: parsed.data.title,
@@ -62,15 +69,7 @@ export async function POST(request: NextRequest) {
         quantity: parsed.data.quantity ?? 1,
         unitPrice: parsed.data.estimatedAmount ?? 0,
       },
-    ], {
-      urgencyLevel: parsed.data.urgencyLevel,
-      beneficiaryTeam: parsed.data.beneficiaryTeam,
-    });
-
-  if (parsed.data.items?.length) {
-    quote.urgencyLevel = parsed.data.urgencyLevel;
-    quote.beneficiaryTeam = parsed.data.beneficiaryTeam;
-  }
+    ], quoteOptions);
 
   if (quote.items.length === 0) {
     return NextResponse.json({ error: "Ajoutez au moins une ligne valide dans le devis (désignation, quantité, prix unitaire)." }, { status: 400 });

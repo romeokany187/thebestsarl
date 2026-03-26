@@ -216,6 +216,8 @@ export const needRequestSchema = z.object({
   category: z.string().min(2).max(80).optional(),
   urgencyLevel: z.enum(["CRITIQUE", "ELEVEE", "NORMALE", "FAIBLE"]),
   beneficiaryTeam: z.enum(["KINSHASA", "LUBUMBASHI", "MBUJIMAYI"]),
+  beneficiaryPersonId: z.string().optional(),
+  beneficiaryPersonName: z.string().max(120).optional(),
   details: z.string().min(10).max(4000).optional(),
   quantity: z.number().positive().optional(),
   unit: z.string().min(1).max(20).optional(),

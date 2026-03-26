@@ -314,6 +314,7 @@ export async function GET(request: NextRequest, context: RouteContext) {
     ["Exécution", executionMovement ? formatDate(executionMovement.createdAt) : "En attente d'exécution"],
     ["Niveau d'urgence", urgencyLabel],
     ["Équipe bénéficiaire", beneficiaryLabel],
+    ...(quote?.beneficiaryPersonName ? [["Personne bénéficiaire", quote.beneficiaryPersonName] as const] : []),
   ] as const;
 
   for (const [label, value] of details) {

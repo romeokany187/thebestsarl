@@ -72,12 +72,14 @@ function parseNeedMeta(details: string) {
   type NeedMeta = {
     urgencyLevel: NeedUrgencyLevel | null;
     beneficiaryTeam: NeedBeneficiaryTeam | null;
+    beneficiaryPersonName: string | null;
   };
 
   try {
     const parsed = JSON.parse(details) as {
       urgencyLevel?: string;
       beneficiaryTeam?: string;
+      beneficiaryPersonName?: string;
     };
     const urgencyLevel = parsed.urgencyLevel;
     const beneficiaryTeam = parsed.beneficiaryTeam;
@@ -90,10 +92,11 @@ function parseNeedMeta(details: string) {
         beneficiaryTeam === "KINSHASA" || beneficiaryTeam === "LUBUMBASHI" || beneficiaryTeam === "MBUJIMAYI"
           ? beneficiaryTeam
           : null,
+      beneficiaryPersonName: typeof parsed.beneficiaryPersonName === "string" ? parsed.beneficiaryPersonName : null,
     };
     return meta;
   } catch {
-    const meta: NeedMeta = { urgencyLevel: null, beneficiaryTeam: null };
+    const meta: NeedMeta = { urgencyLevel: null, beneficiaryTeam: null, beneficiaryPersonName: null };
     return meta;
   }
 }
@@ -105,6 +108,8 @@ function statusLabel(status: NeedStatus) {
   return "Brouillon";
 }
 
+type UserOption = { id: string; name: string; teamName: string | null };
+
 export function ProcurementHub({
   initialNeeds,
   initialStock,
@@ -114,6 +119,7 @@ export function ProcurementHub({
   canManageStock,
   hideNeedWorkflow,
   hideDynamicStock,
+  allUsers = [],
 }: {
   initialNeeds: NeedItem[];
   initialStock: StockItem[];
@@ -123,6 +129,7 @@ export function ProcurementHub({
   canManageStock: boolean;
   hideNeedWorkflow?: boolean;
   hideDynamicStock?: boolean;
+  allUsers?: UserOption[];
 }) {
   const defaultReportMonth = new Date().toISOString().slice(0, 7);
   const [needs, setNeeds] = useState(initialNeeds);
@@ -135,6 +142,13 @@ export function ProcurementHub({
   const [needLines, setNeedLines] = useState<NeedLineForm[]>([
     { designation: "", description: "", quantity: "1", unitPrice: "0" },
   ]);
+  const [selectedBeneficiaryTeam, setSelectedBeneficiaryTeam] = useState<NeedBeneficiaryTeam>("KINSHASA");
+  const [selectedBeneficiaryPerson, setSelectedBeneficiaryPerson] = useState("");
+
+  const filteredUsers = useMemo(() => {
+    const keyword = selectedBeneficiaryTeam.toLowerCase();
+    return allUsers.filter((u) => u.teamName?.toLowerCase().includes(keyword) ?? false);
+  }, [allUsers, selectedBeneficiaryTeam]);
 
   const approvedNeeds = useMemo(
     () => needs.filter((need) => need.status === "APPROVED"),
@@ -219,14 +233,20 @@ export function ProcurementHub({
 
     setNeedStatus("Émission en cours...");
 
+    const beneficiaryPersonId = String(formData.get("beneficiaryPersonId") ?? "").trim() || undefined;
+    const beneficiaryPersonName = beneficiaryPersonId
+      ? allUsers.find((u) => u.id === beneficiaryPersonId)?.name
+      : undefined;
+
     const response = await fetch("/api/procurement/needs", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         title: String(formData.get("title") ?? ""),
-        category: String(formData.get("category") ?? ""),
         urgencyLevel: String(formData.get("urgencyLevel") ?? "NORMALE"),
         beneficiaryTeam: String(formData.get("beneficiaryTeam") ?? "KINSHASA"),
+        beneficiaryPersonId,
+        beneficiaryPersonName,
         currency: String(formData.get("currency") ?? "XAF").trim() || "XAF",
         items,
       }),
@@ -241,6 +261,8 @@ export function ProcurementHub({
     setNeedStatus("État de besoin émis et transféré à la Direction Générale.");
     form.reset();
     setNeedLines([{ designation: "", description: "", quantity: "1", unitPrice: "0" }]);
+    setSelectedBeneficiaryTeam("KINSHASA");
+    setSelectedBeneficiaryPerson("");
     await refreshData();
   }
 
@@ -329,10 +351,34 @@ export function ProcurementHub({
                     <option value="NORMALE">Urgence normale</option>
                     <option value="FAIBLE">Urgence faible</option>
                   </select>
-                  <select name="beneficiaryTeam" defaultValue="KINSHASA" required className="rounded-md border px-3 py-2 text-sm">
+                  <select
+                    name="beneficiaryTeam"
+                    value={selectedBeneficiaryTeam}
+                    onChange={(e) => {
+                      setSelectedBeneficiaryTeam(e.target.value as NeedBeneficiaryTeam);
+                      setSelectedBeneficiaryPerson("");
+                    }}
+                    required
+                    className="rounded-md border px-3 py-2 text-sm"
+                  >
                     <option value="KINSHASA">Équipe bénéficiaire: Kinshasa</option>
                     <option value="LUBUMBASHI">Équipe bénéficiaire: Lubumbashi</option>
                     <option value="MBUJIMAYI">Équipe bénéficiaire: Mbujimayi</option>
+                  </select>
+                  <select
+                    name="beneficiaryPersonId"
+                    value={selectedBeneficiaryPerson}
+                    onChange={(e) => setSelectedBeneficiaryPerson(e.target.value)}
+                    className="rounded-md border px-3 py-2 text-sm col-span-2"
+                  >
+                    <option value="">Personne bénéficiaire (optionnel)</option>
+                    {filteredUsers.length === 0 ? (
+                      <option disabled>Aucun employé lié à cette équipe</option>
+                    ) : (
+                      filteredUsers.map((u) => (
+                        <option key={u.id} value={u.id}>{u.name}</option>
+                      ))
+                    )}
                   </select>
                 </div>
                 <div className="rounded-lg border border-black/10 p-3 dark:border-white/10">
@@ -492,6 +538,7 @@ export function ProcurementHub({
                 <th className="px-3 py-2 text-left font-semibold">Demandeur</th>
                 <th className="px-3 py-2 text-left font-semibold">Urgence</th>
                 <th className="px-3 py-2 text-left font-semibold">Équipe cible</th>
+                <th className="px-3 py-2 text-left font-semibold">Bénéficiaire</th>
                 <th className="px-3 py-2 text-left font-semibold">Montant</th>
                 <th className="px-3 py-2 text-left font-semibold">Statut</th>
                 <th className="px-3 py-2 text-left font-semibold">Date</th>
@@ -508,6 +555,7 @@ export function ProcurementHub({
                   <td className="px-3 py-2">{need.requester.name}</td>
                   <td className="px-3 py-2 text-xs font-semibold">{meta.urgencyLevel ? URGENCY_LABEL[meta.urgencyLevel] : "-"}</td>
                   <td className="px-3 py-2 text-xs">{meta.beneficiaryTeam ? BENEFICIARY_LABEL[meta.beneficiaryTeam] : "-"}</td>
+                  <td className="px-3 py-2 text-xs">{meta.beneficiaryPersonName ?? "-"}</td>
                   <td className="px-3 py-2">
                     {typeof need.estimatedAmount === "number"
                       ? `${new Intl.NumberFormat("fr-FR").format(need.estimatedAmount)} ${need.currency ?? "XAF"}`
@@ -543,7 +591,7 @@ export function ProcurementHub({
               ))}
               {needs.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="px-3 py-8 text-center text-sm text-black/60 dark:text-white/60">
+                  <td colSpan={9} className="px-3 py-8 text-center text-sm text-black/60 dark:text-white/60">
                     Aucun état de besoin pour le moment.
                   </td>
                 </tr>

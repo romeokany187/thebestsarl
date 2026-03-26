@@ -12,6 +12,8 @@ export type NeedDetailsQuote = {
   totalGeneral: number;
   urgencyLevel?: "CRITIQUE" | "ELEVEE" | "NORMALE" | "FAIBLE";
   beneficiaryTeam?: "KINSHASA" | "LUBUMBASHI" | "MBUJIMAYI";
+  beneficiaryPersonId?: string;
+  beneficiaryPersonName?: string;
 };
 
 function round2(value: number) {
@@ -43,6 +45,8 @@ export function quoteFromItems(
   options?: {
     urgencyLevel?: "CRITIQUE" | "ELEVEE" | "NORMALE" | "FAIBLE";
     beneficiaryTeam?: "KINSHASA" | "LUBUMBASHI" | "MBUJIMAYI";
+    beneficiaryPersonId?: string;
+    beneficiaryPersonName?: string;
   },
 ): NeedDetailsQuote {
   const normalized = normalizeNeedLines(items);
@@ -54,6 +58,8 @@ export function quoteFromItems(
     totalGeneral,
     urgencyLevel: options?.urgencyLevel,
     beneficiaryTeam: options?.beneficiaryTeam,
+    beneficiaryPersonId: options?.beneficiaryPersonId,
+    beneficiaryPersonName: options?.beneficiaryPersonName,
   };
 }
 
@@ -69,6 +75,8 @@ export function parseNeedQuote(details: string | null | undefined): NeedDetailsQ
       format?: string;
       urgencyLevel?: string;
       beneficiaryTeam?: string;
+      beneficiaryPersonId?: string;
+      beneficiaryPersonName?: string;
       items?: Array<{
         designation?: string;
         description?: string;
@@ -118,6 +126,8 @@ export function parseNeedQuote(details: string | null | undefined): NeedDetailsQ
         || payload.beneficiaryTeam === "MBUJIMAYI"
           ? payload.beneficiaryTeam
           : undefined,
+      beneficiaryPersonId: typeof payload.beneficiaryPersonId === "string" ? payload.beneficiaryPersonId : undefined,
+      beneficiaryPersonName: typeof payload.beneficiaryPersonName === "string" ? payload.beneficiaryPersonName : undefined,
     };
   } catch {
     return null;

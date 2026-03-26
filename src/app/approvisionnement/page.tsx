@@ -13,7 +13,7 @@ export default async function ApprovisionnementPage() {
     select: { jobTitle: true, role: true },
   });
 
-  const [needs, stockItems, movements] = await Promise.all([
+  const [needs, stockItems, movements, allUsersRaw] = await Promise.all([
     prisma.needRequest.findMany({
       include: {
         requester: { select: { id: true, name: true, jobTitle: true } },
@@ -35,7 +35,14 @@ export default async function ApprovisionnementPage() {
       orderBy: { createdAt: "desc" },
       take: 400,
     }),
+    prisma.user.findMany({
+      where: { teamId: { not: null } },
+      select: { id: true, name: true, team: { select: { name: true } } },
+      orderBy: { name: "asc" },
+    }),
   ]);
+
+  const allUsers = allUsersRaw.map((u) => ({ id: u.id, name: u.name, teamName: u.team?.name ?? null }));
 
   const isAdminReadOnly = role === "ADMIN";
   const canCreateNeed = !isAdminReadOnly && (role === "MANAGER" || me?.jobTitle === "APPROVISIONNEMENT_MARKETING");
@@ -77,6 +84,7 @@ export default async function ApprovisionnementPage() {
         canManageStock={canManageStock}
         hideNeedWorkflow={isAdminReadOnly}
         hideDynamicStock={isAdminReadOnly}
+        allUsers={allUsers}
       />
     </AppShell>
   );

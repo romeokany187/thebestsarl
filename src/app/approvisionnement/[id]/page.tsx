@@ -114,6 +114,9 @@ export default async function NeedReadPage(context: PageContext) {
           <p><span className="font-semibold">Exécution:</span> {executedMovement ? `Exécuté le ${formatDate(executedMovement.createdAt)}` : "En attente d'exécution"}</p>
           <p><span className="font-semibold">Niveau d&apos;urgence:</span> {urgencyLabel}</p>
           <p><span className="font-semibold">Équipe bénéficiaire:</span> {beneficiaryLabel}</p>
+          {quote?.beneficiaryPersonName && (
+            <p><span className="font-semibold">Personne bénéficiaire:</span> {quote.beneficiaryPersonName}</p>
+          )}
         </div>
 
         <section className="mt-4">
