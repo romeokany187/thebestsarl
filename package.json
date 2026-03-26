@@ -4,11 +4,11 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "prisma generate && prisma db push && next build",
+    "build": "prisma generate && prisma db push --accept-data-loss && next build",
     "start": "next start",
     "lint": "eslint",
     "db:generate": "prisma generate",
-    "db:push": "prisma db push",
+    "db:push": "prisma db push --accept-data-loss",
     "db:seed": "tsx prisma/seed.ts",
     "db:import:tickets:excel": "tsx scripts/import-tickets-excel.ts",
     "db:reset:operational": "tsx scripts/reset-operational-data.ts"
