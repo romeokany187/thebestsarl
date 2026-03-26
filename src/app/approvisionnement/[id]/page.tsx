@@ -73,7 +73,7 @@ export default async function NeedReadPage(context: PageContext) {
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Lecture de l&apos;état de besoin</h1>
           <p className="text-sm text-black/60 dark:text-white/60">
-            Référence: EDB-{need.id.slice(0, 8).toUpperCase()} • Statut: {displayStatus}
+            Référence: {need.code ?? `EDB-${need.id.slice(0, 8).toUpperCase()}`} • Statut: {displayStatus}
           </p>
         </div>
         <div className="flex flex-wrap gap-2">

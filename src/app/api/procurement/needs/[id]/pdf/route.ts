@@ -278,7 +278,7 @@ export async function GET(request: NextRequest, context: RouteContext) {
     y -= 16;
   };
 
-  page.drawText(`Réf: EDB-${need.id.slice(0, 8).toUpperCase()}`, {
+  page.drawText(`Réf: ${need.code ?? `EDB-${need.id.slice(0, 8).toUpperCase()}`}`, {
     x: CONTENT_LEFT,
     y,
     size: 10.5,

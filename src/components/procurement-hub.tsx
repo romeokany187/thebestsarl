@@ -7,6 +7,7 @@ type MovementType = "IN" | "OUT";
 
 type NeedItem = {
   id: string;
+  code?: string | null;
   title: string;
   category: string;
   details: string;
@@ -534,6 +535,7 @@ export function ProcurementHub({
           <table className="min-w-full text-sm">
             <thead className="bg-black/5 dark:bg-white/10">
               <tr>
+                <th className="px-3 py-2 text-left font-semibold">Référence</th>
                 <th className="px-3 py-2 text-left font-semibold">Objet</th>
                 <th className="px-3 py-2 text-left font-semibold">Demandeur</th>
                 <th className="px-3 py-2 text-left font-semibold">Urgence</th>
@@ -551,6 +553,7 @@ export function ProcurementHub({
                   const meta = parseNeedMeta(need.details);
                   return (
                 <tr key={need.id} className="border-t border-black/10 dark:border-white/10">
+                  <td className="px-3 py-2 font-mono text-xs font-semibold text-blue-700 dark:text-blue-400 whitespace-nowrap">{need.code ?? "-"}</td>
                   <td className="px-3 py-2 font-medium">{need.title}</td>
                   <td className="px-3 py-2">{need.requester.name}</td>
                   <td className="px-3 py-2 text-xs font-semibold">{meta.urgencyLevel ? URGENCY_LABEL[meta.urgencyLevel] : "-"}</td>
@@ -591,7 +594,7 @@ export function ProcurementHub({
               ))}
               {needs.length === 0 ? (
                 <tr>
-                  <td colSpan={9} className="px-3 py-8 text-center text-sm text-black/60 dark:text-white/60">
+                  <td colSpan={10} className="px-3 py-8 text-center text-sm text-black/60 dark:text-white/60">
                     Aucun état de besoin pour le moment.
                   </td>
                 </tr>

@@ -343,6 +343,7 @@ model AuditLog {
 
 model NeedRequest {
   id             String            @id @default(cuid())
+  code           String?           @unique
   title          String
   category       String
   details        String

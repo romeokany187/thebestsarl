@@ -75,19 +75,32 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Ajoutez au moins une ligne valide dans le devis (désignation, quantité, prix unitaire)." }, { status: 400 });
   }
 
-  const need = await prisma.needRequest.create({
-    data: {
-      title: parsed.data.title,
-      category: parsed.data.category?.trim() || "GENERAL",
-      details: serializeNeedQuote(quote),
-      quantity: quote.items.reduce((sum, item) => sum + item.quantity, 0),
-      unit: "LOT",
-      estimatedAmount: quote.totalGeneral,
-      currency: parsed.data.currency?.toUpperCase() ?? "XAF",
-      status: "SUBMITTED",
-      requesterId: me.id,
-      submittedAt: new Date(),
-    },
+  // Generate codification: TB-{TEAM3}-EB-{YEAR}-{SEQ}
+  const teamMap: Record<string, string> = { KINSHASA: "KIN", LUBUMBASHI: "LUB", MBUJIMAYI: "MBU" };
+  const team3 = teamMap[parsed.data.beneficiaryTeam] ?? parsed.data.beneficiaryTeam.slice(0, 3).toUpperCase();
+  const year = new Date().getFullYear();
+  const prefix = `TB-${team3}-EB-${year}-`;
+
+  const need = await prisma.$transaction(async (tx) => {
+    const count = await tx.needRequest.count({ where: { code: { startsWith: prefix } } });
+    const seq = String(count + 1).padStart(3, "0");
+    const code = `${prefix}${seq}`;
+
+    return tx.needRequest.create({
+      data: {
+        code,
+        title: parsed.data.title,
+        category: parsed.data.category?.trim() || "GENERAL",
+        details: serializeNeedQuote(quote),
+        quantity: quote.items.reduce((sum, item) => sum + item.quantity, 0),
+        unit: "LOT",
+        estimatedAmount: quote.totalGeneral,
+        currency: parsed.data.currency?.toUpperCase() ?? "XAF",
+        status: "SUBMITTED",
+        requesterId: me.id,
+        submittedAt: new Date(),
+      },
+    });
   });
 
   const validators = await prisma.user.findMany({
@@ -104,7 +117,7 @@ export async function POST(request: NextRequest) {
       data: validators.map((user) => ({
         userId: user.id,
         title: "Validation EDB requise",
-        message: `Un nouvel état de besoin est soumis: ${need.title}.`,
+        message: `Un nouvel état de besoin est soumis: ${need.code ?? need.title} — ${need.title}.`,
         type: "PROCUREMENT_APPROVAL",
         metadata: {
           needRequestId: need.id,
