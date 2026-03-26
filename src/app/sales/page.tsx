@@ -154,12 +154,7 @@ export default async function SalesPage({
         : Math.max(0, caaTargetAmount - caaRemainder)
     : 0;
   const airFastTicketCount = airFastAirline
-    ? await prisma.ticketSale.count({
-      where: {
-        airlineId: airFastAirline.id,
-        ...(role === "EMPLOYEE" ? { sellerId: session.user.id } : {}),
-      },
-    })
+    ? tickets.filter((ticket) => ticket.airlineId === airFastAirline.id).length
     : 0;
   const airFastNextBonusIn = airFastAirline
     ? (13 - (airFastTicketCount % 13 || 13))
