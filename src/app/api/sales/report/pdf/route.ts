@@ -11,7 +11,17 @@ type SearchParams = {
   endDate?: string;
 };
 
-type ReportKind = "DAILY" | "WEEKLY" | "MONTHLY";
+type ReportKind = "DAILY" | "WEEKLY" | "MONTHLY" | "ANNUAL" | "CUSTOM";
+
+type ExecutiveAnalysis = {
+  title: string;
+  summary: string;
+  strengths: string[];
+  weaknesses: string[];
+  advances: string[];
+  regressions: string[];
+  recommendations: string[];
+};
 
 function parseSearchParams(url: URL): SearchParams {
   return {
@@ -53,7 +63,9 @@ function inferReportKind(start: Date, endExclusive: Date): ReportKind {
   const days = Math.max(1, Math.round(ms / (24 * 60 * 60 * 1000)));
   if (days === 1) return "DAILY";
   if (days <= 7) return "WEEKLY";
-  return "MONTHLY";
+  if (days >= 365 && days <= 366) return "ANNUAL";
+  if (days <= 31) return "MONTHLY";
+  return "CUSTOM";
 }
 
 function weekLabel(start: Date, endExclusive: Date) {
@@ -68,6 +80,255 @@ function getWeekStart(baseStart: Date, date: Date) {
   const start = new Date(baseStart);
   start.setUTCDate(baseStart.getUTCDate() + block * 7);
   return start;
+}
+
+function pct(current: number, previous: number) {
+  if (previous > 0) return ((current - previous) / previous) * 100;
+  return current > 0 ? 100 : 0;
+}
+
+function signed(value: number) {
+  return `${value >= 0 ? "+" : ""}${value.toFixed(1)}%`;
+}
+
+function clampList(items: string[], fallback: string) {
+  const cleaned = items
+    .map((item) => item.trim())
+    .filter((item) => item.length > 0)
+    .slice(0, 5);
+  return cleaned.length > 0 ? cleaned : [fallback];
+}
+
+function extractJsonObject(raw: string) {
+  const trimmed = raw.trim();
+  if (trimmed.startsWith("{") && trimmed.endsWith("}")) {
+    return trimmed;
+  }
+
+  const fenced = trimmed.match(/```json\s*([\s\S]*?)```/i);
+  if (fenced?.[1]) {
+    return fenced[1].trim();
+  }
+
+  const first = trimmed.indexOf("{");
+  const last = trimmed.lastIndexOf("}");
+  if (first >= 0 && last > first) {
+    return trimmed.slice(first, last + 1);
+  }
+
+  return null;
+}
+
+function buildFallbackExecutiveAnalysis(input: {
+  reportKind: ReportKind;
+  startRaw: string;
+  endRaw: string;
+  totalCount: number;
+  totalAmount: number;
+  totalCommission: number;
+  paymentPaid: number;
+  paymentPartial: number;
+  paymentUnpaid: number;
+  previousCount: number;
+  previousAmount: number;
+  previousCommission: number;
+  topAirlines: Array<{ code: string; amount: number; count: number }>;
+  topAgencies: Array<{ name: string; amount: number; count: number }>;
+}): ExecutiveAnalysis {
+  const ticketsTrend = pct(input.totalCount, input.previousCount);
+  const amountTrend = pct(input.totalAmount, input.previousAmount);
+  const commissionTrend = pct(input.totalCommission, input.previousCommission);
+  const unpaidRisk = input.totalCount > 0 ? ((input.paymentUnpaid + input.paymentPartial) / input.totalCount) * 100 : 0;
+  const topAirline = input.topAirlines[0];
+  const topAgency = input.topAgencies[0];
+
+  return {
+    title: `Analyse ${input.reportKind} • ${input.startRaw} → ${input.endRaw}`,
+    summary: [
+      `Sur la période, ${input.totalCount} billets ont été vendus pour ${input.totalAmount.toFixed(2)} USD, avec ${input.totalCommission.toFixed(2)} USD de commissions.`,
+      `Par rapport à la période précédente équivalente, l'évolution est de ${signed(amountTrend)} sur le chiffre d'affaires et ${signed(commissionTrend)} sur les commissions.`,
+      `Le niveau de risque d'encaissement (partiel + impayé) est estimé à ${unpaidRisk.toFixed(1)}% des billets de la période.`,
+    ].join(" "),
+    strengths: clampList([
+      topAirline ? `La compagnie ${topAirline.code} tire le portefeuille avec ${topAirline.amount.toFixed(2)} USD (${topAirline.count} billets).` : "Le volume de ventes reste stable sur la période.",
+      topAgency ? `L'agence/équipe ${topAgency.name} contribue majoritairement avec ${topAgency.amount.toFixed(2)} USD.` : "La contribution des agences reste équilibrée.",
+      amountTrend >= 0 ? `Le chiffre d'affaires progresse de ${signed(amountTrend)} sur période comparable.` : "La base de revenus reste significative malgré un contexte plus contraint.",
+    ], "Performance commerciale globalement solide sur la période."),
+    weaknesses: clampList([
+      unpaidRisk >= 25 ? `Le taux partiel/impayé est élevé (${unpaidRisk.toFixed(1)}%), ce qui pèse sur la trésorerie.` : "La qualité d'encaissement doit rester sous surveillance.",
+      commissionTrend < 0 ? `La commission recule de ${signed(commissionTrend)}, signalant une pression sur la marge.` : "La marge commissionnelle reste sensible à la structure des ventes.",
+      input.topAirlines.length <= 1 ? "La concentration sur un nombre limité de compagnies augmente le risque de dépendance." : "La concentration des ventes doit être pilotée pour limiter le risque de dépendance.",
+    ], "Quelques fragilités opérationnelles exigent un suivi rapproché."),
+    advances: clampList([
+      ticketsTrend > 0 ? `Le volume billets progresse de ${signed(ticketsTrend)} par rapport à la période de référence.` : "Le volume billets se maintient sans rupture.",
+      amountTrend > 0 ? `L'activité commerciale est en progression nette (${signed(amountTrend)}).` : "Les acquis commerciaux sont globalement conservés.",
+      input.paymentPaid > 0 ? `${input.paymentPaid} billets totalement payés soutiennent la stabilité des encaissements.` : "La discipline d'encaissement progresse progressivement.",
+    ], "Des avancées sont visibles dans l'exécution commerciale."),
+    regressions: clampList([
+      ticketsTrend < 0 ? `Le volume billets recule de ${signed(ticketsTrend)} sur période comparable.` : "Pas de régression majeure sur le volume.",
+      amountTrend < 0 ? `Le chiffre d'affaires recule de ${signed(amountTrend)}.` : "Pas de régression majeure sur le chiffre d'affaires.",
+      input.paymentUnpaid > 0 ? `${input.paymentUnpaid} billets restent non payés à date et fragilisent le cycle cash.` : "Le niveau d'impayé reste contenu.",
+    ], "Les signaux de recul restent contenus mais doivent être pilotés."),
+    recommendations: clampList([
+      "Renforcer le suivi quotidien des créances (partiel/impayé) avec relances structurées et échéancier documenté.",
+      "Fixer des objectifs de diversification commerciale par compagnie et par agence pour réduire la concentration du risque.",
+      "Institutionnaliser un comité de performance hebdomadaire (ventes, marge, encaissement) avec plan d'actions daté.",
+      "Standardiser ce rapport pour diffusion aux associés et autorités avec indicateurs de tendance et mesures correctives.",
+    ], "Mettre en place un pilotage plus resserré des revenus et de l'encaissement."),
+  };
+}
+
+async function generateExecutiveAnalysis(input: {
+  reportKind: ReportKind;
+  startRaw: string;
+  endRaw: string;
+  totalCount: number;
+  totalAmount: number;
+  totalCommission: number;
+  paymentPaid: number;
+  paymentPartial: number;
+  paymentUnpaid: number;
+  previousCount: number;
+  previousAmount: number;
+  previousCommission: number;
+  byAirline: Array<{ code: string; amount: number; count: number; commission: number }>;
+  byAgency: Array<{ name: string; amount: number; count: number }>;
+}) {
+  const topAirlines = input.byAirline.slice(0, 6).map((item) => ({
+    code: item.code,
+    amount: Number(item.amount.toFixed(2)),
+    count: item.count,
+    commission: Number(item.commission.toFixed(2)),
+  }));
+  const topAgencies = input.byAgency.slice(0, 6).map((item) => ({
+    name: item.name,
+    amount: Number(item.amount.toFixed(2)),
+    count: item.count,
+  }));
+
+  const fallback = buildFallbackExecutiveAnalysis({
+    reportKind: input.reportKind,
+    startRaw: input.startRaw,
+    endRaw: input.endRaw,
+    totalCount: input.totalCount,
+    totalAmount: input.totalAmount,
+    totalCommission: input.totalCommission,
+    paymentPaid: input.paymentPaid,
+    paymentPartial: input.paymentPartial,
+    paymentUnpaid: input.paymentUnpaid,
+    previousCount: input.previousCount,
+    previousAmount: input.previousAmount,
+    previousCommission: input.previousCommission,
+    topAirlines,
+    topAgencies,
+  });
+
+  const apiKey = process.env.OPENAI_API_KEY?.trim();
+  if (!apiKey) {
+    return fallback;
+  }
+
+  const model = process.env.SALES_REPORT_AI_MODEL?.trim() || "gpt-4o-mini";
+  const payload = {
+    reportKind: input.reportKind,
+    period: { from: input.startRaw, to: input.endRaw },
+    totals: {
+      tickets: input.totalCount,
+      amountUSD: Number(input.totalAmount.toFixed(2)),
+      commissionUSD: Number(input.totalCommission.toFixed(2)),
+      paymentStatus: {
+        paid: input.paymentPaid,
+        partial: input.paymentPartial,
+        unpaid: input.paymentUnpaid,
+      },
+    },
+    comparisonPreviousEquivalentPeriod: {
+      tickets: input.previousCount,
+      amountUSD: Number(input.previousAmount.toFixed(2)),
+      commissionUSD: Number(input.previousCommission.toFixed(2)),
+      growth: {
+        ticketsPct: Number(pct(input.totalCount, input.previousCount).toFixed(1)),
+        amountPct: Number(pct(input.totalAmount, input.previousAmount).toFixed(1)),
+        commissionPct: Number(pct(input.totalCommission, input.previousCommission).toFixed(1)),
+      },
+    },
+    topAirlines,
+    topAgencies,
+  };
+
+  const systemPrompt = [
+    "Tu es un analyste financier senior d'une compagnie aérienne/agence de voyage.",
+    "Tu rédiges une synthèse professionnelle, sobre, factuelle, prête à être partagée aux associés et autorités.",
+    "N'invente aucun chiffre et ne sors pas du périmètre des données fournies.",
+    "Réponds STRICTEMENT en JSON valide sans texte additionnel.",
+  ].join(" ");
+
+  const userPrompt = [
+    "Produis une analyse exécutive en français avec ce schéma JSON exact:",
+    "{",
+    '  "title": "string",',
+    '  "summary": "string",',
+    '  "strengths": ["string"],',
+    '  "weaknesses": ["string"],',
+    '  "advances": ["string"],',
+    '  "regressions": ["string"],',
+    '  "recommendations": ["string"]',
+    "}",
+    "Contraintes:",
+    "- 1 summary entre 3 et 5 phrases.",
+    "- 3 à 5 puces par liste.",
+    "- Ton corporate et actionnable.",
+    "Données:",
+    JSON.stringify(payload),
+  ].join("\n");
+
+  try {
+    const response = await fetch("https://api.openai.com/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        model,
+        temperature: 0.2,
+        messages: [
+          { role: "system", content: systemPrompt },
+          { role: "user", content: userPrompt },
+        ],
+      }),
+    });
+
+    if (!response.ok) {
+      return fallback;
+    }
+
+    const completion = await response.json() as {
+      choices?: Array<{ message?: { content?: string } }>;
+    };
+    const content = completion.choices?.[0]?.message?.content?.trim() ?? "";
+    const jsonPayload = extractJsonObject(content);
+    if (!jsonPayload) {
+      return fallback;
+    }
+
+    const parsed = JSON.parse(jsonPayload) as Partial<ExecutiveAnalysis>;
+    if (!parsed.summary || !Array.isArray(parsed.strengths)) {
+      return fallback;
+    }
+
+    return {
+      title: parsed.title?.trim() || fallback.title,
+      summary: parsed.summary.trim(),
+      strengths: clampList(parsed.strengths ?? [], fallback.strengths[0]),
+      weaknesses: clampList(parsed.weaknesses ?? [], fallback.weaknesses[0]),
+      advances: clampList(parsed.advances ?? [], fallback.advances[0]),
+      regressions: clampList(parsed.regressions ?? [], fallback.regressions[0]),
+      recommendations: clampList(parsed.recommendations ?? [], fallback.recommendations[0]),
+    };
+  } catch {
+    return fallback;
+  }
 }
 
 export async function GET(request: NextRequest) {
@@ -93,6 +354,24 @@ export async function GET(request: NextRequest) {
       seller: { select: { name: true, team: { select: { name: true } } } },
     },
     orderBy: [{ soldAt: "asc" }, { airline: { code: "asc" } }],
+  });
+
+  const rangeDurationMs = dateRange.end.getTime() - dateRange.start.getTime();
+  const previousRangeStart = new Date(dateRange.start.getTime() - rangeDurationMs);
+  const previousRangeEnd = new Date(dateRange.start.getTime());
+
+  const previousTickets = await prisma.ticketSale.findMany({
+    where: {
+      ...(access.role === "EMPLOYEE" ? { sellerId: access.session.user.id } : {}),
+      soldAt: {
+        gte: previousRangeStart,
+        lt: previousRangeEnd,
+      },
+    },
+    select: {
+      amount: true,
+      commissionAmount: true,
+    },
   });
 
   // Common aggregates
@@ -157,6 +436,36 @@ export async function GET(request: NextRequest) {
   const totalCount = tickets.length;
   const totalAmount = tickets.reduce((sum, t) => sum + t.amount, 0);
   const totalCommission = tickets.reduce((sum, t) => sum + (t.commissionAmount ?? 0), 0);
+  const previousCount = previousTickets.length;
+  const previousAmount = previousTickets.reduce((sum, t) => sum + t.amount, 0);
+  const previousCommission = previousTickets.reduce((sum, t) => sum + (t.commissionAmount ?? 0), 0);
+  const paymentPaid = tickets.filter((ticket) => ticket.paymentStatus === "PAID").length;
+  const paymentPartial = tickets.filter((ticket) => ticket.paymentStatus === "PARTIAL").length;
+  const paymentUnpaid = tickets.filter((ticket) => ticket.paymentStatus === "UNPAID").length;
+
+  const sortedAirlinesForAnalysis = Array.from(airlineTotals.entries())
+    .map(([code, data]) => ({ code, amount: data.amount, count: data.count, commission: data.commission }))
+    .sort((a, b) => b.amount - a.amount);
+  const sortedAgenciesForAnalysis = Array.from(byAgency.entries())
+    .map(([name, data]) => ({ name, amount: data.amount, count: data.count }))
+    .sort((a, b) => b.amount - a.amount);
+
+  const executiveAnalysis = await generateExecutiveAnalysis({
+    reportKind,
+    startRaw: dateRange.startRaw,
+    endRaw: dateRange.endRaw,
+    totalCount,
+    totalAmount,
+    totalCommission,
+    paymentPaid,
+    paymentPartial,
+    paymentUnpaid,
+    previousCount,
+    previousAmount,
+    previousCommission,
+    byAirline: sortedAirlinesForAnalysis,
+    byAgency: sortedAgenciesForAnalysis,
+  });
 
   // Create PDF
   const pdf = await PDFDocument.create();
@@ -224,7 +533,11 @@ export async function GET(request: NextRequest) {
     ? `RAPPORT VENTE BILLETS ${dateRange.startRaw}`
     : reportKind === "WEEKLY"
       ? `RAPPORT DE LA SEMAINE DU ${dateRange.startRaw} AU ${dateRange.endRaw}`
-      : `RAPPORT MENSUEL DU ${dateRange.startRaw} AU ${dateRange.endRaw}`;
+      : reportKind === "MONTHLY"
+        ? `RAPPORT MENSUEL DU ${dateRange.startRaw} AU ${dateRange.endRaw}`
+        : reportKind === "ANNUAL"
+          ? `RAPPORT ANNUEL DU ${dateRange.startRaw} AU ${dateRange.endRaw}`
+          : `RAPPORT DE PERFORMANCE DU ${dateRange.startRaw} AU ${dateRange.endRaw}`;
 
   drawTextAt(title, margin, y, 16);
   y -= 16;
@@ -373,6 +686,73 @@ export async function GET(request: NextRequest) {
       "right",
     );
   }
+
+  const wrapText = (text: string, size: number, maxWidth: number) => {
+    const words = text.split(/\s+/).filter(Boolean);
+    if (words.length === 0) return [""];
+    const lines: string[] = [];
+    let current = words[0];
+
+    for (let i = 1; i < words.length; i += 1) {
+      const candidate = `${current} ${words[i]}`;
+      if (font.widthOfTextAtSize(candidate, size) <= maxWidth) {
+        current = candidate;
+      } else {
+        lines.push(current);
+        current = words[i];
+      }
+    }
+    lines.push(current);
+    return lines;
+  };
+
+  const drawParagraphBlock = (heading: string, body: string, bullets?: string[]) => {
+    const headingSize = 10;
+    const textSize = 8.2;
+    const lineGap = 4;
+    const contentWidth = width - margin * 2;
+
+    const bodyLines = wrapText(body, textSize, contentWidth);
+    const bulletLines = (bullets ?? []).flatMap((item) => wrapText(`• ${item}`, textSize, contentWidth));
+    const neededRows = 2 + bodyLines.length + bulletLines.length;
+    ensureSpace(neededRows + 2);
+
+    drawTextAt(heading, margin, y, headingSize);
+    y -= rowH;
+    drawRule(0.4);
+    y -= 8;
+
+    bodyLines.forEach((line) => {
+      drawTextAt(line, margin, y, textSize);
+      y -= lineGap + textSize;
+    });
+
+    if (bulletLines.length > 0) {
+      y -= 2;
+      bulletLines.forEach((line) => {
+        drawTextAt(line, margin, y, textSize);
+        y -= lineGap + textSize;
+      });
+    }
+
+    y -= 5;
+  };
+
+  y -= 20;
+  ensureSpace(6);
+  drawRule(1);
+  y -= 14;
+  drawTextAt("ANALYSE EXECUTIVE INTELLIGENTE", margin, y, 12);
+  y -= 16;
+  drawTextAt(executiveAnalysis.title.toUpperCase(), margin, y, 9);
+  y -= 12;
+
+  drawParagraphBlock("1) Synthese", executiveAnalysis.summary);
+  drawParagraphBlock("2) Points forts", "Leviers de performance observes sur la periode.", executiveAnalysis.strengths);
+  drawParagraphBlock("3) Points faibles", "Zones de fragilite a traiter en priorite.", executiveAnalysis.weaknesses);
+  drawParagraphBlock("4) Avancees", "Progres constatés sur la periode analysee.", executiveAnalysis.advances);
+  drawParagraphBlock("5) Regressions", "Signaux de recul detectes face a la periode de reference.", executiveAnalysis.regressions);
+  drawParagraphBlock("6) Recommandations", "Plan d'action propose pour la direction.", executiveAnalysis.recommendations);
 
   const bytes = await pdf.save();
   return new NextResponse(Uint8Array.from(bytes), {
