@@ -322,7 +322,6 @@ export function ProcurementHub({
             {canCreateNeed ? (
               <form onSubmit={submitNeed} className="mt-3 grid gap-2">
                 <input name="title" required placeholder="Objet du besoin" className="rounded-md border px-3 py-2 text-sm" />
-                <input name="category" required placeholder="Catégorie" className="rounded-md border px-3 py-2 text-sm" />
                 <div className="grid gap-2 sm:grid-cols-2">
                   <select name="urgencyLevel" defaultValue="NORMALE" required className="rounded-md border px-3 py-2 text-sm">
                     <option value="CRITIQUE">Urgence critique</option>

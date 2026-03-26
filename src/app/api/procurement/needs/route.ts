@@ -58,7 +58,7 @@ export async function POST(request: NextRequest) {
     : quoteFromItems([
       {
         designation: parsed.data.title,
-        description: parsed.data.details ?? parsed.data.category,
+        description: parsed.data.details ?? parsed.data.title,
         quantity: parsed.data.quantity ?? 1,
         unitPrice: parsed.data.estimatedAmount ?? 0,
       },
@@ -79,7 +79,7 @@ export async function POST(request: NextRequest) {
   const need = await prisma.needRequest.create({
     data: {
       title: parsed.data.title,
-      category: parsed.data.category,
+      category: parsed.data.category?.trim() || "GENERAL",
       details: serializeNeedQuote(quote),
       quantity: quote.items.reduce((sum, item) => sum + item.quantity, 0),
       unit: "LOT",

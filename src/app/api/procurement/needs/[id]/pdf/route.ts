@@ -305,7 +305,6 @@ export async function GET(request: NextRequest, context: RouteContext) {
 
   const details = [
     ["Objet", need.title],
-    ["Catégorie", need.category],
     ["Quantité", `${need.quantity} ${need.unit}`],
     ["Montant estimatif", typeof need.estimatedAmount === "number" ? `${new Intl.NumberFormat("fr-FR").format(need.estimatedAmount)} ${need.currency ?? "XAF"}` : "-"] ,
     ["Demandeur", `${need.requester.name} (${need.requester.jobTitle})`],

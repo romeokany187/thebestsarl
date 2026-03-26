@@ -102,7 +102,7 @@ export default async function NeedReadPage(context: PageContext) {
 
       <article className="rounded-xl border border-black/10 bg-white p-5 text-sm dark:border-white/10 dark:bg-zinc-900">
         <h2 className="text-lg font-semibold">{need.title}</h2>
-        <p className="mt-1 text-black/70 dark:text-white/70">{need.category} • {need.quantity} {need.unit}</p>
+        <p className="mt-1 text-black/70 dark:text-white/70">{need.quantity} {need.unit}</p>
 
         <div className="mt-4 grid gap-2 sm:grid-cols-2">
           <p><span className="font-semibold">Demandeur:</span> {need.requester.name} ({need.requester.jobTitle})</p>
