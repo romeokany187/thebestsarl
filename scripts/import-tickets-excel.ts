@@ -12,6 +12,7 @@ type ParsedArgs = {
   defaultSellerEmail?: string;
   year: number;
   month: number;
+  fullYear: boolean;
   replaceMonth: boolean;
 };
 
@@ -39,19 +40,20 @@ function parseArgs(): ParsedArgs {
   const defaultSellerEmail = readFlagValue(args, "--default-seller-email")?.trim().toLowerCase();
   const yearRaw = readFlagValue(args, "--year");
   const monthRaw = readFlagValue(args, "--month");
+  const fullYear = args.includes("--full-year");
   const replaceMonth = args.includes("--replace-month");
   const year = yearRaw ? Number.parseInt(yearRaw, 10) : new Date().getFullYear();
   const month = monthRaw ? Number.parseInt(monthRaw, 10) : 1;
 
   if (!fileArg) {
-    throw new Error("Usage: npm run db:import:tickets:excel -- <fichier.xlsx> [--sheet NomFeuille] [--year 2026] [--month 1] [--default-seller-email email@domaine.com] [--replace-month] [--dry-run]");
+    throw new Error("Usage: npm run db:import:tickets:excel -- <fichier.xlsx> [--sheet NomFeuille] [--year 2025] [--month 1 | --full-year] [--default-seller-email email@domaine.com] [--replace-month] [--dry-run]");
   }
 
   if (!Number.isFinite(year) || year < 2000 || year > 2100) {
     throw new Error("Paramètre --year invalide.");
   }
 
-  if (!Number.isFinite(month) || month < 1 || month > 12) {
+  if (!fullYear && (!Number.isFinite(month) || month < 1 || month > 12)) {
     throw new Error("Paramètre --month invalide (1..12).");
   }
 
@@ -62,6 +64,7 @@ function parseArgs(): ParsedArgs {
     defaultSellerEmail,
     year,
     month,
+    fullYear,
     replaceMonth,
   };
 }
@@ -204,15 +207,19 @@ function parsePaymentStatus(value: unknown): PaymentStatus {
   return PaymentStatus.UNPAID;
 }
 
-function buildRange(year: number, month: number) {
+function buildRange(year: number, month: number, fullYear = false) {
   const now = new Date();
-  const start = new Date(Date.UTC(year, month - 1, 1, 0, 0, 0, 0));
-  const endOfMonth = new Date(Date.UTC(year, month, 0, 23, 59, 59, 999));
+  const start = fullYear
+    ? new Date(Date.UTC(year, 0, 1, 0, 0, 0, 0))
+    : new Date(Date.UTC(year, month - 1, 1, 0, 0, 0, 0));
+  const rangeEnd = fullYear
+    ? new Date(Date.UTC(year, 11, 31, 23, 59, 59, 999))
+    : new Date(Date.UTC(year, month, 0, 23, 59, 59, 999));
 
   const yesterday = new Date(now);
   yesterday.setUTCDate(yesterday.getUTCDate() - 1);
   const yesterdayEnd = new Date(Date.UTC(yesterday.getUTCFullYear(), yesterday.getUTCMonth(), yesterday.getUTCDate(), 23, 59, 59, 999));
-  const end = endOfMonth < yesterdayEnd ? endOfMonth : yesterdayEnd;
+  const end = rangeEnd < yesterdayEnd ? rangeEnd : yesterdayEnd;
 
   return { start, end };
 }
@@ -374,7 +381,7 @@ function toRowsFromMatrix(sheet: XLSX.WorkSheet): Row[] {
 
 async function main() {
   const args = parseArgs();
-  const range = buildRange(args.year, args.month);
+  const range = buildRange(args.year, args.month, args.fullYear);
 
   const workbook = XLSX.readFile(args.filePath, { cellDates: true });
   const sheetNames = args.sheetName
@@ -414,15 +421,15 @@ async function main() {
   };
 
   const errors: string[] = [];
-  const januaryDailyTotals: Totals = { tickets: 0, amount: 0, commission: 0 };
+  const importedRangeTotals: Totals = { tickets: 0, amount: 0, commission: 0 };
   const pnrSequence = new Map<string, number>();
 
   if (args.replaceMonth && !args.dryRun) {
-    const existingMonthTickets = await prisma.ticketSale.findMany({
+    const existingRangeTickets = await prisma.ticketSale.findMany({
       where: { soldAt: { gte: range.start, lte: range.end } },
       select: { id: true },
     });
-    const ticketIds = existingMonthTickets.map((ticket) => ticket.id);
+    const ticketIds = existingRangeTickets.map((ticket) => ticket.id);
 
     if (ticketIds.length > 0) {
       await prisma.payment.deleteMany({ where: { ticketId: { in: ticketIds } } });
@@ -539,7 +546,8 @@ async function main() {
           airlineByName.set(createdAirline.name.toLowerCase(), createdAirline);
         }
 
-        const isMarchImport = args.month === 3;
+        const soldMonth = soldAt.getUTCMonth() + 1;
+        const isMarchImport = soldMonth === 3;
         const hasCommissionFromFile = commissionAmountFromFile > 0;
 
         let commissionAmount = 0;
@@ -599,9 +607,9 @@ async function main() {
           ].filter(Boolean).join(" | ") || null,
         };
 
-        januaryDailyTotals.tickets += 1;
-        januaryDailyTotals.amount = round2(januaryDailyTotals.amount + amount);
-        januaryDailyTotals.commission = round2(januaryDailyTotals.commission + commissionAmount);
+        importedRangeTotals.tickets += 1;
+        importedRangeTotals.amount = round2(importedRangeTotals.amount + amount);
+        importedRangeTotals.commission = round2(importedRangeTotals.commission + commissionAmount);
 
         if (args.dryRun) {
           summary.created += 1;
@@ -626,54 +634,60 @@ async function main() {
   console.log(`Mises à jour: ${summary.updated}`);
   console.log(`Échecs: ${summary.failed}`);
 
-  const weeklySheets = workbook.SheetNames.filter((name) => /semaine/i.test(name) && /jan/i.test(name));
-  const weeklyTotals = weeklySheets
-    .map((sheetName) => {
-      const sheet = workbook.Sheets[sheetName];
-      if (!sheet) return null;
-      const totals = extractTotalsFromSummarySheet(sheet);
-      if (!totals) return null;
-      return { sheetName, totals };
-    })
-    .filter((entry): entry is { sheetName: string; totals: Totals } => Boolean(entry));
+  if (!args.fullYear && args.month === 1) {
+    const weeklySheets = workbook.SheetNames.filter((name) => /semaine/i.test(name) && /jan/i.test(name));
+    const weeklyTotals = weeklySheets
+      .map((sheetName) => {
+        const sheet = workbook.Sheets[sheetName];
+        if (!sheet) return null;
+        const totals = extractTotalsFromSummarySheet(sheet);
+        if (!totals) return null;
+        return { sheetName, totals };
+      })
+      .filter((entry): entry is { sheetName: string; totals: Totals } => Boolean(entry));
 
-  const weeklyAggregate: Totals = weeklyTotals.reduce(
-    (acc, entry) => ({
-      tickets: acc.tickets + entry.totals.tickets,
-      amount: round2(acc.amount + entry.totals.amount),
-      commission: round2(acc.commission + entry.totals.commission),
-    }),
-    { tickets: 0, amount: 0, commission: 0 },
-  );
+    const weeklyAggregate: Totals = weeklyTotals.reduce(
+      (acc, entry) => ({
+        tickets: acc.tickets + entry.totals.tickets,
+        amount: round2(acc.amount + entry.totals.amount),
+        commission: round2(acc.commission + entry.totals.commission),
+      }),
+      { tickets: 0, amount: 0, commission: 0 },
+    );
 
-  const monthlySheetName = workbook.SheetNames.find((name) => normalizeHeader(name).includes("rapportjanvier"));
-  const monthlyTotals = monthlySheetName
-    ? extractTotalsFromSummarySheet(workbook.Sheets[monthlySheetName])
-    : null;
+    const monthlySheetName = workbook.SheetNames.find((name) => normalizeHeader(name).includes("rapportjanvier"));
+    const monthlyTotals = monthlySheetName
+      ? extractTotalsFromSummarySheet(workbook.Sheets[monthlySheetName])
+      : null;
 
-  const weeklyVsDailyOk =
-    weeklyAggregate.tickets === januaryDailyTotals.tickets
-    && round2(weeklyAggregate.amount) === round2(januaryDailyTotals.amount)
-    && round2(weeklyAggregate.commission) === round2(januaryDailyTotals.commission);
+    const weeklyVsDailyOk =
+      weeklyAggregate.tickets === importedRangeTotals.tickets
+      && round2(weeklyAggregate.amount) === round2(importedRangeTotals.amount)
+      && round2(weeklyAggregate.commission) === round2(importedRangeTotals.commission);
 
-  const monthlyVsDailyOk = monthlyTotals
-    ? (
-      monthlyTotals.tickets === januaryDailyTotals.tickets
-      && round2(monthlyTotals.amount) === round2(januaryDailyTotals.amount)
-      && round2(monthlyTotals.commission) === round2(januaryDailyTotals.commission)
-    )
-    : false;
+    const monthlyVsDailyOk = monthlyTotals
+      ? (
+        monthlyTotals.tickets === importedRangeTotals.tickets
+        && round2(monthlyTotals.amount) === round2(importedRangeTotals.amount)
+        && round2(monthlyTotals.commission) === round2(importedRangeTotals.commission)
+      )
+      : false;
 
-  console.log("--- Contrôle de concordance Janvier ---");
-  console.log(`Cumul journalier importé: billets=${januaryDailyTotals.tickets}, montant=${januaryDailyTotals.amount}, commission=${januaryDailyTotals.commission}`);
-  console.log(`Cumul feuilles hebdo: billets=${weeklyAggregate.tickets}, montant=${weeklyAggregate.amount}, commission=${weeklyAggregate.commission}`);
-  if (monthlyTotals) {
-    console.log(`Total feuille mensuelle (${monthlySheetName}): billets=${monthlyTotals.tickets}, montant=${monthlyTotals.amount}, commission=${monthlyTotals.commission}`);
-  } else {
-    console.log("Total feuille mensuelle: introuvable");
+    console.log("--- Contrôle de concordance Janvier ---");
+    console.log(`Cumul journalier importé: billets=${importedRangeTotals.tickets}, montant=${importedRangeTotals.amount}, commission=${importedRangeTotals.commission}`);
+    console.log(`Cumul feuilles hebdo: billets=${weeklyAggregate.tickets}, montant=${weeklyAggregate.amount}, commission=${weeklyAggregate.commission}`);
+    if (monthlyTotals) {
+      console.log(`Total feuille mensuelle (${monthlySheetName}): billets=${monthlyTotals.tickets}, montant=${monthlyTotals.amount}, commission=${monthlyTotals.commission}`);
+    } else {
+      console.log("Total feuille mensuelle: introuvable");
+    }
+    console.log(`Hebdo vs journalier: ${weeklyVsDailyOk ? "OK" : "ECART"}`);
+    console.log(`Mensuel vs journalier: ${monthlyVsDailyOk ? "OK" : "ECART"}`);
+  } else if (args.fullYear) {
+    console.log("--- Contrôle de concordance ---");
+    console.log("Mode annuel: le contrôle spécifique Janvier est ignoré.");
+    console.log(`Cumul annuel importé: billets=${importedRangeTotals.tickets}, montant=${importedRangeTotals.amount}, commission=${importedRangeTotals.commission}`);
   }
-  console.log(`Hebdo vs journalier: ${weeklyVsDailyOk ? "OK" : "ECART"}`);
-  console.log(`Mensuel vs journalier: ${monthlyVsDailyOk ? "OK" : "ECART"}`);
 
   if (errors.length > 0) {
     console.log("--- Détail erreurs ---");
