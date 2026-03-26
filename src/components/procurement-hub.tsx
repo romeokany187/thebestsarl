@@ -69,6 +69,11 @@ const BENEFICIARY_LABEL: Record<NeedBeneficiaryTeam, string> = {
 };
 
 function parseNeedMeta(details: string) {
+  type NeedMeta = {
+    urgencyLevel: NeedUrgencyLevel | null;
+    beneficiaryTeam: NeedBeneficiaryTeam | null;
+  };
+
   try {
     const parsed = JSON.parse(details) as {
       urgencyLevel?: string;
@@ -76,7 +81,7 @@ function parseNeedMeta(details: string) {
     };
     const urgencyLevel = parsed.urgencyLevel;
     const beneficiaryTeam = parsed.beneficiaryTeam;
-    return {
+    const meta: NeedMeta = {
       urgencyLevel:
         urgencyLevel === "CRITIQUE" || urgencyLevel === "ELEVEE" || urgencyLevel === "NORMALE" || urgencyLevel === "FAIBLE"
           ? urgencyLevel
@@ -86,8 +91,10 @@ function parseNeedMeta(details: string) {
           ? beneficiaryTeam
           : null,
     };
+    return meta;
   } catch {
-    return { urgencyLevel: null, beneficiaryTeam: null };
+    const meta: NeedMeta = { urgencyLevel: null, beneficiaryTeam: null };
+    return meta;
   }
 }
 
