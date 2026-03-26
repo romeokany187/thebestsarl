@@ -257,28 +257,28 @@ async function generateExecutiveAnalysis(input: {
   };
 
   const systemPrompt = [
-    "Tu es un analyste financier senior d'une compagnie aérienne/agence de voyage.",
-    "Tu rédiges une synthèse professionnelle, sobre, factuelle, prête à être partagée aux associés et autorités.",
-    "N'invente aucun chiffre et ne sors pas du périmètre des données fournies.",
-    "Réponds STRICTEMENT en JSON valide sans texte additionnel.",
+    "Tu es directeur de la stratégie et analyste financier senior d'une agence de voyages aériens de référence en Afrique centrale.",
+    "Tu rédiges des analyses executives de haut niveau, substantielles, factuelless, rigoureuses et présentables à un conseil d'administration, aux associés et aux autorités régulatrices.",
+    "Chaque section doit être DÉVELOPPÉE : au moins 4 à 6 phrases ou puces denses par rubrique. Pas de superficialité ni de généralités vides.",
+    "Cite systématiquement les chiffres clés de la période dans chaque section. Contextualise les tendances avec des interprétations causales concrètes.",
+    "Dans les recommandations, propose des mesures concrètes avec responsables suggérés, délais et KPIs de suivi.",
+    "N'invente aucun chiffre au-delà des données fournies. Réponds STRICTEMENT en JSON valide sans aucun texte additionnel.",
   ].join(" ");
 
   const userPrompt = [
-    "Produis une analyse exécutive en français avec ce schéma JSON exact:",
+    "Produis une analyse exécutive complète et détaillée en français avec ce schéma JSON EXACT:",
     "{",
-    '  "title": "string",',
-    '  "summary": "string",',
-    '  "strengths": ["string"],',
-    '  "weaknesses": ["string"],',
-    '  "advances": ["string"],',
-    '  "regressions": ["string"],',
-    '  "recommendations": ["string"]',
+    '  "title": "string (titre court du rapport avec période)",',
+    '  "summary": "string (MINIMUM 6 phrases: contexte opérationnel, chiffres clés période, comparaison période précédente, qualité encaissement, structure commissions, conclusion direction)",',
+    '  "strengths": ["string (4 à 6 puces développées chacune en 2-3 phrases avec chiffres)"],',
+    '  "weaknesses": ["string (4 à 6 puces développées chacune en 2-3 phrases avec analyse causale)"],',
+    '  "advances": ["string (4 à 6 puces développées: description de la progression et son impact business)"],',
+    '  "regressions": ["string (4 à 6 puces développées: description du recul, causes probables, impact estimé)"],',
+    '  "recommendations": ["string (4 à 6 actions concrètes avec: quoi faire, qui porte la responsabilité, délai cible, KPI de succès)"]',
     "}",
-    "Contraintes:",
-    "- 1 summary entre 3 et 5 phrases.",
-    "- 3 à 5 puces par liste.",
-    "- Ton corporate et actionnable.",
-    "Données:",
+    "",
+    "IMPERATIF: Chaque puce doit être substantielle (2 à 3 phrases au minimum). Pas de bullet point vague de type 'surveiller les ventes'.",
+    "Données de la période analysée:",
     JSON.stringify(payload),
   ].join("\n");
 
@@ -467,38 +467,217 @@ export async function GET(request: NextRequest) {
     byAgency: sortedAgenciesForAnalysis,
   });
 
-  // Create PDF
+  // ─── Create PDF ────────────────────────────────────────────────────────────
   const pdf = await PDFDocument.create();
   pdf.registerFontkit(fontkit);
 
-  const fontFile = await readFile(path.join(process.cwd(), "public/fonts/Montserrat-Regular.ttf")).catch(() =>
-    readFile(path.join(process.cwd(), "public/branding/fonts/Montserrat-Regular.ttf")),
-  );
-  const font = await pdf.embedFont(fontFile);
+  const [fontFile, fontBoldFile] = await Promise.all([
+    readFile(path.join(process.cwd(), "public/fonts/Montserrat-Regular.ttf")).catch(() =>
+      readFile(path.join(process.cwd(), "public/branding/fonts/Montserrat-Regular.ttf")),
+    ),
+    readFile(path.join(process.cwd(), "public/fonts/Montserrat-Bold.ttf")).catch(() =>
+      readFile(path.join(process.cwd(), "public/branding/fonts/Montserrat-Bold.ttf")),
+    ),
+  ]);
+  const fontRegular = await pdf.embedFont(fontFile);
+  const fontBold = await pdf.embedFont(fontBoldFile);
 
-  let page = pdf.addPage([842, 595]);
-  const width = page.getWidth();
-  const height = page.getHeight();
-  const margin = 20;
-  let y = height - 28;
-  const rowH = 15;
+  // ─── Portrait constants ─────────────────────────────────────────────────────
+  const PW = 595;
+  const PH = 842;
+  const PM = 40; // portrait margin
+  const bodySize = 12;
+  const titleSize = 14;
+  const bodyLeading = 7; // gap between lines (body)
+  const titleLeading = 10;
 
-  const ensureSpace = (rows: number) => {
-    if (y - rows * rowH < 45) {
-      page = pdf.addPage([842, 595]);
-      y = height - 28;
+  let pPage = pdf.addPage([PW, PH]);
+  let pY = PH - PM;
+
+  const pEnsureSpace = (needed: number) => {
+    if (pY - needed < PM + 20) {
+      pPage = pdf.addPage([PW, PH]);
+      pY = PH - PM;
     }
   };
 
-  const drawTextAt = (text: string, x: number, yy: number, size = 8) => {
-    page.drawText(text, { x, y: yy, size, font, color: rgb(0, 0, 0) });
+  const drawPortraitText = (text: string, x: number, yy: number, size: number, bold = false) => {
+    pPage.drawText(text, { x, y: yy, size, font: bold ? fontBold : fontRegular, color: rgb(0, 0, 0) });
+  };
+
+  const drawPortraitRule = (thickness = 0.5, color = rgb(0.7, 0.7, 0.7)) => {
+    pPage.drawLine({
+      start: { x: PM, y: pY },
+      end: { x: PW - PM, y: pY },
+      thickness,
+      color,
+    });
+  };
+
+  const wrapPortrait = (text: string, size: number, maxWidth: number, bold = false): string[] => {
+    const usedFont = bold ? fontBold : fontRegular;
+    const words = text.split(/\s+/).filter(Boolean);
+    if (words.length === 0) return [""];
+    const lines: string[] = [];
+    let current = words[0];
+    for (let i = 1; i < words.length; i++) {
+      const candidate = `${current} ${words[i]}`;
+      if (usedFont.widthOfTextAtSize(candidate, size) <= maxWidth) {
+        current = candidate;
+      } else {
+        lines.push(current);
+        current = words[i];
+      }
+    }
+    lines.push(current);
+    return lines;
+  };
+
+  const drawPortraitSection = (heading: string, bullets: string[]) => {
+    const contentW = PW - PM * 2;
+    const lineH = bodySize + bodyLeading;
+    const bulletIndent = 12;
+    const bulletContentW = contentW - bulletIndent;
+
+    // Estimate height needed
+    const bulletLineCount = bullets.reduce((total, b) => {
+      return total + wrapPortrait(`• ${b}`, bodySize, bulletContentW).length;
+    }, 0);
+    const needed = titleSize + titleLeading + 6 + bulletLineCount * lineH + 16;
+    pEnsureSpace(needed);
+
+    // Section heading
+    drawPortraitText(heading.toUpperCase(), PM, pY, titleSize, true);
+    pY -= titleSize + 4;
+    drawPortraitRule(1, rgb(0.2, 0.2, 0.2));
+    pY -= 8;
+
+    // Bullets
+    for (const bullet of bullets) {
+      const lines = wrapPortrait(`• ${bullet}`, bodySize, bulletContentW);
+      for (let li = 0; li < lines.length; li++) {
+        pEnsureSpace(lineH);
+        const xOffset = li === 0 ? PM : PM + bulletIndent;
+        const lineText = li === 0 ? lines[li] : `  ${lines[li]}`;
+        drawPortraitText(lineText, xOffset, pY, bodySize);
+        pY -= lineH;
+      }
+      pY -= 4; // extra gap between bullets
+    }
+    pY -= 16;
+  };
+
+  const drawPortraitBody = (text: string) => {
+    const contentW = PW - PM * 2;
+    const lineH = bodySize + bodyLeading;
+    const lines = wrapPortrait(text, bodySize, contentW);
+    for (const line of lines) {
+      pEnsureSpace(lineH);
+      drawPortraitText(line, PM, pY, bodySize);
+      pY -= lineH;
+    }
+    pY -= 10;
+  };
+
+  // ─── Report title label ─────────────────────────────────────────────────────
+  const reportTitle = reportKind === "DAILY"
+    ? `RAPPORT DE VENTE DU ${dateRange.startRaw}`
+    : reportKind === "WEEKLY"
+      ? `RAPPORT DE LA SEMAINE DU ${dateRange.startRaw} AU ${dateRange.endRaw}`
+      : reportKind === "MONTHLY"
+        ? `RAPPORT MENSUEL DU ${dateRange.startRaw} AU ${dateRange.endRaw}`
+        : reportKind === "ANNUAL"
+          ? `RAPPORT ANNUEL DU ${dateRange.startRaw} AU ${dateRange.endRaw}`
+          : `RAPPORT DE PERFORMANCE DU ${dateRange.startRaw} AU ${dateRange.endRaw}`;
+
+  // ─── Portrait page 1: header ────────────────────────────────────────────────
+  // Company name
+  drawPortraitText("THE BEST S.A.R.L", PM, pY, 20, true);
+  pY -= 28;
+
+  // Report title
+  drawPortraitText(reportTitle, PM, pY, titleSize, true);
+  pY -= titleSize + 6;
+
+  // Generated at
+  const generatedAt = new Date().toLocaleString("fr-FR", { timeZone: "Africa/Kinshasa" });
+  drawPortraitText(`Généré le ${generatedAt}`, PM, pY, 10);
+  pY -= 14;
+
+  // Totals summary line
+  drawPortraitText(
+    `Billets : ${totalCount}   |   Total : ${fmtNumber(totalAmount)} USD   |   Commission : ${fmtNumber(totalCommission)} USD`,
+    PM,
+    pY,
+    10,
+  );
+  pY -= 10;
+
+  drawPortraitRule(2, rgb(0.1, 0.1, 0.1));
+  pY -= 22;
+
+  // ─── Portrait pages: AI executive analysis ──────────────────────────────────
+  // Analyse executive title
+  pEnsureSpace(titleSize + 20);
+  drawPortraitText("ANALYSE EXECUTIVE", PM, pY, titleSize, true);
+  pY -= titleSize + 4;
+  drawPortraitRule(1.5, rgb(0.1, 0.1, 0.1));
+  pY -= 6;
+  drawPortraitText(executiveAnalysis.title, PM, pY, bodySize, false);
+  pY -= bodySize + bodyLeading + 16;
+
+  // 1. Synthèse
+  pEnsureSpace(titleSize + 20);
+  drawPortraitText("1. SYNTHESE", PM, pY, titleSize, true);
+  pY -= titleSize + 4;
+  drawPortraitRule(1, rgb(0.2, 0.2, 0.2));
+  pY -= 8;
+  drawPortraitBody(executiveAnalysis.summary);
+
+  // 2. Points forts
+  drawPortraitSection("2. Points forts", executiveAnalysis.strengths);
+
+  // 3. Points faibles
+  drawPortraitSection("3. Points faibles", executiveAnalysis.weaknesses);
+
+  // 4. Avancées
+  drawPortraitSection("4. Avancees", executiveAnalysis.advances);
+
+  // 5. Régressions
+  drawPortraitSection("5. Regressions", executiveAnalysis.regressions);
+
+  // 6. Recommandations
+  drawPortraitSection("6. Recommandations", executiveAnalysis.recommendations);
+
+  // ─── Landscape page: data table ─────────────────────────────────────────────
+  const preferredAirlines = ["CAA", "AIRCONGO", "ETHIOPIAN", "MG", "KP", "KENYA", "SA", "UR"];
+  const allCodes = Array.from(new Set(tickets.map((ticket) => ticket.airline.code.toUpperCase())));
+  const extraCodes = allCodes.filter((code) => !preferredAirlines.includes(code)).sort();
+  const airlineColumns = [...preferredAirlines.filter((code) => allCodes.includes(code)), ...extraCodes];
+
+  let lPage = pdf.addPage([842, 595]);
+  const LW = lPage.getWidth();
+  const LH = lPage.getHeight();
+  const LM = 20;
+  let lY = LH - 28;
+  const rowH = 15;
+
+  const lEnsureSpace = (rows: number) => {
+    if (lY - rows * rowH < 45) {
+      lPage = pdf.addPage([842, 595]);
+      lY = LH - 28;
+    }
+  };
+
+  const drawLandText = (text: string, x: number, yy: number, size = 8, bold = false) => {
+    lPage.drawText(text, { x, y: yy, size, font: bold ? fontBold : fontRegular, color: rgb(0, 0, 0) });
   };
 
   const fitText = (text: string, size: number, maxWidth: number) => {
-    if (font.widthOfTextAtSize(text, size) <= maxWidth) return text;
+    if (fontRegular.widthOfTextAtSize(text, size) <= maxWidth) return text;
     const ellipsis = "…";
     let output = text;
-    while (output.length > 0 && font.widthOfTextAtSize(`${output}${ellipsis}`, size) > maxWidth) {
+    while (output.length > 0 && fontRegular.widthOfTextAtSize(`${output}${ellipsis}`, size) > maxWidth) {
       output = output.slice(0, -1);
     }
     return output.length > 0 ? `${output}${ellipsis}` : "";
@@ -511,62 +690,50 @@ export async function GET(request: NextRequest) {
     yy: number,
     size = 8,
     align: "left" | "right" = "left",
+    bold = false,
   ) => {
     const padding = 2;
     const maxWidth = Math.max(0, cellWidth - padding * 2);
     const safeText = fitText(text, size, maxWidth);
-    const textWidth = font.widthOfTextAtSize(safeText, size);
+    const usedFont = bold ? fontBold : fontRegular;
+    const textWidth = usedFont.widthOfTextAtSize(safeText, size);
     const textX = align === "right" ? x + cellWidth - padding - textWidth : x + padding;
-    drawTextAt(safeText, textX, yy, size);
+    lPage.drawText(safeText, { x: textX, y: yy, size, font: usedFont, color: rgb(0, 0, 0) });
   };
 
-  const drawRule = (thickness = 0.5) => {
-    page.drawLine({
-      start: { x: margin, y },
-      end: { x: width - margin, y },
+  const drawLandRule = (thickness = 0.5) => {
+    lPage.drawLine({
+      start: { x: LM, y: lY },
+      end: { x: LW - LM, y: lY },
       thickness,
       color: rgb(0.75, 0.75, 0.75),
     });
   };
 
-  const title = reportKind === "DAILY"
-    ? `RAPPORT VENTE BILLETS ${dateRange.startRaw}`
-    : reportKind === "WEEKLY"
-      ? `RAPPORT DE LA SEMAINE DU ${dateRange.startRaw} AU ${dateRange.endRaw}`
-      : reportKind === "MONTHLY"
-        ? `RAPPORT MENSUEL DU ${dateRange.startRaw} AU ${dateRange.endRaw}`
-        : reportKind === "ANNUAL"
-          ? `RAPPORT ANNUEL DU ${dateRange.startRaw} AU ${dateRange.endRaw}`
-          : `RAPPORT DE PERFORMANCE DU ${dateRange.startRaw} AU ${dateRange.endRaw}`;
-
-  drawTextAt(title, margin, y, 16);
-  y -= 16;
-  drawRule(1);
-  y -= 14;
-
-  const preferredAirlines = ["CAA", "AIRCONGO", "ETHIOPIAN", "MG", "KP", "KENYA", "SA", "UR"];
-  const allCodes = Array.from(new Set(tickets.map((ticket) => ticket.airline.code.toUpperCase())));
-  const extraCodes = allCodes.filter((code) => !preferredAirlines.includes(code)).sort();
-  const airlineColumns = [...preferredAirlines.filter((code) => allCodes.includes(code)), ...extraCodes];
+  // Table header title
+  drawLandText(reportTitle, LM, lY, 12, true);
+  lY -= 16;
+  drawLandRule(1);
+  lY -= 14;
 
   if (reportKind === "DAILY") {
     const headers = ["N°", "EMETEUR", "COMPAGNIE", "BENEFICIAIRE", "PNR", "ITINERAIRE", "MONTANT", "NATURE", "PAYANT", "STATUT", "COM."];
-    const widths = [24, 62, 54, 78, 48, 54, 44, 42, 52, 42, 30];
+    const colWidths = [24, 62, 54, 78, 48, 54, 44, 42, 52, 42, 30];
     const xs: number[] = [];
-    let cursor = margin;
-    widths.forEach((w) => {
+    let cursor = LM;
+    colWidths.forEach((w) => {
       xs.push(cursor);
       cursor += w;
     });
 
-    ensureSpace(2);
-    headers.forEach((header, idx) => drawTextAt(header, xs[idx], y, 8));
-    y -= rowH;
-    drawRule();
-    y -= 9;
+    lEnsureSpace(2);
+    headers.forEach((header, idx) => drawLandText(header, xs[idx], lY, 8, true));
+    lY -= rowH;
+    drawLandRule();
+    lY -= 9;
 
     tickets.forEach((ticket, index) => {
-      ensureSpace(2);
+      lEnsureSpace(2);
       const values = [
         String(index + 1),
         ticket.sellerName ?? ticket.seller?.name ?? "-",
@@ -580,24 +747,24 @@ export async function GET(request: NextRequest) {
         normalizeStatus(ticket.paymentStatus),
         fmtNumber(ticket.commissionAmount ?? 0),
       ];
-      values.forEach((value, idx) => drawTextAt(value.slice(0, 26), xs[idx], y, 8));
-      y -= rowH;
-      drawRule(0.25);
-      y -= 9;
+      values.forEach((value, idx) => drawLandText(value.slice(0, 26), xs[idx], lY, 8));
+      lY -= rowH;
+      drawLandRule(0.25);
+      lY -= 9;
     });
 
-    ensureSpace(3);
-    drawRule(1);
-    y -= 10;
-    drawTextAt(`Nbr billets: ${totalCount}`, margin + 260, y, 10);
-    y -= rowH;
-    drawTextAt(`Total Général: ${fmtNumber(totalAmount)} USD`, margin + 260, y, 10);
-    y -= rowH;
-    drawTextAt(`Commission: ${fmtNumber(totalCommission)} USD`, margin + 260, y, 10);
+    lEnsureSpace(3);
+    drawLandRule(1);
+    lY -= 10;
+    drawLandText(`Nbr billets: ${totalCount}`, LM + 260, lY, 10, true);
+    lY -= rowH;
+    drawLandText(`Total General: ${fmtNumber(totalAmount)} USD`, LM + 260, lY, 10, true);
+    lY -= rowH;
+    drawLandText(`Commission: ${fmtNumber(totalCommission)} USD`, LM + 260, lY, 10, true);
   } else {
-    const headers = ["DATE/PERIODE", "BILLETS", ...airlineColumns, "MONTANTS", "COMMISSION"];
+    const headers = ["DATE / PERIODE", "BILLETS", ...airlineColumns, "MONTANTS", "COMMISSION"];
     const airlineCount = airlineColumns.length;
-    const usableWidth = width - 2 * margin;
+    const usableWidth = LW - 2 * LM;
 
     const billetsW = 50;
     const montantsW = 78;
@@ -617,142 +784,61 @@ export async function GET(request: NextRequest) {
       airlineW = airlineCount > 0 ? Math.max(34, remainingForAirlines / airlineCount) : 0;
     }
 
-    const widths = [firstColW, billetsW, ...airlineColumns.map(() => airlineW), montantsW, commissionW];
+    const colWidths = [firstColW, billetsW, ...airlineColumns.map(() => airlineW), montantsW, commissionW];
     const xs: number[] = [];
-    let cursor = margin;
-    widths.forEach((w) => {
+    let cursor = LM;
+    colWidths.forEach((w) => {
       xs.push(cursor);
       cursor += w;
     });
     const xOf = (i: number) => xs[i];
-    const wOf = (i: number) => widths[i];
+    const wOf = (i: number) => colWidths[i];
 
-    ensureSpace(2);
+    lEnsureSpace(2);
     headers.forEach((header, idx) => {
       const align = idx >= 2 ? "right" : "left";
-      drawCellText(header, xOf(idx), wOf(idx), y, 8, align);
+      drawCellText(header, xOf(idx), wOf(idx), lY, 8, align, true);
     });
-    y -= rowH;
-    drawRule();
-    y -= 9;
+    lY -= rowH;
+    drawLandRule();
+    lY -= 9;
 
     const lines = reportKind === "WEEKLY"
       ? Array.from(byDateAirline.entries()).sort(([a], [b]) => a.localeCompare(b))
       : Array.from(byWeekAirline.entries()).sort(([a], [b]) => a.localeCompare(b));
 
     lines.forEach(([label, airlineMap]) => {
-      ensureSpace(2);
-      const totalBillets = Array.from(airlineMap.values()).reduce((sum, value) => sum + value.count, 0);
-      const totalLineAmount = Array.from(airlineMap.values()).reduce((sum, value) => sum + value.amount, 0);
-      const totalLineCommission = Array.from(airlineMap.values()).reduce((sum, value) => sum + value.commission, 0);
+      lEnsureSpace(2);
+      const totalBillets = Array.from(airlineMap.values()).reduce((sum, v) => sum + v.count, 0);
+      const totalLineAmount = Array.from(airlineMap.values()).reduce((sum, v) => sum + v.amount, 0);
+      const totalLineCommission = Array.from(airlineMap.values()).reduce((sum, v) => sum + v.commission, 0);
 
-      drawCellText(label, xOf(0), wOf(0), y, 8, "left");
-      drawCellText(String(totalBillets), xOf(1), wOf(1), y, 8, "right");
+      drawCellText(label, xOf(0), wOf(0), lY, 8, "left");
+      drawCellText(String(totalBillets), xOf(1), wOf(1), lY, 8, "right");
       airlineColumns.forEach((code, codeIdx) => {
         const amount = airlineMap.get(code)?.amount ?? 0;
-        drawCellText(amount > 0 ? fmtNumber(amount) : "-", xOf(2 + codeIdx), wOf(2 + codeIdx), y, 8, "right");
+        drawCellText(amount > 0 ? fmtNumber(amount) : "-", xOf(2 + codeIdx), wOf(2 + codeIdx), lY, 8, "right");
       });
-      drawCellText(fmtNumber(totalLineAmount), xOf(2 + airlineColumns.length), wOf(2 + airlineColumns.length), y, 8, "right");
-      drawCellText(
-        fmtNumber(totalLineCommission),
-        xOf(3 + airlineColumns.length),
-        wOf(3 + airlineColumns.length),
-        y,
-        8,
-        "right",
-      );
+      drawCellText(fmtNumber(totalLineAmount), xOf(2 + airlineColumns.length), wOf(2 + airlineColumns.length), lY, 8, "right");
+      drawCellText(fmtNumber(totalLineCommission), xOf(3 + airlineColumns.length), wOf(3 + airlineColumns.length), lY, 8, "right");
 
-      y -= rowH;
-      drawRule(0.25);
-      y -= 9;
+      lY -= rowH;
+      drawLandRule(0.25);
+      lY -= 9;
     });
 
-    ensureSpace(4);
-    drawRule(1.1);
-    y -= 10;
-    drawCellText("TOTAL GENERAL", xOf(0), wOf(0), y, 9, "left");
-    drawCellText(String(totalCount), xOf(1), wOf(1), y, 9, "right");
+    lEnsureSpace(4);
+    drawLandRule(1.1);
+    lY -= 10;
+    drawCellText("TOTAL GENERAL", xOf(0), wOf(0), lY, 9, "left", true);
+    drawCellText(String(totalCount), xOf(1), wOf(1), lY, 9, "right", true);
     airlineColumns.forEach((code, codeIdx) => {
       const amount = airlineTotals.get(code)?.amount ?? 0;
-      drawCellText(amount > 0 ? fmtNumber(amount) : "-", xOf(2 + codeIdx), wOf(2 + codeIdx), y, 9, "right");
+      drawCellText(amount > 0 ? fmtNumber(amount) : "-", xOf(2 + codeIdx), wOf(2 + codeIdx), lY, 9, "right", true);
     });
-    drawCellText(fmtNumber(totalAmount), xOf(2 + airlineColumns.length), wOf(2 + airlineColumns.length), y, 9, "right");
-    drawCellText(
-      fmtNumber(totalCommission),
-      xOf(3 + airlineColumns.length),
-      wOf(3 + airlineColumns.length),
-      y,
-      9,
-      "right",
-    );
+    drawCellText(fmtNumber(totalAmount), xOf(2 + airlineColumns.length), wOf(2 + airlineColumns.length), lY, 9, "right", true);
+    drawCellText(fmtNumber(totalCommission), xOf(3 + airlineColumns.length), wOf(3 + airlineColumns.length), lY, 9, "right", true);
   }
-
-  const wrapText = (text: string, size: number, maxWidth: number) => {
-    const words = text.split(/\s+/).filter(Boolean);
-    if (words.length === 0) return [""];
-    const lines: string[] = [];
-    let current = words[0];
-
-    for (let i = 1; i < words.length; i += 1) {
-      const candidate = `${current} ${words[i]}`;
-      if (font.widthOfTextAtSize(candidate, size) <= maxWidth) {
-        current = candidate;
-      } else {
-        lines.push(current);
-        current = words[i];
-      }
-    }
-    lines.push(current);
-    return lines;
-  };
-
-  const drawParagraphBlock = (heading: string, body: string, bullets?: string[]) => {
-    const headingSize = 10;
-    const textSize = 8.2;
-    const lineGap = 4;
-    const contentWidth = width - margin * 2;
-
-    const bodyLines = wrapText(body, textSize, contentWidth);
-    const bulletLines = (bullets ?? []).flatMap((item) => wrapText(`• ${item}`, textSize, contentWidth));
-    const neededRows = 2 + bodyLines.length + bulletLines.length;
-    ensureSpace(neededRows + 2);
-
-    drawTextAt(heading, margin, y, headingSize);
-    y -= rowH;
-    drawRule(0.4);
-    y -= 8;
-
-    bodyLines.forEach((line) => {
-      drawTextAt(line, margin, y, textSize);
-      y -= lineGap + textSize;
-    });
-
-    if (bulletLines.length > 0) {
-      y -= 2;
-      bulletLines.forEach((line) => {
-        drawTextAt(line, margin, y, textSize);
-        y -= lineGap + textSize;
-      });
-    }
-
-    y -= 5;
-  };
-
-  y -= 20;
-  ensureSpace(6);
-  drawRule(1);
-  y -= 14;
-  drawTextAt("ANALYSE EXECUTIVE INTELLIGENTE", margin, y, 12);
-  y -= 16;
-  drawTextAt(executiveAnalysis.title.toUpperCase(), margin, y, 9);
-  y -= 12;
-
-  drawParagraphBlock("1) Synthese", executiveAnalysis.summary);
-  drawParagraphBlock("2) Points forts", "Leviers de performance observes sur la periode.", executiveAnalysis.strengths);
-  drawParagraphBlock("3) Points faibles", "Zones de fragilite a traiter en priorite.", executiveAnalysis.weaknesses);
-  drawParagraphBlock("4) Avancees", "Progres constatés sur la periode analysee.", executiveAnalysis.advances);
-  drawParagraphBlock("5) Regressions", "Signaux de recul detectes face a la periode de reference.", executiveAnalysis.regressions);
-  drawParagraphBlock("6) Recommandations", "Plan d'action propose pour la direction.", executiveAnalysis.recommendations);
 
   const bytes = await pdf.save();
   return new NextResponse(Uint8Array.from(bytes), {
