@@ -874,9 +874,12 @@ export async function GET(request: NextRequest) {
   let lPage = pdf.addPage([842, 595]);
   const LW = lPage.getWidth();
   const LH = lPage.getHeight();
-  const LM = 60;
+  const LM = 20;
   let lY = LH - 28;
   const rowH = 15;
+  const centeredStartY = (estimatedHeight: number) => {
+    return Math.min(LH - 28, Math.max(70, (LH + estimatedHeight) / 2));
+  };
 
   const lEnsureSpace = (rows: number) => {
     if (lY - rows * rowH < 45) {
@@ -917,29 +920,32 @@ export async function GET(request: NextRequest) {
     lPage.drawText(safeText, { x: textX, y: yy, size, font: usedFont, color: rgb(0, 0, 0) });
   };
 
-  const drawLandRule = (thickness = 0.5) => {
+  const drawLandRule = (thickness = 0.5, startX = LM, endX = LW - LM) => {
     lPage.drawLine({
-      start: { x: LM, y: lY },
-      end: { x: LW - LM, y: lY },
+      start: { x: startX, y: lY },
+      end: { x: endX, y: lY },
       thickness,
       color: rgb(0.75, 0.75, 0.75),
     });
   };
 
-  // Table header title - Annexe
-  const tableTitle = `Annexe 1 - Tableau des ventes (${dateRange.startRaw} → ${dateRange.endRaw})`;
-  const tableTitleWidth = fontBold.widthOfTextAtSize(tableTitle, 12);
-  const tableTitleX = Math.max(LM, (LW - tableTitleWidth) / 2);
-  drawLandText(tableTitle, tableTitleX, lY, 12, true);
-  lY -= 16;
-  drawLandRule(1);
-  lY -= 14;
-
   if (reportKind === "DAILY") {
     const headers = ["N°", "EMETEUR", "COMPAGNIE", "BENEFICIAIRE", "PNR", "ITINERAIRE", "MONTANT", "NATURE", "PAYANT", "STATUT", "COM."];
     const colWidths = [24, 62, 54, 78, 48, 54, 44, 42, 52, 42, 30];
+    const tableWidth = colWidths.reduce((sum, w) => sum + w, 0);
+    const startX = (LW - tableWidth) / 2;
+    const estimatedHeight = 30 + (rowH + 9) + tickets.length * (rowH + 9) + 48;
+    lY = centeredStartY(estimatedHeight);
+
+    const tableTitle = `Annexe 1 - Tableau des ventes (${dateRange.startRaw} → ${dateRange.endRaw})`;
+    const tableTitleWidth = fontBold.widthOfTextAtSize(tableTitle, 12);
+    drawLandText(tableTitle, Math.max(0, (LW - tableTitleWidth) / 2), lY, 12, true);
+    lY -= 16;
+    drawLandRule(1, startX, startX + tableWidth);
+    lY -= 14;
+
     const xs: number[] = [];
-    let cursor = LM;
+    let cursor = startX;
     colWidths.forEach((w) => {
       xs.push(cursor);
       cursor += w;
@@ -948,7 +954,7 @@ export async function GET(request: NextRequest) {
     lEnsureSpace(2);
     headers.forEach((header, idx) => drawLandText(header, xs[idx], lY, 8, true));
     lY -= rowH;
-    drawLandRule();
+    drawLandRule(0.5, startX, startX + tableWidth);
     lY -= 9;
 
     tickets.forEach((ticket, index) => {
@@ -968,12 +974,12 @@ export async function GET(request: NextRequest) {
       ];
       values.forEach((value, idx) => drawLandText(value.slice(0, 26), xs[idx], lY, 8));
       lY -= rowH;
-      drawLandRule(0.25);
+      drawLandRule(0.25, startX, startX + tableWidth);
       lY -= 9;
     });
 
     lEnsureSpace(3);
-    drawLandRule(1);
+    drawLandRule(1, startX, startX + tableWidth);
     lY -= 10;
     drawLandText(`Nbr billets: ${totalCount}`, LM + 260, lY, 10, true);
     lY -= rowH;
@@ -983,7 +989,7 @@ export async function GET(request: NextRequest) {
   } else {
     const headers = ["DATE / PERIODE", "BILLETS", ...airlineColumns, "MONTANTS", "COMMISSION"];
     const airlineCount = airlineColumns.length;
-    const usableWidth = LW - 2 * LM;
+    const usableWidth = Math.min(730, LW - 2 * LM);
 
     const billetsW = 50;
     const montantsW = 78;
@@ -1004,8 +1010,23 @@ export async function GET(request: NextRequest) {
     }
 
     const colWidths = [firstColW, billetsW, ...airlineColumns.map(() => airlineW), montantsW, commissionW];
+    const tableWidth = colWidths.reduce((sum, w) => sum + w, 0);
+    const startX = (LW - tableWidth) / 2;
     const xs: number[] = [];
-    let cursor = LM;
+    const lineCount = (reportKind === "WEEKLY"
+      ? Array.from(byDateAirline.entries()).length
+      : Array.from(byWeekAirline.entries()).length);
+    const estimatedHeight = 30 + (rowH + 9) + lineCount * (rowH + 9) + 28;
+    lY = centeredStartY(estimatedHeight);
+
+    const tableTitle = `Annexe 1 - Tableau des ventes (${dateRange.startRaw} → ${dateRange.endRaw})`;
+    const tableTitleWidth = fontBold.widthOfTextAtSize(tableTitle, 12);
+    drawLandText(tableTitle, Math.max(0, (LW - tableTitleWidth) / 2), lY, 12, true);
+    lY -= 16;
+    drawLandRule(1, startX, startX + tableWidth);
+    lY -= 14;
+
+    let cursor = startX;
     colWidths.forEach((w) => {
       xs.push(cursor);
       cursor += w;
@@ -1019,7 +1040,7 @@ export async function GET(request: NextRequest) {
       drawCellText(header, xOf(idx), wOf(idx), lY, 8, align, true);
     });
     lY -= rowH;
-    drawLandRule();
+    drawLandRule(0.5, startX, startX + tableWidth);
     lY -= 9;
 
     const lines = reportKind === "WEEKLY"
@@ -1042,12 +1063,12 @@ export async function GET(request: NextRequest) {
       drawCellText(fmtNumber(totalLineCommission), xOf(3 + airlineColumns.length), wOf(3 + airlineColumns.length), lY, 8, "right");
 
       lY -= rowH;
-      drawLandRule(0.25);
+      drawLandRule(0.25, startX, startX + tableWidth);
       lY -= 9;
     });
 
     lEnsureSpace(4);
-    drawLandRule(1.1);
+    drawLandRule(1.1, startX, startX + tableWidth);
     lY -= 10;
     drawCellText("TOTAL GENERAL", xOf(0), wOf(0), lY, 9, "left", true);
     drawCellText(String(totalCount), xOf(1), wOf(1), lY, 9, "right", true);
