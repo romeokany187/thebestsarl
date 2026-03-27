@@ -386,205 +386,202 @@ export async function GET(request: NextRequest) {
       font: fontBold,
       color: textBlack,
     });
-  } else if (range.mode === "year") {
-    const reportTitle = "Rapport Annuel";
-    const page = pdf.addPage([842, 595]);
-    drawTopInfo(page, fontBold, fontRegular, periodLabel, logoImage);
-    drawFooter(page, fontRegular, reportTitle, generatedByWithRole);
-
-    const monthLabels = [
-      "JANVIER",
-      "FÉVRIER",
-      "MARS",
-      "AVRIL",
-      "MAI",
-      "JUIN",
-      "JUILLET",
-      "AOÛT",
-      "SEPTEMBRE",
-      "OCTOBRE",
-      "NOVEMBRE",
-      "DÉCEMBRE",
-    ];
-
-    const preferredAirlineCodes = ["CAA", "AIRCONGO", "ET", "KENYA", "MG", "DAKOTA", "UR", "TC", "AF", "WB"];
-    const presentCodes = Array.from(new Set(tickets.map((ticket) => ticket.airline.code.toUpperCase()))).sort();
-    const hasOtherCodes = presentCodes.some((code) => !preferredAirlineCodes.includes(code));
-    const airlineColumns = hasOtherCodes ? [...preferredAirlineCodes, "AUTRES"] : preferredAirlineCodes;
-
-    type MonthlyRow = {
-      month: string;
-      tickets: number;
-      amount: number;
-      commission: number;
-      byAirline: Map<string, number>;
-    };
-
-    const monthlyRows: MonthlyRow[] = monthLabels.map((label) => ({
-      month: label,
-      tickets: 0,
-      amount: 0,
-      commission: 0,
-      byAirline: new Map<string, number>(),
-    }));
-
-    tickets.forEach((ticket) => {
-      const soldAt = new Date(ticket.soldAt);
-      const monthIndex = soldAt.getUTCMonth();
-      if (monthIndex < 0 || monthIndex > 11) return;
-
-      const row = monthlyRows[monthIndex];
-      const code = ticket.airline.code.toUpperCase();
-      const columnCode = preferredAirlineCodes.includes(code) ? code : "AUTRES";
-      const commission = ticketCommission(ticket);
-
-      row.tickets += 1;
-      row.amount += ticket.amount;
-      row.commission += commission;
-      row.byAirline.set(columnCode, (row.byAirline.get(columnCode) ?? 0) + ticket.amount);
-    });
-
-    const grand = monthlyRows.reduce((acc, row) => {
-      acc.tickets += row.tickets;
-      acc.amount += row.amount;
-      acc.commission += row.commission;
-      airlineColumns.forEach((code) => {
-        acc.byAirline.set(code, (acc.byAirline.get(code) ?? 0) + (row.byAirline.get(code) ?? 0));
-      });
-      return acc;
-    }, {
-      tickets: 0,
-      amount: 0,
-      commission: 0,
-      byAirline: new Map<string, number>(),
-    });
-
-    const headers = ["MOIS", "BILLETS", ...airlineColumns, "TOTAUX", "COMMISSION"];
-    const tableTop = 472;
-    const rowHeight = 20;
-    const left = 24;
-    const right = 818;
-    const tableWidth = right - left;
-
-    const monthW = 92;
-    const billetsW = 52;
-    const totalsW = 86;
-    const commissionW = 86;
-    const airlineW = Math.max(38, (tableWidth - monthW - billetsW - totalsW - commissionW) / airlineColumns.length);
-    const widths = [monthW, billetsW, ...airlineColumns.map(() => airlineW), totalsW, commissionW];
-    const xs: number[] = [];
-    let cursor = left;
-    widths.forEach((width) => {
-      xs.push(cursor);
-      cursor += width;
-    });
-
-    const drawCell = (
-      text: string,
-      colIndex: number,
-      y: number,
-      opts?: { bold?: boolean; align?: "left" | "right"; size?: number },
-    ) => {
-      const bold = opts?.bold ?? false;
-      const align = opts?.align ?? "left";
-      const size = opts?.size ?? 7.2;
-      const font = bold ? fontBold : fontRegular;
-      const cellX = xs[colIndex];
-      const cellWidth = widths[colIndex];
-      const padding = 3;
-      const available = Math.max(0, cellWidth - padding * 2);
-      let safeText = text;
-      while (safeText.length > 0 && font.widthOfTextAtSize(safeText, size) > available) {
-        safeText = `${safeText.slice(0, -1)}`;
-      }
-
-      const textWidth = font.widthOfTextAtSize(safeText, size);
-      const textX = align === "right"
-        ? cellX + cellWidth - padding - textWidth
-        : cellX + padding;
-
-      page.drawText(safeText, {
-        x: textX,
-        y,
-        size,
-        font,
-        color: textBlack,
-      });
-    };
-
-    const formatInt = (value: number) => new Intl.NumberFormat("fr-FR", { maximumFractionDigits: 0 }).format(Math.round(value));
-    const formatAmountCell = (value: number) => (value > 0 ? formatInt(value) : "-");
-
-    page.drawText(`RAPPORT ANNUEL ${range.start.getUTCFullYear()}`, {
-      x: 24,
-      y: 492,
-      size: 10,
-      font: fontBold,
-      color: textBlack,
-    });
-
-    page.drawRectangle({
-      x: left,
-      y: tableTop,
-      width: tableWidth,
-      height: rowHeight,
-      borderColor: rgb(0.3, 0.3, 0.3),
-      borderWidth: 0.8,
-      color: rgb(0.94, 0.9, 0.84),
-    });
-
-    headers.forEach((header, index) => {
-      drawCell(header, index, tableTop + 6, { bold: true, size: 7.3, align: index >= 1 ? "right" : "left" });
-    });
-
-    monthlyRows.forEach((row, rowIndex) => {
-      const y = tableTop - rowHeight * (rowIndex + 1);
-      page.drawRectangle({
-        x: left,
-        y,
-        width: tableWidth,
-        height: rowHeight,
-        borderColor: rgb(0.72, 0.72, 0.72),
-        borderWidth: 0.35,
-        color: rowIndex % 2 === 0 ? rgb(1, 1, 1) : rgb(0.985, 0.985, 0.985),
-      });
-
-      drawCell(row.month, 0, y + 6, { bold: true, size: 7.3, align: "left" });
-      drawCell(String(row.tickets), 1, y + 6, { align: "right" });
-
-      airlineColumns.forEach((code, idx) => {
-        drawCell(formatAmountCell(row.byAirline.get(code) ?? 0), 2 + idx, y + 6, { align: "right" });
-      });
-
-      drawCell(formatInt(row.amount), 2 + airlineColumns.length, y + 6, { align: "right" });
-      drawCell(formatInt(row.commission), 3 + airlineColumns.length, y + 6, { align: "right" });
-    });
-
-    const totalY = tableTop - rowHeight * 13;
-    page.drawRectangle({
-      x: left,
-      y: totalY,
-      width: tableWidth,
-      height: rowHeight,
-      borderColor: rgb(0.3, 0.3, 0.3),
-      borderWidth: 0.8,
-      color: rgb(0.94, 0.9, 0.84),
-    });
-
-    drawCell("TOTAL GÉNÉRAL", 0, totalY + 6, { bold: true, align: "left", size: 7.5 });
-    drawCell(String(grand.tickets), 1, totalY + 6, { bold: true, align: "right", size: 7.5 });
-
-    airlineColumns.forEach((code, idx) => {
-      drawCell(formatAmountCell(grand.byAirline.get(code) ?? 0), 2 + idx, totalY + 6, { bold: true, align: "right", size: 7.5 });
-    });
-
-    drawCell(formatInt(grand.amount), 2 + airlineColumns.length, totalY + 6, { bold: true, align: "right", size: 7.5 });
-    drawCell(formatInt(grand.commission), 3 + airlineColumns.length, totalY + 6, { bold: true, align: "right", size: 7.5 });
   } else {
     const reportTitle = "Rapport Synthèse";
     let page = pdf.addPage([842, 595]);
     drawTopInfo(page, fontBold, fontRegular, periodLabel, logoImage);
     drawFooter(page, fontRegular, reportTitle, generatedByWithRole);
+
+    if (range.mode === "year") {
+      const monthLabels = [
+        "JANVIER",
+        "FÉVRIER",
+        "MARS",
+        "AVRIL",
+        "MAI",
+        "JUIN",
+        "JUILLET",
+        "AOÛT",
+        "SEPTEMBRE",
+        "OCTOBRE",
+        "NOVEMBRE",
+        "DÉCEMBRE",
+      ];
+
+      const airlineColumns = [
+        { key: "CAA", label: "CAA", aliases: ["CAA"] },
+        { key: "AIRCONGO", label: "AIRCONGO", aliases: ["ACG", "AIRCONGO"] },
+        { key: "ET", label: "ET", aliases: ["ET", "ETH", "ETHIOPIAN"] },
+        { key: "KENYA", label: "KENYA", aliases: ["KQ", "KENYA"] },
+        { key: "MG", label: "MG", aliases: ["MG"] },
+        { key: "DAKOTA", label: "DAKOTA", aliases: ["DK", "DKT", "DAKOTA"] },
+        { key: "UR", label: "UR", aliases: ["UR"] },
+        { key: "TC", label: "TC", aliases: ["TC"] },
+        { key: "AF", label: "AF", aliases: ["AF", "FST", "AIRFAST"] },
+        { key: "WB", label: "WB", aliases: ["WB"] },
+      ] as const;
+
+      const aliasToKey = new Map<string, string>();
+      airlineColumns.forEach((column) => {
+        column.aliases.forEach((alias) => aliasToKey.set(alias.toUpperCase(), column.key));
+      });
+
+      const rows = monthLabels.map(() => ({
+        tickets: 0,
+        amountByAirline: Object.fromEntries(airlineColumns.map((column) => [column.key, 0])) as Record<string, number>,
+        total: 0,
+        commission: 0,
+      }));
+
+      const resolveColumnKey = (airlineCodeRaw: string) => {
+        const upper = airlineCodeRaw.trim().toUpperCase();
+        return aliasToKey.get(upper) ?? null;
+      };
+
+      tickets.forEach((ticket) => {
+        const monthIndex = new Date(ticket.soldAt).getUTCMonth();
+        if (monthIndex < 0 || monthIndex > 11) return;
+
+        const commission = ticketCommission(ticket);
+        const row = rows[monthIndex];
+        const columnKey = resolveColumnKey(ticket.airline.code);
+
+        row.tickets += 1;
+        row.total += ticket.amount;
+        row.commission += commission;
+
+        if (columnKey) {
+          row.amountByAirline[columnKey] = (row.amountByAirline[columnKey] ?? 0) + ticket.amount;
+        }
+      });
+
+      const grandTotal = rows.reduce((acc, row) => {
+        const next = { ...acc };
+        next.tickets += row.tickets;
+        next.total += row.total;
+        next.commission += row.commission;
+        airlineColumns.forEach((column) => {
+          next.amountByAirline[column.key] = (next.amountByAirline[column.key] ?? 0) + (row.amountByAirline[column.key] ?? 0);
+        });
+        return next;
+      }, {
+        tickets: 0,
+        total: 0,
+        commission: 0,
+        amountByAirline: Object.fromEntries(airlineColumns.map((column) => [column.key, 0])) as Record<string, number>,
+      });
+
+      const formatAmount = (value: number) => {
+        if (value <= 0) return "-";
+        return Math.round(value).toLocaleString("fr-FR");
+      };
+
+      const headers = ["N°", "MOIS", "BILLETS", ...airlineColumns.map((column) => column.label), "TOTAUX", "COMMISSION"];
+      const columnWidths = [24, 86, 48, ...airlineColumns.map(() => 44), 70, 70];
+      const tableWidth = columnWidths.reduce((sum, width) => sum + width, 0);
+      const startX = (842 - tableWidth) / 2;
+      const startY = 470;
+      const rowHeight = 23;
+
+      const xPositions: number[] = [];
+      let cursorX = startX;
+      columnWidths.forEach((width) => {
+        xPositions.push(cursorX);
+        cursorX += width;
+      });
+
+      const drawCell = (
+        text: string,
+        rowIndex: number,
+        colIndex: number,
+        bold = false,
+        align: "left" | "center" | "right" = "center",
+      ) => {
+        const x = xPositions[colIndex];
+        const yTop = startY - rowIndex * rowHeight;
+        const width = columnWidths[colIndex];
+        const fontSize = rowIndex === 0 ? 8 : 7.5;
+        const usedFont = bold ? fontBold : fontRegular;
+        const textWidth = usedFont.widthOfTextAtSize(text, fontSize);
+        const textY = yTop - rowHeight + 7;
+
+        let textX = x + 3;
+        if (align === "center") {
+          textX = x + (width - textWidth) / 2;
+        } else if (align === "right") {
+          textX = x + width - textWidth - 3;
+        }
+
+        page.drawText(text, {
+          x: textX,
+          y: textY,
+          size: fontSize,
+          font: usedFont,
+          color: textBlack,
+        });
+      };
+
+      const tableTitle = `RAPPORT ANNUEL ${range.start.getUTCFullYear()}`;
+      const titleWidth = fontBold.widthOfTextAtSize(tableTitle, 11);
+      page.drawText(tableTitle, {
+        x: (842 - titleWidth) / 2,
+        y: 500,
+        size: 11,
+        font: fontBold,
+        color: textBlack,
+      });
+
+      headers.forEach((header, index) => {
+        drawCell(header, 0, index, true, "center");
+      });
+
+      rows.forEach((row, index) => {
+        const rowIndex = index + 1;
+        drawCell(String(index + 1), rowIndex, 0, false, "center");
+        drawCell(monthLabels[index], rowIndex, 1, false, "left");
+        drawCell(String(row.tickets), rowIndex, 2, false, "right");
+
+        airlineColumns.forEach((column, columnIndex) => {
+          drawCell(formatAmount(row.amountByAirline[column.key] ?? 0), rowIndex, 3 + columnIndex, false, "right");
+        });
+
+        drawCell(formatAmount(row.total), rowIndex, 3 + airlineColumns.length, false, "right");
+        drawCell(formatAmount(row.commission), rowIndex, 4 + airlineColumns.length, false, "right");
+      });
+
+      const totalRowIndex = rows.length + 1;
+      drawCell("", totalRowIndex, 0, true, "center");
+      drawCell("TOTAL GENERAL", totalRowIndex, 1, true, "left");
+      drawCell(String(grandTotal.tickets), totalRowIndex, 2, true, "right");
+
+      airlineColumns.forEach((column, columnIndex) => {
+        drawCell(formatAmount(grandTotal.amountByAirline[column.key] ?? 0), totalRowIndex, 3 + columnIndex, true, "right");
+      });
+
+      drawCell(formatAmount(grandTotal.total), totalRowIndex, 3 + airlineColumns.length, true, "right");
+      drawCell(formatAmount(grandTotal.commission), totalRowIndex, 4 + airlineColumns.length, true, "right");
+
+      const totalRows = rows.length + 2;
+      for (let line = 0; line <= totalRows; line += 1) {
+        const y = startY - line * rowHeight;
+        page.drawLine({
+          start: { x: startX, y },
+          end: { x: startX + tableWidth, y },
+          thickness: line === 0 || line === totalRows || line === totalRowIndex ? 0.9 : 0.45,
+          color: rgb(0.6, 0.6, 0.6),
+        });
+      }
+
+      for (let col = 0; col <= columnWidths.length; col += 1) {
+        const x = col === columnWidths.length ? startX + tableWidth : xPositions[col];
+        page.drawLine({
+          start: { x, y: startY },
+          end: { x, y: startY - totalRows * rowHeight },
+          thickness: col === 0 || col === columnWidths.length ? 0.9 : 0.45,
+          color: rgb(0.6, 0.6, 0.6),
+        });
+      }
+    } else {
 
     const grouped = Array.from(
       tickets.reduce((map, ticket) => {
@@ -733,6 +730,7 @@ export async function GET(request: NextRequest) {
     page.drawText(String(grandTickets), { x: 360, y, size: 10, font: fontBold, color: textBlack });
     page.drawText(formatMoney(grandSales), { x: 455, y, size: 10, font: fontBold, color: textBlack });
     page.drawText(formatMoney(grandCommissions), { x: 585, y, size: 10, font: fontBold, color: textBlack });
+    }
   }
 
   const bytes = await pdf.save();
