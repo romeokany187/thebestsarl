@@ -764,9 +764,14 @@ export async function importTicketWorkbookFromBuffer(options: TicketWorkbookImpo
           airlineByName.set(createdAirline.name.toLowerCase(), createdAirline);
         }
 
-        let commissionAmount = Math.max(0, commissionAmountFromFile);
-
         const afterDepositRule = afterDepositRuleByAirlineId.get(airline.id) ?? null;
+        const isAirFast = isAirFastLike(airline);
+
+        // Pour CAA (règle afterDeposit) et AirFast, la commission est calculée
+        // exclusivement par la logique métier — la valeur du fichier est ignorée.
+        // Pour toutes les autres compagnies, on utilise directement la valeur du fichier.
+        let commissionAmount = (afterDepositRule || isAirFast) ? 0 : Math.max(0, commissionAmountFromFile);
+
         if (afterDepositRule) {
           const targetAmount = afterDepositRule.depositStockTargetAmount ?? 0;
           const batchAmount = afterDepositRule.batchCommissionAmount ?? 0;
@@ -784,7 +789,7 @@ export async function importTicketWorkbookFromBuffer(options: TicketWorkbookImpo
           }
         }
 
-        if (isAirFastLike(airline)) {
+        if (isAirFast) {
           const nextAirfastTicketNumber = (ticketCountByAirlineId.get(airline.id) ?? 0) + 1;
           ticketCountByAirlineId.set(airline.id, nextAirfastTicketNumber);
           if (nextAirfastTicketNumber % 13 === 0) {
