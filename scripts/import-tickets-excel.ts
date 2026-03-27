@@ -86,13 +86,13 @@ function normalizeHeader(value: string) {
 
 function isLikelyDailySheet(name: string) {
   const clean = name.trim();
-  return /^\d{1,2}\.\d{1,2}$/.test(clean) || /^\d{4}$/.test(clean);
+  return /^\d{1,2}[.,]\d{1,2}$/.test(clean) || /^\d{4}$/.test(clean);
 }
 
 function parseSheetDateFromName(sheetName: string, year: number) {
   const clean = sheetName.trim();
 
-  const dotted = clean.match(/^(\d{1,2})\.(\d{1,2})$/);
+  const dotted = clean.match(/^(\d{1,2})[.,](\d{1,2})$/);
   if (dotted) {
     const day = Number.parseInt(dotted[1], 10);
     const month = Number.parseInt(dotted[2], 10);
@@ -405,7 +405,7 @@ function toRowsFromMatrix(sheet: XLSX.WorkSheet): Row[] {
   for (let i = 0; i < Math.min(matrix.length, 8); i += 1) {
     const row = matrix[i] ?? [];
     const normalized = row.map((cell) => normalizeHeader(String(cell ?? "")));
-    if (normalized.includes("pnr") && normalized.includes("emeteur") && normalized.includes("montant")) {
+    if (normalized.includes("pnr") && normalized.some((n) => n.startsWith("emeteur")) && normalized.includes("montant")) {
       headerRowIndex = i;
       break;
     }
@@ -604,7 +604,7 @@ async function main() {
         const commissionBaseAmount = baseFareAmount && baseFareAmount > 0 ? baseFareAmount : amount;
 
         const sellerEmail = asString(pickValue(row, ["sellerEmail", "commercialEmail", "agentEmail", "email vendeur", "email agent"]));
-        const sellerName = asString(pickValue(row, ["sellerName", "commercial", "vendeur", "agent", "emeteur", "emetteur", "emetteur/emitteur", "emitteur"]));
+        const sellerName = asString(pickValue(row, ["sellerName", "commercial", "vendeur", "agent", "emeteur", "emetteur", "emetteur/emitteur", "emitteur", "emeteur/bureau", "emetteur/bureau"]));
         const seller = await resolveSeller({ sellerEmail, sellerName });
 
         const airlineCodeRaw = asString(pickValue(row, ["airlineCode", "compagnieCode", "code compagnie", "code"]));
