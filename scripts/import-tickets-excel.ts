@@ -548,23 +548,25 @@ async function main() {
 
         const soldMonth = soldAt.getUTCMonth() + 1;
         const isMarchImport = soldMonth === 3;
-        const hasCommissionFromFile = commissionAmountFromFile > 0;
+        const isCaa = isCaaLike(airline);
+        const isAirFast = isAirFastLike(airline);
 
         let commissionAmount = 0;
         let commissionRateUsed = 0;
 
         if (!isMarchImport) {
-          if (hasCommissionFromFile) {
-            commissionAmount = commissionAmountFromFile;
-            commissionRateUsed = commissionRateFromFile ?? 0;
-          } else if (isCaaLike(airline)) {
+          if (isCaa) {
             commissionAmount = commissionBaseAmount * 0.05;
             commissionRateUsed = 5;
-          } else if (isAirFastLike(airline)) {
+          } else if (isAirFast) {
             const nextAirfastTicketNumber = (ticketCountByAirlineId.get(airline.id) ?? 0) + 1;
             ticketCountByAirlineId.set(airline.id, nextAirfastTicketNumber);
             commissionAmount = nextAirfastTicketNumber % 13 === 0 ? amount : 0;
             commissionRateUsed = nextAirfastTicketNumber % 13 === 0 ? 100 : 0;
+          } else {
+            commissionAmount = Math.max(0, commissionAmountFromFile);
+            commissionRateUsed = commissionRateFromFile
+              ?? (commissionBaseAmount > 0 ? (commissionAmount / commissionBaseAmount) * 100 : 0);
           }
         }
 
