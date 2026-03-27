@@ -430,7 +430,7 @@ export async function GET(request: NextRequest) {
     const weekEndExclusive = new Date(weekStart);
     weekEndExclusive.setUTCDate(weekEndExclusive.getUTCDate() + 7);
     const weekKey = weekLabel(weekStart, weekEndExclusive);
-    const airlineCode = ticket.airline.code;
+    const airlineCode = ticket.airline.code.toUpperCase();
     const agencyKey = ticket.seller?.team?.name ?? "Sans agence";
 
     // Group by date -> airline
@@ -867,9 +867,9 @@ export async function GET(request: NextRequest) {
 
   // ─── Landscape page: data table ─────────────────────────────────────────────
   const preferredAirlines = ["CAA", "AIRCONGO", "ETHIOPIAN", "MG", "KP", "KENYA", "SA", "UR"];
-  const allCodes = Array.from(new Set(tickets.map((ticket) => ticket.airline.code.toUpperCase())));
-  const extraCodes = allCodes.filter((code) => !preferredAirlines.includes(code)).sort();
-  const airlineColumns = [...preferredAirlines.filter((code) => allCodes.includes(code)), ...extraCodes];
+  const soldCodes = Array.from(airlineTotals.keys());
+  const extraCodes = soldCodes.filter((code) => !preferredAirlines.includes(code)).sort();
+  const airlineColumns = [...preferredAirlines.filter((code) => soldCodes.includes(code)), ...extraCodes];
 
   let lPage = pdf.addPage([842, 595]);
   const LW = lPage.getWidth();
