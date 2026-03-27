@@ -263,20 +263,84 @@ function makeAirlineCode(name: string, usedCodes: Set<string>) {
   return code;
 }
 
-function mapPayerToAgency(value: string | null) {
-  const text = (value ?? "").trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-  const compact = text.replace(/[^a-z0-9]/g, "");
+function normalizeLookupKey(value: string) {
+  return value
+    .trim()
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
 
-  if (compact.includes("mbujimayi") || compact.includes("mbujimai")) {
-    return "Agence MBUJIMAYI";
+function compactLookupKey(value: string) {
+  return normalizeLookupKey(value).replace(/\s+/g, "");
+}
+
+function addLookupCandidate(candidates: Set<string>, value: string) {
+  const normalized = normalizeLookupKey(value);
+  if (normalized) {
+    candidates.add(normalized);
   }
-  if (compact.includes("lubumbashi")) {
-    return "Agence LUBUMBASHI";
+}
+
+function buildTeamLookupCandidates(teamName: string) {
+  const candidates = new Set<string>();
+  addLookupCandidate(candidates, teamName);
+  addLookupCandidate(candidates, teamName.replace(/^agence\s+de\s+/i, ""));
+  addLookupCandidate(candidates, teamName.replace(/^equipe\s*[-:]?\s*/i, ""));
+
+  const compact = compactLookupKey(teamName);
+  if (compact.includes("kinshasa")) addLookupCandidate(candidates, "Kinshasa");
+  if (compact.includes("lubumbashi")) addLookupCandidate(candidates, "Lubumbashi");
+  if (compact.includes("mbujimayi") || compact.includes("mbujimai")) addLookupCandidate(candidates, "Mbujimayi");
+  if (compact.includes("hkservice")) addLookupCandidate(candidates, "HKSERVICE");
+
+  return Array.from(candidates);
+}
+
+function resolveImportedPayerName(
+  value: string | null,
+  lookups: {
+    usersByKey: Map<string, string>;
+    teamsByKey: Map<string, string>;
+    userKeys: string[];
+    teamKeys: string[];
+  },
+) {
+  const raw = value?.trim();
+  if (!raw) return null;
+
+  const normalized = normalizeLookupKey(raw);
+  const compact = compactLookupKey(raw);
+  const stripped = normalizeLookupKey(raw.replace(/^(agent|employe|employe e|employe\(e\)|equipe|team|agence|client)\s*[-:]?\s*/i, ""));
+  const lookupKeys = Array.from(new Set([normalized, compact, stripped, compactLookupKey(stripped)]).values()).filter(Boolean);
+
+  for (const key of lookupKeys) {
+    const matchedTeam = lookups.teamsByKey.get(key);
+    if (matchedTeam) {
+      return `Équipe - ${matchedTeam}`;
+    }
+    const matchedUser = lookups.usersByKey.get(key);
+    if (matchedUser) {
+      return `Agent - ${matchedUser}`;
+    }
   }
-  if (compact.includes("hkservice")) {
-    return "HKSERVICE";
+
+  const partialTeamMatches = lookups.teamKeys.filter((key) => key.includes(compact) || compact.includes(key));
+  if (partialTeamMatches.length === 1) {
+    const matchedTeam = lookups.teamsByKey.get(partialTeamMatches[0]);
+    if (matchedTeam) return `Équipe - ${matchedTeam}`;
   }
-  return "Agence de Kinshasa (Direction générale)";
+
+  const partialUserMatches = lookups.userKeys.filter((key) => key.includes(compact) || compact.includes(key));
+  if (partialUserMatches.length === 1) {
+    const matchedUser = lookups.usersByKey.get(partialUserMatches[0]);
+    if (matchedUser) return `Agent - ${matchedUser}`;
+  }
+
+  return raw;
 }
 
 function readSheetRows(sheet: XLSX.WorkSheet) {
@@ -392,8 +456,9 @@ async function main() {
     throw new Error("Aucune feuille journalière détectée. Utilisez --sheet si nécessaire.");
   }
 
-  const [users, airlines, ticketCounts] = await Promise.all([
+  const [users, teams, airlines, ticketCounts] = await Promise.all([
     prisma.user.findMany({ select: { id: true, email: true, name: true } }),
+    prisma.team.findMany({ select: { id: true, name: true } }),
     prisma.airline.findMany({ select: { id: true, code: true, name: true } }),
     prisma.ticketSale.groupBy({ by: ["airlineId"], _count: { _all: true } }),
   ]);
@@ -404,6 +469,27 @@ async function main() {
 
   const userByEmail = new Map(users.map((user) => [user.email.trim().toLowerCase(), user]));
   const userByName = new Map(users.map((user) => [normalizePersonKey(user.name), user]));
+  const usersByPayerKey = new Map<string, string>();
+  users.forEach((user) => {
+    const keys = new Set<string>([
+      normalizeLookupKey(user.name),
+      compactLookupKey(user.name),
+      normalizeLookupKey(`Agent ${user.name}`),
+      compactLookupKey(`Agent ${user.name}`),
+    ]);
+    keys.forEach((key) => {
+      if (key) usersByPayerKey.set(key, user.name);
+    });
+  });
+  const teamsByPayerKey = new Map<string, string>();
+  teams.forEach((team) => {
+    buildTeamLookupCandidates(team.name).forEach((candidate) => {
+      const normalizedCandidate = normalizeLookupKey(candidate);
+      const compactCandidate = compactLookupKey(candidate);
+      if (normalizedCandidate) teamsByPayerKey.set(normalizedCandidate, team.name);
+      if (compactCandidate) teamsByPayerKey.set(compactCandidate, team.name);
+    });
+  });
 
   const airlineByCode = new Map(airlines.map((airline) => [airline.code.trim().toUpperCase(), airline]));
   const airlineByName = new Map(airlines.map((airline) => [airline.name.trim().toLowerCase(), airline]));
@@ -595,7 +681,12 @@ async function main() {
           sellerName: seller.name ?? undefined,
           saleNature: parseSaleNature(pickValue(row, ["saleNature", "nature vente", "nature"])),
           paymentStatus: parsePaymentStatus(pickValue(row, ["paymentStatus", "statut paiement", "statut", "etat paiement"])),
-          payerName: mapPayerToAgency(asString(pickValue(row, ["payerName", "payant", "nom payeur"]))),
+          payerName: resolveImportedPayerName(asString(pickValue(row, ["payerName", "payant", "nom payeur"])), {
+            usersByKey: usersByPayerKey,
+            teamsByKey: teamsByPayerKey,
+            userKeys: Array.from(usersByPayerKey.keys()),
+            teamKeys: Array.from(teamsByPayerKey.keys()),
+          }),
           agencyMarkupPercent: 0,
           agencyMarkupAmount,
           commissionBaseAmount,
