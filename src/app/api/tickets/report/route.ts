@@ -408,34 +408,39 @@ export async function GET(request: NextRequest) {
         "DÉCEMBRE",
       ];
 
-      const airlineColumns = [
-        { key: "CAA", label: "CAA", aliases: ["CAA"] },
-        { key: "AIRCONGO", label: "AIRCONGO", aliases: ["ACG", "AIRCONGO"] },
-        { key: "ET", label: "ET", aliases: ["ET", "ETH", "ETHIOPIAN"] },
-        { key: "KENYA", label: "KENYA", aliases: ["KQ", "KENYA"] },
-        { key: "MG", label: "MG", aliases: ["MG"] },
-        { key: "DAKOTA", label: "DAKOTA", aliases: ["DK", "DKT", "DAKOTA"] },
-        { key: "UR", label: "UR", aliases: ["UR"] },
-        { key: "TC", label: "TC", aliases: ["TC"] },
-        { key: "AF", label: "AF", aliases: ["AF", "FST", "AIRFAST"] },
-        { key: "WB", label: "WB", aliases: ["WB"] },
-      ] as const;
+      const aliasToKey = new Map<string, string>([
+        ["ACG", "AIRCONGO"],
+        ["AIRCONGO", "AIRCONGO"],
+        ["ETH", "ET"],
+        ["ETHIOPIAN", "ET"],
+        ["KQ", "KENYA"],
+        ["DK", "DAKOTA"],
+        ["DKT", "DAKOTA"],
+        ["FST", "AF"],
+        ["AIRFAST", "AF"],
+      ]);
 
-      const aliasToKey = new Map<string, string>();
-      airlineColumns.forEach((column) => {
-        column.aliases.forEach((alias) => aliasToKey.set(alias.toUpperCase(), column.key));
-      });
+      const normalizeAirlineCode = (airlineCodeRaw: string) => {
+        const upper = airlineCodeRaw.trim().toUpperCase();
+        return aliasToKey.get(upper) ?? upper;
+      };
+
+      const preferredOrder = ["CAA", "AIRCONGO", "ET", "KENYA", "MG", "DAKOTA", "UR", "TC", "AF", "WB"];
+      const soldAirlineCodes = Array.from(new Set(tickets.map((ticket) => normalizeAirlineCode(ticket.airline.code))));
+      const airlineColumns = [
+        ...preferredOrder.filter((code) => soldAirlineCodes.includes(code)),
+        ...soldAirlineCodes.filter((code) => !preferredOrder.includes(code)).sort(),
+      ];
 
       const rows = monthLabels.map(() => ({
         tickets: 0,
-        amountByAirline: Object.fromEntries(airlineColumns.map((column) => [column.key, 0])) as Record<string, number>,
+        amountByAirline: Object.fromEntries(airlineColumns.map((code) => [code, 0])) as Record<string, number>,
         total: 0,
         commission: 0,
       }));
 
       const resolveColumnKey = (airlineCodeRaw: string) => {
-        const upper = airlineCodeRaw.trim().toUpperCase();
-        return aliasToKey.get(upper) ?? null;
+        return normalizeAirlineCode(airlineCodeRaw);
       };
 
       tickets.forEach((ticket) => {
@@ -460,15 +465,15 @@ export async function GET(request: NextRequest) {
         next.tickets += row.tickets;
         next.total += row.total;
         next.commission += row.commission;
-        airlineColumns.forEach((column) => {
-          next.amountByAirline[column.key] = (next.amountByAirline[column.key] ?? 0) + (row.amountByAirline[column.key] ?? 0);
+        airlineColumns.forEach((code) => {
+          next.amountByAirline[code] = (next.amountByAirline[code] ?? 0) + (row.amountByAirline[code] ?? 0);
         });
         return next;
       }, {
         tickets: 0,
         total: 0,
         commission: 0,
-        amountByAirline: Object.fromEntries(airlineColumns.map((column) => [column.key, 0])) as Record<string, number>,
+        amountByAirline: Object.fromEntries(airlineColumns.map((code) => [code, 0])) as Record<string, number>,
       });
 
       const formatAmount = (value: number) => {
@@ -476,7 +481,7 @@ export async function GET(request: NextRequest) {
         return Math.round(value).toLocaleString("fr-FR");
       };
 
-      const headers = ["N°", "MOIS", "BILLETS", ...airlineColumns.map((column) => column.label), "TOTAUX", "COMMISSION"];
+      const headers = ["N°", "MOIS", "BILLETS", ...airlineColumns, "TOTAUX", "COMMISSION"];
       const columnWidths = [24, 86, 48, ...airlineColumns.map(() => 44), 70, 70];
       const tableWidth = columnWidths.reduce((sum, width) => sum + width, 0);
       const startX = (842 - tableWidth) / 2;
@@ -541,8 +546,8 @@ export async function GET(request: NextRequest) {
         drawCell(monthLabels[index], rowIndex, 1, false, "left");
         drawCell(String(row.tickets), rowIndex, 2, false, "right");
 
-        airlineColumns.forEach((column, columnIndex) => {
-          drawCell(formatAmount(row.amountByAirline[column.key] ?? 0), rowIndex, 3 + columnIndex, false, "right");
+        airlineColumns.forEach((code, columnIndex) => {
+          drawCell(formatAmount(row.amountByAirline[code] ?? 0), rowIndex, 3 + columnIndex, false, "right");
         });
 
         drawCell(formatAmount(row.total), rowIndex, 3 + airlineColumns.length, false, "right");
@@ -554,8 +559,8 @@ export async function GET(request: NextRequest) {
       drawCell("TOTAL GENERAL", totalRowIndex, 1, true, "left");
       drawCell(String(grandTotal.tickets), totalRowIndex, 2, true, "right");
 
-      airlineColumns.forEach((column, columnIndex) => {
-        drawCell(formatAmount(grandTotal.amountByAirline[column.key] ?? 0), totalRowIndex, 3 + columnIndex, true, "right");
+      airlineColumns.forEach((code, columnIndex) => {
+        drawCell(formatAmount(grandTotal.amountByAirline[code] ?? 0), totalRowIndex, 3 + columnIndex, true, "right");
       });
 
       drawCell(formatAmount(grandTotal.total), totalRowIndex, 3 + airlineColumns.length, true, "right");
