@@ -107,6 +107,7 @@ export async function POST(request: NextRequest) {
     where: {
       id: { not: me.id },
       role: "ADMIN",
+      jobTitle: "DIRECTION_GENERALE",
     },
     select: { id: true },
     take: 160,
