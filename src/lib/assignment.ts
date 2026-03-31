@@ -52,7 +52,7 @@ export function assignmentCapabilities(jobTitle: string) {
 }
 
 export function canSellTickets(jobTitle: string) {
-  return jobTitle === "COMMERCIAL" || jobTitle === "DIRECTION_GENERALE";
+  return Boolean(jobTitle && jobTitle.trim().length > 0);
 }
 
 export function canImportTicketWorkbook(role: string, explicitPermission?: boolean | null) {
