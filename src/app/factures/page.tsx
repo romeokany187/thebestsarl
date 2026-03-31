@@ -6,6 +6,7 @@ import { invoiceNumberFromTicket } from "@/lib/invoice";
 export const dynamic = "force-dynamic";
 
 type SearchParams = {
+  month?: string;
   startDate?: string;
   endDate?: string;
   q?: string;
@@ -19,13 +20,33 @@ type SearchParams = {
 
 function dateRangeFromParams(params: SearchParams) {
   const now = new Date();
+  const defaultMonth = now.toISOString().slice(0, 7);
+  const rawMonth = params.month?.match(/^(\d{4})-(\d{2})$/) ? params.month : defaultMonth;
+  const monthMatch = rawMonth.match(/^(\d{4})-(\d{2})$/);
+
+  if (monthMatch) {
+    const year = Number.parseInt(monthMatch[1], 10);
+    const month = Number.parseInt(monthMatch[2], 10) - 1;
+    const safeMonth = Math.max(0, Math.min(11, month));
+    const start = new Date(Date.UTC(year, safeMonth, 1, 0, 0, 0, 0));
+    const end = new Date(Date.UTC(year, safeMonth + 1, 1, 0, 0, 0, 0));
+    const endInclusive = new Date(end.getTime() - 1).toISOString().slice(0, 10);
+    return {
+      monthRaw: rawMonth,
+      start,
+      end,
+      startRaw: start.toISOString().slice(0, 10),
+      endRaw: endInclusive,
+    };
+  }
+
   const defaultDay = now.toISOString().slice(0, 10);
   const startRaw = params.startDate ?? defaultDay;
   const endRaw = params.endDate ?? startRaw;
   const start = new Date(`${startRaw}T00:00:00.000Z`);
   const end = new Date(`${endRaw}T00:00:00.000Z`);
   end.setUTCDate(end.getUTCDate() + 1);
-  return { start, end, startRaw, endRaw };
+  return { monthRaw: "", start, end, startRaw, endRaw };
 }
 
 function parseOptionalAmount(value?: string) {
@@ -56,7 +77,7 @@ export default async function FacturesPage({
 }) {
   const { role } = await requirePageModuleAccess("invoices", ["ADMIN", "MANAGER", "EMPLOYEE", "ACCOUNTANT"]);
   const resolvedSearchParams = (await searchParams) ?? {};
-  const { start, end, startRaw, endRaw } = dateRangeFromParams(resolvedSearchParams);
+  const { monthRaw, start, end, startRaw, endRaw } = dateRangeFromParams(resolvedSearchParams);
   const query = resolvedSearchParams.q?.trim() ?? "";
   const selectedAirlineId = resolvedSearchParams.airlineId && resolvedSearchParams.airlineId !== "ALL"
     ? resolvedSearchParams.airlineId
@@ -173,6 +194,10 @@ export default async function FacturesPage({
 
       <section className="mb-6 rounded-2xl border border-black/10 bg-white p-4 dark:border-white/10 dark:bg-zinc-900">
         <form method="GET" className="grid gap-3 lg:grid-cols-4 lg:items-end">
+          <div>
+            <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-black/60 dark:text-white/60">Mois</label>
+            <input type="month" name="month" defaultValue={monthRaw} className="w-full rounded-md border border-black/15 bg-white px-3 py-2 text-sm dark:border-white/15 dark:bg-zinc-900" />
+          </div>
           <div>
             <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-black/60 dark:text-white/60">Du</label>
             <input type="date" name="startDate" defaultValue={startRaw} className="w-full rounded-md border border-black/15 bg-white px-3 py-2 text-sm dark:border-white/15 dark:bg-zinc-900" />
