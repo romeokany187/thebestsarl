@@ -8,6 +8,7 @@ import { CommissionCalculationStatus, CommissionMode } from "@prisma/client";
 import { ensureAirlineCatalog } from "@/lib/airline-catalog";
 import { Prisma } from "@prisma/client";
 import { canSellTickets } from "@/lib/assignment";
+import { invoiceNumberFromTicket } from "@/lib/invoice";
 
 function clamp(value: number, min: number, max: number) {
   return Math.max(min, Math.min(max, value));
@@ -224,7 +225,15 @@ export async function POST(request: NextRequest) {
       return created;
     });
 
-    return NextResponse.json({ data: ticket }, { status: 201 });
+    const invoiceNumber = invoiceNumberFromTicket(ticket.ticketNumber, ticket.soldAt);
+
+    return NextResponse.json({
+      data: ticket,
+      invoice: {
+        number: invoiceNumber,
+        pdfUrl: `/api/invoices/${ticket.id}/pdf`,
+      },
+    }, { status: 201 });
   } catch (error) {
     console.error("POST /api/tickets failed", error);
 

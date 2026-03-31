@@ -14,6 +14,7 @@ export type AppModule =
   | "attendance"
   | "sales"
   | "tickets"
+  | "invoices"
   | "payments"
   | "procurement"
   | "archives"
@@ -85,6 +86,14 @@ export function hasModuleAccess(params: {
       || jobTitle === "CAISSIERE"
       || jobTitle === "DIRECTION_GENERALE"
         || teamIncludes(teamName, ["VENTE", "COMMERCIAL", "AUDIT", "COMPTA", "CAISSE"]);
+  }
+
+  if (module === "invoices") {
+    return jobTitle === "COMMERCIAL"
+      || jobTitle === "COMPTABLE"
+      || jobTitle === "CAISSIERE"
+      || jobTitle === "DIRECTION_GENERALE"
+      || teamIncludes(teamName, ["VENTE", "COMMERCIAL", "COMPTA", "CAISSE"]);
   }
 
   if (module === "payments") {
