@@ -140,6 +140,8 @@ export function ProcurementHub({
   const [stockStatus, setStockStatus] = useState("");
   const [approvalStatus, setApprovalStatus] = useState("");
   const [stockReportMonth, setStockReportMonth] = useState(defaultReportMonth);
+  const [needStatusFilter, setNeedStatusFilter] = useState<"ALL" | NeedStatus>("ALL");
+  const [needSearch, setNeedSearch] = useState("");
   const [needLines, setNeedLines] = useState<NeedLineForm[]>([
     { designation: "", description: "", quantity: "1", unitPrice: "0" },
   ]);
@@ -175,6 +177,28 @@ export function ProcurementHub({
     () => stockItems.filter((item) => item.currentQuantity <= 5),
     [stockItems],
   );
+
+  const visibleNeeds = useMemo(() => {
+    const search = needSearch.trim().toLowerCase();
+    return needs.filter((need) => {
+      const statusOk = needStatusFilter === "ALL" || need.status === needStatusFilter;
+      if (!statusOk) return false;
+      if (!search) return true;
+
+      const meta = parseNeedMeta(need.details);
+      const haystack = [
+        need.code ?? "",
+        need.title,
+        need.requester.name,
+        meta.beneficiaryPersonName ?? "",
+        meta.beneficiaryTeam ? BENEFICIARY_LABEL[meta.beneficiaryTeam] : "",
+      ]
+        .join(" ")
+        .toLowerCase();
+
+      return haystack.includes(search);
+    });
+  }, [needs, needSearch, needStatusFilter]);
 
   function updateNeedLine(index: number, key: keyof NeedLineForm, value: string) {
     setNeedLines((prev) => prev.map((line, lineIndex) => (lineIndex === index ? { ...line, [key]: value } : line)));
@@ -512,6 +536,26 @@ export function ProcurementHub({
 
       <section className="rounded-xl border border-black/10 bg-white p-4 dark:border-white/10 dark:bg-zinc-900">
         <h2 className="text-base font-semibold">Suivi des états de besoin</h2>
+        <div className="mt-3 grid gap-2 sm:grid-cols-[220px,1fr]">
+          <select
+            value={needStatusFilter}
+            onChange={(event) => setNeedStatusFilter(event.target.value as "ALL" | NeedStatus)}
+            className="rounded-md border px-3 py-2 text-sm"
+          >
+            <option value="ALL">Tous les statuts</option>
+            <option value="SUBMITTED">Soumis</option>
+            <option value="APPROVED">Approuvés</option>
+            <option value="REJECTED">Rejetés</option>
+            <option value="DRAFT">Brouillons</option>
+          </select>
+          <input
+            value={needSearch}
+            onChange={(event) => setNeedSearch(event.target.value)}
+            placeholder="Rechercher: référence, objet, demandeur, bénéficiaire..."
+            className="rounded-md border px-3 py-2 text-sm"
+          />
+        </div>
+
         <div className="mt-3 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
           <article className="rounded-lg border border-black/10 bg-black/3 p-3 dark:border-white/10 dark:bg-white/3">
             <p className="text-[11px] uppercase tracking-wide text-black/60 dark:text-white/60">Total EDB</p>
@@ -548,7 +592,7 @@ export function ProcurementHub({
               </tr>
             </thead>
             <tbody>
-              {needs.slice(0, 30).map((need) => (
+              {visibleNeeds.slice(0, 30).map((need) => (
                 (() => {
                   const meta = parseNeedMeta(need.details);
                   return (
@@ -592,10 +636,10 @@ export function ProcurementHub({
                   );
                 })()
               ))}
-              {needs.length === 0 ? (
+              {visibleNeeds.length === 0 ? (
                 <tr>
                   <td colSpan={10} className="px-3 py-8 text-center text-sm text-black/60 dark:text-white/60">
-                    Aucun état de besoin pour le moment.
+                    Aucun état de besoin sur ce filtre.
                   </td>
                 </tr>
               ) : null}

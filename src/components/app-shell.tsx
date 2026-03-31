@@ -73,6 +73,12 @@ const links = [
     module: "settings" as AppModule,
     roles: ["ADMIN", "MANAGER", "EMPLOYEE", "ACCOUNTANT"] as AppRole[],
   },
+  {
+    href: "/audit",
+    label: "Audit",
+    module: "audit" as AppModule,
+    roles: ["ADMIN", "MANAGER", "EMPLOYEE", "ACCOUNTANT"] as AppRole[],
+  },
   { href: "/admin", label: "Admin", module: "admin" as AppModule, roles: ["ADMIN"] as AppRole[] },
 ];
 
@@ -102,7 +108,7 @@ export async function AppShell({
 
   return (
     <div className="min-h-screen bg-background text-foreground">
-      <div className="mx-auto flex min-h-screen max-w-[1600px]">
+      <div className="mx-auto flex min-h-screen max-w-400">
         <aside className="sticky top-0 hidden h-screen w-72 shrink-0 overflow-y-auto border-r border-black/10 bg-white/70 p-5 backdrop-blur md:block dark:border-white/10 dark:bg-zinc-950/70">
           <div className="mb-6">
             <Link href="/" className="block rounded-lg p-1 transition hover:bg-black/5 dark:hover:bg-white/10">

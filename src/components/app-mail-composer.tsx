@@ -108,7 +108,7 @@ export function AppMailComposer({ recipients, currentUserId }: Props) {
       </div>
 
       {isOpen ? (
-        <section className="fixed bottom-20 right-5 z-50 w-[92vw] max-w-[390px] overflow-hidden rounded-2xl border border-black/15 bg-white p-4 shadow-2xl dark:border-white/15 dark:bg-zinc-900">
+        <section className="fixed bottom-20 right-5 z-50 w-[92vw] max-w-97.5 overflow-hidden rounded-2xl border border-black/15 bg-white p-4 shadow-2xl dark:border-white/15 dark:bg-zinc-900">
           <div className="flex max-h-[75vh] min-h-0 flex-col">
           <div className="mb-3 flex items-center justify-between gap-2">
             <h2 className="text-base font-semibold">Nouvelle conversation</h2>

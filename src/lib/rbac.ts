@@ -101,6 +101,11 @@ export function hasModuleAccess(params: {
     return true;
   }
 
+  if (module === "audit") {
+    return jobTitle === "AUDITEUR"
+      || teamIncludes(teamName, ["AUDIT"]);
+  }
+
   return false;
 }
 
