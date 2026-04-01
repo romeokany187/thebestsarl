@@ -4,6 +4,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/auth";
 import { LogoutButton } from "@/components/logout-button";
 import { ThemeToggle } from "@/components/theme-toggle";
+import { prisma } from "@/lib/prisma";
 
 const links = [
   { href: "/", label: "Dashboard", module: "home" as AppModule, roles: ["ADMIN", "MANAGER", "EMPLOYEE", "ACCOUNTANT"] as AppRole[] },
@@ -98,6 +99,14 @@ export async function AppShell({
   accessNote?: string;
 }) {
   const session = await getServerSession(authOptions);
+  const unreadNotifications = session?.user?.id
+    ? await prisma.userNotification.count({
+        where: {
+          userId: session.user.id,
+          isRead: false,
+        },
+      })
+    : 0;
   const visibleLinks = links.filter((link) => {
     if (!role || !link.roles.includes(role)) {
       return false;
@@ -134,9 +143,14 @@ export async function AppShell({
               <Link
                 key={link.href}
                 href={link.href}
-                className="block rounded-lg px-3 py-2 text-sm font-medium text-black/75 transition hover:bg-black/5 hover:text-black dark:text-white/75 dark:hover:bg-white/10 dark:hover:text-white"
+                className="flex items-center justify-between rounded-lg px-3 py-2 text-sm font-medium text-black/75 transition hover:bg-black/5 hover:text-black dark:text-white/75 dark:hover:bg-white/10 dark:hover:text-white"
               >
-                {link.label}
+                <span>{link.label}</span>
+                {link.module === "profile" && unreadNotifications > 0 ? (
+                  <span className="rounded-full bg-red-600 px-2 py-0.5 text-[10px] font-semibold text-white">
+                    {unreadNotifications > 99 ? "99+" : unreadNotifications}
+                  </span>
+                ) : null}
               </Link>
             ))}
           </nav>
@@ -154,6 +168,17 @@ export async function AppShell({
                   {roleLabel}
                 </span>
               ) : null}
+              <Link
+                href="/profile"
+                className="inline-flex items-center gap-2 rounded-full border border-black/15 px-3 py-1 text-xs font-semibold dark:border-white/20"
+              >
+                <span>Inbox</span>
+                {unreadNotifications > 0 ? (
+                  <span className="rounded-full bg-red-600 px-1.5 py-0.5 text-[10px] font-semibold text-white">
+                    {unreadNotifications > 99 ? "99+" : unreadNotifications}
+                  </span>
+                ) : null}
+              </Link>
               <ThemeToggle />
               {session?.user?.email ? (
                 <div className="rounded-xl border border-black/10 bg-white px-3 py-1.5 text-right dark:border-white/10 dark:bg-zinc-900">
@@ -172,6 +197,7 @@ export async function AppShell({
                   className="shrink-0 rounded-full border border-black/10 bg-white px-3 py-1.5 text-xs font-semibold text-black/75 dark:border-white/15 dark:bg-zinc-900 dark:text-white/75"
                 >
                   {link.label}
+                  {link.module === "profile" && unreadNotifications > 0 ? ` (${unreadNotifications > 99 ? "99+" : unreadNotifications})` : ""}
                 </Link>
               ))}
             </nav>

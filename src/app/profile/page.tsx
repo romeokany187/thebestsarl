@@ -24,6 +24,14 @@ export default async function ProfilePage() {
       })
     : null;
 
+  await prisma.userNotification.updateMany({
+    where: {
+      userId,
+      isRead: false,
+    },
+    data: { isRead: true },
+  });
+
   const notifications = await prisma.userNotification.findMany({
     where: { userId },
     orderBy: { createdAt: "desc" },
