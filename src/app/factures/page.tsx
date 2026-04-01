@@ -1,7 +1,7 @@
 import { AppShell } from "@/components/app-shell";
 import { prisma } from "@/lib/prisma";
 import { requirePageModuleAccess } from "@/lib/rbac";
-import { invoiceNumberFromTicket } from "@/lib/invoice";
+import { invoiceNumberFromChronology } from "@/lib/invoice";
 
 export const dynamic = "force-dynamic";
 
@@ -23,7 +23,6 @@ function dateRangeFromParams(params: SearchParams) {
     const safeMonth = Math.max(0, Math.min(11, month));
     const start = new Date(Date.UTC(year, safeMonth, 1, 0, 0, 0, 0));
     const end = new Date(Date.UTC(year, safeMonth + 1, 1, 0, 0, 0, 0));
-    const endInclusive = new Date(end.getTime() - 1).toISOString().slice(0, 10);
     return {
       monthRaw: rawMonth,
       start,
@@ -72,7 +71,11 @@ export default async function FacturesPage({
     ? resolvedSearchParams.status
     : "ALL";
 
-  const [airlines, tickets] = await Promise.all([
+  const selectedYear = start.getUTCFullYear();
+  const yearStart = new Date(Date.UTC(selectedYear, 0, 1, 0, 0, 0, 0));
+  const yearEnd = new Date(Date.UTC(selectedYear + 1, 0, 1, 0, 0, 0, 0));
+
+  const [airlines, tickets, yearTickets] = await Promise.all([
     prisma.airline.findMany({
       select: { id: true, code: true, name: true },
       orderBy: { name: "asc" },
@@ -84,16 +87,37 @@ export default async function FacturesPage({
     },
     include: {
       airline: { select: { code: true, name: true } },
-      seller: { select: { name: true } },
+      seller: { select: { name: true, team: { select: { name: true } } } },
       payments: { select: { amount: true } },
     },
     orderBy: { soldAt: "desc" },
     take: 2000,
   }),
+    prisma.ticketSale.findMany({
+      where: {
+        soldAt: { gte: yearStart, lt: yearEnd },
+      },
+      select: {
+        id: true,
+        soldAt: true,
+      },
+      orderBy: [{ soldAt: "asc" }, { id: "asc" }],
+      take: 10000,
+    }),
   ]);
 
+  const sequenceByTicketId = new Map<string, number>();
+  yearTickets.forEach((ticket, index) => {
+    sequenceByTicketId.set(ticket.id, index + 1);
+  });
+
   const invoices = tickets.map((ticket) => {
-    const invoiceNumber = invoiceNumberFromTicket(ticket.ticketNumber, ticket.soldAt);
+    const sequence = sequenceByTicketId.get(ticket.id) ?? 1;
+    const invoiceNumber = invoiceNumberFromChronology({
+      soldAt: ticket.soldAt,
+      sellerTeamName: ticket.seller?.team?.name ?? null,
+      sequence,
+    });
     const paidAmount = ticket.payments.reduce((sum, payment) => sum + payment.amount, 0);
     const balance = Math.max(0, ticket.amount - paidAmount);
     const status = statusFromAmounts(ticket.amount, paidAmount);

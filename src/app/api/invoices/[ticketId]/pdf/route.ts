@@ -5,7 +5,7 @@ import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { prisma } from "@/lib/prisma";
 import { requireApiModuleAccess } from "@/lib/rbac";
-import { invoiceFileName, invoiceNumberFromTicket } from "@/lib/invoice";
+import { invoiceFileName, invoiceNumberFromChronology } from "@/lib/invoice";
 
 type RouteContext = {
   params: Promise<{ ticketId: string }>;
@@ -51,7 +51,7 @@ export async function GET(request: NextRequest, context: RouteContext) {
     where: { id: ticketId },
     include: {
       airline: { select: { code: true, name: true } },
-      seller: { select: { name: true } },
+      seller: { select: { name: true, team: { select: { name: true } } } },
       payments: { select: { amount: true } },
     },
   });
@@ -60,7 +60,23 @@ export async function GET(request: NextRequest, context: RouteContext) {
     return NextResponse.json({ error: "Billet introuvable." }, { status: 404 });
   }
 
-  const invoiceNumber = invoiceNumberFromTicket(ticket.ticketNumber, ticket.soldAt);
+  const year = ticket.soldAt.getUTCFullYear();
+  const yearStart = new Date(Date.UTC(year, 0, 1, 0, 0, 0, 0));
+  const yearEnd = new Date(Date.UTC(year + 1, 0, 1, 0, 0, 0, 0));
+  const sequence = await prisma.ticketSale.count({
+    where: {
+      soldAt: { gte: yearStart, lt: yearEnd },
+      OR: [
+        { soldAt: { lt: ticket.soldAt } },
+        { soldAt: ticket.soldAt, id: { lte: ticket.id } },
+      ],
+    },
+  });
+  const invoiceNumber = invoiceNumberFromChronology({
+    soldAt: ticket.soldAt,
+    sellerTeamName: ticket.seller?.team?.name ?? null,
+    sequence,
+  });
   const paidAmount = ticket.payments.reduce((sum, payment) => sum + payment.amount, 0);
   const balance = Math.max(0, ticket.amount - paidAmount);
 

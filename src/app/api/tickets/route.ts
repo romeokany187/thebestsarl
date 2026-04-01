@@ -8,7 +8,7 @@ import { CommissionCalculationStatus, CommissionMode } from "@prisma/client";
 import { ensureAirlineCatalog } from "@/lib/airline-catalog";
 import { Prisma } from "@prisma/client";
 import { canSellTickets } from "@/lib/assignment";
-import { invoiceNumberFromTicket } from "@/lib/invoice";
+import { invoiceNumberFromChronology } from "@/lib/invoice";
 
 function clamp(value: number, min: number, max: number) {
   return Math.max(min, Math.min(max, value));
@@ -228,7 +228,23 @@ export async function POST(request: NextRequest) {
       return created;
     });
 
-    const invoiceNumber = invoiceNumberFromTicket(ticket.ticketNumber, ticket.soldAt);
+    const year = ticket.soldAt.getUTCFullYear();
+    const yearStart = new Date(Date.UTC(year, 0, 1, 0, 0, 0, 0));
+    const yearEnd = new Date(Date.UTC(year + 1, 0, 1, 0, 0, 0, 0));
+    const sequence = await prisma.ticketSale.count({
+      where: {
+        soldAt: { gte: yearStart, lt: yearEnd },
+        OR: [
+          { soldAt: { lt: ticket.soldAt } },
+          { soldAt: ticket.soldAt, id: { lte: ticket.id } },
+        ],
+      },
+    });
+    const invoiceNumber = invoiceNumberFromChronology({
+      soldAt: ticket.soldAt,
+      sellerTeamName: access.session.user.teamName ?? null,
+      sequence,
+    });
 
     return NextResponse.json({
       data: ticket,
