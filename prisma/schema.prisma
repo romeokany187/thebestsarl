@@ -90,6 +90,7 @@ enum CashOperationCategory {
   UTILITY_PAYMENT
   TRANSPORT_PAYMENT
   OTHER_EXPENSE
+  FX_CONVERSION
 }
 
 enum TravelClass {

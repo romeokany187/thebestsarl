@@ -290,6 +290,7 @@ export const cashOperationCreateSchema = z.object({
     "UTILITY_PAYMENT",
     "TRANSPORT_PAYMENT",
     "OTHER_EXPENSE",
+    "FX_CONVERSION",
   ]),
   amount: z.number().positive(),
   currency: z.string().trim().length(3).optional(),
@@ -298,4 +299,13 @@ export const cashOperationCreateSchema = z.object({
   method: z.string().trim().min(2).max(60),
   reference: z.string().trim().max(180).optional(),
   description: z.string().trim().min(5).max(500),
+});
+
+export const cashConversionSchema = z.object({
+  occurredAt: z.coerce.date().optional(),
+  sourceCurrency: z.enum(["USD", "CDF"]),
+  sourceAmount: z.number().positive(),
+  fxRateUsdToCdf: z.number().positive(),
+  reference: z.string().trim().max(180).optional(),
+  description: z.string().trim().min(5).max(500).optional(),
 });

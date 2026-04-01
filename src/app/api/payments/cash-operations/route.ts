@@ -115,15 +115,49 @@ export async function POST(request: NextRequest) {
           },
           0,
         );
+
+        const signedUsdFromOps = previousCashOperations.reduce(
+          (sum: number, op: { direction: string; amount: number; currency?: string }) => {
+            const opCurrency = (op.currency ?? "USD").toUpperCase();
+            if (opCurrency !== "USD") return sum;
+            return sum + (op.direction === "INFLOW" ? op.amount : -op.amount);
+          },
+          0,
+        );
+
+        const signedCdfFromOps = previousCashOperations.reduce(
+          (sum: number, op: { direction: string; amount: number; currency?: string }) => {
+            const opCurrency = (op.currency ?? "USD").toUpperCase();
+            if (opCurrency !== "CDF") return sum;
+            return sum + (op.direction === "INFLOW" ? op.amount : -op.amount);
+          },
+          0,
+        );
+
         const availableBalance = (ticketInflows._sum.amount ?? 0) + cashSigned;
+        const availableUsd = (ticketInflows._sum.amount ?? 0) + signedUsdFromOps;
+        const availableCdf = signedCdfFromOps;
 
         if (normalizedAmountUsd > availableBalance + 0.0001) {
           throw new Error(`INSUFFICIENT_CASH:${availableBalance.toFixed(2)}`);
         }
 
+        if (currency === "USD" && data.amount > availableUsd + 0.0001) {
+          throw new Error(`INSUFFICIENT_CURRENCY:USD:${availableUsd.toFixed(2)}`);
+        }
+
+        if (currency === "CDF" && data.amount > availableCdf + 0.0001) {
+          throw new Error(`INSUFFICIENT_CURRENCY:CDF:${availableCdf.toFixed(2)}`);
+        }
+
+        if (data.category === "FX_CONVERSION") {
+          throw new Error("CONVERSION_NOT_ALLOWED_HERE");
+        }
+
         const sameDayOutflowOperations = await (tx as unknown as { cashOperation: any }).cashOperation.findMany({
           where: {
             direction: "OUTFLOW",
+            category: { not: "FX_CONVERSION" },
             occurredAt: { gte: dayStart, lt: dayEnd },
           },
           select: {
@@ -207,6 +241,21 @@ export async function POST(request: NextRequest) {
         {
           error: `Plafond journalier dépassé: cumul ${projected} USD pour un plafond autorisé de ${cap} USD. Alertez le comptable avant tout nouveau décaissement.`,
         },
+        { status: 400 },
+      );
+    }
+    if (error instanceof Error && error.message.startsWith("INSUFFICIENT_CURRENCY:")) {
+      const [, missingCurrency, available] = error.message.split(":");
+      return NextResponse.json(
+        {
+          error: `Solde ${missingCurrency} insuffisant: disponible ${available} ${missingCurrency}, sortie demandée ${data.amount.toFixed(2)} ${currency}. Passez d'abord une écriture de conversion si nécessaire.`,
+        },
+        { status: 400 },
+      );
+    }
+    if (error instanceof Error && error.message === "CONVERSION_NOT_ALLOWED_HERE") {
+      return NextResponse.json(
+        { error: "Utilisez l'opération dédiée de conversion USD/CDF pour les écritures de conversion." },
         { status: 400 },
       );
     }
