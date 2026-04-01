@@ -32,8 +32,8 @@ export function CashOperationForm() {
   const [direction, setDirection] = useState<"INFLOW" | "OUTFLOW">("INFLOW");
   const [category, setCategory] = useState<string>("OTHER_SALE");
   const [amount, setAmount] = useState<string>("");
-  const [currency, setCurrency] = useState<string>("USD");
-  const [fxRateToUsd, setFxRateToUsd] = useState<string>("1");
+  const [currency, setCurrency] = useState<"USD" | "CDF">("USD");
+  const [fxRateUsdToCdf, setFxRateUsdToCdf] = useState<string>("2800");
   const [method, setMethod] = useState<string>("CASH");
   const [reference, setReference] = useState<string>("");
   const [description, setDescription] = useState<string>("");
@@ -62,11 +62,11 @@ export function CashOperationForm() {
       return;
     }
 
-    const normalizedCurrency = currency.trim().toUpperCase();
-    const numericFx = Number.parseFloat(fxRateToUsd);
+    const normalizedCurrency = currency;
+    const numericUsdToCdf = Number.parseFloat(fxRateUsdToCdf);
 
-    if (normalizedCurrency !== "USD" && (!Number.isFinite(numericFx) || numericFx <= 0)) {
-      setError("Saisissez un taux du jour valide vers USD pour cette devise.");
+    if (!Number.isFinite(numericUsdToCdf) || numericUsdToCdf <= 0) {
+      setError("Saisissez un taux du jour valide (1 USD = X CDF).");
       setLoading(false);
       return;
     }
@@ -85,7 +85,7 @@ export function CashOperationForm() {
         category,
         amount: numericAmount,
         currency: normalizedCurrency,
-        fxRateToUsd: Number.isFinite(numericFx) && numericFx > 0 ? numericFx : 1,
+        fxRateUsdToCdf: numericUsdToCdf,
         method: method.trim(),
         reference: reference.trim() || undefined,
         description: description.trim(),
@@ -158,24 +158,26 @@ export function CashOperationForm() {
 
         <div>
           <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-black/60 dark:text-white/60">Devise</label>
-          <input
+          <select
             value={currency}
-            onChange={(event) => setCurrency(event.target.value)}
-            maxLength={3}
+            onChange={(event) => setCurrency(event.target.value as "USD" | "CDF")}
             className="w-full rounded-md border border-black/15 bg-white px-3 py-2 text-sm uppercase dark:border-white/15 dark:bg-zinc-900"
-          />
+          >
+            <option value="USD">USD</option>
+            <option value="CDF">CDF</option>
+          </select>
         </div>
 
         <div>
-          <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-black/60 dark:text-white/60">Taux du jour (vers USD)</label>
+          <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-black/60 dark:text-white/60">Taux du jour (1 USD = X CDF)</label>
           <input
             type="number"
-            step="0.0001"
-            min="0.0001"
-            value={fxRateToUsd}
-            onChange={(event) => setFxRateToUsd(event.target.value)}
+            step="0.01"
+            min="0.01"
+            value={fxRateUsdToCdf}
+            onChange={(event) => setFxRateUsdToCdf(event.target.value)}
             className="w-full rounded-md border border-black/15 bg-white px-3 py-2 text-sm dark:border-white/15 dark:bg-zinc-900"
-            placeholder="1.0000"
+            placeholder="2800"
           />
         </div>
 

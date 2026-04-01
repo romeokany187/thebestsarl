@@ -370,7 +370,9 @@ model CashOperation {
   amount       Float
   currency     String                @default("USD")
   fxRateToUsd  Float?
+  fxRateUsdToCdf Float?
   amountUsd    Float?
+  amountCdf    Float?
   method       String
   reference    String?
   description  String

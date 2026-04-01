@@ -22,9 +22,14 @@ function utcDayBounds(date: Date): { start: Date; end: Date } {
   return { start, end };
 }
 
-function amountToUsd(amount: number, currency: string, fxRateToUsd: number): number {
+function amountToUsd(amount: number, currency: string, fxRateUsdToCdf: number): number {
   if (currency === "USD") return amount;
-  return amount * fxRateToUsd;
+  return amount / fxRateUsdToCdf;
+}
+
+function amountToCdf(amount: number, currency: string, fxRateUsdToCdf: number): number {
+  if (currency === "CDF") return amount;
+  return amount * fxRateUsdToCdf;
 }
 
 export async function POST(request: NextRequest) {
@@ -49,16 +54,23 @@ export async function POST(request: NextRequest) {
   const data = parsed.data;
   const occurredAt = data.occurredAt ?? new Date();
   const currency = (data.currency ?? "USD").toUpperCase();
-  const fxRateToUsd = currency === "USD" ? 1 : data.fxRateToUsd;
+  if (currency !== "USD" && currency !== "CDF") {
+    return NextResponse.json({ error: "Devise non supportée. Utilisez USD ou CDF." }, { status: 400 });
+  }
 
-  if (currency !== "USD" && (!fxRateToUsd || fxRateToUsd <= 0)) {
+  const fxRateUsdToCdf = data.fxRateUsdToCdf
+    ?? (data.fxRateToUsd && data.fxRateToUsd > 0 ? 1 / data.fxRateToUsd : undefined)
+    ?? parsePositiveNumber(process.env.CASH_DEFAULT_USD_TO_CDF_RATE, 2800);
+
+  if (!fxRateUsdToCdf || fxRateUsdToCdf <= 0) {
     return NextResponse.json(
-      { error: "Le taux du jour vers USD est obligatoire pour une opération en devise non-USD." },
+      { error: "Le taux du jour (1 USD = X CDF) est obligatoire et doit être positif." },
       { status: 400 },
     );
   }
 
-  const normalizedAmountUsd = amountToUsd(data.amount, currency, fxRateToUsd ?? 1);
+  const normalizedAmountUsd = amountToUsd(data.amount, currency, fxRateUsdToCdf);
+  const normalizedAmountCdf = amountToCdf(data.amount, currency, fxRateUsdToCdf);
   const singleOutflowAlertLimit = parsePositiveNumber(process.env.CASH_SINGLE_OUTFLOW_ALERT_LIMIT_USD, DEFAULT_SINGLE_OUTFLOW_ALERT_LIMIT_USD);
   const dailyOutflowCap = parsePositiveNumber(process.env.CASH_DAILY_OUTFLOW_CAP_USD, DEFAULT_DAILY_OUTFLOW_CAP_USD);
   const { start: dayStart, end: dayEnd } = utcDayBounds(occurredAt);
@@ -88,17 +100,17 @@ export async function POST(request: NextRequest) {
             amount: true,
             currency: true,
             amountUsd: true,
-            fxRateToUsd: true,
+            fxRateUsdToCdf: true,
           },
           take: 100000,
         });
 
         const cashSigned = previousCashOperations.reduce(
-          (sum: number, op: { direction: string; amount: number; currency?: string; amountUsd?: number | null; fxRateToUsd?: number | null }) => {
+          (sum: number, op: { direction: string; amount: number; currency?: string; amountUsd?: number | null; fxRateUsdToCdf?: number | null }) => {
             const opCurrency = (op.currency ?? "USD").toUpperCase();
             const opAmountUsd = typeof op.amountUsd === "number"
               ? op.amountUsd
-              : amountToUsd(op.amount, opCurrency, op.fxRateToUsd ?? 1);
+              : amountToUsd(op.amount, opCurrency, op.fxRateUsdToCdf ?? fxRateUsdToCdf);
             return sum + (op.direction === "INFLOW" ? opAmountUsd : -opAmountUsd);
           },
           0,
@@ -118,17 +130,17 @@ export async function POST(request: NextRequest) {
             amount: true,
             currency: true,
             amountUsd: true,
-            fxRateToUsd: true,
+            fxRateUsdToCdf: true,
           },
           take: 100000,
         });
 
         const existingDailyOutflowUsd = sameDayOutflowOperations.reduce(
-          (sum: number, op: { amount: number; currency?: string; amountUsd?: number | null; fxRateToUsd?: number | null }) => {
+          (sum: number, op: { amount: number; currency?: string; amountUsd?: number | null; fxRateUsdToCdf?: number | null }) => {
             const opCurrency = (op.currency ?? "USD").toUpperCase();
             const opAmountUsd = typeof op.amountUsd === "number"
               ? op.amountUsd
-              : amountToUsd(op.amount, opCurrency, op.fxRateToUsd ?? 1);
+              : amountToUsd(op.amount, opCurrency, op.fxRateUsdToCdf ?? fxRateUsdToCdf);
             return sum + opAmountUsd;
           },
           0,
@@ -141,7 +153,7 @@ export async function POST(request: NextRequest) {
         }
 
         if (normalizedAmountUsd >= singleOutflowAlertLimit) {
-          thresholdAlertMessage = `Alerte seuil décaissement: sortie ${data.amount.toFixed(2)} ${currency} (taux ${fxRateToUsd?.toFixed(4)} -> ${normalizedAmountUsd.toFixed(2)} USD), seuil ${singleOutflowAlertLimit.toFixed(2)} USD.`;
+          thresholdAlertMessage = `Alerte seuil décaissement: sortie ${data.amount.toFixed(2)} ${currency} (taux 1 USD = ${fxRateUsdToCdf.toFixed(2)} CDF, eq ${normalizedAmountUsd.toFixed(2)} USD), seuil ${singleOutflowAlertLimit.toFixed(2)} USD.`;
         }
       }
 
@@ -152,8 +164,10 @@ export async function POST(request: NextRequest) {
           category: data.category,
           amount: data.amount,
           currency,
-          fxRateToUsd,
+          fxRateToUsd: 1 / fxRateUsdToCdf,
+          fxRateUsdToCdf,
           amountUsd: normalizedAmountUsd,
+          amountCdf: normalizedAmountCdf,
           method: data.method,
           reference: data.reference,
           description: data.description,
@@ -167,7 +181,9 @@ export async function POST(request: NextRequest) {
           amount: true,
           currency: true,
           fxRateToUsd: true,
+          fxRateUsdToCdf: true,
           amountUsd: true,
+          amountCdf: true,
           method: true,
           reference: true,
           description: true,
@@ -247,7 +263,8 @@ export async function POST(request: NextRequest) {
             `Catégorie: ${operation.category}`,
             `Montant: ${operation.amount.toFixed(2)} ${operation.currency}`,
             `Équivalent USD: ${(operation.amountUsd ?? operation.amount).toFixed(2)} USD`,
-            `Taux du jour: ${operation.fxRateToUsd ?? 1}`,
+            `Équivalent CDF: ${(operation.amountCdf ?? operation.amount).toFixed(2)} CDF`,
+            `Taux du jour: 1 USD = ${(operation.fxRateUsdToCdf ?? fxRateUsdToCdf).toFixed(2)} CDF`,
             `Méthode: ${operation.method}`,
             `Référence: ${operation.reference ?? "-"}`,
             `Libellé: ${operation.description}`,
@@ -262,7 +279,8 @@ export async function POST(request: NextRequest) {
             <strong>Catégorie:</strong> ${operation.category}<br/>
             <strong>Montant:</strong> ${operation.amount.toFixed(2)} ${operation.currency}<br/>
             <strong>Équivalent USD:</strong> ${(operation.amountUsd ?? operation.amount).toFixed(2)} USD<br/>
-            <strong>Taux du jour:</strong> ${operation.fxRateToUsd ?? 1}<br/>
+            <strong>Équivalent CDF:</strong> ${(operation.amountCdf ?? operation.amount).toFixed(2)} CDF<br/>
+            <strong>Taux du jour:</strong> 1 USD = ${(operation.fxRateUsdToCdf ?? fxRateUsdToCdf).toFixed(2)} CDF<br/>
             <strong>Méthode:</strong> ${operation.method}<br/>
             <strong>Référence:</strong> ${operation.reference ?? "-"}<br/>
             <strong>Libellé:</strong> ${operation.description}<br/>
@@ -292,7 +310,9 @@ export async function POST(request: NextRequest) {
             amount: operation.amount,
             currency: operation.currency,
             fxRateToUsd: operation.fxRateToUsd,
+            fxRateUsdToCdf: operation.fxRateUsdToCdf,
             amountUsd: operation.amountUsd,
+            amountCdf: operation.amountCdf,
             threshold: singleOutflowAlertLimit,
             projectedDailyOutflowUsd,
             dailyCap: dailyOutflowCap,

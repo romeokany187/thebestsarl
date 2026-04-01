@@ -40,6 +40,7 @@ function normalizeCashAmountUsd(operation: {
   currency?: string | null;
   amountUsd?: number | null;
   fxRateToUsd?: number | null;
+  fxRateUsdToCdf?: number | null;
 }): number {
   if (typeof operation.amountUsd === "number") {
     return operation.amountUsd;
@@ -48,8 +49,8 @@ function normalizeCashAmountUsd(operation: {
   if (currency === "USD") {
     return operation.amount;
   }
-  const fx = operation.fxRateToUsd ?? 1;
-  return operation.amount * fx;
+  const rate = operation.fxRateUsdToCdf ?? (operation.fxRateToUsd && operation.fxRateToUsd > 0 ? 1 / operation.fxRateToUsd : 2800);
+  return operation.amount / rate;
 }
 
 export const dynamic = "force-dynamic";
@@ -161,6 +162,7 @@ export default async function PaymentsPage({
         currency: true,
         amountUsd: true,
         fxRateToUsd: true,
+        fxRateUsdToCdf: true,
       },
       take: 5000,
     }),
@@ -209,7 +211,7 @@ export default async function PaymentsPage({
 
   const ticketInflowsBefore = ticketPaymentsBeforeStart.reduce((sum, payment) => sum + payment.amount, 0);
   const cashOpsSignedBefore = cashOperationsBeforeStart.reduce(
-    (sum: number, operation: { direction: string; amount: number; currency?: string; amountUsd?: number; fxRateToUsd?: number }) => {
+    (sum: number, operation: { direction: string; amount: number; currency?: string; amountUsd?: number; fxRateToUsd?: number; fxRateUsdToCdf?: number }) => {
       const normalized = normalizeCashAmountUsd(operation);
       return sum + (operation.direction === "INFLOW" ? normalized : -normalized);
     },
@@ -219,10 +221,10 @@ export default async function PaymentsPage({
 
   const otherInflows = cashOperations
     .filter((operation: { direction: string }) => operation.direction === "INFLOW")
-    .reduce((sum: number, operation: { amount: number; currency?: string; amountUsd?: number; fxRateToUsd?: number }) => sum + normalizeCashAmountUsd(operation), 0);
+    .reduce((sum: number, operation: { amount: number; currency?: string; amountUsd?: number; fxRateToUsd?: number; fxRateUsdToCdf?: number }) => sum + normalizeCashAmountUsd(operation), 0);
   const cashOutflows = cashOperations
     .filter((operation: { direction: string }) => operation.direction === "OUTFLOW")
-    .reduce((sum: number, operation: { amount: number; currency?: string; amountUsd?: number; fxRateToUsd?: number }) => sum + normalizeCashAmountUsd(operation), 0);
+    .reduce((sum: number, operation: { amount: number; currency?: string; amountUsd?: number; fxRateToUsd?: number; fxRateUsdToCdf?: number }) => sum + normalizeCashAmountUsd(operation), 0);
 
   const grossInflows = totalPaid + otherInflows;
   const netCashVariation = grossInflows - cashOutflows;
@@ -436,7 +438,7 @@ export default async function PaymentsPage({
                         <td className="px-4 py-3">{operation.direction === "INFLOW" ? "Entrée" : "Sortie"}</td>
                         <td className="px-4 py-3">{operation.category}</td>
                         <td className="px-4 py-3">{operation.amount.toFixed(2)} {operation.currency}</td>
-                        <td className="px-4 py-3">{(operation.fxRateToUsd ?? 1).toFixed(4)}</td>
+                        <td className="px-4 py-3">{(operation.fxRateUsdToCdf ?? (operation.fxRateToUsd && operation.fxRateToUsd > 0 ? 1 / operation.fxRateToUsd : 2800)).toFixed(2)}</td>
                         <td className="px-4 py-3">{normalizeCashAmountUsd(operation).toFixed(2)} USD</td>
                         <td className="px-4 py-3">{operation.method}</td>
                         <td className="px-4 py-3">{operation.reference ?? "-"}</td>
