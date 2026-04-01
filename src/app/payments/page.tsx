@@ -110,10 +110,8 @@ export default async function PaymentsPage({
     }),
     prisma.payment.findMany({
       where: {
-        ticket: {
-          soldAt: { gte: range.start, lt: range.end },
-          ...(selectedAirlineId ? { airlineId: selectedAirlineId } : {}),
-        },
+        paidAt: { gte: range.start, lt: range.end },
+        ...(selectedAirlineId ? { ticket: { airlineId: selectedAirlineId } } : {}),
       },
       include: {
         ticket: {
@@ -293,6 +291,45 @@ export default async function PaymentsPage({
   const closingUsd = openingUsd + totalPaid + cashInflowUsd - cashOutflowUsd;
   const closingCdf = openingCdf + cashInflowCdf - cashOutflowCdf;
 
+  const caisseRows = [
+    ...payments.map((payment) => ({
+      occurredAt: new Date(payment.paidAt),
+      typeOperation: "Entrée en caisse",
+      libelle: `Paiement billet ${payment.ticket.ticketNumber} - ${payment.ticket.customerName}`,
+      reference: payment.reference ?? "-",
+      usdIn: payment.amount,
+      usdOut: 0,
+      cdfIn: 0,
+      cdfOut: 0,
+    })),
+    ...cashOperations.map((operation: any) => {
+      const currency = (operation.currency ?? "USD").toUpperCase();
+      const isInflow = operation.direction === "INFLOW";
+      return {
+        occurredAt: new Date(operation.occurredAt),
+        typeOperation: isInflow ? "Entrée en caisse" : "Sortie en caisse",
+        libelle: operation.description,
+        reference: operation.reference ?? "-",
+        usdIn: isInflow && currency === "USD" ? operation.amount : 0,
+        usdOut: !isInflow && currency === "USD" ? operation.amount : 0,
+        cdfIn: isInflow && currency === "CDF" ? operation.amount : 0,
+        cdfOut: !isInflow && currency === "CDF" ? operation.amount : 0,
+      };
+    }),
+  ].sort((a, b) => a.occurredAt.getTime() - b.occurredAt.getTime());
+
+  let runningUsd = openingUsd;
+  let runningCdf = openingCdf;
+  const caisseLedger = caisseRows.map((row) => {
+    runningUsd += row.usdIn - row.usdOut;
+    runningCdf += row.cdfIn - row.cdfOut;
+    return {
+      ...row,
+      usdBalance: runningUsd,
+      cdfBalance: runningCdf,
+    };
+  });
+
   const paymentTickets = ticketsWithComputedStatus
     .filter((ticket) => ticket.computedStatus !== PaymentStatus.PAID)
     .map((ticket) => ({
@@ -468,43 +505,56 @@ export default async function PaymentsPage({
 
             <section className="overflow-hidden rounded-2xl border border-black/10 bg-white shadow-sm dark:border-white/10 dark:bg-zinc-900">
               <div className="border-b border-black/10 px-4 py-3 dark:border-white/10">
-                <h2 className="text-sm font-semibold">Journal des autres opérations de caisse</h2>
+                <h2 className="text-sm font-semibold">Journal caisse (logique feuille CAISSE)</h2>
               </div>
               <div className="overflow-x-auto">
                 <table className="min-w-full text-sm">
                   <thead className="bg-black/5 dark:bg-white/10">
                     <tr>
                       <th className="px-4 py-3 text-left font-semibold">Date</th>
-                      <th className="px-4 py-3 text-left font-semibold">Sens</th>
-                      <th className="px-4 py-3 text-left font-semibold">Catégorie</th>
-                      <th className="px-4 py-3 text-left font-semibold">Montant</th>
-                      <th className="px-4 py-3 text-left font-semibold">Taux du jour</th>
-                      <th className="px-4 py-3 text-left font-semibold">Eq. USD</th>
-                      <th className="px-4 py-3 text-left font-semibold">Méthode</th>
-                      <th className="px-4 py-3 text-left font-semibold">Référence</th>
+                      <th className="px-4 py-3 text-left font-semibold">Type d'opération</th>
                       <th className="px-4 py-3 text-left font-semibold">Libellé</th>
-                      <th className="px-4 py-3 text-left font-semibold">Saisi par</th>
+                      <th className="px-4 py-3 text-left font-semibold">USD Entrées</th>
+                      <th className="px-4 py-3 text-left font-semibold">USD Sorties</th>
+                      <th className="px-4 py-3 text-left font-semibold">USD Solde</th>
+                      <th className="px-4 py-3 text-left font-semibold">CDF Entrées</th>
+                      <th className="px-4 py-3 text-left font-semibold">CDF Sorties</th>
+                      <th className="px-4 py-3 text-left font-semibold">CDF Solde</th>
+                      <th className="px-4 py-3 text-left font-semibold">Référence</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {cashOperations.map((operation: any) => (
-                      <tr key={operation.id} className="border-t border-black/5 dark:border-white/10">
-                        <td className="px-4 py-3">{new Date(operation.occurredAt).toLocaleString("fr-FR")}</td>
-                        <td className="px-4 py-3">{operation.direction === "INFLOW" ? "Entrée" : "Sortie"}</td>
-                        <td className="px-4 py-3">{operation.category}</td>
-                        <td className="px-4 py-3">{operation.amount.toFixed(2)} {operation.currency}</td>
-                        <td className="px-4 py-3">{(operation.fxRateUsdToCdf ?? (operation.fxRateToUsd && operation.fxRateToUsd > 0 ? 1 / operation.fxRateToUsd : 2800)).toFixed(2)}</td>
-                        <td className="px-4 py-3">{normalizeCashAmountUsd(operation).toFixed(2)} USD</td>
-                        <td className="px-4 py-3">{operation.method}</td>
-                        <td className="px-4 py-3">{operation.reference ?? "-"}</td>
-                        <td className="px-4 py-3">{operation.description}</td>
-                        <td className="px-4 py-3">{operation.createdBy?.name ?? "-"}</td>
+                    <tr className="border-t border-black/5 bg-black/2 dark:border-white/10 dark:bg-white/3">
+                      <td className="px-4 py-3 font-semibold">{range.startRaw}</td>
+                      <td className="px-4 py-3 font-semibold">Report à nouveau</td>
+                      <td className="px-4 py-3 text-black/60 dark:text-white/60">Solde d'ouverture période</td>
+                      <td className="px-4 py-3">-</td>
+                      <td className="px-4 py-3">-</td>
+                      <td className="px-4 py-3 font-semibold">{openingUsd.toFixed(2)} USD</td>
+                      <td className="px-4 py-3">-</td>
+                      <td className="px-4 py-3">-</td>
+                      <td className="px-4 py-3 font-semibold">{openingCdf.toFixed(2)} CDF</td>
+                      <td className="px-4 py-3">-</td>
+                    </tr>
+
+                    {caisseLedger.map((row, index) => (
+                      <tr key={`${row.occurredAt.toISOString()}-${index}`} className="border-t border-black/5 dark:border-white/10">
+                        <td className="px-4 py-3">{row.occurredAt.toLocaleDateString("fr-FR")}</td>
+                        <td className="px-4 py-3">{row.typeOperation}</td>
+                        <td className="px-4 py-3">{row.libelle}</td>
+                        <td className="px-4 py-3">{row.usdIn > 0 ? `${row.usdIn.toFixed(2)} USD` : "-"}</td>
+                        <td className="px-4 py-3">{row.usdOut > 0 ? `${row.usdOut.toFixed(2)} USD` : "-"}</td>
+                        <td className="px-4 py-3">{row.usdBalance.toFixed(2)} USD</td>
+                        <td className="px-4 py-3">{row.cdfIn > 0 ? `${row.cdfIn.toFixed(2)} CDF` : "-"}</td>
+                        <td className="px-4 py-3">{row.cdfOut > 0 ? `${row.cdfOut.toFixed(2)} CDF` : "-"}</td>
+                        <td className="px-4 py-3">{row.cdfBalance.toFixed(2)} CDF</td>
+                        <td className="px-4 py-3">{row.reference}</td>
                       </tr>
                     ))}
-                    {cashOperations.length === 0 ? (
+                    {caisseLedger.length === 0 ? (
                       <tr>
                         <td colSpan={10} className="px-4 py-8 text-center text-sm text-black/55 dark:text-white/55">
-                          Aucune opération de caisse (hors billets) sur cette période.
+                          Aucune opération de caisse sur cette période.
                         </td>
                       </tr>
                     ) : null}
