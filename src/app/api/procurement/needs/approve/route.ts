@@ -36,6 +36,13 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "État de besoin introuvable." }, { status: 404 });
   }
 
+  if (need.status !== "SUBMITTED") {
+    return NextResponse.json(
+      { error: "Cet état de besoin a déjà été traité. Une décision DG ne peut être faite qu'une seule fois." },
+      { status: 400 },
+    );
+  }
+
   const now = new Date();
   const nextStatus = parsed.data.status;
 
