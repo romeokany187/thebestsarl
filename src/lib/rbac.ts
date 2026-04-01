@@ -117,12 +117,12 @@ export function hasModuleAccess(params: {
 }
 
 function extractRole(role: unknown, jobTitle: string | null | undefined): AppRole | null {
-  if (normalize(jobTitle) === "DIRECTION_GENERALE") {
-    return "DIRECTEUR_GENERAL";
-  }
-
   if (role === "ADMIN") {
     return "ADMIN";
+  }
+
+  if (normalize(jobTitle) === "DIRECTION_GENERALE") {
+    return "DIRECTEUR_GENERAL";
   }
 
   if (role === "MANAGER" || role === "EMPLOYEE" || role === "ACCOUNTANT") {
