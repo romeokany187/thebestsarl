@@ -3,6 +3,15 @@
 import { FormEvent, useState } from "react";
 import { useRouter } from "next/navigation";
 
+function toLocalDateTimeInputValue(date: Date): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  const hours = String(date.getHours()).padStart(2, "0");
+  const minutes = String(date.getMinutes()).padStart(2, "0");
+  return `${year}-${month}-${day}T${hours}:${minutes}`;
+}
+
 const categories: Array<{ value: string; label: string }> = [
   { value: "OTHER_SALE", label: "Autres ventes" },
   { value: "COMMISSION_INCOME", label: "Commissions" },
@@ -27,7 +36,7 @@ export function CashOperationForm() {
   const [method, setMethod] = useState<string>("CASH");
   const [reference, setReference] = useState<string>("");
   const [description, setDescription] = useState<string>("");
-  const [occurredAt, setOccurredAt] = useState<string>(new Date().toISOString().slice(0, 16));
+  const [occurredAt, setOccurredAt] = useState<string>(toLocalDateTimeInputValue(new Date()));
   const [loading, setLoading] = useState<boolean>(false);
   const [message, setMessage] = useState<string>("");
   const [error, setError] = useState<string>("");
@@ -52,6 +61,12 @@ export function CashOperationForm() {
       return;
     }
 
+    if (!occurredAt) {
+      setError("Sélectionnez la date et l'heure de l'opération.");
+      setLoading(false);
+      return;
+    }
+
     const response = await fetch("/api/payments/cash-operations", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -63,7 +78,7 @@ export function CashOperationForm() {
         method: method.trim(),
         reference: reference.trim() || undefined,
         description: description.trim(),
-        occurredAt: occurredAt ? new Date(occurredAt).toISOString() : undefined,
+        occurredAt: new Date(occurredAt).toISOString(),
       }),
     });
 

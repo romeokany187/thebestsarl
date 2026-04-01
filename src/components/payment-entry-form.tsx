@@ -3,6 +3,15 @@
 import { useRouter } from "next/navigation";
 import { FormEvent, useMemo, useState } from "react";
 
+function toLocalDateTimeInputValue(date: Date): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  const hours = String(date.getHours()).padStart(2, "0");
+  const minutes = String(date.getMinutes()).padStart(2, "0");
+  return `${year}-${month}-${day}T${hours}:${minutes}`;
+}
+
 type TicketOption = {
   id: string;
   ticketNumber: string;
@@ -18,7 +27,7 @@ export function PaymentEntryForm({ tickets }: { tickets: TicketOption[] }) {
   const [amount, setAmount] = useState<string>("");
   const [method, setMethod] = useState<string>("CASH");
   const [reference, setReference] = useState<string>("");
-  const [paidAt, setPaidAt] = useState<string>(new Date().toISOString().slice(0, 16));
+  const [paidAt, setPaidAt] = useState<string>(toLocalDateTimeInputValue(new Date()));
   const [loading, setLoading] = useState<boolean>(false);
   const [message, setMessage] = useState<string>("");
   const [error, setError] = useState<string>("");
