@@ -78,12 +78,7 @@ export function hasModuleAccess(params: {
   }
 
   if (module === "tickets") {
-    return jobTitle === "COMMERCIAL"
-      || jobTitle === "AUDITEUR"
-      || jobTitle === "COMPTABLE"
-      || jobTitle === "CAISSIERE"
-      || jobTitle === "DIRECTION_GENERALE"
-        || teamIncludes(teamName, ["VENTE", "COMMERCIAL", "AUDIT", "COMPTA", "CAISSE"]);
+    return true;
   }
 
   if (module === "invoices") {
