@@ -10,6 +10,10 @@ export async function POST(request: NextRequest) {
   const access = await requireApiModuleAccess("payments", ["ADMIN", "DIRECTEUR_GENERAL", "MANAGER", "ACCOUNTANT", "EMPLOYEE"]);
   if (access.error) return access.error;
 
+  if (access.role === "ADMIN" || access.role === "DIRECTEUR_GENERAL") {
+    return NextResponse.json({ error: "Admin et Direction Générale ont un accès lecture seule sur les écritures de caisse." }, { status: 403 });
+  }
+
   if (access.session.user.jobTitle !== "CAISSIERE") {
     return NextResponse.json({ error: "Seule la caissière est autorisée à enregistrer les opérations de caisse." }, { status: 403 });
   }
