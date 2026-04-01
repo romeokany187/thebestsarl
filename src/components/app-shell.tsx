@@ -2,6 +2,7 @@ import Link from "next/link";
 import { type AppModule, type AppRole, hasModuleAccess } from "@/lib/rbac";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/auth";
+import { InboxRealtimeLink } from "@/components/inbox-realtime-link";
 import { LogoutButton } from "@/components/logout-button";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { prisma } from "@/lib/prisma";
@@ -105,14 +106,21 @@ export async function AppShell({
   accessNote?: string;
 }) {
   const session = await getServerSession(authOptions);
-  const unreadNotifications = session?.user?.id
-    ? await prisma.userNotification.count({
-        where: {
-          userId: session.user.id,
-          isRead: false,
-        },
-      })
-    : 0;
+  const [unreadNotifications, latestNotification] = session?.user?.id
+    ? await Promise.all([
+        prisma.userNotification.count({
+          where: {
+            userId: session.user.id,
+            isRead: false,
+          },
+        }),
+        prisma.userNotification.findFirst({
+          where: { userId: session.user.id },
+          select: { id: true },
+          orderBy: { createdAt: "desc" },
+        }),
+      ])
+    : [0, null];
   const visibleLinks = links.filter((link) => {
     if (!role || !link.roles.includes(role)) {
       return false;
@@ -174,17 +182,10 @@ export async function AppShell({
                   {roleLabel}
                 </span>
               ) : null}
-              <Link
-                href="/profile"
-                className="inline-flex items-center gap-2 rounded-full border border-black/15 px-3 py-1 text-xs font-semibold dark:border-white/20"
-              >
-                <span>Inbox</span>
-                {unreadNotifications > 0 ? (
-                  <span className="rounded-full bg-red-600 px-1.5 py-0.5 text-[10px] font-semibold text-white">
-                    {unreadNotifications > 99 ? "99+" : unreadNotifications}
-                  </span>
-                ) : null}
-              </Link>
+              <InboxRealtimeLink
+                initialUnreadCount={unreadNotifications}
+                initialLatestNotificationId={latestNotification?.id ?? null}
+              />
               <ThemeToggle />
               {session?.user?.email ? (
                 <div className="rounded-xl border border-black/10 bg-white px-3 py-1.5 text-right dark:border-white/10 dark:bg-zinc-900">
