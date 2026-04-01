@@ -26,32 +26,81 @@ export async function POST(request: NextRequest) {
   }
 
   const data = parsed.data;
+  const occurredAt = data.occurredAt ?? new Date();
+  const currency = (data.currency ?? "USD").toUpperCase();
 
-  const operation = await cashOperationClient.create({
-    data: {
-      occurredAt: data.occurredAt ?? new Date(),
-      direction: data.direction,
-      category: data.category,
-      amount: data.amount,
-      currency: (data.currency ?? "USD").toUpperCase(),
-      method: data.method,
-      reference: data.reference,
-      description: data.description,
-      createdById: access.session.user.id,
-    },
-    select: {
-      id: true,
-      occurredAt: true,
-      direction: true,
-      category: true,
-      amount: true,
-      currency: true,
-      method: true,
-      reference: true,
-      description: true,
-      createdById: true,
-    },
-  });
+  let operation;
+
+  try {
+    operation = await prisma.$transaction(async (tx) => {
+      if (data.direction === "OUTFLOW") {
+        const ticketInflows = await tx.payment.aggregate({
+          where: {
+            paidAt: { lte: occurredAt },
+          },
+          _sum: {
+            amount: true,
+          },
+        });
+
+        const previousCashOperations = await (tx as unknown as { cashOperation: any }).cashOperation.findMany({
+          where: {
+            occurredAt: { lte: occurredAt },
+          },
+          select: {
+            direction: true,
+            amount: true,
+          },
+          take: 100000,
+        });
+
+        const cashSigned = previousCashOperations.reduce(
+          (sum: number, op: { direction: string; amount: number }) => sum + (op.direction === "INFLOW" ? op.amount : -op.amount),
+          0,
+        );
+        const availableBalance = (ticketInflows._sum.amount ?? 0) + cashSigned;
+
+        if (data.amount > availableBalance + 0.0001) {
+          throw new Error(`INSUFFICIENT_CASH:${availableBalance.toFixed(2)}`);
+        }
+      }
+
+      return (tx as unknown as { cashOperation: any }).cashOperation.create({
+        data: {
+          occurredAt,
+          direction: data.direction,
+          category: data.category,
+          amount: data.amount,
+          currency,
+          method: data.method,
+          reference: data.reference,
+          description: data.description,
+          createdById: access.session.user.id,
+        },
+        select: {
+          id: true,
+          occurredAt: true,
+          direction: true,
+          category: true,
+          amount: true,
+          currency: true,
+          method: true,
+          reference: true,
+          description: true,
+          createdById: true,
+        },
+      });
+    });
+  } catch (error) {
+    if (error instanceof Error && error.message.startsWith("INSUFFICIENT_CASH:")) {
+      const available = error.message.replace("INSUFFICIENT_CASH:", "");
+      return NextResponse.json(
+        { error: `Solde insuffisant: disponible ${available} USD, sortie demandée ${data.amount.toFixed(2)} USD.` },
+        { status: 400 },
+      );
+    }
+    return NextResponse.json({ error: "Erreur serveur lors de l'enregistrement de l'opération de caisse." }, { status: 500 });
+  }
 
   const accountants = await prisma.user.findMany({
     where: {
