@@ -5,6 +5,22 @@ import { cashOperationCreateSchema } from "@/lib/validators";
 import { isMailConfigured, sendMailBatch } from "@/lib/mail";
 
 const cashOperationClient = (prisma as unknown as { cashOperation: any }).cashOperation;
+const DEFAULT_SINGLE_OUTFLOW_ALERT_LIMIT_USD = 1000;
+const DEFAULT_DAILY_OUTFLOW_CAP_USD = 3000;
+
+function parsePositiveNumber(raw: string | undefined, fallback: number): number {
+  if (!raw) return fallback;
+  const parsed = Number(raw);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+}
+
+function utcDayBounds(date: Date): { start: Date; end: Date } {
+  const start = new Date(date);
+  start.setUTCHours(0, 0, 0, 0);
+  const end = new Date(start);
+  end.setUTCDate(end.getUTCDate() + 1);
+  return { start, end };
+}
 
 export async function POST(request: NextRequest) {
   const access = await requireApiModuleAccess("payments", ["ADMIN", "DIRECTEUR_GENERAL", "MANAGER", "ACCOUNTANT", "EMPLOYEE"]);
@@ -28,6 +44,11 @@ export async function POST(request: NextRequest) {
   const data = parsed.data;
   const occurredAt = data.occurredAt ?? new Date();
   const currency = (data.currency ?? "USD").toUpperCase();
+  const singleOutflowAlertLimit = parsePositiveNumber(process.env.CASH_SINGLE_OUTFLOW_ALERT_LIMIT_USD, DEFAULT_SINGLE_OUTFLOW_ALERT_LIMIT_USD);
+  const dailyOutflowCap = parsePositiveNumber(process.env.CASH_DAILY_OUTFLOW_CAP_USD, DEFAULT_DAILY_OUTFLOW_CAP_USD);
+  const { start: dayStart, end: dayEnd } = utcDayBounds(occurredAt);
+  let projectedDailyOutflow = 0;
+  let thresholdAlertMessage: string | null = null;
 
   let operation;
 
@@ -63,6 +84,26 @@ export async function POST(request: NextRequest) {
         if (data.amount > availableBalance + 0.0001) {
           throw new Error(`INSUFFICIENT_CASH:${availableBalance.toFixed(2)}`);
         }
+
+        const sameDayOutflow = await (tx as unknown as { cashOperation: any }).cashOperation.aggregate({
+          where: {
+            direction: "OUTFLOW",
+            occurredAt: { gte: dayStart, lt: dayEnd },
+          },
+          _sum: {
+            amount: true,
+          },
+        });
+
+        projectedDailyOutflow = (sameDayOutflow?._sum?.amount ?? 0) + data.amount;
+
+        if (projectedDailyOutflow > dailyOutflowCap + 0.0001) {
+          throw new Error(`DAILY_CAP_EXCEEDED:${projectedDailyOutflow.toFixed(2)}:${dailyOutflowCap.toFixed(2)}`);
+        }
+
+        if (data.amount >= singleOutflowAlertLimit) {
+          thresholdAlertMessage = `Alerte seuil décaissement: sortie unitaire ${data.amount.toFixed(2)} ${currency} (seuil ${singleOutflowAlertLimit.toFixed(2)} ${currency}).`;
+        }
       }
 
       return (tx as unknown as { cashOperation: any }).cashOperation.create({
@@ -96,6 +137,15 @@ export async function POST(request: NextRequest) {
       const available = error.message.replace("INSUFFICIENT_CASH:", "");
       return NextResponse.json(
         { error: `Solde insuffisant: disponible ${available} USD, sortie demandée ${data.amount.toFixed(2)} USD.` },
+        { status: 400 },
+      );
+    }
+    if (error instanceof Error && error.message.startsWith("DAILY_CAP_EXCEEDED:")) {
+      const [, projected, cap] = error.message.split(":");
+      return NextResponse.json(
+        {
+          error: `Plafond journalier dépassé: cumul ${projected} USD pour un plafond autorisé de ${cap} USD. Alertez le comptable avant tout nouveau décaissement.`,
+        },
         { status: 400 },
       );
     }
@@ -177,7 +227,29 @@ export async function POST(request: NextRequest) {
         });
       }
     }
+
+    if (thresholdAlertMessage) {
+      const alertMessage = thresholdAlertMessage;
+      await prisma.userNotification.createMany({
+        data: accountants.map((user) => ({
+          userId: user.id,
+          title: "Alerte seuil de décaissement",
+          message: alertMessage,
+          type: "CASH_OPERATION_THRESHOLD_ALERT",
+          metadata: {
+            cashOperationId: operation.id,
+            amount: operation.amount,
+            currency: operation.currency,
+            threshold: singleOutflowAlertLimit,
+            projectedDailyOutflow,
+            dailyCap: dailyOutflowCap,
+            occurredAt: operation.occurredAt,
+            source: "CASH_LEDGER_POLICY",
+          },
+        })),
+      });
+    }
   }
 
-  return NextResponse.json({ data: operation }, { status: 201 });
+  return NextResponse.json({ data: operation, thresholdAlert: thresholdAlertMessage }, { status: 201 });
 }

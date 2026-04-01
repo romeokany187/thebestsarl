@@ -90,7 +90,12 @@ export function CashOperationForm() {
       return;
     }
 
-    setMessage("Opération de caisse enregistrée et notifiée à la comptabilité.");
+    const thresholdAlert = typeof payload?.thresholdAlert === "string" ? payload.thresholdAlert : null;
+    setMessage(
+      thresholdAlert
+        ? `Opération enregistrée. ${thresholdAlert}`
+        : "Opération de caisse enregistrée et notifiée à la comptabilité.",
+    );
     setAmount("");
     setReference("");
     setDescription("");
