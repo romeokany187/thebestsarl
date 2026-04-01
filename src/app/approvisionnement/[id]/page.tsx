@@ -46,8 +46,9 @@ export default async function NeedReadPage(context: PageContext) {
 
   if (!need) notFound();
   const quote = parseNeedQuote(need.details);
+  const hasExecutionMarker = (need.reviewComment ?? "").includes("EXECUTION_CAISSE:");
   const executedMovement = need.stockMovements[0] ?? null;
-  const displayStatus = need.status === "APPROVED" && executedMovement
+  const displayStatus = need.status === "APPROVED" && (executedMovement || hasExecutionMarker)
     ? "Approuvé et exécuté"
     : statusLabel(need.status);
   const urgencyLabel = quote?.urgencyLevel === "CRITIQUE"
@@ -111,7 +112,11 @@ export default async function NeedReadPage(context: PageContext) {
           <p><span className="font-semibold">Validé par:</span> {need.reviewedBy?.name ?? "-"}</p>
           <p><span className="font-semibold">Date validation:</span> {formatDate(need.approvedAt ?? need.reviewedAt)}</p>
           <p><span className="font-semibold">Sceau:</span> {need.sealedAt ? `Scellé le ${formatDate(need.sealedAt)}` : "Non scellé"}</p>
-          <p><span className="font-semibold">Exécution:</span> {executedMovement ? `Exécuté le ${formatDate(executedMovement.createdAt)}` : "En attente d'exécution"}</p>
+          <p><span className="font-semibold">Exécution:</span> {executedMovement
+            ? `Exécuté le ${formatDate(executedMovement.createdAt)}`
+            : hasExecutionMarker
+              ? "Exécuté (validation caisse enregistrée)"
+              : "En attente d'exécution"}</p>
           <p><span className="font-semibold">Niveau d&apos;urgence:</span> {urgencyLabel}</p>
           <p><span className="font-semibold">Équipe bénéficiaire:</span> {beneficiaryLabel}</p>
           {quote?.beneficiaryPersonName && (

@@ -239,6 +239,12 @@ export const needApprovalSchema = z.object({
   reviewComment: z.string().max(500).optional(),
 });
 
+export const needExecutionSchema = z.object({
+  needRequestId: z.string().min(1),
+  referenceDoc: z.string().min(2).max(180),
+  executionComment: z.string().max(500).optional(),
+});
+
 export const stockMovementSchema = z.object({
   itemName: z.string().min(2).max(120),
   category: z.string().min(2).max(80),

@@ -160,6 +160,7 @@ export async function GET(request: NextRequest, context: RouteContext) {
   const quote = parseNeedQuote(need.details);
   const grid = rgb(0.82, 0.82, 0.82);
   const executionMovement = need.stockMovements[0] ?? null;
+  const hasExecutionMarker = (need.reviewComment ?? "").includes("EXECUTION_CAISSE:");
   const urgencyLabel = quote?.urgencyLevel === "CRITIQUE"
     ? "Critique"
     : quote?.urgencyLevel === "ELEVEE"
@@ -176,7 +177,7 @@ export async function GET(request: NextRequest, context: RouteContext) {
       : quote?.beneficiaryTeam === "MBUJIMAYI"
         ? "Mbujimayi"
         : "-";
-  const statusLabel = need.status === "APPROVED" && executionMovement
+  const statusLabel = need.status === "APPROVED" && (executionMovement || hasExecutionMarker)
     ? "APPROUVÉ ET EXÉCUTÉ"
     : need.status;
 
@@ -311,7 +312,11 @@ export async function GET(request: NextRequest, context: RouteContext) {
     ["Soumis le", formatDate(need.submittedAt)],
     ["Validé par", need.reviewedBy?.name ?? "-"],
     ["Date validation", formatDate(need.approvedAt ?? need.reviewedAt)],
-    ["Exécution", executionMovement ? formatDate(executionMovement.createdAt) : "En attente d'exécution"],
+    ["Exécution", executionMovement
+      ? formatDate(executionMovement.createdAt)
+      : hasExecutionMarker
+        ? "Exécuté (validation caisse enregistrée)"
+        : "En attente d'exécution"],
     ["Niveau d'urgence", urgencyLabel],
     ["Équipe bénéficiaire", beneficiaryLabel],
     ...(quote?.beneficiaryPersonName ? [["Personne bénéficiaire", quote.beneficiaryPersonName] as const] : []),
@@ -506,8 +511,11 @@ export async function GET(request: NextRequest, context: RouteContext) {
         color: black,
       });
 
-      if (executionMovement) {
-        targetPage.drawText(`Mention finale: APPROUVÉ ET EXÉCUTÉ (${formatDate(executionMovement.createdAt)})`, {
+      if (executionMovement || hasExecutionMarker) {
+        const executionDateLabel = executionMovement
+          ? formatDate(executionMovement.createdAt)
+          : formatDate(need.sealedAt ?? need.updatedAt);
+        targetPage.drawText(`Mention finale: APPROUVÉ ET EXÉCUTÉ (${executionDateLabel})`, {
           x: CONTENT_LEFT,
           y: sealTextY - 12,
           size: 9.2,

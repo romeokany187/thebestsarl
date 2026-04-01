@@ -109,6 +109,10 @@ function statusLabel(status: NeedStatus) {
   return "Brouillon";
 }
 
+function hasCashExecutionMarker(value?: string | null) {
+  return (value ?? "").includes("EXECUTION_CAISSE:");
+}
+
 type UserOption = { id: string; name: string; teamName: string | null };
 
 export function ProcurementHub({
@@ -154,7 +158,12 @@ export function ProcurementHub({
   }, [allUsers, selectedBeneficiaryTeam]);
 
   const approvedNeeds = useMemo(
-    () => needs.filter((need) => need.status === "APPROVED"),
+    () => needs.filter((need) => need.status === "APPROVED" && !hasCashExecutionMarker(need.reviewComment)),
+    [needs],
+  );
+
+  const executedNeeds = useMemo(
+    () => needs.filter((need) => hasCashExecutionMarker(need.reviewComment)),
     [needs],
   );
 
@@ -570,6 +579,10 @@ export function ProcurementHub({
             <p className="mt-1 text-2xl font-semibold">{approvedNeeds.length}</p>
           </article>
           <article className="rounded-lg border border-black/10 bg-black/3 p-3 dark:border-white/10 dark:bg-white/3">
+            <p className="text-[11px] uppercase tracking-wide text-black/60 dark:text-white/60">Exécutés caisse</p>
+            <p className="mt-1 text-2xl font-semibold">{executedNeeds.length}</p>
+          </article>
+          <article className="rounded-lg border border-black/10 bg-black/3 p-3 dark:border-white/10 dark:bg-white/3">
             <p className="text-[11px] uppercase tracking-wide text-black/60 dark:text-white/60">Rejetés</p>
             <p className="mt-1 text-2xl font-semibold">{rejectedNeeds.length}</p>
           </article>
@@ -610,7 +623,9 @@ export function ProcurementHub({
                   </td>
                   <td className="px-3 py-2">
                     <span className="rounded-full border border-black/15 px-2 py-0.5 text-[11px] font-semibold dark:border-white/20">
-                      {statusLabel(need.status)}
+                      {hasCashExecutionMarker(need.reviewComment)
+                        ? "Exécuté"
+                        : statusLabel(need.status)}
                     </span>
                   </td>
                   <td className="px-3 py-2 text-xs text-black/65 dark:text-white/65">{new Date(need.createdAt).toLocaleDateString()}</td>

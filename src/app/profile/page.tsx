@@ -1,6 +1,7 @@
 import { AppShell } from "@/components/app-shell";
 import { AppMailComposer } from "@/components/app-mail-composer";
 import { ProcurementInboxActions } from "@/components/procurement-inbox-actions";
+import { ProcurementCashExecutionActions } from "@/components/procurement-cash-execution-actions";
 import { authOptions } from "@/auth";
 import { assignmentCapabilities, jobTitleLabel } from "@/lib/assignment";
 import { prisma } from "@/lib/prisma";
@@ -16,6 +17,7 @@ export default async function ProfilePage() {
   const currentJobTitle = roleSession.user.jobTitle ?? "AGENT_TERRAIN";
   const capabilities = assignmentCapabilities(currentJobTitle);
   const canValidateNeedsFromInbox = role === "ADMIN" && currentJobTitle === "DIRECTION_GENERALE";
+  const canExecuteNeedFromInbox = currentJobTitle === "CAISSIERE";
 
   const user = session?.user?.email
     ? await prisma.user.findUnique({
@@ -182,6 +184,25 @@ export default async function ProfilePage() {
                     }
 
                     return <ProcurementInboxActions needRequestId={needRequestId} />;
+                  })()}
+                  {(() => {
+                    const metadata = (notification.metadata ?? null) as { needRequestId?: string; needStatus?: string } | null;
+                    const needRequestId = typeof metadata?.needRequestId === "string"
+                      ? metadata.needRequestId
+                      : null;
+                    const needStatus = typeof metadata?.needStatus === "string"
+                      ? metadata.needStatus
+                      : null;
+
+                    if (!canExecuteNeedFromInbox || !needRequestId || notification.type !== "PROCUREMENT_FINANCE_EXECUTION") {
+                      return null;
+                    }
+
+                    if (needStatus && needStatus !== "APPROVED") {
+                      return <p className="mt-2 text-[11px] text-black/55 dark:text-white/55">Statut actuel: {needStatus}</p>;
+                    }
+
+                    return <ProcurementCashExecutionActions needRequestId={needRequestId} />;
                   })()}
                   <p className="mt-1 text-[11px] text-black/50 dark:text-white/50">{new Date(notification.createdAt).toLocaleString()}</p>
                 </li>

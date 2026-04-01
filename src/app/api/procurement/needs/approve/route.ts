@@ -75,22 +75,19 @@ export async function POST(request: NextRequest) {
   }
 
   if (nextStatus === "APPROVED") {
-    const financeUsers = await prisma.user.findMany({
+    const cashierUsers = await prisma.user.findMany({
       where: {
-        OR: [
-          { role: "ACCOUNTANT" },
-          { jobTitle: { in: ["CAISSIERE", "COMPTABLE"] } },
-        ],
+        jobTitle: "CAISSIERE",
       },
       select: { id: true },
       take: 160,
     });
 
-    financeUsers.forEach((finance) => {
+    cashierUsers.forEach((cashier) => {
       notifications.push({
-        userId: finance.id,
+        userId: cashier.id,
         title: "EDB approuvé à exécuter",
-        message: `L'état de besoin \"${updated.title}\" est approuvé. Procéder à l'exécution et à la libération des fonds.` ,
+        message: `L'état de besoin \"${updated.title}\" est approuvé par la Direction Générale. Exécuter la caisse depuis votre inbox.`,
         type: "PROCUREMENT_FINANCE_EXECUTION",
         metadata: {
           needRequestId: updated.id,
