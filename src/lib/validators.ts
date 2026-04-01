@@ -255,3 +255,21 @@ export const stockMovementSchema = z.object({
   referenceDoc: z.string().min(2).max(180),
   needRequestId: z.string().optional(),
 });
+
+export const paymentOrderCreationSchema = z.object({
+  description: z.string().min(5).max(500),
+  amount: z.number().positive(),
+  currency: z.string().length(3).optional(),
+});
+
+export const paymentOrderApprovalSchema = z.object({
+  paymentOrderId: z.string().min(1),
+  status: z.enum(["APPROVED", "REJECTED"]),
+  reviewComment: z.string().max(500).optional(),
+});
+
+export const paymentOrderExecutionSchema = z.object({
+  paymentOrderId: z.string().min(1),
+  referenceDoc: z.string().min(2).max(180),
+  executionComment: z.string().max(500).optional(),
+});

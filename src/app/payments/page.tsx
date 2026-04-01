@@ -2,8 +2,11 @@ import { PaymentStatus } from "@prisma/client";
 import { AppShell } from "@/components/app-shell";
 import { KpiCard } from "@/components/kpi-card";
 import { PaymentEntryForm } from "@/components/payment-entry-form";
+import { PaymentOrderForm } from "@/components/payment-order-form";
 import { requirePageModuleAccess } from "@/lib/rbac";
 import { prisma } from "@/lib/prisma";
+
+const paymentOrderClient = (prisma as unknown as { paymentOrder: any }).paymentOrder;
 
 type SearchParams = {
   startDate?: string;
@@ -37,8 +40,9 @@ export default async function PaymentsPage({
 }: {
   searchParams?: Promise<SearchParams>;
 }) {
-  const { role, session } = await requirePageModuleAccess("payments", ["ADMIN", "ACCOUNTANT", "EMPLOYEE"]);
+  const { role, session } = await requirePageModuleAccess("payments", ["ADMIN", "DIRECTEUR_GENERAL", "ACCOUNTANT", "EMPLOYEE"]);
   const canWrite = session.user.jobTitle === "CAISSIERE";
+  const canIssuePaymentOrder = role === "DIRECTEUR_GENERAL";
   const resolvedSearchParams = (await searchParams) ?? {};
   const range = dateRangeFromParams(resolvedSearchParams);
 
@@ -53,7 +57,7 @@ export default async function PaymentsPage({
     ...(selectedAirlineId ? { airlineId: selectedAirlineId } : {}),
   }).toString();
 
-  const [airlines, tickets, payments] = await Promise.all([
+  const [airlines, tickets, payments, paymentOrders] = (await Promise.all([
     prisma.airline.findMany({
       select: { id: true, code: true, name: true },
       orderBy: { name: "asc" },
@@ -88,10 +92,19 @@ export default async function PaymentsPage({
       orderBy: { paidAt: "desc" },
       take: 250,
     }),
-  ]);
+    paymentOrderClient.findMany({
+      include: {
+        issuedBy: { select: { name: true, jobTitle: true } },
+        approvedBy: { select: { name: true, jobTitle: true } },
+        executedBy: { select: { name: true, jobTitle: true } },
+      },
+      orderBy: { createdAt: "desc" },
+      take: 80,
+    }),
+  ])) as [any[], any[], any[], any[]];
 
   const ticketsWithComputedStatus = tickets.map((ticket) => {
-    const paidAmount = ticket.payments.reduce((sum, payment) => sum + payment.amount, 0);
+    const paidAmount = ticket.payments.reduce((sum: number, payment: { amount: number }) => sum + payment.amount, 0);
     const computedStatus = paidAmount <= 0
       ? PaymentStatus.UNPAID
       : paidAmount + 0.0001 >= ticket.amount
@@ -187,6 +200,49 @@ export default async function PaymentsPage({
       </section>
 
       {canWrite ? <PaymentEntryForm tickets={paymentTickets} /> : null}
+      {canIssuePaymentOrder ? <PaymentOrderForm /> : null}
+
+      <section className="mb-6 overflow-hidden rounded-2xl border border-black/10 bg-white shadow-sm dark:border-white/10 dark:bg-zinc-900">
+        <div className="border-b border-black/10 px-4 py-3 dark:border-white/10">
+          <h2 className="text-sm font-semibold">Ordres de paiement (flux notifications)</h2>
+          <p className="mt-1 text-xs text-black/60 dark:text-white/60">DG émet, Admin valide, Caissière exécute, Comptable reçoit la notification finale.</p>
+        </div>
+        <div className="overflow-x-auto">
+          <table className="min-w-full text-sm">
+            <thead className="bg-black/5 dark:bg-white/10">
+              <tr>
+                <th className="px-4 py-3 text-left font-semibold">Créé le</th>
+                <th className="px-4 py-3 text-left font-semibold">Description</th>
+                <th className="px-4 py-3 text-left font-semibold">Montant</th>
+                <th className="px-4 py-3 text-left font-semibold">DG</th>
+                <th className="px-4 py-3 text-left font-semibold">Admin</th>
+                <th className="px-4 py-3 text-left font-semibold">Caissière</th>
+                <th className="px-4 py-3 text-left font-semibold">Statut</th>
+              </tr>
+            </thead>
+            <tbody>
+              {paymentOrders.map((order) => (
+                <tr key={order.id} className="border-t border-black/5 dark:border-white/10">
+                  <td className="px-4 py-3">{new Date(order.createdAt).toLocaleDateString("fr-FR")}</td>
+                  <td className="px-4 py-3">{order.description}</td>
+                  <td className="px-4 py-3">{order.amount.toFixed(2)} {order.currency}</td>
+                  <td className="px-4 py-3">{order.issuedBy?.name ?? "-"}</td>
+                  <td className="px-4 py-3">{order.approvedBy?.name ?? "-"}</td>
+                  <td className="px-4 py-3">{order.executedBy?.name ?? "-"}</td>
+                  <td className="px-4 py-3">{order.status}</td>
+                </tr>
+              ))}
+              {paymentOrders.length === 0 ? (
+                <tr>
+                  <td colSpan={7} className="px-4 py-8 text-center text-sm text-black/55 dark:text-white/55">
+                    Aucun ordre de paiement pour le moment.
+                  </td>
+                </tr>
+              ) : null}
+            </tbody>
+          </table>
+        </div>
+      </section>
 
       <div className="mb-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <KpiCard label="Total facturé" value={`${totalTicketAmount.toFixed(2)} USD`} />

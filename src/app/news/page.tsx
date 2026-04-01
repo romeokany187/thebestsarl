@@ -22,9 +22,9 @@ export default async function NewsPage() {
   });
 
   return (
-    <AppShellcanPublishNews
+    <AppShell
       role={role}
-      accessNote={role === "ADMIN"
+      accessNote={role === "ADMIN" || role === "DIRECTEUR_GENERAL"
         ? "Pilotage éditorial: vous pouvez publier les nouvelles officielles de la direction."
         : "Mode lecture: consultation des nouvelles publiées par la direction."}
     >

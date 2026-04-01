@@ -1,5 +1,7 @@
 import { AppShell } from "@/components/app-shell";
 import { AppMailComposer } from "@/components/app-mail-composer";
+import { PaymentOrderAdminActions } from "@/components/payment-order-admin-actions";
+import { PaymentOrderCashExecutionActions } from "@/components/payment-order-cash-execution-actions";
 import { ProcurementInboxActions } from "@/components/procurement-inbox-actions";
 import { ProcurementCashExecutionActions } from "@/components/procurement-cash-execution-actions";
 import { authOptions } from "@/auth";
@@ -18,6 +20,8 @@ export default async function ProfilePage() {
   const capabilities = assignmentCapabilities(currentJobTitle);
   const canValidateNeedsFromInbox = role === "DIRECTEUR_GENERAL" || role === "ADMIN";
   const canExecuteNeedFromInbox = currentJobTitle === "CAISSIERE";
+  const canApprovePaymentOrderFromInbox = role === "ADMIN";
+  const canExecutePaymentOrderFromInbox = currentJobTitle === "CAISSIERE";
 
   const user = session?.user?.email
     ? await prisma.user.findUnique({
@@ -203,6 +207,44 @@ export default async function ProfilePage() {
                     }
 
                     return <ProcurementCashExecutionActions needRequestId={needRequestId} />;
+                  })()}
+                  {(() => {
+                    const metadata = (notification.metadata ?? null) as { paymentOrderId?: string; paymentStatus?: string } | null;
+                    const paymentOrderId = typeof metadata?.paymentOrderId === "string"
+                      ? metadata.paymentOrderId
+                      : null;
+                    const paymentStatus = typeof metadata?.paymentStatus === "string"
+                      ? metadata.paymentStatus
+                      : null;
+
+                    if (!canApprovePaymentOrderFromInbox || !paymentOrderId || notification.type !== "PAYMENT_ORDER_APPROVAL_REQUIRED") {
+                      return null;
+                    }
+
+                    if (paymentStatus && paymentStatus !== "SUBMITTED") {
+                      return <p className="mt-2 text-[11px] text-black/55 dark:text-white/55">Statut actuel OP: {paymentStatus}</p>;
+                    }
+
+                    return <PaymentOrderAdminActions paymentOrderId={paymentOrderId} />;
+                  })()}
+                  {(() => {
+                    const metadata = (notification.metadata ?? null) as { paymentOrderId?: string; paymentStatus?: string } | null;
+                    const paymentOrderId = typeof metadata?.paymentOrderId === "string"
+                      ? metadata.paymentOrderId
+                      : null;
+                    const paymentStatus = typeof metadata?.paymentStatus === "string"
+                      ? metadata.paymentStatus
+                      : null;
+
+                    if (!canExecutePaymentOrderFromInbox || !paymentOrderId || notification.type !== "PAYMENT_ORDER_EXECUTION_REQUIRED") {
+                      return null;
+                    }
+
+                    if (paymentStatus && paymentStatus !== "APPROVED") {
+                      return <p className="mt-2 text-[11px] text-black/55 dark:text-white/55">Statut actuel OP: {paymentStatus}</p>;
+                    }
+
+                    return <PaymentOrderCashExecutionActions paymentOrderId={paymentOrderId} />;
                   })()}
                   <p className="mt-1 text-[11px] text-black/50 dark:text-white/50">{new Date(notification.createdAt).toLocaleString()}</p>
                 </li>

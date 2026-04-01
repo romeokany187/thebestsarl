@@ -85,9 +85,9 @@ export default async function ReportsPage() {
   const authorOptions = role === "EMPLOYEE" || role === "ACCOUNTANT"
     ? users.filter((user) => user.id === session.user.id)
     : users;
-  const canCreateReport = role === "MANAGER" || role === DIRECTEUR_GENERAL" || role === "MANAGER";
-  const accessNote = isExecutiveRoleADMIN" || role === "MANAGER";
-  const accessNote = role === "ADMIN"
+  const canApproveReport = role === "ADMIN" || role === "DIRECTEUR_GENERAL" || role === "MANAGER";
+  const canCreateReport = canApproveReport || role === "EMPLOYEE" || role === "ACCOUNTANT";
+  const accessNote = isExecutiveRole
     ? "Accès direction: lecture, organisation par service et impression des rapports soumis."
     : canApproveReport
       ? "Accès validation: vous pouvez créer et approuver les rapports."
