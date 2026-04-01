@@ -5,7 +5,6 @@ import { requireApiModuleAccess } from "@/lib/rbac";
 import { ticketUpdateSchema } from "@/lib/validators";
 import { computeCommissionAmount, pickCommissionRule } from "@/lib/commission";
 import { ensureAirlineCatalog } from "@/lib/airline-catalog";
-import { canSellTickets } from "@/lib/assignment";
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -14,13 +13,9 @@ function clamp(value: number, min: number, max: number) {
 }
 
 export async function PATCH(request: NextRequest, { params }: Params) {
-  const access = await requireApiModuleAccess("sales", ["ADMIN", "MANAGER", "EMPLOYEE"]);
+  const access = await requireApiModuleAccess("sales", ["ADMIN"]);
   if (access.error) {
     return access.error;
-  }
-
-  if (access.role === "EMPLOYEE" && !canSellTickets(access.session.user.jobTitle ?? "")) {
-    return NextResponse.json({ error: "Fonction non autorisée pour modifier des billets." }, { status: 403 });
   }
 
   try {
@@ -47,16 +42,8 @@ export async function PATCH(request: NextRequest, { params }: Params) {
       return NextResponse.json({ error: "Billet introuvable." }, { status: 404 });
     }
 
-    if (access.role === "EMPLOYEE" && existing.sellerId !== access.session.user.id) {
-      return NextResponse.json({ error: "Accès refusé." }, { status: 403 });
-    }
-
     const nextAirlineId = parsed.data.airlineId ?? existing.airlineId;
     const nextSellerId = parsed.data.sellerId ?? existing.sellerId;
-
-    if (access.role === "EMPLOYEE" && nextSellerId !== access.session.user.id) {
-      return NextResponse.json({ error: "Accès refusé." }, { status: 403 });
-    }
 
     const targetAirline = await prisma.airline.findUnique({
       where: { id: nextAirlineId },
@@ -303,13 +290,9 @@ export async function PATCH(request: NextRequest, { params }: Params) {
 }
 
 export async function DELETE(_request: NextRequest, { params }: Params) {
-  const access = await requireApiModuleAccess("sales", ["ADMIN", "MANAGER", "EMPLOYEE"]);
+  const access = await requireApiModuleAccess("sales", ["ADMIN"]);
   if (access.error) {
     return access.error;
-  }
-
-  if (access.role === "EMPLOYEE" && !canSellTickets(access.session.user.jobTitle ?? "")) {
-    return NextResponse.json({ error: "Fonction non autorisée pour supprimer des billets." }, { status: 403 });
   }
 
   try {
@@ -321,10 +304,6 @@ export async function DELETE(_request: NextRequest, { params }: Params) {
 
     if (!existing) {
       return NextResponse.json({ error: "Billet introuvable." }, { status: 404 });
-    }
-
-    if (access.role === "EMPLOYEE" && existing.sellerId !== access.session.user.id) {
-      return NextResponse.json({ error: "Accès refusé." }, { status: 403 });
     }
 
     await prisma.ticketSale.delete({ where: { id } });
