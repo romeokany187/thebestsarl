@@ -56,6 +56,10 @@ export function hasModuleAccess(params: {
     return true;
   }
 
+  if (module === "settings") {
+    return true;
+  }
+
   if (module === "payments") {
     const financeRole = jobTitle === "CAISSIERE" || jobTitle === "COMPTABLE";
     const kinshasaDirection = teamIncludes(teamName, ["KINSHASA", "DIRECTION GENERALE", "DIRECTION GÉNÉRALE"]);
@@ -75,7 +79,7 @@ export function hasModuleAccess(params: {
     return false;
   }
 
-  if (module === "reports" || module === "attendance" || module === "news" || module === "settings") {
+  if (module === "reports" || module === "attendance" || module === "news") {
     return true;
   }
 
