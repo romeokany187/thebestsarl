@@ -52,8 +52,10 @@ export function InboxRealtimeLink({
   const [toast, setToast] = useState<{ title: string; message: string } | null>(null);
   const [soundEnabled, setSoundEnabled] = useState(false);
   const pollingRef = useRef<number | null>(null);
+  const eventSourceRef = useRef<EventSource | null>(null);
   const latestIdRef = useRef<string | null>(initialLatestNotificationId);
   const unreadCountRef = useRef(initialUnreadCount);
+  const soundEnabledRef = useRef(false);
 
   useEffect(() => {
     const unlock = () => setSoundEnabled(true);
@@ -75,6 +77,32 @@ export function InboxRealtimeLink({
   }, [unreadCount]);
 
   useEffect(() => {
+    soundEnabledRef.current = soundEnabled;
+  }, [soundEnabled]);
+
+  useEffect(() => {
+    function applyPayload(payload: RealtimePayload) {
+      const hasNewNotification = payload.latest?.id && payload.latest.id !== latestIdRef.current;
+      const countIncreased = payload.unreadCount > unreadCountRef.current;
+
+      setUnreadCount(payload.unreadCount);
+
+      if (payload.latest?.id) {
+        setLatestId(payload.latest.id);
+      }
+
+      if (hasNewNotification || countIncreased) {
+        if (payload.latest) {
+          setToast({
+            title: payload.latest.title,
+            message: payload.latest.message,
+          });
+          window.setTimeout(() => setToast(null), 5000);
+        }
+        playNotificationTone(soundEnabledRef.current);
+      }
+    }
+
     async function poll() {
       try {
         const response = await fetch("/api/notifications/realtime", {
@@ -86,42 +114,53 @@ export function InboxRealtimeLink({
         if (!response.ok) return;
 
         const payload = (await response.json()) as RealtimePayload;
-
-  const hasNewNotification = payload.latest?.id && payload.latest.id !== latestIdRef.current;
-  const countIncreased = payload.unreadCount > unreadCountRef.current;
-
-        setUnreadCount(payload.unreadCount);
-
-        if (payload.latest?.id) {
-          setLatestId(payload.latest.id);
-        }
-
-        if (hasNewNotification || countIncreased) {
-          if (payload.latest) {
-            setToast({
-              title: payload.latest.title,
-              message: payload.latest.message,
-            });
-            window.setTimeout(() => setToast(null), 5000);
-          }
-          playNotificationTone(soundEnabled);
-        }
+        applyPayload(payload);
       } catch {
         // Keep silent on polling failures; next cycle will retry.
       }
     }
 
-    void poll();
-    pollingRef.current = window.setInterval(() => {
+    function startPollingFallback() {
+      if (pollingRef.current) return;
       void poll();
-    }, 8000);
+      pollingRef.current = window.setInterval(() => {
+        void poll();
+      }, 8000);
+    }
+
+    if (typeof window !== "undefined" && "EventSource" in window) {
+      const source = new EventSource("/api/notifications/stream");
+      eventSourceRef.current = source;
+
+      source.onmessage = (event) => {
+        try {
+          const payload = JSON.parse(event.data) as RealtimePayload;
+          applyPayload(payload);
+        } catch {
+          // Ignore malformed SSE payload.
+        }
+      };
+
+      source.onerror = () => {
+        source.close();
+        eventSourceRef.current = null;
+        startPollingFallback();
+      };
+    } else {
+      startPollingFallback();
+    }
 
     return () => {
+      if (eventSourceRef.current) {
+        eventSourceRef.current.close();
+        eventSourceRef.current = null;
+      }
       if (pollingRef.current) {
         window.clearInterval(pollingRef.current);
+        pollingRef.current = null;
       }
     };
-  }, [soundEnabled]);
+  }, []);
 
   return (
     <>
