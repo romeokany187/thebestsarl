@@ -16,7 +16,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Utilisateur introuvable." }, { status: 404 });
   }
 
-  const canValidate = access.role === "DIRECTEUR_GENERAL";
+  const canValidate = access.role === "DIRECTEUR_GENERAL" || access.role === "ADMIN";
   if (!canValidate) {
     return NextResponse.json({ error: "Validation réservée à la Direction Générale." }, { status: 403 });
   }

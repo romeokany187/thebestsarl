@@ -16,7 +16,7 @@ export default async function ProfilePage() {
   const userId = roleSession.user.id;
   const currentJobTitle = roleSession.user.jobTitle ?? "AGENT_TERRAIN";
   const capabilities = assignmentCapabilities(currentJobTitle);
-  const canValidateNeedsFromInbox = role === "DIRECTEUR_GENERAL";
+  const canValidateNeedsFromInbox = role === "DIRECTEUR_GENERAL" || role === "ADMIN";
   const canExecuteNeedFromInbox = currentJobTitle === "CAISSIERE";
 
   const user = session?.user?.email

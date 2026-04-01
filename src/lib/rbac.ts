@@ -67,7 +67,7 @@ export function hasModuleAccess(params: {
   }
 
   if (module === "tickets") {
-    return role === "DIRECTEUR_GENERAL";
+    return role === "DIRECTEUR_GENERAL" || role === "ADMIN";
   }
 
   if (role === "ADMIN") {
@@ -118,8 +118,12 @@ export function hasModuleAccess(params: {
 }
 
 function extractRole(role: unknown, jobTitle: string | null | undefined): AppRole | null {
+  if (normalize(jobTitle) === "DIRECTION_GENERALE") {
+    return "DIRECTEUR_GENERAL";
+  }
+
   if (role === "ADMIN") {
-    return normalize(jobTitle) === "DIRECTION_GENERALE" ? "DIRECTEUR_GENERAL" : "ADMIN";
+    return "ADMIN";
   }
 
   if (role === "MANAGER" || role === "EMPLOYEE" || role === "ACCOUNTANT") {
@@ -130,6 +134,8 @@ function extractRole(role: unknown, jobTitle: string | null | undefined): AppRol
 
 function isRoleAllowed(role: AppRole, allowedRoles: AppRole[]) {
   if (allowedRoles.includes(role)) return true;
+  // Backward compatibility: admin keeps historical DG-protected permissions.
+  if (role === "ADMIN" && allowedRoles.includes("DIRECTEUR_GENERAL")) return true;
   // Backward compatibility: old ADMIN-allowed paths can still be used by DG.
   if (role === "DIRECTEUR_GENERAL" && allowedRoles.includes("ADMIN")) return true;
   return false;
