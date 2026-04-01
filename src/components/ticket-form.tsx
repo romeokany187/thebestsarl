@@ -62,6 +62,10 @@ const EMPTY_FORM: FormState = {
   notes: "",
 };
 
+function todayDateInputValue() {
+  return new Date().toISOString().slice(0, 10);
+}
+
 export function TicketForm({
   users,
   airlines,
@@ -74,7 +78,7 @@ export function TicketForm({
   const [status, setStatus] = useState<string>("");
   const [statusType, setStatusType] = useState<"idle" | "success" | "error" | "loading">("idle");
   const [editTicketId, setEditTicketId] = useState<string | null>(null);
-  const [form, setForm] = useState<FormState>({ ...EMPTY_FORM });
+  const [form, setForm] = useState<FormState>({ ...EMPTY_FORM, travelDate: todayDateInputValue() });
 
   useEffect(() => {
     function handleEdit(event: Event) {
@@ -160,7 +164,7 @@ export function TicketForm({
   }
 
   function resetForm() {
-    setForm({ ...EMPTY_FORM });
+    setForm({ ...EMPTY_FORM, travelDate: todayDateInputValue() });
     setEditTicketId(null);
   }
 
@@ -271,14 +275,9 @@ export function TicketForm({
       </div>
 
       <div className="grid gap-3 sm:grid-cols-2">
-        <input
-          name="travelDate"
-          type="date"
-          required
-          value={form.travelDate}
-          onChange={(event) => updateField("travelDate", event.target.value)}
-          className="rounded-md border px-3 py-2"
-        />
+        <div className="rounded-md border px-3 py-2 text-sm">
+          Date du jour (encodage): <span className="font-semibold">{form.travelDate}</span>
+        </div>
         <select
           name="saleNature"
           value={form.saleNature}

@@ -86,6 +86,8 @@ export async function POST(request: NextRequest) {
     }
 
     const isAfterDepositMode = rule.commissionMode === CommissionMode.AFTER_DEPOSIT;
+    const todayRaw = new Date().toISOString().slice(0, 10);
+    const enforcedTravelDate = new Date(`${todayRaw}T00:00:00.000Z`);
     const consumedBeforeForAfterDeposit = isAfterDepositMode
       ? (
         await prisma.ticketSale.aggregate({
@@ -197,6 +199,7 @@ export async function POST(request: NextRequest) {
       const created = await tx.ticketSale.create({
         data: {
           ...parsed.data,
+          travelDate: enforcedTravelDate,
           currency: "USD",
           baseFareAmount,
           agencyMarkupPercent: 0,
