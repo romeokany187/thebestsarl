@@ -138,6 +138,39 @@ export async function GET(request: NextRequest) {
       : Promise.resolve(null),
   ]);
 
+  const [cashOperationsInRange, cashOperationsBeforeRange, ticketInflowsBeforeRange] = await Promise.all([
+    (prisma as unknown as { cashOperation: any }).cashOperation.findMany({
+      where: {
+        occurredAt: { gte: range.start, lt: range.end },
+      },
+      select: {
+        direction: true,
+        amount: true,
+        currency: true,
+      },
+      take: 5000,
+    }),
+    (prisma as unknown as { cashOperation: any }).cashOperation.findMany({
+      where: {
+        occurredAt: { lt: range.start },
+      },
+      select: {
+        direction: true,
+        amount: true,
+        currency: true,
+      },
+      take: 5000,
+    }),
+    prisma.payment.aggregate({
+      where: {
+        paidAt: { lt: range.start },
+      },
+      _sum: {
+        amount: true,
+      },
+    }),
+  ]);
+
   const ticketsWithStatus = tickets.map((ticket) => {
     const paidAmount = ticket.payments.reduce((sum, payment) => sum + payment.amount, 0);
     const computedStatus = paidAmount <= 0
@@ -180,6 +213,40 @@ export async function GET(request: NextRequest) {
   const partialBilled = partialTickets.reduce((sum, ticket) => sum + ticket.amount, 0);
   const partialPaid = partialTickets.reduce((sum, ticket) => sum + ticket.paidAmount, 0);
   const partialCoverage = partialBilled > 0 ? (partialPaid / partialBilled) * 100 : 0;
+
+  const openingUsdFromOps = cashOperationsBeforeRange.reduce((sum: number, row: { direction: string; amount: number; currency?: string }) => {
+    if ((row.currency ?? "USD").toUpperCase() !== "USD") return sum;
+    return sum + (row.direction === "INFLOW" ? row.amount : -row.amount);
+  }, 0);
+  const openingCdf = cashOperationsBeforeRange.reduce((sum: number, row: { direction: string; amount: number; currency?: string }) => {
+    if ((row.currency ?? "USD").toUpperCase() !== "CDF") return sum;
+    return sum + (row.direction === "INFLOW" ? row.amount : -row.amount);
+  }, 0);
+
+  const inflowUsdOps = cashOperationsInRange.reduce((sum: number, row: { direction: string; amount: number; currency?: string }) => {
+    if (row.direction !== "INFLOW") return sum;
+    if ((row.currency ?? "USD").toUpperCase() !== "USD") return sum;
+    return sum + row.amount;
+  }, 0);
+  const outflowUsdOps = cashOperationsInRange.reduce((sum: number, row: { direction: string; amount: number; currency?: string }) => {
+    if (row.direction !== "OUTFLOW") return sum;
+    if ((row.currency ?? "USD").toUpperCase() !== "USD") return sum;
+    return sum + row.amount;
+  }, 0);
+  const inflowCdfOps = cashOperationsInRange.reduce((sum: number, row: { direction: string; amount: number; currency?: string }) => {
+    if (row.direction !== "INFLOW") return sum;
+    if ((row.currency ?? "USD").toUpperCase() !== "CDF") return sum;
+    return sum + row.amount;
+  }, 0);
+  const outflowCdfOps = cashOperationsInRange.reduce((sum: number, row: { direction: string; amount: number; currency?: string }) => {
+    if (row.direction !== "OUTFLOW") return sum;
+    if ((row.currency ?? "USD").toUpperCase() !== "CDF") return sum;
+    return sum + row.amount;
+  }, 0);
+
+  const openingUsd = (ticketInflowsBeforeRange._sum.amount ?? 0) + openingUsdFromOps;
+  const closingUsd = openingUsd + totalPaidOnTickets + inflowUsdOps - outflowUsdOps;
+  const closingCdf = openingCdf + inflowCdfOps - outflowCdfOps;
 
   const pdf = await PDFDocument.create();
   pdf.registerFontkit(fontkit);
@@ -237,12 +304,14 @@ export async function GET(request: NextRequest) {
     page.drawText(`Créance: ${totalOutstanding.toFixed(2)} USD`, { x: 350, y: 505, size: 8.4, font: fontBold, color: textBlack });
     page.drawText(`Payés: ${paidTickets.length} • Impayés: ${unpaidTickets.length} • Partiels: ${partialTickets.length}`, { x: 24, y: 492, size: 8.2, font, color: textBlack });
     page.drawText(`Partiels encaissés: ${partialPaid.toFixed(2)} / ${partialBilled.toFixed(2)} USD (${partialCoverage.toFixed(1)}%)`, { x: 350, y: 492, size: 8.2, font, color: textBlack });
+    page.drawText(`Caisse USD: ouverture ${openingUsd.toFixed(2)} • entrées billets ${totalPaidOnTickets.toFixed(2)} • entrées ops ${inflowUsdOps.toFixed(2)} • sorties ${outflowUsdOps.toFixed(2)} • solde ${closingUsd.toFixed(2)}`, { x: 24, y: 480, size: 7.9, font, color: textBlack });
+    page.drawText(`Caisse CDF: ouverture ${openingCdf.toFixed(2)} • entrées ${inflowCdfOps.toFixed(2)} • sorties ${outflowCdfOps.toFixed(2)} • solde ${closingCdf.toFixed(2)}`, { x: 24, y: 468, size: 7.9, font, color: textBlack });
 
     const methodsLabel = topMethods.length > 0
       ? `Méthodes: ${topMethods.map(([method, amount]) => `${method} ${amount.toFixed(2)} USD`).join(" | ")}`
       : "Méthodes: -";
-    page.drawText(short(methodsLabel, 150), { x: 24, y: 480, size: 7.6, font, color: textBlack });
-    page.drawLine({ start: { x: 24, y: 475 }, end: { x: 818, y: 475 }, thickness: 0.7, color: lineGray });
+    page.drawText(short(methodsLabel, 150), { x: 24, y: 456, size: 7.6, font, color: textBlack });
+    page.drawLine({ start: { x: 24, y: 451 }, end: { x: 818, y: 451 }, thickness: 0.7, color: lineGray });
   };
 
   const headers = ["Date", "PNR", "Client", "Compagnie", "Vendeur", "Montant payé", "Méthode", "Référence"];
@@ -257,8 +326,8 @@ export async function GET(request: NextRequest) {
 
   drawHeader();
   drawSummary();
-  drawTableHeader(460);
-  let y = 444;
+  drawTableHeader(436);
+  let y = 420;
 
   for (const row of rows) {
     if (y < 38) {

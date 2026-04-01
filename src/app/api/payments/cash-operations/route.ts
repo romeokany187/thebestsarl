@@ -58,8 +58,21 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Devise non supportée. Utilisez USD ou CDF." }, { status: 400 });
   }
 
-  const fxRateUsdToCdf = data.fxRateUsdToCdf
-    ?? (data.fxRateToUsd && data.fxRateToUsd > 0 ? 1 / data.fxRateToUsd : undefined)
+  const latestRateOperation = await cashOperationClient.findFirst({
+    where: {
+      occurredAt: { lte: occurredAt },
+      fxRateUsdToCdf: { not: null },
+    },
+    select: {
+      fxRateUsdToCdf: true,
+      fxRateToUsd: true,
+      occurredAt: true,
+    },
+    orderBy: { occurredAt: "desc" },
+  });
+
+  const fxRateUsdToCdf = latestRateOperation?.fxRateUsdToCdf
+    ?? (latestRateOperation?.fxRateToUsd && latestRateOperation.fxRateToUsd > 0 ? 1 / latestRateOperation.fxRateToUsd : undefined)
     ?? parsePositiveNumber(process.env.CASH_DEFAULT_USD_TO_CDF_RATE, 2800);
 
   if (!fxRateUsdToCdf || fxRateUsdToCdf <= 0) {

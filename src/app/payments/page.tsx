@@ -53,6 +53,24 @@ function normalizeCashAmountUsd(operation: {
   return operation.amount / rate;
 }
 
+function normalizeCashAmountCdf(operation: {
+  amount: number;
+  currency?: string | null;
+  amountCdf?: number | null;
+  fxRateToUsd?: number | null;
+  fxRateUsdToCdf?: number | null;
+}): number {
+  if (typeof operation.amountCdf === "number") {
+    return operation.amountCdf;
+  }
+  const currency = (operation.currency ?? "USD").toUpperCase();
+  if (currency === "CDF") {
+    return operation.amount;
+  }
+  const rate = operation.fxRateUsdToCdf ?? (operation.fxRateToUsd && operation.fxRateToUsd > 0 ? 1 / operation.fxRateToUsd : 2800);
+  return operation.amount * rate;
+}
+
 export const dynamic = "force-dynamic";
 
 export default async function PaymentsPage({
@@ -219,6 +237,24 @@ export default async function PaymentsPage({
   );
   const openingBalance = ticketInflowsBefore + cashOpsSignedBefore;
 
+  const openingUsdFromOps = cashOperationsBeforeStart.reduce(
+    (sum: number, operation: { direction: string; amount: number; currency?: string }) => {
+      const currency = (operation.currency ?? "USD").toUpperCase();
+      if (currency !== "USD") return sum;
+      return sum + (operation.direction === "INFLOW" ? operation.amount : -operation.amount);
+    },
+    0,
+  );
+  const openingCdf = cashOperationsBeforeStart.reduce(
+    (sum: number, operation: { direction: string; amount: number; currency?: string }) => {
+      const currency = (operation.currency ?? "USD").toUpperCase();
+      if (currency !== "CDF") return sum;
+      return sum + (operation.direction === "INFLOW" ? operation.amount : -operation.amount);
+    },
+    0,
+  );
+  const openingUsd = ticketInflowsBefore + openingUsdFromOps;
+
   const otherInflows = cashOperations
     .filter((operation: { direction: string }) => operation.direction === "INFLOW")
     .reduce((sum: number, operation: { amount: number; currency?: string; amountUsd?: number; fxRateToUsd?: number; fxRateUsdToCdf?: number }) => sum + normalizeCashAmountUsd(operation), 0);
@@ -240,6 +276,22 @@ export default async function PaymentsPage({
   const riskHint = `Sorties ${cashOutflows.toFixed(2)} / Entrées ${grossInflows.toFixed(2)} (${expensePressure.toFixed(1)}%)`;
 
   const accountingConsistency = Math.abs((openingBalance + grossInflows - cashOutflows) - closingBalance) <= 0.0001;
+
+  const cashInflowUsd = cashOperations
+    .filter((operation: { direction: string; currency?: string }) => operation.direction === "INFLOW" && (operation.currency ?? "USD").toUpperCase() === "USD")
+    .reduce((sum: number, operation: { amount: number }) => sum + operation.amount, 0);
+  const cashOutflowUsd = cashOperations
+    .filter((operation: { direction: string; currency?: string }) => operation.direction === "OUTFLOW" && (operation.currency ?? "USD").toUpperCase() === "USD")
+    .reduce((sum: number, operation: { amount: number }) => sum + operation.amount, 0);
+  const cashInflowCdf = cashOperations
+    .filter((operation: { direction: string; currency?: string }) => operation.direction === "INFLOW" && (operation.currency ?? "USD").toUpperCase() === "CDF")
+    .reduce((sum: number, operation: { amount: number }) => sum + operation.amount, 0);
+  const cashOutflowCdf = cashOperations
+    .filter((operation: { direction: string; currency?: string }) => operation.direction === "OUTFLOW" && (operation.currency ?? "USD").toUpperCase() === "CDF")
+    .reduce((sum: number, operation: { amount: number }) => sum + operation.amount, 0);
+
+  const closingUsd = openingUsd + totalPaid + cashInflowUsd - cashOutflowUsd;
+  const closingCdf = openingCdf + cashInflowCdf - cashOutflowCdf;
 
   const paymentTickets = ticketsWithComputedStatus
     .filter((ticket) => ticket.computedStatus !== PaymentStatus.PAID)
@@ -270,9 +322,11 @@ export default async function PaymentsPage({
 
       <PaymentsWritingWorkspace
         closedSummary={(
-          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
             <KpiCard label="Total encaissé" value={`${grossInflows.toFixed(2)} USD`} hint={`Billets ${totalPaid.toFixed(2)} + autres ${otherInflows.toFixed(2)}`} />
             <KpiCard label="Total dépensé" value={`${cashOutflows.toFixed(2)} USD`} />
+            <KpiCard label="Solde caisse USD" value={`${closingUsd.toFixed(2)} USD`} />
+            <KpiCard label="Total caisse CDF" value={`${closingCdf.toFixed(2)} CDF`} />
             <KpiCard label="Niveau de risque" value={riskLevel} hint={riskHint} />
           </div>
         )}
@@ -390,16 +444,17 @@ export default async function PaymentsPage({
         cashWorkspace={(
           <div className="space-y-4">
             <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-              <KpiCard label="Solde ouverture caisse" value={`${openingBalance.toFixed(2)} USD`} />
-              <KpiCard label="Entrées globales" value={`${grossInflows.toFixed(2)} USD`} hint={`Billets ${totalPaid.toFixed(2)} + autres ${otherInflows.toFixed(2)}`} />
-              <KpiCard label="Sorties caisse" value={`${cashOutflows.toFixed(2)} USD`} />
-              <KpiCard label="Solde clôture caisse" value={`${closingBalance.toFixed(2)} USD`} hint={accountingConsistency ? "Equilibre comptable OK" : "Ecart de contrôle détecté"} />
+              <KpiCard label="Solde ouverture USD" value={`${openingUsd.toFixed(2)} USD`} />
+              <KpiCard label="Solde clôture USD" value={`${closingUsd.toFixed(2)} USD`} hint={`Billets ${totalPaid.toFixed(2)} + autres USD ${cashInflowUsd.toFixed(2)} - sorties USD ${cashOutflowUsd.toFixed(2)}`} />
+              <KpiCard label="Solde ouverture CDF" value={`${openingCdf.toFixed(2)} CDF`} />
+              <KpiCard label="Solde clôture CDF" value={`${closingCdf.toFixed(2)} CDF`} hint={`Entrées CDF ${cashInflowCdf.toFixed(2)} - sorties CDF ${cashOutflowCdf.toFixed(2)}`} />
             </div>
 
             <section className="rounded-2xl border border-black/10 bg-white p-4 dark:border-white/10 dark:bg-zinc-900">
               <h2 className="text-sm font-semibold">Synthèse caisse</h2>
               <p className="mt-2 text-xs text-black/60 dark:text-white/60">
-                Ouverture {openingBalance.toFixed(2)} USD, entrées {grossInflows.toFixed(2)} USD, sorties {cashOutflows.toFixed(2)} USD, variation nette {netCashVariation.toFixed(2)} USD, clôture {closingBalance.toFixed(2)} USD.
+                Solde USD: ouverture {openingUsd.toFixed(2)} USD, clôture {closingUsd.toFixed(2)} USD. Solde CDF: ouverture {openingCdf.toFixed(2)} CDF, clôture {closingCdf.toFixed(2)} CDF.
+                Contrôle global (équivalent USD): ouverture {openingBalance.toFixed(2)} USD, entrées {grossInflows.toFixed(2)} USD, sorties {cashOutflows.toFixed(2)} USD, variation nette {netCashVariation.toFixed(2)} USD, clôture {closingBalance.toFixed(2)} USD ({accountingConsistency ? "OK" : "écart"}).
               </p>
             </section>
 

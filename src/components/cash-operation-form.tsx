@@ -33,14 +33,32 @@ export function CashOperationForm() {
   const [category, setCategory] = useState<string>("OTHER_SALE");
   const [amount, setAmount] = useState<string>("");
   const [currency, setCurrency] = useState<"USD" | "CDF">("USD");
-  const [fxRateUsdToCdf, setFxRateUsdToCdf] = useState<string>("2800");
   const [method, setMethod] = useState<string>("CASH");
   const [reference, setReference] = useState<string>("");
   const [description, setDescription] = useState<string>("");
   const [occurredAt, setOccurredAt] = useState<string>(toLocalDateTimeInputValue(new Date()));
+  const [fxRateUsdToCdf, setFxRateUsdToCdf] = useState<string>("2800");
+  const [conversionSourceCurrency, setConversionSourceCurrency] = useState<"USD" | "CDF">("USD");
+  const [conversionSourceAmount, setConversionSourceAmount] = useState<string>("");
+  const [conversionReference, setConversionReference] = useState<string>("");
+  const [conversionDescription, setConversionDescription] = useState<string>("Conversion interne de caisse");
+  const [conversionOccurredAt, setConversionOccurredAt] = useState<string>(toLocalDateTimeInputValue(new Date()));
   const [loading, setLoading] = useState<boolean>(false);
+  const [conversionLoading, setConversionLoading] = useState<boolean>(false);
   const [message, setMessage] = useState<string>("");
   const [error, setError] = useState<string>("");
+
+  const conversionTargetCurrency = conversionSourceCurrency === "USD" ? "CDF" : "USD";
+  const numericRatePreview = Number.parseFloat(fxRateUsdToCdf);
+  const numericConversionSourceAmountPreview = Number.parseFloat(conversionSourceAmount);
+  const conversionTargetAmountPreview = Number.isFinite(numericRatePreview)
+    && numericRatePreview > 0
+    && Number.isFinite(numericConversionSourceAmountPreview)
+    && numericConversionSourceAmountPreview > 0
+    ? conversionSourceCurrency === "USD"
+      ? numericConversionSourceAmountPreview * numericRatePreview
+      : numericConversionSourceAmountPreview / numericRatePreview
+    : 0;
 
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -63,13 +81,6 @@ export function CashOperationForm() {
     }
 
     const normalizedCurrency = currency;
-    const numericUsdToCdf = Number.parseFloat(fxRateUsdToCdf);
-
-    if (!Number.isFinite(numericUsdToCdf) || numericUsdToCdf <= 0) {
-      setError("Saisissez un taux du jour valide (1 USD = X CDF).");
-      setLoading(false);
-      return;
-    }
 
     if (!occurredAt) {
       setError("Sélectionnez la date et l'heure de l'opération.");
@@ -85,7 +96,6 @@ export function CashOperationForm() {
         category,
         amount: numericAmount,
         currency: normalizedCurrency,
-        fxRateUsdToCdf: numericUsdToCdf,
         method: method.trim(),
         reference: reference.trim() || undefined,
         description: description.trim(),
@@ -111,6 +121,64 @@ export function CashOperationForm() {
     setReference("");
     setDescription("");
     setLoading(false);
+    router.refresh();
+  }
+
+  async function onConvertSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setConversionLoading(true);
+    setMessage("");
+    setError("");
+
+    const sourceAmount = Number.parseFloat(conversionSourceAmount);
+    const rate = Number.parseFloat(fxRateUsdToCdf);
+
+    if (!Number.isFinite(sourceAmount) || sourceAmount <= 0) {
+      setError("Saisissez un montant source valide pour la conversion.");
+      setConversionLoading(false);
+      return;
+    }
+
+    if (!Number.isFinite(rate) || rate <= 0) {
+      setError("Saisissez un taux du jour valide (1 USD = X CDF).");
+      setConversionLoading(false);
+      return;
+    }
+
+    if (!conversionOccurredAt) {
+      setError("Sélectionnez la date et l'heure de conversion.");
+      setConversionLoading(false);
+      return;
+    }
+
+    const response = await fetch("/api/payments/cash-operations/convert", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        sourceCurrency: conversionSourceCurrency,
+        sourceAmount,
+        fxRateUsdToCdf: rate,
+        reference: conversionReference.trim() || undefined,
+        description: conversionDescription.trim() || undefined,
+        occurredAt: new Date(conversionOccurredAt).toISOString(),
+      }),
+    });
+
+    const payload = await response.json().catch(() => null);
+
+    if (!response.ok) {
+      setError(payload?.error ?? "Impossible d'enregistrer la conversion de caisse.");
+      setConversionLoading(false);
+      return;
+    }
+
+    const converted = payload?.data;
+    setMessage(
+      `Conversion enregistrée: ${Number(converted?.sourceAmount ?? sourceAmount).toFixed(2)} ${converted?.sourceCurrency ?? conversionSourceCurrency} -> ${Number(converted?.targetAmount ?? conversionTargetAmountPreview).toFixed(2)} ${converted?.targetCurrency ?? conversionTargetCurrency}.`,
+    );
+    setConversionSourceAmount("");
+    setConversionReference("");
+    setConversionLoading(false);
     router.refresh();
   }
 
@@ -169,19 +237,6 @@ export function CashOperationForm() {
         </div>
 
         <div>
-          <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-black/60 dark:text-white/60">Taux du jour (1 USD = X CDF)</label>
-          <input
-            type="number"
-            step="0.01"
-            min="0.01"
-            value={fxRateUsdToCdf}
-            onChange={(event) => setFxRateUsdToCdf(event.target.value)}
-            className="w-full rounded-md border border-black/15 bg-white px-3 py-2 text-sm dark:border-white/15 dark:bg-zinc-900"
-            placeholder="2800"
-          />
-        </div>
-
-        <div>
           <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-black/60 dark:text-white/60">Méthode</label>
           <input
             value={method}
@@ -229,6 +284,93 @@ export function CashOperationForm() {
           {loading ? "Enregistrement..." : "Enregistrer l'opération"}
         </button>
       </form>
+
+      <div className="mt-4 border-t border-black/10 pt-4 dark:border-white/10">
+        <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-black/60 dark:text-white/60">
+          Conversion caisse USD/CDF (à utiliser uniquement si nécessaire)
+        </h3>
+        <form onSubmit={onConvertSubmit} className="grid gap-3 lg:grid-cols-5 lg:items-end">
+          <div>
+            <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-black/60 dark:text-white/60">Débiter</label>
+            <select
+              value={conversionSourceCurrency}
+              onChange={(event) => setConversionSourceCurrency(event.target.value as "USD" | "CDF")}
+              className="w-full rounded-md border border-black/15 bg-white px-3 py-2 text-sm uppercase dark:border-white/15 dark:bg-zinc-900"
+            >
+              <option value="USD">USD</option>
+              <option value="CDF">CDF</option>
+            </select>
+          </div>
+
+          <div>
+            <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-black/60 dark:text-white/60">Montant débité</label>
+            <input
+              type="number"
+              step="0.01"
+              min="0"
+              value={conversionSourceAmount}
+              onChange={(event) => setConversionSourceAmount(event.target.value)}
+              className="w-full rounded-md border border-black/15 bg-white px-3 py-2 text-sm dark:border-white/15 dark:bg-zinc-900"
+              placeholder="0.00"
+            />
+          </div>
+
+          <div>
+            <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-black/60 dark:text-white/60">Taux du jour</label>
+            <input
+              type="number"
+              step="0.01"
+              min="0.01"
+              value={fxRateUsdToCdf}
+              onChange={(event) => setFxRateUsdToCdf(event.target.value)}
+              className="w-full rounded-md border border-black/15 bg-white px-3 py-2 text-sm dark:border-white/15 dark:bg-zinc-900"
+              placeholder="1 USD = X CDF"
+            />
+          </div>
+
+          <div>
+            <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-black/60 dark:text-white/60">Date conversion</label>
+            <input
+              type="datetime-local"
+              value={conversionOccurredAt}
+              onChange={(event) => setConversionOccurredAt(event.target.value)}
+              className="w-full rounded-md border border-black/15 bg-white px-3 py-2 text-sm dark:border-white/15 dark:bg-zinc-900"
+            />
+          </div>
+
+          <button
+            type="submit"
+            disabled={conversionLoading}
+            className="rounded-md border border-black/20 px-4 py-2 text-sm font-semibold hover:bg-black/5 disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/20 dark:hover:bg-white/10"
+          >
+            {conversionLoading ? "Conversion..." : `Convertir vers ${conversionTargetCurrency}`}
+          </button>
+
+          <div>
+            <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-black/60 dark:text-white/60">Référence</label>
+            <input
+              value={conversionReference}
+              onChange={(event) => setConversionReference(event.target.value)}
+              className="w-full rounded-md border border-black/15 bg-white px-3 py-2 text-sm dark:border-white/15 dark:bg-zinc-900"
+              placeholder="Optionnel"
+            />
+          </div>
+
+          <div className="lg:col-span-3">
+            <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-black/60 dark:text-white/60">Libellé conversion</label>
+            <input
+              value={conversionDescription}
+              onChange={(event) => setConversionDescription(event.target.value)}
+              className="w-full rounded-md border border-black/15 bg-white px-3 py-2 text-sm dark:border-white/15 dark:bg-zinc-900"
+              placeholder="Conversion interne de caisse"
+            />
+          </div>
+        </form>
+
+        <p className="mt-2 text-xs text-black/60 dark:text-white/60">
+          Crédit cible estimé: {conversionTargetAmountPreview.toFixed(2)} {conversionTargetCurrency} (taux 1 USD = {Number.isFinite(numericRatePreview) ? numericRatePreview.toFixed(2) : "0.00"} CDF)
+        </p>
+      </div>
 
       {message ? <p className="mt-2 text-xs text-emerald-600">{message}</p> : null}
       {error ? <p className="mt-2 text-xs text-red-600">{error}</p> : null}
