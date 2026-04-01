@@ -19,7 +19,6 @@ type UserRow = {
   role: string;
   jobTitle: JobTitle;
   teamName: string;
-  canImportTicketWorkbook: boolean;
 };
 
 const jobOptions: Array<{ value: JobTitle; label: string }> = [
@@ -39,16 +38,12 @@ export function UserJobTitleAdmin({ users }: { users: UserRow[] }) {
   const [savingId, setSavingId] = useState<string>("");
 
   const hasChanges = useMemo(
-    () => rows.some((row, index) => row.jobTitle !== users[index]?.jobTitle || row.canImportTicketWorkbook !== users[index]?.canImportTicketWorkbook),
+    () => rows.some((row, index) => row.jobTitle !== users[index]?.jobTitle),
     [rows, users],
   );
 
   function updateJobTitle(userId: string, jobTitle: JobTitle) {
     setRows((prev) => prev.map((row) => (row.id === userId ? { ...row, jobTitle } : row)));
-  }
-
-  function updateImportPermission(userId: string, canImportTicketWorkbook: boolean) {
-    setRows((prev) => prev.map((row) => (row.id === userId ? { ...row, canImportTicketWorkbook } : row)));
   }
 
   async function saveOne(userId: string) {
@@ -63,7 +58,7 @@ export function UserJobTitleAdmin({ users }: { users: UserRow[] }) {
     const response = await fetch(`/api/users/${userId}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ jobTitle: row.jobTitle, canImportTicketWorkbook: row.canImportTicketWorkbook }),
+      body: JSON.stringify({ jobTitle: row.jobTitle }),
     });
 
     if (!response.ok) {
@@ -122,7 +117,6 @@ export function UserJobTitleAdmin({ users }: { users: UserRow[] }) {
               <th className="px-3 py-2 text-left">Accès</th>
               <th className="px-3 py-2 text-left">Service</th>
               <th className="px-3 py-2 text-left">Poste</th>
-              <th className="px-3 py-2 text-left">Import Excel billets</th>
               <th className="px-3 py-2 text-left">Action</th>
             </tr>
           </thead>
@@ -145,16 +139,6 @@ export function UserJobTitleAdmin({ users }: { users: UserRow[] }) {
                       </option>
                     ))}
                   </select>
-                </td>
-                <td className="px-3 py-2">
-                  <label className="flex items-center gap-2 text-xs">
-                    <input
-                      type="checkbox"
-                      checked={user.canImportTicketWorkbook}
-                      onChange={(event) => updateImportPermission(user.id, event.target.checked)}
-                    />
-                    <span>{user.canImportTicketWorkbook ? "Autorisé" : "Non autorisé"}</span>
-                  </label>
                 </td>
                 <td className="px-3 py-2">
                   <div className="flex items-center gap-2">

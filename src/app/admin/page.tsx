@@ -46,7 +46,6 @@ export default async function AdminPage() {
             role: user.role,
             jobTitle: user.jobTitle,
             teamName: user.team?.name ?? "Sans équipe",
-            canImportTicketWorkbook: user.canImportTicketWorkbook,
           }))}
         />
       </section>

@@ -33,7 +33,7 @@ function parseIsoDate(value: FormDataEntryValue | null) {
 }
 
 export async function GET(request: NextRequest) {
-  const access = await requireApiModuleAccess("tickets", ["DIRECTEUR_GENERAL"]);
+  const access = await requireApiModuleAccess("tickets", ["ADMIN"]);
   if (access.error) {
     return access.error;
   }
@@ -65,7 +65,7 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
-  const access = await requireApiModuleAccess("tickets", ["DIRECTEUR_GENERAL"]);
+  const access = await requireApiModuleAccess("tickets", ["ADMIN"]);
   if (access.error) {
     return access.error;
   }
@@ -112,10 +112,6 @@ export async function POST(request: NextRequest) {
     const hasSupportedExtension = lowerName.endsWith(".xlsx") || lowerName.endsWith(".xls");
     if ((!file.type || !allowedMimeTypes.has(file.type)) && !hasSupportedExtension) {
       return NextResponse.json({ error: "Formats autorisés: XLSX, XLS." }, { status: 400 });
-    }
-
-    if (replaceExistingPeriodRequested && access.role === "EMPLOYEE") {
-      return NextResponse.json({ error: "Le remplacement complet de la période est réservé à la supervision." }, { status: 403 });
     }
 
     const buffer = Buffer.from(await file.arrayBuffer());

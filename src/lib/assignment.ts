@@ -55,8 +55,8 @@ export function canSellTickets(jobTitle: string) {
   return Boolean(jobTitle && jobTitle.trim().length > 0);
 }
 
-export function canImportTicketWorkbook(role: string, explicitPermission?: boolean | null) {
-  return role === "ADMIN" || Boolean(explicitPermission);
+export function canImportTicketWorkbook(role: string, _explicitPermission?: boolean | null) {
+  return role === "ADMIN";
 }
 
 export function canProcessPayments(jobTitle: string) {
