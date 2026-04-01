@@ -4,7 +4,7 @@ import fontkit from "@pdf-lib/fontkit";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { prisma } from "@/lib/prisma";
-import { requireApiModuleAccess } from "@/lib/rbac";
+import { requireApiRoles } from "@/lib/rbac";
 import { parseNeedQuote } from "@/lib/need-lines";
 
 type RouteContext = {
@@ -97,7 +97,7 @@ function wrapTextByWidth(text: string, maxWidth: number, font: import("pdf-lib")
 }
 
 export async function GET(request: NextRequest, context: RouteContext) {
-  const access = await requireApiModuleAccess("procurement", ["ADMIN", "MANAGER", "EMPLOYEE", "ACCOUNTANT"]);
+  const access = await requireApiRoles(["ADMIN", "MANAGER", "EMPLOYEE", "ACCOUNTANT"]);
   if (access.error) {
     if (access.error.status === 401) {
       const signInUrl = new URL("/auth/signin", request.url);

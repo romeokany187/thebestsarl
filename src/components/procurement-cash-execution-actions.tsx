@@ -11,6 +11,12 @@ export function ProcurementCashExecutionActions({ needRequestId }: { needRequest
   const [executionComment, setExecutionComment] = useState("");
 
   async function executeNeed() {
+    if (referenceDoc.trim().length < 2) {
+      setState("error");
+      setMessage("Saisissez une référence caisse (au moins 2 caractères) avant d'exécuter.");
+      return;
+    }
+
     setState("loading");
     setMessage("");
 
@@ -65,7 +71,7 @@ export function ProcurementCashExecutionActions({ needRequestId }: { needRequest
       <button
         type="button"
         onClick={() => void executeNeed()}
-        disabled={state === "loading" || referenceDoc.trim().length < 2}
+        disabled={state === "loading"}
         className="rounded-md border border-blue-300 px-2.5 py-1 text-[11px] font-semibold text-blue-700 hover:bg-blue-50 disabled:opacity-60 dark:border-blue-700/60 dark:text-blue-300 dark:hover:bg-blue-950/30"
       >
         Exécuter (Caisse)
