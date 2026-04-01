@@ -60,6 +60,14 @@ export function hasModuleAccess(params: {
     return true;
   }
 
+  if (role === "ADMIN") {
+    return true;
+  }
+
+  if (role === "DIRECTEUR_GENERAL") {
+    return true;
+  }
+
   if (module === "payments") {
     const financeRole = jobTitle === "CAISSIERE" || jobTitle === "COMPTABLE";
     const kinshasaDirection = teamIncludes(teamName, ["KINSHASA", "DIRECTION GENERALE", "DIRECTION GÉNÉRALE"]);
@@ -67,15 +75,7 @@ export function hasModuleAccess(params: {
   }
 
   if (module === "tickets") {
-    return role === "DIRECTEUR_GENERAL" || role === "ADMIN";
-  }
-
-  if (role === "ADMIN") {
-    return true;
-  }
-
-  if (role === "DIRECTEUR_GENERAL") {
-    return true;
+    return false;
   }
 
   // Without assignment/function, only home and profile are visible until affectation.
