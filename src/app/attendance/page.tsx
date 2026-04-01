@@ -35,20 +35,21 @@ export default async function AttendancePage({
 }: {
   searchParams?: Promise<SearchParams>;
 }) {
-  const { session, role } = await requirePageModuleAccess("attendance", ["ADMIN", "MANAGER", "EMPLOYEE", "ACCOUNTANT"]);
+  const { session, role } = await requirePageModuleAccess("attendance", ["ADMIN", "DIRECTEUR_GENERAL", "MANAGER", "EMPLOYEE", "ACCOUNTANT"]);
   const resolvedSearchParams = (await searchParams) ?? {};
   const range = dateRangeFromParams(resolvedSearchParams);
+  const canViewGlobalAttendance = role === "ADMIN" || role === "DIRECTEUR_GENERAL";
   const canManageAttendance = role !== "ADMIN";
-  const selectedUserId = role === "ADMIN"
+  const selectedUserId = canViewGlobalAttendance
     ? resolvedSearchParams.userId && resolvedSearchParams.userId !== "ALL"
       ? resolvedSearchParams.userId
       : undefined
     : session.user.id;
-  const accessNote = canManageAttendance
-    ? "Accès personnel: vous signez votre présence et consultez uniquement vos propres lignes."
-    : "Accès lecture seule: consultation des présences uniquement.";
+  const accessNote = canViewGlobalAttendance
+    ? "Accès direction: visualisation globale des présences et récapitulatifs journaliers de toute l'équipe."
+    : "Accès personnel: vous signez votre présence et consultez uniquement vos propres lignes.";
 
-  const users = role !== "ADMIN"
+  const users = !canViewGlobalAttendance
     ? []
     : await prisma.user.findMany({
       select: { id: true, name: true },
@@ -125,7 +126,7 @@ export default async function AttendancePage({
             Filtrer
           </button>
         </form>
-        {role === "ADMIN" ? (
+        {canViewGlobalAttendance ? (
           <div className="mt-3 flex flex-wrap items-center gap-2 text-xs">
             <a
               href={`/api/attendance/report?${reportQuery}`}
@@ -160,7 +161,7 @@ export default async function AttendancePage({
           startDate={range.startRaw}
           endDate={range.endRaw}
           userId={selectedUserId}
-          showEmployeeColumn={role === "ADMIN"}
+          showEmployeeColumn={canViewGlobalAttendance}
         />
       </div>
     </AppShell>

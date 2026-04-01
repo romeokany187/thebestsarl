@@ -4,7 +4,7 @@ import { attendanceSchema } from "@/lib/validators";
 import { requireApiModuleAccess } from "@/lib/rbac";
 
 export async function GET(request: NextRequest) {
-  const access = await requireApiModuleAccess("attendance", ["ADMIN", "MANAGER", "EMPLOYEE", "ACCOUNTANT"]);
+  const access = await requireApiModuleAccess("attendance", ["ADMIN", "DIRECTEUR_GENERAL", "MANAGER", "EMPLOYEE", "ACCOUNTANT"]);
   if (access.error) {
     return access.error;
   }
@@ -13,7 +13,8 @@ export async function GET(request: NextRequest) {
   const requestedUserId = searchParams.get("userId");
   const startDate = searchParams.get("startDate");
   const endDate = searchParams.get("endDate");
-  const userId = access.role === "ADMIN" ? requestedUserId : access.session.user.id;
+  const canViewGlobalAttendance = access.role === "ADMIN" || access.role === "DIRECTEUR_GENERAL";
+  const userId = canViewGlobalAttendance ? requestedUserId : access.session.user.id;
 
   let dateFilter: { gte: Date; lt: Date } | undefined;
   if (startDate && endDate) {
