@@ -14,7 +14,7 @@ function clamp(value: number, min: number, max: number) {
 }
 
 export async function PATCH(request: NextRequest, { params }: Params) {
-  const access = await requireApiModuleAccess("tickets", ["ADMIN"]);
+  const access = await requireApiModuleAccess("sales", ["ADMIN", "MANAGER", "EMPLOYEE"]);
   if (access.error) {
     return access.error;
   }
@@ -303,7 +303,7 @@ export async function PATCH(request: NextRequest, { params }: Params) {
 }
 
 export async function DELETE(_request: NextRequest, { params }: Params) {
-  const access = await requireApiModuleAccess("tickets", ["ADMIN"]);
+  const access = await requireApiModuleAccess("sales", ["ADMIN", "MANAGER", "EMPLOYEE"]);
   if (access.error) {
     return access.error;
   }
