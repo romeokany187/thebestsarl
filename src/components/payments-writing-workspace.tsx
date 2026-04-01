@@ -2,17 +2,19 @@
 
 import { useState } from "react";
 
-type WritingMode = "none" | "tickets" | "cash" | "needs" | "orders";
+type WritingMode = "none" | "tickets" | "cash" | "billetage" | "needs" | "orders";
 
 export function PaymentsWritingWorkspace({
   ticketWorkspace,
   cashWorkspace,
+  billetageWorkspace,
   needsPendingWorkspace,
   ordersPendingWorkspace,
   closedSummary,
 }: {
   ticketWorkspace: React.ReactNode;
   cashWorkspace: React.ReactNode;
+  billetageWorkspace: React.ReactNode;
   needsPendingWorkspace: React.ReactNode;
   ordersPendingWorkspace: React.ReactNode;
   closedSummary?: React.ReactNode;
@@ -65,6 +67,17 @@ export function PaymentsWritingWorkspace({
           </button>
           <button
             type="button"
+            onClick={() => setMode("billetage")}
+            className={`rounded-md px-3 py-1.5 text-xs font-semibold transition ${
+              mode === "billetage"
+                ? "border border-sky-500 bg-sky-50 text-sky-700 dark:border-sky-600 dark:bg-sky-950/40 dark:text-sky-300"
+                : "border border-black/20 hover:bg-black/5 dark:border-white/20 dark:hover:bg-white/10"
+            }`}
+          >
+            Billetage caisse
+          </button>
+          <button
+            type="button"
             onClick={() => setMode("needs")}
             className={`rounded-md px-3 py-1.5 text-xs font-semibold transition ${
               mode === "needs"
@@ -90,6 +103,7 @@ export function PaymentsWritingWorkspace({
         <div className="mt-4">
           {mode === "tickets" ? ticketWorkspace : null}
           {mode === "cash" ? cashWorkspace : null}
+          {mode === "billetage" ? billetageWorkspace : null}
           {mode === "needs" ? needsPendingWorkspace : null}
           {mode === "orders" ? ordersPendingWorkspace : null}
           {mode === "none" ? (

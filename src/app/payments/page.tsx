@@ -1,5 +1,6 @@
 import { NeedRequestStatus, PaymentStatus } from "@prisma/client";
 import { AppShell } from "@/components/app-shell";
+import { CashBilletageWorkspace } from "@/components/cash-billetage-workspace";
 import { CashOperationForm } from "@/components/cash-operation-form";
 import { KpiCard } from "@/components/kpi-card";
 import { PaymentEntryForm } from "@/components/payment-entry-form";
@@ -563,6 +564,9 @@ export default async function PaymentsPage({
               </div>
             </section>
           </div>
+        )}
+        billetageWorkspace={(
+          <CashBilletageWorkspace expectedUsd={closingUsd} expectedCdf={closingCdf} />
         )}
         needsPendingWorkspace={(
           <div className="space-y-4">
