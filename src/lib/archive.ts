@@ -1,6 +1,6 @@
 import { ArchiveFolder, ArchiveOrigin, PrismaClient } from "@prisma/client";
 
-type ArchiveAppRole = "ADMIN" | "MANAGER" | "EMPLOYEE" | "ACCOUNTANT";
+type ArchiveAppRole = "ADMIN" | "DIRECTEUR_GENERAL" | "MANAGER" | "EMPLOYEE" | "ACCOUNTANT";
 type ArchiveAccessScope = "ALL" | "DIRECTION" | "FINANCE";
 
 const ARCHIVE_FOLDER_SCOPES: Record<ArchiveFolder, ArchiveAccessScope> = {

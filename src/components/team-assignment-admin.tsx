@@ -9,7 +9,7 @@ type TeamOption = {
   createdAt: string;
 };
 
-type UserRole = "ADMIN" | "MANAGER" | "EMPLOYEE" | "ACCOUNTANT";
+type UserRole = "ADMIN" | "DIRECTEUR_GENERAL" | "MANAGER" | "EMPLOYEE" | "ACCOUNTANT";
 
 type JobTitle =
   | "COMMERCIAL"
@@ -44,6 +44,7 @@ type UserRow = {
 
 function roleLabel(role: UserRole) {
   if (role === "ADMIN") return "Admin";
+  if (role === "DIRECTEUR_GENERAL") return "Direction générale";
   if (role === "MANAGER") return "Chef";
   if (role === "ACCOUNTANT") return "Comptable";
   return "Collaborateur";
