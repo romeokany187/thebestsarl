@@ -15,7 +15,7 @@ function clamp(value: number, min: number, max: number) {
 }
 
 export async function GET() {
-  const access = await requireApiModuleAccess("tickets", ["ADMIN", "MANAGER", "EMPLOYEE", "ACCOUNTANT"]);
+  const access = await requireApiModuleAccess("tickets", ["ADMIN"]);
   if (access.error) {
     return access.error;
   }
@@ -38,7 +38,7 @@ export async function GET() {
 }
 
 export async function POST(request: NextRequest) {
-  const access = await requireApiModuleAccess("tickets", ["ADMIN", "MANAGER", "EMPLOYEE"]);
+  const access = await requireApiModuleAccess("tickets", ["ADMIN"]);
   if (access.error) {
     return access.error;
   }

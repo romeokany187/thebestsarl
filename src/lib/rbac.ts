@@ -66,6 +66,10 @@ export function hasModuleAccess(params: {
     return financeRole && kinshasaDirection;
   }
 
+  if (module === "tickets") {
+    return role === "ADMIN" && jobTitle === "DIRECTION_GENERALE";
+  }
+
   if (role === "ADMIN") {
     return true;
   }
@@ -84,10 +88,6 @@ export function hasModuleAccess(params: {
   }
 
   if (module === "sales") {
-    return true;
-  }
-
-  if (module === "tickets") {
     return true;
   }
 
