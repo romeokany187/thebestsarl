@@ -22,6 +22,11 @@ function utcDayBounds(date: Date): { start: Date; end: Date } {
   return { start, end };
 }
 
+function amountToUsd(amount: number, currency: string, fxRateToUsd: number): number {
+  if (currency === "USD") return amount;
+  return amount * fxRateToUsd;
+}
+
 export async function POST(request: NextRequest) {
   const access = await requireApiModuleAccess("payments", ["ADMIN", "DIRECTEUR_GENERAL", "MANAGER", "ACCOUNTANT", "EMPLOYEE"]);
   if (access.error) return access.error;
@@ -44,10 +49,20 @@ export async function POST(request: NextRequest) {
   const data = parsed.data;
   const occurredAt = data.occurredAt ?? new Date();
   const currency = (data.currency ?? "USD").toUpperCase();
+  const fxRateToUsd = currency === "USD" ? 1 : data.fxRateToUsd;
+
+  if (currency !== "USD" && (!fxRateToUsd || fxRateToUsd <= 0)) {
+    return NextResponse.json(
+      { error: "Le taux du jour vers USD est obligatoire pour une opération en devise non-USD." },
+      { status: 400 },
+    );
+  }
+
+  const normalizedAmountUsd = amountToUsd(data.amount, currency, fxRateToUsd ?? 1);
   const singleOutflowAlertLimit = parsePositiveNumber(process.env.CASH_SINGLE_OUTFLOW_ALERT_LIMIT_USD, DEFAULT_SINGLE_OUTFLOW_ALERT_LIMIT_USD);
   const dailyOutflowCap = parsePositiveNumber(process.env.CASH_DAILY_OUTFLOW_CAP_USD, DEFAULT_DAILY_OUTFLOW_CAP_USD);
   const { start: dayStart, end: dayEnd } = utcDayBounds(occurredAt);
-  let projectedDailyOutflow = 0;
+  let projectedDailyOutflowUsd = 0;
   let thresholdAlertMessage: string | null = null;
 
   let operation;
@@ -71,38 +86,62 @@ export async function POST(request: NextRequest) {
           select: {
             direction: true,
             amount: true,
+            currency: true,
+            amountUsd: true,
+            fxRateToUsd: true,
           },
           take: 100000,
         });
 
         const cashSigned = previousCashOperations.reduce(
-          (sum: number, op: { direction: string; amount: number }) => sum + (op.direction === "INFLOW" ? op.amount : -op.amount),
+          (sum: number, op: { direction: string; amount: number; currency?: string; amountUsd?: number | null; fxRateToUsd?: number | null }) => {
+            const opCurrency = (op.currency ?? "USD").toUpperCase();
+            const opAmountUsd = typeof op.amountUsd === "number"
+              ? op.amountUsd
+              : amountToUsd(op.amount, opCurrency, op.fxRateToUsd ?? 1);
+            return sum + (op.direction === "INFLOW" ? opAmountUsd : -opAmountUsd);
+          },
           0,
         );
         const availableBalance = (ticketInflows._sum.amount ?? 0) + cashSigned;
 
-        if (data.amount > availableBalance + 0.0001) {
+        if (normalizedAmountUsd > availableBalance + 0.0001) {
           throw new Error(`INSUFFICIENT_CASH:${availableBalance.toFixed(2)}`);
         }
 
-        const sameDayOutflow = await (tx as unknown as { cashOperation: any }).cashOperation.aggregate({
+        const sameDayOutflowOperations = await (tx as unknown as { cashOperation: any }).cashOperation.findMany({
           where: {
             direction: "OUTFLOW",
             occurredAt: { gte: dayStart, lt: dayEnd },
           },
-          _sum: {
+          select: {
             amount: true,
+            currency: true,
+            amountUsd: true,
+            fxRateToUsd: true,
           },
+          take: 100000,
         });
 
-        projectedDailyOutflow = (sameDayOutflow?._sum?.amount ?? 0) + data.amount;
+        const existingDailyOutflowUsd = sameDayOutflowOperations.reduce(
+          (sum: number, op: { amount: number; currency?: string; amountUsd?: number | null; fxRateToUsd?: number | null }) => {
+            const opCurrency = (op.currency ?? "USD").toUpperCase();
+            const opAmountUsd = typeof op.amountUsd === "number"
+              ? op.amountUsd
+              : amountToUsd(op.amount, opCurrency, op.fxRateToUsd ?? 1);
+            return sum + opAmountUsd;
+          },
+          0,
+        );
 
-        if (projectedDailyOutflow > dailyOutflowCap + 0.0001) {
-          throw new Error(`DAILY_CAP_EXCEEDED:${projectedDailyOutflow.toFixed(2)}:${dailyOutflowCap.toFixed(2)}`);
+        projectedDailyOutflowUsd = existingDailyOutflowUsd + normalizedAmountUsd;
+
+        if (projectedDailyOutflowUsd > dailyOutflowCap + 0.0001) {
+          throw new Error(`DAILY_CAP_EXCEEDED:${projectedDailyOutflowUsd.toFixed(2)}:${dailyOutflowCap.toFixed(2)}`);
         }
 
-        if (data.amount >= singleOutflowAlertLimit) {
-          thresholdAlertMessage = `Alerte seuil décaissement: sortie unitaire ${data.amount.toFixed(2)} ${currency} (seuil ${singleOutflowAlertLimit.toFixed(2)} ${currency}).`;
+        if (normalizedAmountUsd >= singleOutflowAlertLimit) {
+          thresholdAlertMessage = `Alerte seuil décaissement: sortie ${data.amount.toFixed(2)} ${currency} (taux ${fxRateToUsd?.toFixed(4)} -> ${normalizedAmountUsd.toFixed(2)} USD), seuil ${singleOutflowAlertLimit.toFixed(2)} USD.`;
         }
       }
 
@@ -113,6 +152,8 @@ export async function POST(request: NextRequest) {
           category: data.category,
           amount: data.amount,
           currency,
+          fxRateToUsd,
+          amountUsd: normalizedAmountUsd,
           method: data.method,
           reference: data.reference,
           description: data.description,
@@ -125,6 +166,8 @@ export async function POST(request: NextRequest) {
           category: true,
           amount: true,
           currency: true,
+          fxRateToUsd: true,
+          amountUsd: true,
           method: true,
           reference: true,
           description: true,
@@ -136,7 +179,9 @@ export async function POST(request: NextRequest) {
     if (error instanceof Error && error.message.startsWith("INSUFFICIENT_CASH:")) {
       const available = error.message.replace("INSUFFICIENT_CASH:", "");
       return NextResponse.json(
-        { error: `Solde insuffisant: disponible ${available} USD, sortie demandée ${data.amount.toFixed(2)} USD.` },
+        {
+          error: `Solde insuffisant: disponible ${available} USD, sortie demandée ${data.amount.toFixed(2)} ${currency} (${normalizedAmountUsd.toFixed(2)} USD).`,
+        },
         { status: 400 },
       );
     }
@@ -174,6 +219,8 @@ export async function POST(request: NextRequest) {
           category: operation.category,
           amount: operation.amount,
           currency: operation.currency,
+          fxRateToUsd: operation.fxRateToUsd,
+          amountUsd: operation.amountUsd,
           method: operation.method,
           reference: operation.reference,
           description: operation.description,
@@ -199,6 +246,8 @@ export async function POST(request: NextRequest) {
             `Type: ${operation.direction}`,
             `Catégorie: ${operation.category}`,
             `Montant: ${operation.amount.toFixed(2)} ${operation.currency}`,
+            `Équivalent USD: ${(operation.amountUsd ?? operation.amount).toFixed(2)} USD`,
+            `Taux du jour: ${operation.fxRateToUsd ?? 1}`,
             `Méthode: ${operation.method}`,
             `Référence: ${operation.reference ?? "-"}`,
             `Libellé: ${operation.description}`,
@@ -212,6 +261,8 @@ export async function POST(request: NextRequest) {
             <strong>Type:</strong> ${operation.direction}<br/>
             <strong>Catégorie:</strong> ${operation.category}<br/>
             <strong>Montant:</strong> ${operation.amount.toFixed(2)} ${operation.currency}<br/>
+            <strong>Équivalent USD:</strong> ${(operation.amountUsd ?? operation.amount).toFixed(2)} USD<br/>
+            <strong>Taux du jour:</strong> ${operation.fxRateToUsd ?? 1}<br/>
             <strong>Méthode:</strong> ${operation.method}<br/>
             <strong>Référence:</strong> ${operation.reference ?? "-"}<br/>
             <strong>Libellé:</strong> ${operation.description}<br/>
@@ -240,8 +291,10 @@ export async function POST(request: NextRequest) {
             cashOperationId: operation.id,
             amount: operation.amount,
             currency: operation.currency,
+            fxRateToUsd: operation.fxRateToUsd,
+            amountUsd: operation.amountUsd,
             threshold: singleOutflowAlertLimit,
-            projectedDailyOutflow,
+            projectedDailyOutflowUsd,
             dailyCap: dailyOutflowCap,
             occurredAt: operation.occurredAt,
             source: "CASH_LEDGER_POLICY",

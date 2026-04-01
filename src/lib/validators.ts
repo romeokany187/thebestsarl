@@ -293,6 +293,7 @@ export const cashOperationCreateSchema = z.object({
   ]),
   amount: z.number().positive(),
   currency: z.string().trim().length(3).optional(),
+  fxRateToUsd: z.number().positive().optional(),
   method: z.string().trim().min(2).max(60),
   reference: z.string().trim().max(180).optional(),
   description: z.string().trim().min(5).max(500),

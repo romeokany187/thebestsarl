@@ -33,6 +33,7 @@ export function CashOperationForm() {
   const [category, setCategory] = useState<string>("OTHER_SALE");
   const [amount, setAmount] = useState<string>("");
   const [currency, setCurrency] = useState<string>("USD");
+  const [fxRateToUsd, setFxRateToUsd] = useState<string>("1");
   const [method, setMethod] = useState<string>("CASH");
   const [reference, setReference] = useState<string>("");
   const [description, setDescription] = useState<string>("");
@@ -61,6 +62,15 @@ export function CashOperationForm() {
       return;
     }
 
+    const normalizedCurrency = currency.trim().toUpperCase();
+    const numericFx = Number.parseFloat(fxRateToUsd);
+
+    if (normalizedCurrency !== "USD" && (!Number.isFinite(numericFx) || numericFx <= 0)) {
+      setError("Saisissez un taux du jour valide vers USD pour cette devise.");
+      setLoading(false);
+      return;
+    }
+
     if (!occurredAt) {
       setError("Sélectionnez la date et l'heure de l'opération.");
       setLoading(false);
@@ -74,7 +84,8 @@ export function CashOperationForm() {
         direction,
         category,
         amount: numericAmount,
-        currency: currency.trim().toUpperCase(),
+        currency: normalizedCurrency,
+        fxRateToUsd: Number.isFinite(numericFx) && numericFx > 0 ? numericFx : 1,
         method: method.trim(),
         reference: reference.trim() || undefined,
         description: description.trim(),
@@ -152,6 +163,19 @@ export function CashOperationForm() {
             onChange={(event) => setCurrency(event.target.value)}
             maxLength={3}
             className="w-full rounded-md border border-black/15 bg-white px-3 py-2 text-sm uppercase dark:border-white/15 dark:bg-zinc-900"
+          />
+        </div>
+
+        <div>
+          <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-black/60 dark:text-white/60">Taux du jour (vers USD)</label>
+          <input
+            type="number"
+            step="0.0001"
+            min="0.0001"
+            value={fxRateToUsd}
+            onChange={(event) => setFxRateToUsd(event.target.value)}
+            className="w-full rounded-md border border-black/15 bg-white px-3 py-2 text-sm dark:border-white/15 dark:bg-zinc-900"
+            placeholder="1.0000"
           />
         </div>
 

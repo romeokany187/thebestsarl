@@ -35,6 +35,23 @@ function dateRangeFromParams(params: SearchParams) {
   };
 }
 
+function normalizeCashAmountUsd(operation: {
+  amount: number;
+  currency?: string | null;
+  amountUsd?: number | null;
+  fxRateToUsd?: number | null;
+}): number {
+  if (typeof operation.amountUsd === "number") {
+    return operation.amountUsd;
+  }
+  const currency = (operation.currency ?? "USD").toUpperCase();
+  if (currency === "USD") {
+    return operation.amount;
+  }
+  const fx = operation.fxRateToUsd ?? 1;
+  return operation.amount * fx;
+}
+
 export const dynamic = "force-dynamic";
 
 export default async function PaymentsPage({
@@ -141,6 +158,9 @@ export default async function PaymentsPage({
       select: {
         amount: true,
         direction: true,
+        currency: true,
+        amountUsd: true,
+        fxRateToUsd: true,
       },
       take: 5000,
     }),
@@ -189,17 +209,20 @@ export default async function PaymentsPage({
 
   const ticketInflowsBefore = ticketPaymentsBeforeStart.reduce((sum, payment) => sum + payment.amount, 0);
   const cashOpsSignedBefore = cashOperationsBeforeStart.reduce(
-    (sum: number, operation: { direction: string; amount: number }) => sum + (operation.direction === "INFLOW" ? operation.amount : -operation.amount),
+    (sum: number, operation: { direction: string; amount: number; currency?: string; amountUsd?: number; fxRateToUsd?: number }) => {
+      const normalized = normalizeCashAmountUsd(operation);
+      return sum + (operation.direction === "INFLOW" ? normalized : -normalized);
+    },
     0,
   );
   const openingBalance = ticketInflowsBefore + cashOpsSignedBefore;
 
   const otherInflows = cashOperations
     .filter((operation: { direction: string }) => operation.direction === "INFLOW")
-    .reduce((sum: number, operation: { amount: number }) => sum + operation.amount, 0);
+    .reduce((sum: number, operation: { amount: number; currency?: string; amountUsd?: number; fxRateToUsd?: number }) => sum + normalizeCashAmountUsd(operation), 0);
   const cashOutflows = cashOperations
     .filter((operation: { direction: string }) => operation.direction === "OUTFLOW")
-    .reduce((sum: number, operation: { amount: number }) => sum + operation.amount, 0);
+    .reduce((sum: number, operation: { amount: number; currency?: string; amountUsd?: number; fxRateToUsd?: number }) => sum + normalizeCashAmountUsd(operation), 0);
 
   const grossInflows = totalPaid + otherInflows;
   const netCashVariation = grossInflows - cashOutflows;
@@ -398,6 +421,8 @@ export default async function PaymentsPage({
                       <th className="px-4 py-3 text-left font-semibold">Sens</th>
                       <th className="px-4 py-3 text-left font-semibold">Catégorie</th>
                       <th className="px-4 py-3 text-left font-semibold">Montant</th>
+                      <th className="px-4 py-3 text-left font-semibold">Taux du jour</th>
+                      <th className="px-4 py-3 text-left font-semibold">Eq. USD</th>
                       <th className="px-4 py-3 text-left font-semibold">Méthode</th>
                       <th className="px-4 py-3 text-left font-semibold">Référence</th>
                       <th className="px-4 py-3 text-left font-semibold">Libellé</th>
@@ -411,6 +436,8 @@ export default async function PaymentsPage({
                         <td className="px-4 py-3">{operation.direction === "INFLOW" ? "Entrée" : "Sortie"}</td>
                         <td className="px-4 py-3">{operation.category}</td>
                         <td className="px-4 py-3">{operation.amount.toFixed(2)} {operation.currency}</td>
+                        <td className="px-4 py-3">{(operation.fxRateToUsd ?? 1).toFixed(4)}</td>
+                        <td className="px-4 py-3">{normalizeCashAmountUsd(operation).toFixed(2)} USD</td>
                         <td className="px-4 py-3">{operation.method}</td>
                         <td className="px-4 py-3">{operation.reference ?? "-"}</td>
                         <td className="px-4 py-3">{operation.description}</td>
@@ -419,7 +446,7 @@ export default async function PaymentsPage({
                     ))}
                     {cashOperations.length === 0 ? (
                       <tr>
-                        <td colSpan={8} className="px-4 py-8 text-center text-sm text-black/55 dark:text-white/55">
+                        <td colSpan={10} className="px-4 py-8 text-center text-sm text-black/55 dark:text-white/55">
                           Aucune opération de caisse (hors billets) sur cette période.
                         </td>
                       </tr>
