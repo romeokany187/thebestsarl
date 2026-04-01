@@ -2,11 +2,12 @@
 
 import { useState } from "react";
 
-type WritingMode = "none" | "tickets" | "cash" | "billetage" | "needs" | "orders";
+type WritingMode = "none" | "tickets" | "cash" | "virtual" | "billetage" | "needs" | "orders";
 
 export function PaymentsWritingWorkspace({
   ticketWorkspace,
   cashWorkspace,
+  virtualWorkspace,
   billetageWorkspace,
   needsPendingWorkspace,
   ordersPendingWorkspace,
@@ -14,6 +15,7 @@ export function PaymentsWritingWorkspace({
 }: {
   ticketWorkspace: React.ReactNode;
   cashWorkspace: React.ReactNode;
+  virtualWorkspace: React.ReactNode;
   billetageWorkspace: React.ReactNode;
   needsPendingWorkspace: React.ReactNode;
   ordersPendingWorkspace: React.ReactNode;
@@ -67,6 +69,17 @@ export function PaymentsWritingWorkspace({
           </button>
           <button
             type="button"
+            onClick={() => setMode("virtual")}
+            className={`rounded-md px-3 py-1.5 text-xs font-semibold transition ${
+              mode === "virtual"
+                ? "border border-cyan-500 bg-cyan-50 text-cyan-700 dark:border-cyan-600 dark:bg-cyan-950/40 dark:text-cyan-300"
+                : "border border-black/20 hover:bg-black/5 dark:border-white/20 dark:hover:bg-white/10"
+            }`}
+          >
+            Comptes virtuels
+          </button>
+          <button
+            type="button"
             onClick={() => setMode("billetage")}
             className={`rounded-md px-3 py-1.5 text-xs font-semibold transition ${
               mode === "billetage"
@@ -103,6 +116,7 @@ export function PaymentsWritingWorkspace({
         <div className="mt-4">
           {mode === "tickets" ? ticketWorkspace : null}
           {mode === "cash" ? cashWorkspace : null}
+          {mode === "virtual" ? virtualWorkspace : null}
           {mode === "billetage" ? billetageWorkspace : null}
           {mode === "needs" ? needsPendingWorkspace : null}
           {mode === "orders" ? ordersPendingWorkspace : null}

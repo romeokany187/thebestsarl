@@ -72,6 +72,25 @@ function normalizeCashAmountCdf(operation: {
   return operation.amount * rate;
 }
 
+type VirtualChannel = "AIRTEL_MONEY" | "ORANGE_MONEY" | "MPESA" | "EQUITY";
+
+const virtualChannels: Array<{ key: VirtualChannel; label: string }> = [
+  { key: "AIRTEL_MONEY", label: "Airtel Money" },
+  { key: "ORANGE_MONEY", label: "Orange Money" },
+  { key: "MPESA", label: "M-Pesa" },
+  { key: "EQUITY", label: "Equity" },
+];
+
+function detectVirtualChannel(methodRaw: string | null | undefined): VirtualChannel | null {
+  const method = (methodRaw ?? "").trim().toUpperCase();
+  if (!method) return null;
+  if (method.includes("AIRTEL")) return "AIRTEL_MONEY";
+  if (method.includes("ORANGE")) return "ORANGE_MONEY";
+  if (method.includes("M-PESA") || method.includes("MPESA") || method.includes("M PESA")) return "MPESA";
+  if (method.includes("EQUITY")) return "EQUITY";
+  return null;
+}
+
 export const dynamic = "force-dynamic";
 
 export default async function PaymentsPage({
@@ -166,6 +185,7 @@ export default async function PaymentsPage({
       },
       select: {
         amount: true,
+        method: true,
       },
       take: 5000,
     }),
@@ -176,6 +196,7 @@ export default async function PaymentsPage({
       select: {
         amount: true,
         direction: true,
+        method: true,
         currency: true,
         amountUsd: true,
         fxRateToUsd: true,
@@ -330,6 +351,106 @@ export default async function PaymentsPage({
       cdfBalance: runningCdf,
     };
   });
+
+  const initialVirtualStats = Object.fromEntries(
+    virtualChannels.map(({ key }) => [
+      key,
+      {
+        openingUsd: 0,
+        openingCdf: 0,
+        inUsd: 0,
+        outUsd: 0,
+        inCdf: 0,
+        outCdf: 0,
+      },
+    ]),
+  ) as Record<VirtualChannel, {
+    openingUsd: number;
+    openingCdf: number;
+    inUsd: number;
+    outUsd: number;
+    inCdf: number;
+    outCdf: number;
+  }>;
+
+  for (const payment of ticketPaymentsBeforeStart as Array<{ amount: number; method?: string }>) {
+    const channel = detectVirtualChannel(payment.method);
+    if (!channel) continue;
+    initialVirtualStats[channel].openingUsd += payment.amount;
+  }
+
+  for (const operation of cashOperationsBeforeStart as Array<{ direction: string; amount: number; method?: string; currency?: string }>) {
+    const channel = detectVirtualChannel(operation.method);
+    if (!channel) continue;
+    const currency = (operation.currency ?? "USD").toUpperCase();
+    if (currency === "USD") {
+      initialVirtualStats[channel].openingUsd += operation.direction === "INFLOW" ? operation.amount : -operation.amount;
+    } else if (currency === "CDF") {
+      initialVirtualStats[channel].openingCdf += operation.direction === "INFLOW" ? operation.amount : -operation.amount;
+    }
+  }
+
+  for (const payment of payments as Array<{ amount: number; method?: string }>) {
+    const channel = detectVirtualChannel(payment.method);
+    if (!channel) continue;
+    initialVirtualStats[channel].inUsd += payment.amount;
+  }
+
+  for (const operation of cashOperations as Array<{ direction: string; amount: number; method?: string; currency?: string }>) {
+    const channel = detectVirtualChannel(operation.method);
+    if (!channel) continue;
+    const currency = (operation.currency ?? "USD").toUpperCase();
+    if (currency === "USD") {
+      if (operation.direction === "INFLOW") {
+        initialVirtualStats[channel].inUsd += operation.amount;
+      } else {
+        initialVirtualStats[channel].outUsd += operation.amount;
+      }
+    } else if (currency === "CDF") {
+      if (operation.direction === "INFLOW") {
+        initialVirtualStats[channel].inCdf += operation.amount;
+      } else {
+        initialVirtualStats[channel].outCdf += operation.amount;
+      }
+    }
+  }
+
+  const virtualRows = virtualChannels.map(({ key, label }) => {
+    const stats = initialVirtualStats[key];
+    const closingUsd = stats.openingUsd + stats.inUsd - stats.outUsd;
+    const closingCdf = stats.openingCdf + stats.inCdf - stats.outCdf;
+    return {
+      key,
+      label,
+      ...stats,
+      closingUsd,
+      closingCdf,
+    };
+  });
+
+  const virtualTotals = virtualRows.reduce(
+    (sum, row) => {
+      sum.openingUsd += row.openingUsd;
+      sum.openingCdf += row.openingCdf;
+      sum.inUsd += row.inUsd;
+      sum.outUsd += row.outUsd;
+      sum.inCdf += row.inCdf;
+      sum.outCdf += row.outCdf;
+      sum.closingUsd += row.closingUsd;
+      sum.closingCdf += row.closingCdf;
+      return sum;
+    },
+    {
+      openingUsd: 0,
+      openingCdf: 0,
+      inUsd: 0,
+      outUsd: 0,
+      inCdf: 0,
+      outCdf: 0,
+      closingUsd: 0,
+      closingCdf: 0,
+    },
+  );
 
   const paymentTickets = ticketsWithComputedStatus
     .filter((ticket) => ticket.computedStatus !== PaymentStatus.PAID)
@@ -563,6 +684,63 @@ export default async function PaymentsPage({
                 </table>
               </div>
             </section>
+          </div>
+        )}
+        virtualWorkspace={(
+          <div className="space-y-4">
+            <section className="rounded-2xl border border-black/10 bg-white p-4 dark:border-white/10 dark:bg-zinc-900">
+              <h2 className="text-sm font-semibold">Comptes virtuels</h2>
+              <p className="mt-2 text-xs text-black/60 dark:text-white/60">
+                Conformément à la feuille VIRTUEL, suivi des canaux Airtel Money, Orange Money, M-Pesa et Equity avec soldes par devise.
+              </p>
+            </section>
+
+            <div className="overflow-hidden rounded-2xl border border-black/10 bg-white shadow-sm dark:border-white/10 dark:bg-zinc-900">
+              <div className="overflow-x-auto">
+                <table className="min-w-full text-sm">
+                  <thead className="bg-black/5 dark:bg-white/10">
+                    <tr>
+                      <th className="px-4 py-3 text-left font-semibold">Comptes virtuels</th>
+                      <th className="px-4 py-3 text-left font-semibold">Ouverture USD</th>
+                      <th className="px-4 py-3 text-left font-semibold">Ouverture CDF</th>
+                      <th className="px-4 py-3 text-left font-semibold">Entrées USD</th>
+                      <th className="px-4 py-3 text-left font-semibold">Sorties USD</th>
+                      <th className="px-4 py-3 text-left font-semibold">Solde USD</th>
+                      <th className="px-4 py-3 text-left font-semibold">Entrées CDF</th>
+                      <th className="px-4 py-3 text-left font-semibold">Sorties CDF</th>
+                      <th className="px-4 py-3 text-left font-semibold">Solde CDF</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {virtualRows.map((row) => (
+                      <tr key={row.key} className="border-t border-black/5 dark:border-white/10">
+                        <td className="px-4 py-3 font-medium">{row.label}</td>
+                        <td className="px-4 py-3">{row.openingUsd.toFixed(2)} USD</td>
+                        <td className="px-4 py-3">{row.openingCdf.toFixed(2)} CDF</td>
+                        <td className="px-4 py-3">{row.inUsd.toFixed(2)} USD</td>
+                        <td className="px-4 py-3">{row.outUsd.toFixed(2)} USD</td>
+                        <td className="px-4 py-3 font-semibold">{row.closingUsd.toFixed(2)} USD</td>
+                        <td className="px-4 py-3">{row.inCdf.toFixed(2)} CDF</td>
+                        <td className="px-4 py-3">{row.outCdf.toFixed(2)} CDF</td>
+                        <td className="px-4 py-3 font-semibold">{row.closingCdf.toFixed(2)} CDF</td>
+                      </tr>
+                    ))}
+
+                    <tr className="border-t border-black/10 bg-black/5 font-semibold dark:border-white/10 dark:bg-white/10">
+                      <td className="px-4 py-3">TOTAL</td>
+                      <td className="px-4 py-3">{virtualTotals.openingUsd.toFixed(2)} USD</td>
+                      <td className="px-4 py-3">{virtualTotals.openingCdf.toFixed(2)} CDF</td>
+                      <td className="px-4 py-3">{virtualTotals.inUsd.toFixed(2)} USD</td>
+                      <td className="px-4 py-3">{virtualTotals.outUsd.toFixed(2)} USD</td>
+                      <td className="px-4 py-3">{virtualTotals.closingUsd.toFixed(2)} USD</td>
+                      <td className="px-4 py-3">{virtualTotals.inCdf.toFixed(2)} CDF</td>
+                      <td className="px-4 py-3">{virtualTotals.outCdf.toFixed(2)} CDF</td>
+                      <td className="px-4 py-3">{virtualTotals.closingCdf.toFixed(2)} CDF</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
           </div>
         )}
         billetageWorkspace={(

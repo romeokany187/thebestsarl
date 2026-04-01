@@ -238,12 +238,17 @@ export function CashOperationForm() {
 
         <div>
           <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-black/60 dark:text-white/60">Méthode</label>
-          <input
+          <select
             value={method}
             onChange={(event) => setMethod(event.target.value)}
             className="w-full rounded-md border border-black/15 bg-white px-3 py-2 text-sm dark:border-white/15 dark:bg-zinc-900"
-            placeholder="CASH / VIREMENT / MOBILE"
-          />
+          >
+            <option value="CASH">Cash</option>
+            <option value="AIRTEL_MONEY">Airtel Money</option>
+            <option value="ORANGE_MONEY">Orange Money</option>
+            <option value="MPESA">M-Pesa</option>
+            <option value="EQUITY">Equity</option>
+          </select>
         </div>
 
         <div>
