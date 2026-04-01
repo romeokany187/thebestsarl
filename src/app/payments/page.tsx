@@ -1,11 +1,13 @@
 import { PaymentStatus } from "@prisma/client";
 import { AppShell } from "@/components/app-shell";
+import { CashOperationForm } from "@/components/cash-operation-form";
 import { KpiCard } from "@/components/kpi-card";
 import { PaymentEntryForm } from "@/components/payment-entry-form";
 import { requirePageModuleAccess } from "@/lib/rbac";
 import { prisma } from "@/lib/prisma";
 
 const paymentOrderClient = (prisma as unknown as { paymentOrder: any }).paymentOrder;
+const cashOperationClient = (prisma as unknown as { cashOperation: any }).cashOperation;
 
 type SearchParams = {
   startDate?: string;
@@ -55,7 +57,7 @@ export default async function PaymentsPage({
     ...(selectedAirlineId ? { airlineId: selectedAirlineId } : {}),
   }).toString();
 
-  const [airlines, tickets, payments, paymentOrders] = (await Promise.all([
+  const paymentsData = await Promise.all([
     prisma.airline.findMany({
       select: { id: true, code: true, name: true },
       orderBy: { name: "asc" },
@@ -99,7 +101,46 @@ export default async function PaymentsPage({
       orderBy: { createdAt: "desc" },
       take: 80,
     }),
-  ])) as [any[], any[], any[], any[]];
+    cashOperationClient.findMany({
+      where: {
+        occurredAt: { gte: range.start, lt: range.end },
+      },
+      include: {
+        createdBy: { select: { name: true, jobTitle: true } },
+      },
+      orderBy: { occurredAt: "desc" },
+      take: 250,
+    }),
+    prisma.payment.findMany({
+      where: {
+        paidAt: { lt: range.start },
+      },
+      select: {
+        amount: true,
+      },
+      take: 5000,
+    }),
+    cashOperationClient.findMany({
+      where: {
+        occurredAt: { lt: range.start },
+      },
+      select: {
+        amount: true,
+        direction: true,
+      },
+      take: 5000,
+    }),
+  ]);
+
+  const [
+    airlines,
+    tickets,
+    payments,
+    paymentOrders,
+    cashOperations,
+    ticketPaymentsBeforeStart,
+    cashOperationsBeforeStart,
+  ] = paymentsData as [any[], any[], any[], any[], any[], any[], any[]];
 
   const ticketsWithComputedStatus = tickets.map((ticket) => {
     const paidAmount = ticket.payments.reduce((sum: number, payment: { amount: number }) => sum + payment.amount, 0);
@@ -130,6 +171,26 @@ export default async function PaymentsPage({
   const unpaidTotal = unpaidTickets.reduce((sum, ticket) => sum + ticket.amount, 0);
   const collectionRate = totalTicketAmount > 0 ? (totalPaid / totalTicketAmount) * 100 : 0;
   const partialCoverageRate = partialBilled > 0 ? (partialCollected / partialBilled) * 100 : 0;
+
+  const ticketInflowsBefore = ticketPaymentsBeforeStart.reduce((sum, payment) => sum + payment.amount, 0);
+  const cashOpsSignedBefore = cashOperationsBeforeStart.reduce(
+    (sum: number, operation: { direction: string; amount: number }) => sum + (operation.direction === "INFLOW" ? operation.amount : -operation.amount),
+    0,
+  );
+  const openingBalance = ticketInflowsBefore + cashOpsSignedBefore;
+
+  const otherInflows = cashOperations
+    .filter((operation: { direction: string }) => operation.direction === "INFLOW")
+    .reduce((sum: number, operation: { amount: number }) => sum + operation.amount, 0);
+  const cashOutflows = cashOperations
+    .filter((operation: { direction: string }) => operation.direction === "OUTFLOW")
+    .reduce((sum: number, operation: { amount: number }) => sum + operation.amount, 0);
+
+  const grossInflows = totalPaid + otherInflows;
+  const netCashVariation = grossInflows - cashOutflows;
+  const closingBalance = openingBalance + netCashVariation;
+
+  const accountingConsistency = Math.abs((openingBalance + grossInflows - cashOutflows) - closingBalance) <= 0.0001;
 
   const paymentTickets = ticketsWithComputedStatus
     .filter((ticket) => ticket.computedStatus !== PaymentStatus.PAID)
@@ -198,6 +259,7 @@ export default async function PaymentsPage({
       </section>
 
       {canWrite ? <PaymentEntryForm tickets={paymentTickets} /> : null}
+      {canWrite ? <CashOperationForm /> : null}
 
       {role === "DIRECTEUR_GENERAL" ? (
         <section className="mb-6 rounded-2xl border border-black/10 bg-white p-4 shadow-sm dark:border-white/10 dark:bg-zinc-900">
@@ -231,7 +293,7 @@ export default async function PaymentsPage({
               </tr>
             </thead>
             <tbody>
-              {paymentOrders.map((order) => (
+              {paymentOrders.map((order: any) => (
                 <tr key={order.id} className="border-t border-black/5 dark:border-white/10">
                   <td className="px-4 py-3">{new Date(order.createdAt).toLocaleDateString("fr-FR")}</td>
                   <td className="px-4 py-3">{order.description}</td>
@@ -262,6 +324,13 @@ export default async function PaymentsPage({
       </div>
 
       <div className="mb-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <KpiCard label="Solde ouverture caisse" value={`${openingBalance.toFixed(2)} USD`} />
+        <KpiCard label="Entrées globales" value={`${grossInflows.toFixed(2)} USD`} hint={`Billets ${totalPaid.toFixed(2)} + autres ${otherInflows.toFixed(2)}`} />
+        <KpiCard label="Sorties caisse" value={`${cashOutflows.toFixed(2)} USD`} />
+        <KpiCard label="Solde clôture caisse" value={`${closingBalance.toFixed(2)} USD`} hint={accountingConsistency ? "Equilibre comptable OK" : "Ecart de contrôle détecté"} />
+      </div>
+
+      <div className="mb-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <KpiCard label="Billets payés" value={`${paidTickets.length}`} hint={`${paidTickets.reduce((sum, t) => sum + t.amount, 0).toFixed(2)} USD`} />
         <KpiCard label="Billets impayés" value={`${unpaidTickets.length}`} hint={`${unpaidTotal.toFixed(2)} USD non encaissés`} />
         <KpiCard label="Billets partiels" value={`${partialTickets.length}`} hint={`${partialCollected.toFixed(2)} / ${partialBilled.toFixed(2)} USD`} />
@@ -274,7 +343,53 @@ export default async function PaymentsPage({
           Total facturé: {totalTicketAmount.toFixed(2)} USD • Paiements reçus: {totalPaid.toFixed(2)} USD • Créances restantes: {receivables.toFixed(2)} USD.
           Partiels: encaissé {partialCollected.toFixed(2)} USD sur {partialBilled.toFixed(2)} USD ({partialCoverageRate.toFixed(1)}%), reste {partialOutstanding.toFixed(2)} USD.
         </p>
+        <p className="mt-2 text-xs text-black/60 dark:text-white/60">
+          Caisse: ouverture {openingBalance.toFixed(2)} USD, entrées {grossInflows.toFixed(2)} USD, sorties {cashOutflows.toFixed(2)} USD, variation nette {netCashVariation.toFixed(2)} USD, clôture {closingBalance.toFixed(2)} USD.
+        </p>
       </section>
+
+      <div className="mb-6 overflow-hidden rounded-2xl border border-black/10 bg-white shadow-sm dark:border-white/10 dark:bg-zinc-900">
+        <div className="border-b border-black/10 px-4 py-3 dark:border-white/10">
+          <h2 className="text-sm font-semibold">Journal des autres opérations de caisse</h2>
+        </div>
+        <div className="overflow-x-auto">
+          <table className="min-w-full text-sm">
+            <thead className="bg-black/5 dark:bg-white/10">
+              <tr>
+                <th className="px-4 py-3 text-left font-semibold">Date</th>
+                <th className="px-4 py-3 text-left font-semibold">Sens</th>
+                <th className="px-4 py-3 text-left font-semibold">Catégorie</th>
+                <th className="px-4 py-3 text-left font-semibold">Montant</th>
+                <th className="px-4 py-3 text-left font-semibold">Méthode</th>
+                <th className="px-4 py-3 text-left font-semibold">Référence</th>
+                <th className="px-4 py-3 text-left font-semibold">Libellé</th>
+                <th className="px-4 py-3 text-left font-semibold">Saisi par</th>
+              </tr>
+            </thead>
+            <tbody>
+              {cashOperations.map((operation: any) => (
+                <tr key={operation.id} className="border-t border-black/5 dark:border-white/10">
+                  <td className="px-4 py-3">{new Date(operation.occurredAt).toLocaleString("fr-FR")}</td>
+                  <td className="px-4 py-3">{operation.direction === "INFLOW" ? "Entrée" : "Sortie"}</td>
+                  <td className="px-4 py-3">{operation.category}</td>
+                  <td className="px-4 py-3">{operation.amount.toFixed(2)} {operation.currency}</td>
+                  <td className="px-4 py-3">{operation.method}</td>
+                  <td className="px-4 py-3">{operation.reference ?? "-"}</td>
+                  <td className="px-4 py-3">{operation.description}</td>
+                  <td className="px-4 py-3">{operation.createdBy?.name ?? "-"}</td>
+                </tr>
+              ))}
+              {cashOperations.length === 0 ? (
+                <tr>
+                  <td colSpan={8} className="px-4 py-8 text-center text-sm text-black/55 dark:text-white/55">
+                    Aucune opération de caisse (hors billets) sur cette période.
+                  </td>
+                </tr>
+              ) : null}
+            </tbody>
+          </table>
+        </div>
+      </div>
 
       <div className="overflow-hidden rounded-2xl border border-black/10 bg-white shadow-sm dark:border-white/10 dark:bg-zinc-900">
         <div className="overflow-x-auto">

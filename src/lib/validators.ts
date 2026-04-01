@@ -273,3 +273,27 @@ export const paymentOrderExecutionSchema = z.object({
   referenceDoc: z.string().min(2).max(180),
   executionComment: z.string().max(500).optional(),
 });
+
+export const cashOperationCreateSchema = z.object({
+  occurredAt: z.coerce.date().optional(),
+  direction: z.enum(["INFLOW", "OUTFLOW"]),
+  category: z.enum([
+    "OTHER_SALE",
+    "COMMISSION_INCOME",
+    "SERVICE_INCOME",
+    "LOAN_INFLOW",
+    "ADVANCE_RECOVERY",
+    "SUPPLIER_PAYMENT",
+    "SALARY_PAYMENT",
+    "RENT_PAYMENT",
+    "TAX_PAYMENT",
+    "UTILITY_PAYMENT",
+    "TRANSPORT_PAYMENT",
+    "OTHER_EXPENSE",
+  ]),
+  amount: z.number().positive(),
+  currency: z.string().trim().length(3).optional(),
+  method: z.string().trim().min(2).max(60),
+  reference: z.string().trim().max(180).optional(),
+  description: z.string().trim().min(5).max(500),
+});

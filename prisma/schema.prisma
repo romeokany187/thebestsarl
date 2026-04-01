@@ -72,6 +72,26 @@ enum PaymentStatus {
   PARTIAL
 }
 
+enum CashDirection {
+  INFLOW
+  OUTFLOW
+}
+
+enum CashOperationCategory {
+  OTHER_SALE
+  COMMISSION_INCOME
+  SERVICE_INCOME
+  LOAN_INFLOW
+  ADVANCE_RECOVERY
+  SUPPLIER_PAYMENT
+  SALARY_PAYMENT
+  RENT_PAYMENT
+  TAX_PAYMENT
+  UTILITY_PAYMENT
+  TRANSPORT_PAYMENT
+  OTHER_EXPENSE
+}
+
 enum TravelClass {
   ECONOMY
   PREMIUM_ECONOMY
@@ -161,6 +181,7 @@ model User {
   paymentOrdersIssued PaymentOrder[] @relation("PaymentOrderIssuer")
   paymentOrdersApproved PaymentOrder[] @relation("PaymentOrderApprover")
   paymentOrdersExecuted PaymentOrder[] @relation("PaymentOrderExecutor")
+  cashOperations   CashOperation[] @relation("CashOperationCreator")
   stockMovements StockMovement[] @relation("StockMovementActor")
   archiveUploads ArchiveDocument[] @relation("ArchiveUploader")
   createdAt     DateTime      @default(now())
@@ -339,6 +360,27 @@ model Payment {
   method      String
   reference   String?
   createdAt   DateTime  @default(now())
+}
+
+model CashOperation {
+  id           String                @id @default(cuid())
+  occurredAt   DateTime              @default(now())
+  direction    CashDirection
+  category     CashOperationCategory
+  amount       Float
+  currency     String                @default("USD")
+  method       String
+  reference    String?
+  description  String
+  createdById  String
+  createdBy    User                  @relation("CashOperationCreator", fields: [createdById], references: [id])
+  createdAt    DateTime              @default(now())
+  updatedAt    DateTime              @updatedAt
+
+  @@index([occurredAt])
+  @@index([direction])
+  @@index([category])
+  @@index([createdById])
 }
 
 model AuditLog {
