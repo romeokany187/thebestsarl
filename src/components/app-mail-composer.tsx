@@ -97,18 +97,18 @@ export function AppMailComposer({ recipients, currentUserId }: Props) {
 
   return (
     <>
-      <div className="fixed bottom-5 right-5 z-50">
+      <div className="fixed inset-x-0 bottom-0 z-50 px-4 pb-[calc(env(safe-area-inset-bottom)+0.75rem)] sm:inset-auto sm:bottom-5 sm:right-5 sm:px-0 sm:pb-0">
         <button
           type="button"
           onClick={() => setIsOpen((value) => !value)}
-          className="rounded-full bg-black px-4 py-3 text-sm font-semibold text-white shadow-lg hover:opacity-95 dark:bg-white dark:text-black"
+          className="w-full rounded-full bg-black px-4 py-3 text-sm font-semibold text-white shadow-lg hover:opacity-95 sm:w-auto dark:bg-white dark:text-black"
         >
           {isOpen ? "Fermer" : "Écrire"}
         </button>
       </div>
 
       {isOpen ? (
-        <section className="fixed bottom-20 right-5 z-50 w-[92vw] max-w-97.5 overflow-hidden rounded-2xl border border-black/15 bg-white p-4 shadow-2xl dark:border-white/15 dark:bg-zinc-900">
+        <section className="fixed inset-x-0 bottom-0 z-50 w-full overflow-hidden rounded-t-2xl border border-black/15 bg-white p-4 shadow-2xl sm:bottom-20 sm:right-5 sm:inset-x-auto sm:w-[92vw] sm:max-w-97.5 sm:rounded-2xl dark:border-white/15 dark:bg-zinc-900">
           <div className="flex max-h-[75vh] min-h-0 flex-col">
           <div className="mb-3 flex items-center justify-between gap-2">
             <h2 className="text-base font-semibold">Nouvelle conversation</h2>
