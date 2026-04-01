@@ -9,11 +9,13 @@ export function PaymentsWritingWorkspace({
   cashWorkspace,
   needsPendingWorkspace,
   ordersPendingWorkspace,
+  closedSummary,
 }: {
   ticketWorkspace: React.ReactNode;
   cashWorkspace: React.ReactNode;
   needsPendingWorkspace: React.ReactNode;
   ordersPendingWorkspace: React.ReactNode;
+  closedSummary?: React.ReactNode;
 }) {
   const [mode, setMode] = useState<WritingMode>("none");
 
@@ -90,9 +92,12 @@ export function PaymentsWritingWorkspace({
         {mode === "needs" ? needsPendingWorkspace : null}
         {mode === "orders" ? ordersPendingWorkspace : null}
         {mode === "none" ? (
-          <p className="rounded-xl border border-dashed border-black/20 px-4 py-5 text-xs text-black/60 dark:border-white/20 dark:text-white/60">
-            Aucun espace ouvert. Cliquez sur une action pour commencer.
-          </p>
+          <div className="space-y-3">
+            {closedSummary ?? null}
+            <p className="rounded-xl border border-dashed border-black/20 px-4 py-5 text-xs text-black/60 dark:border-white/20 dark:text-white/60">
+              Aucun espace ouvert. Cliquez sur une action pour commencer.
+            </p>
+          </div>
         ) : null}
       </div>
     </section>

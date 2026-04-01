@@ -204,6 +204,15 @@ export default async function PaymentsPage({
   const grossInflows = totalPaid + otherInflows;
   const netCashVariation = grossInflows - cashOutflows;
   const closingBalance = openingBalance + netCashVariation;
+  const expensePressure = grossInflows > 0 ? (cashOutflows / grossInflows) * 100 : cashOutflows > 0 ? 100 : 0;
+  const riskLevel = cashOutflows > grossInflows
+    ? "Critique"
+    : expensePressure >= 85
+      ? "Alerte"
+      : expensePressure >= 65
+        ? "Sous surveillance"
+        : "Sain";
+  const riskHint = `Sorties ${cashOutflows.toFixed(2)} / Entrées ${grossInflows.toFixed(2)} (${expensePressure.toFixed(1)}%)`;
 
   const accountingConsistency = Math.abs((openingBalance + grossInflows - cashOutflows) - closingBalance) <= 0.0001;
 
@@ -235,6 +244,13 @@ export default async function PaymentsPage({
       </section>
 
       <PaymentsWritingWorkspace
+        closedSummary={(
+          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+            <KpiCard label="Total encaissé" value={`${grossInflows.toFixed(2)} USD`} hint={`Billets ${totalPaid.toFixed(2)} + autres ${otherInflows.toFixed(2)}`} />
+            <KpiCard label="Total dépensé" value={`${cashOutflows.toFixed(2)} USD`} />
+            <KpiCard label="Niveau de risque" value={riskLevel} hint={riskHint} />
+          </div>
+        )}
         ticketWorkspace={(
           <div className="space-y-4">
             <section className="rounded-2xl border border-black/10 bg-white p-4 dark:border-white/10 dark:bg-zinc-900">
