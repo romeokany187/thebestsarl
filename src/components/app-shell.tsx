@@ -36,7 +36,7 @@ const links = [
     href: "/payments",
     label: "Paiements",
     module: "payments" as AppModule,
-    roles: ["ADMIN", "MANAGER", "ACCOUNTANT"] as AppRole[],
+    roles: ["ADMIN", "MANAGER", "ACCOUNTANT", "EMPLOYEE"] as AppRole[],
   },
   {
     href: "/attendance",

@@ -60,8 +60,11 @@ export function hasModuleAccess(params: {
     return true;
   }
 
-  // Without assignment/function, only home and profile are visible until affectation.
+  // Without assignment/function, home and profile stay visible. Exception: cashier/accountant can access payments.
   if (!isAssignedNonAdmin(jobTitle, teamName)) {
+    if (module === "payments") {
+      return jobTitle === "CAISSIERE" || jobTitle === "COMPTABLE";
+    }
     return false;
   }
 
