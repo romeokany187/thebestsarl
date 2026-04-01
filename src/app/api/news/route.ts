@@ -13,8 +13,10 @@ export async function GET() {
   const access = await requireApiModuleAccess("news", ["ADMIN", "MANAGER", "EMPLOYEE", "ACCOUNTANT"]);
   if (access.error) return access.error;
 
+  const canPublishNews = access.role === "ADMIN" || access.role === "DIRECTEUR_GENERAL";
+
   const posts = await prisma.newsPost.findMany({
-    where: access.role === "ADMIN" ? {} : { isPublished: true },
+    where: canPublishNews ? {} : { isPublished: true },
     include: {
       author: {
         select: { id: true, name: true, email: true },
@@ -28,7 +30,7 @@ export async function GET() {
 }
 
 export async function POST(request: NextRequest) {
-  const access = await requireApiModuleAccess("news", ["ADMIN"]);
+  const access = await requireApiModuleAccess("news", ["ADMIN", "DIRECTEUR_GENERAL"]);
   if (access.error) return access.error;
 
   const body = await request.json();

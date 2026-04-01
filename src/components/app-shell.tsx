@@ -7,86 +7,86 @@ import { ThemeToggle } from "@/components/theme-toggle";
 import { prisma } from "@/lib/prisma";
 
 const links = [
-  { href: "/", label: "Dashboard", module: "home" as AppModule, roles: ["ADMIN", "MANAGER", "EMPLOYEE", "ACCOUNTANT"] as AppRole[] },
+  { href: "/", label: "Dashboard", module: "home" as AppModule, roles: ["ADMIN", "DIRECTEUR_GENERAL", "MANAGER", "EMPLOYEE", "ACCOUNTANT"] as AppRole[] },
   {
     href: "/profile",
     label: "Profil & Inbox",
     module: "profile" as AppModule,
-    roles: ["ADMIN", "MANAGER", "EMPLOYEE", "ACCOUNTANT"] as AppRole[],
+    roles: ["ADMIN", "DIRECTEUR_GENERAL", "MANAGER", "EMPLOYEE", "ACCOUNTANT"] as AppRole[],
   },
   {
     href: "/sales",
     label: "Ventes",
     module: "sales" as AppModule,
-    roles: ["ADMIN", "MANAGER", "EMPLOYEE", "ACCOUNTANT"] as AppRole[],
+    roles: ["ADMIN", "DIRECTEUR_GENERAL", "MANAGER", "EMPLOYEE", "ACCOUNTANT"] as AppRole[],
   },
   {
     href: "/tickets",
     label: "Billets",
     module: "tickets" as AppModule,
-    roles: ["ADMIN", "MANAGER", "EMPLOYEE", "ACCOUNTANT"] as AppRole[],
+    roles: ["ADMIN", "DIRECTEUR_GENERAL", "MANAGER", "EMPLOYEE", "ACCOUNTANT"] as AppRole[],
   },
   {
     href: "/factures",
     label: "Factures",
     module: "invoices" as AppModule,
-    roles: ["ADMIN", "MANAGER", "EMPLOYEE", "ACCOUNTANT"] as AppRole[],
+    roles: ["ADMIN", "DIRECTEUR_GENERAL", "MANAGER", "EMPLOYEE", "ACCOUNTANT"] as AppRole[],
   },
   {
     href: "/payments",
     label: "Paiements",
     module: "payments" as AppModule,
-    roles: ["ADMIN", "MANAGER", "ACCOUNTANT", "EMPLOYEE"] as AppRole[],
+    roles: ["ADMIN", "DIRECTEUR_GENERAL", "MANAGER", "ACCOUNTANT", "EMPLOYEE"] as AppRole[],
   },
   {
     href: "/attendance",
     label: "Présences",
     module: "attendance" as AppModule,
-    roles: ["ADMIN", "MANAGER", "EMPLOYEE", "ACCOUNTANT"] as AppRole[],
+    roles: ["ADMIN", "DIRECTEUR_GENERAL", "MANAGER", "EMPLOYEE", "ACCOUNTANT"] as AppRole[],
   },
   {
     href: "/teams",
     label: "Équipes",
     module: "teams" as AppModule,
-    roles: ["ADMIN", "MANAGER", "ACCOUNTANT"] as AppRole[],
+    roles: ["ADMIN", "DIRECTEUR_GENERAL", "MANAGER", "ACCOUNTANT"] as AppRole[],
   },
   {
     href: "/reports",
     label: "Rapports",
     module: "reports" as AppModule,
-    roles: ["ADMIN", "MANAGER", "EMPLOYEE", "ACCOUNTANT"] as AppRole[],
+    roles: ["ADMIN", "DIRECTEUR_GENERAL", "MANAGER", "EMPLOYEE", "ACCOUNTANT"] as AppRole[],
   },
   {
     href: "/approvisionnement",
     label: "Approvisionnement",
     module: "procurement" as AppModule,
-    roles: ["ADMIN", "MANAGER", "EMPLOYEE", "ACCOUNTANT"] as AppRole[],
+    roles: ["ADMIN", "DIRECTEUR_GENERAL", "MANAGER", "EMPLOYEE", "ACCOUNTANT"] as AppRole[],
   },
   {
     href: "/archives",
     label: "Archives",
     module: "archives" as AppModule,
-    roles: ["ADMIN", "MANAGER", "EMPLOYEE", "ACCOUNTANT"] as AppRole[],
+    roles: ["ADMIN", "DIRECTEUR_GENERAL", "MANAGER", "EMPLOYEE", "ACCOUNTANT"] as AppRole[],
   },
   {
     href: "/news",
     label: "Nouvelles",
     module: "news" as AppModule,
-    roles: ["ADMIN", "MANAGER", "EMPLOYEE", "ACCOUNTANT"] as AppRole[],
+    roles: ["ADMIN", "DIRECTEUR_GENERAL", "MANAGER", "EMPLOYEE", "ACCOUNTANT"] as AppRole[],
   },
   {
     href: "/settings",
     label: "Paramètres",
     module: "settings" as AppModule,
-    roles: ["ADMIN", "MANAGER", "EMPLOYEE", "ACCOUNTANT"] as AppRole[],
+    roles: ["ADMIN", "DIRECTEUR_GENERAL", "MANAGER", "EMPLOYEE", "ACCOUNTANT"] as AppRole[],
   },
   {
     href: "/audit",
     label: "Audit",
     module: "audit" as AppModule,
-    roles: ["ADMIN", "MANAGER", "EMPLOYEE", "ACCOUNTANT"] as AppRole[],
+    roles: ["ADMIN", "DIRECTEUR_GENERAL", "MANAGER", "EMPLOYEE", "ACCOUNTANT"] as AppRole[],
   },
-  { href: "/admin", label: "Admin", module: "admin" as AppModule, roles: ["ADMIN"] as AppRole[] },
+  { href: "/admin", label: "Admin", module: "admin" as AppModule, roles: ["ADMIN", "DIRECTEUR_GENERAL"] as AppRole[] },
 ];
 
 export async function AppShell({

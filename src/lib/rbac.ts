@@ -75,8 +75,7 @@ export function hasModuleAccess(params: {
   }
 
   if (role === "DIRECTEUR_GENERAL") {
-    // DG has executive access, distinct from technical admin areas.
-    return module !== "admin" && module !== "teams";
+    return true;
   }
 
   // Without assignment/function, only home and profile are visible until affectation.

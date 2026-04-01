@@ -8,8 +8,10 @@ export const dynamic = "force-dynamic";
 export default async function NewsPage() {
   const { role } = await requirePageModuleAccess("news", ["ADMIN", "MANAGER", "EMPLOYEE", "ACCOUNTANT"]);
 
+  const canPublishNews = role === "ADMIN" || role === "DIRECTEUR_GENERAL";
+
   const news = await prisma.newsPost.findMany({
-    where: role === "ADMIN" ? {} : { isPublished: true },
+    where: canPublishNews ? {} : { isPublished: true },
     include: {
       author: {
         select: { name: true, email: true },
@@ -20,7 +22,7 @@ export default async function NewsPage() {
   });
 
   return (
-    <AppShell
+    <AppShellcanPublishNews
       role={role}
       accessNote={role === "ADMIN"
         ? "Pilotage éditorial: vous pouvez publier les nouvelles officielles de la direction."
@@ -36,7 +38,7 @@ export default async function NewsPage() {
             </p>
           </div>
           <div className="rounded-full border border-black/15 bg-white/70 px-3 py-1 text-xs font-semibold dark:border-white/20 dark:bg-zinc-800/70">
-            {role === "ADMIN" ? "Mode édition" : "Mode lecture"}
+            {canPublishNews ? "Mode édition" : "Mode lecture"}
           </div>
         </div>
       </section>
@@ -82,14 +84,14 @@ export default async function NewsPage() {
         </section>
 
         <aside className="space-y-4">
-          {role === "ADMIN" ? <NewsPublisher /> : null}
+          {canPublishNews ? <NewsPublisher /> : null}
           <section className="rounded-2xl border border-black/10 bg-white p-4 shadow-sm dark:border-white/10 dark:bg-zinc-900">
             <h2 className="text-sm font-semibold">Règles d&apos;accès</h2>
             <p className="mt-2 text-xs text-black/65 dark:text-white/65">
               Lecture: tous les profils autorisés.
             </p>
             <p className="mt-1 text-xs text-black/65 dark:text-white/65">
-              Rédaction/publication: administrateur uniquement.
+              Rédaction/publication: administrateur et direction générale.
             </p>
           </section>
         </aside>

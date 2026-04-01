@@ -63,6 +63,7 @@ const adminReportSections = [
 export default async function ReportsPage() {
   const { session, role } = await requirePageModuleAccess("reports", ["ADMIN", "MANAGER", "EMPLOYEE", "ACCOUNTANT"]);
   const isPersonalScope = role === "EMPLOYEE" || role === "ACCOUNTANT";
+  const isExecutiveRole = role === "ADMIN" || role === "DIRECTEUR_GENERAL";
 
   const [users, reports] = await Promise.all([
     prisma.user.findMany({
@@ -84,8 +85,8 @@ export default async function ReportsPage() {
   const authorOptions = role === "EMPLOYEE" || role === "ACCOUNTANT"
     ? users.filter((user) => user.id === session.user.id)
     : users;
-  const canCreateReport = role === "MANAGER" || role === "EMPLOYEE" || role === "ACCOUNTANT";
-  const canApproveReport = role === "ADMIN" || role === "MANAGER";
+  const canCreateReport = role === "MANAGER" || role === DIRECTEUR_GENERAL" || role === "MANAGER";
+  const accessNote = isExecutiveRoleADMIN" || role === "MANAGER";
   const accessNote = role === "ADMIN"
     ? "Accès direction: lecture, organisation par service et impression des rapports soumis."
     : canApproveReport
@@ -124,7 +125,7 @@ export default async function ReportsPage() {
         </p>
       </section>
 
-      {role === "ADMIN" ? (
+      {isExecutiveRole ? (
         <AdminReportsSections
           sections={adminSectionsData}
           managers={managers.map((manager) => ({ id: manager.id, name: manager.name }))}

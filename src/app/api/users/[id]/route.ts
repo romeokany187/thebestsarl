@@ -168,3 +168,73 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
 
   return NextResponse.json({ data: updated });
 }
+
+export async function DELETE(_request: NextRequest, context: RouteContext) {
+  const access = await requireApiModuleAccess("teams", ["ADMIN", "MANAGER", "EMPLOYEE", "ACCOUNTANT"]);
+  if (access.error) {
+    return access.error;
+  }
+
+  const actor = await prisma.user.findUnique({
+    where: { id: access.session.user.id },
+    select: { id: true, role: true, jobTitle: true },
+  });
+
+  if (!actor) {
+    return NextResponse.json({ error: "Utilisateur courant introuvable." }, { status: 404 });
+  }
+
+  const canDeleteUser = actor.role === "ADMIN" || actor.jobTitle === "DIRECTION_GENERALE";
+  if (!canDeleteUser) {
+    return NextResponse.json({ error: "Suppression réservée à l'administrateur ou à la Direction Générale." }, { status: 403 });
+  }
+
+  const { id } = await context.params;
+  if (id === actor.id) {
+    return NextResponse.json({ error: "Vous ne pouvez pas supprimer votre propre compte." }, { status: 400 });
+  }
+
+  const existing = await prisma.user.findUnique({
+    where: { id },
+    select: {
+      id: true,
+      role: true,
+      _count: {
+        select: {
+          reports: true,
+          approvals: true,
+          attendances: true,
+          ticketsSold: true,
+          logs: true,
+          notifications: true,
+          newsPosts: true,
+          needRequests: true,
+          needReviews: true,
+          stockMovements: true,
+          archiveUploads: true,
+        },
+      },
+    },
+  });
+
+  if (!existing) {
+    return NextResponse.json({ error: "Utilisateur introuvable." }, { status: 404 });
+  }
+
+  if (existing.role === "ADMIN") {
+    return NextResponse.json({ error: "Suppression d'un administrateur interdite." }, { status: 400 });
+  }
+
+  const dependencyTotal = Object.values(existing._count).reduce((sum, count) => sum + count, 0);
+  if (dependencyTotal > 0) {
+    return NextResponse.json(
+      {
+        error: "Suppression impossible: cet utilisateur possède déjà des données liées (rapports, billets, présences, etc.).",
+      },
+      { status: 400 },
+    );
+  }
+
+  await prisma.user.delete({ where: { id } });
+  return NextResponse.json({ success: true });
+}
