@@ -184,7 +184,7 @@ function drawTopInfo(
 }
 
 export async function GET(request: NextRequest) {
-  const access = await requireApiModuleAccess("tickets", ["ADMIN"]);
+  const access = await requireApiModuleAccess("tickets", ["DIRECTEUR_GENERAL"]);
   if (access.error) {
     return access.error;
   }

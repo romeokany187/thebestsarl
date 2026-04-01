@@ -15,7 +15,7 @@ function clamp(value: number, min: number, max: number) {
 }
 
 export async function GET() {
-  const access = await requireApiModuleAccess("tickets", ["ADMIN"]);
+  const access = await requireApiModuleAccess("tickets", ["DIRECTEUR_GENERAL"]);
   if (access.error) {
     return access.error;
   }

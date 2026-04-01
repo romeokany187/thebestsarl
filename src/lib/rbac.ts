@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 import { redirect } from "next/navigation";
 import { authOptions } from "@/auth";
 
-export type AppRole = "ADMIN" | "MANAGER" | "EMPLOYEE" | "ACCOUNTANT";
+export type AppRole = "ADMIN" | "DIRECTEUR_GENERAL" | "MANAGER" | "EMPLOYEE" | "ACCOUNTANT";
 export type AppModule =
   | "home"
   | "dashboard"
@@ -22,7 +22,7 @@ export type AppModule =
   | "settings"
   | "audit";
 
-const ALL_ROLES: AppRole[] = ["ADMIN", "MANAGER", "EMPLOYEE", "ACCOUNTANT"];
+const ALL_ROLES: AppRole[] = ["ADMIN", "DIRECTEUR_GENERAL", "MANAGER", "EMPLOYEE", "ACCOUNTANT"];
 
 function normalize(value: string | null | undefined) {
   return (value ?? "").trim().toUpperCase();
@@ -67,11 +67,16 @@ export function hasModuleAccess(params: {
   }
 
   if (module === "tickets") {
-    return role === "ADMIN" && jobTitle === "DIRECTION_GENERALE";
+    return role === "DIRECTEUR_GENERAL";
   }
 
   if (role === "ADMIN") {
     return true;
+  }
+
+  if (role === "DIRECTEUR_GENERAL") {
+    // DG has executive access, distinct from technical admin areas.
+    return module !== "admin" && module !== "teams";
   }
 
   // Without assignment/function, only home and profile are visible until affectation.
@@ -112,11 +117,22 @@ export function hasModuleAccess(params: {
   return false;
 }
 
-function extractRole(role: unknown): AppRole | null {
-  if (role === "ADMIN" || role === "MANAGER" || role === "EMPLOYEE" || role === "ACCOUNTANT") {
+function extractRole(role: unknown, jobTitle: string | null | undefined): AppRole | null {
+  if (role === "ADMIN") {
+    return normalize(jobTitle) === "DIRECTION_GENERALE" ? "DIRECTEUR_GENERAL" : "ADMIN";
+  }
+
+  if (role === "MANAGER" || role === "EMPLOYEE" || role === "ACCOUNTANT") {
     return role;
   }
   return null;
+}
+
+function isRoleAllowed(role: AppRole, allowedRoles: AppRole[]) {
+  if (allowedRoles.includes(role)) return true;
+  // Backward compatibility: old ADMIN-allowed paths can still be used by DG.
+  if (role === "DIRECTEUR_GENERAL" && allowedRoles.includes("ADMIN")) return true;
+  return false;
 }
 
 export async function requireApiRoles(allowedRoles: AppRole[]) {
@@ -130,9 +146,9 @@ export async function requireApiRoles(allowedRoles: AppRole[]) {
     };
   }
 
-  const role = extractRole(session.user.role);
+  const role = extractRole(session.user.role, session.user.jobTitle);
 
-  if (!role || !allowedRoles.includes(role)) {
+  if (!role || !isRoleAllowed(role, allowedRoles)) {
     return {
       error: NextResponse.json({ error: "Forbidden" }, { status: 403 }),
       session,
@@ -154,9 +170,9 @@ export async function requirePageRoles(allowedRoles: AppRole[]) {
     redirect("/api/auth/signin");
   }
 
-  const role = extractRole(session.user.role);
+  const role = extractRole(session.user.role, session.user.jobTitle);
 
-  if (!role || !allowedRoles.includes(role)) {
+  if (!role || !isRoleAllowed(role, allowedRoles)) {
     redirect("/");
   }
 

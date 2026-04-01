@@ -33,7 +33,7 @@ function parseIsoDate(value: FormDataEntryValue | null) {
 }
 
 export async function GET(request: NextRequest) {
-  const access = await requireApiModuleAccess("tickets", ["ADMIN"]);
+  const access = await requireApiModuleAccess("tickets", ["DIRECTEUR_GENERAL"]);
   if (access.error) {
     return access.error;
   }
@@ -65,7 +65,7 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
-  const access = await requireApiModuleAccess("tickets", ["ADMIN"]);
+  const access = await requireApiModuleAccess("tickets", ["DIRECTEUR_GENERAL"]);
   if (access.error) {
     return access.error;
   }

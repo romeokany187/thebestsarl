@@ -4,7 +4,7 @@ import { requireApiRoles } from "@/lib/rbac";
 import { needApprovalSchema } from "@/lib/validators";
 
 export async function POST(request: NextRequest) {
-  const access = await requireApiRoles(["ADMIN"]);
+  const access = await requireApiRoles(["DIRECTEUR_GENERAL"]);
   if (access.error) return access.error;
 
   const me = await prisma.user.findUnique({
@@ -16,7 +16,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Utilisateur introuvable." }, { status: 404 });
   }
 
-  const canValidate = me.role === "ADMIN" && me.jobTitle === "DIRECTION_GENERALE";
+  const canValidate = access.role === "DIRECTEUR_GENERAL";
   if (!canValidate) {
     return NextResponse.json({ error: "Validation réservée à la Direction Générale." }, { status: 403 });
   }

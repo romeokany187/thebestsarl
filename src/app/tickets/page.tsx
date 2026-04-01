@@ -239,7 +239,7 @@ export default async function TicketsPage({
   const currentDate = now.toISOString().slice(0, 10);
   const currentStartDate = resolvedSearchParams.startDate ?? `${now.getUTCFullYear()}-01-01`;
   const currentEndDate = resolvedSearchParams.endDate ?? currentDate;
-  const { session, role } = await requirePageModuleAccess("tickets", ["ADMIN"]);
+  const { session, role } = await requirePageModuleAccess("tickets", ["DIRECTEUR_GENERAL"]);
   const roleTicketFilter = role === "EMPLOYEE" ? { sellerId: session.user.id } : {};
 
   await ensureAirlineCatalog(prisma);
