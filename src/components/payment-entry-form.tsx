@@ -18,6 +18,7 @@ export function PaymentEntryForm({ tickets }: { tickets: TicketOption[] }) {
   const [amount, setAmount] = useState<string>("");
   const [method, setMethod] = useState<string>("CASH");
   const [reference, setReference] = useState<string>("");
+  const [paidAt, setPaidAt] = useState<string>(new Date().toISOString().slice(0, 16));
   const [loading, setLoading] = useState<boolean>(false);
   const [message, setMessage] = useState<string>("");
   const [error, setError] = useState<string>("");
@@ -47,6 +48,7 @@ export function PaymentEntryForm({ tickets }: { tickets: TicketOption[] }) {
         amount: numericAmount,
         method,
         reference: reference || undefined,
+        paidAt: paidAt ? new Date(paidAt).toISOString() : undefined,
       }),
     });
 
@@ -114,6 +116,16 @@ export function PaymentEntryForm({ tickets }: { tickets: TicketOption[] }) {
             onChange={(event) => setReference(event.target.value)}
             className="w-full rounded-md border border-black/15 bg-white px-3 py-2 text-sm dark:border-white/15 dark:bg-zinc-900"
             placeholder="Optionnel"
+          />
+        </div>
+
+        <div>
+          <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-black/60 dark:text-white/60">Date opération</label>
+          <input
+            type="datetime-local"
+            value={paidAt}
+            onChange={(event) => setPaidAt(event.target.value)}
+            className="w-full rounded-md border border-black/15 bg-white px-3 py-2 text-sm dark:border-white/15 dark:bg-zinc-900"
           />
         </div>
 
