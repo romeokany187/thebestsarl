@@ -3,6 +3,7 @@ import { AppShell } from "@/components/app-shell";
 import { CashOperationForm } from "@/components/cash-operation-form";
 import { KpiCard } from "@/components/kpi-card";
 import { PaymentEntryForm } from "@/components/payment-entry-form";
+import { PaymentsWritingWorkspace } from "@/components/payments-writing-workspace";
 import { requirePageModuleAccess } from "@/lib/rbac";
 import { prisma } from "@/lib/prisma";
 
@@ -258,8 +259,11 @@ export default async function PaymentsPage({
         </p>
       </section>
 
-      {canWrite ? <PaymentEntryForm tickets={paymentTickets} /> : null}
-      {canWrite ? <CashOperationForm /> : null}
+      <PaymentsWritingWorkspace
+        canWrite={canWrite}
+        ticketPaymentForm={<PaymentEntryForm tickets={paymentTickets} />}
+        cashOperationForm={<CashOperationForm />}
+      />
 
       {role === "DIRECTEUR_GENERAL" ? (
         <section className="mb-6 rounded-2xl border border-black/10 bg-white p-4 shadow-sm dark:border-white/10 dark:bg-zinc-900">
