@@ -46,10 +46,6 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
     return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
   }
 
-  if (actor.role !== "ADMIN" && parsed.data.role !== undefined) {
-    return NextResponse.json({ error: "Seul un administrateur peut changer le rôle." }, { status: 403 });
-  }
-
   const existing = await prisma.user.findUnique({
     where: { id },
     select: {
@@ -64,6 +60,22 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
   });
   if (!existing) {
     return NextResponse.json({ error: "Utilisateur introuvable." }, { status: 404 });
+  }
+
+  if (parsed.data.role !== undefined && actor.role !== "ADMIN") {
+    if (parsed.data.role === "ADMIN") {
+      return NextResponse.json(
+        { error: "La nomination au rôle administrateur est réservée à un administrateur." },
+        { status: 403 },
+      );
+    }
+
+    if (existing.role === "ADMIN") {
+      return NextResponse.json(
+        { error: "Seul un administrateur peut modifier le rôle d'un administrateur." },
+        { status: 403 },
+      );
+    }
   }
 
   if (parsed.data.teamId) {
