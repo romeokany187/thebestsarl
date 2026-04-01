@@ -39,6 +39,12 @@ const links = [
     roles: ["ADMIN", "DIRECTEUR_GENERAL", "MANAGER", "ACCOUNTANT", "EMPLOYEE"] as AppRole[],
   },
   {
+    href: "/dg/ordres-paiement",
+    label: "OP - Espace DG",
+    module: "home" as AppModule,
+    roles: ["DIRECTEUR_GENERAL"] as AppRole[],
+  },
+  {
     href: "/attendance",
     label: "Présences",
     module: "attendance" as AppModule,

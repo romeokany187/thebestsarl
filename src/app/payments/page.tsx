@@ -2,7 +2,6 @@ import { PaymentStatus } from "@prisma/client";
 import { AppShell } from "@/components/app-shell";
 import { KpiCard } from "@/components/kpi-card";
 import { PaymentEntryForm } from "@/components/payment-entry-form";
-import { PaymentOrderForm } from "@/components/payment-order-form";
 import { requirePageModuleAccess } from "@/lib/rbac";
 import { prisma } from "@/lib/prisma";
 
@@ -42,7 +41,6 @@ export default async function PaymentsPage({
 }) {
   const { role, session } = await requirePageModuleAccess("payments", ["ADMIN", "DIRECTEUR_GENERAL", "ACCOUNTANT", "EMPLOYEE"]);
   const canWrite = session.user.jobTitle === "CAISSIERE";
-  const canIssuePaymentOrder = role === "DIRECTEUR_GENERAL";
   const resolvedSearchParams = (await searchParams) ?? {};
   const range = dateRangeFromParams(resolvedSearchParams);
 
@@ -200,7 +198,19 @@ export default async function PaymentsPage({
       </section>
 
       {canWrite ? <PaymentEntryForm tickets={paymentTickets} /> : null}
-      {canIssuePaymentOrder ? <PaymentOrderForm /> : null}
+
+      {role === "DIRECTEUR_GENERAL" ? (
+        <section className="mb-6 rounded-2xl border border-black/10 bg-white p-4 shadow-sm dark:border-white/10 dark:bg-zinc-900">
+          <h2 className="text-sm font-semibold">Ordres de paiement DG</h2>
+          <p className="mt-1 text-xs text-black/60 dark:text-white/60">La création d'OP se fait dans votre espace dédié.</p>
+          <a
+            href="/dg/ordres-paiement"
+            className="mt-3 inline-flex rounded-md border border-black/20 px-3 py-1.5 text-xs font-semibold hover:bg-black/5 dark:border-white/20 dark:hover:bg-white/10"
+          >
+            Ouvrir l'espace DG OP
+          </a>
+        </section>
+      ) : null}
 
       <section className="mb-6 overflow-hidden rounded-2xl border border-black/10 bg-white shadow-sm dark:border-white/10 dark:bg-zinc-900">
         <div className="border-b border-black/10 px-4 py-3 dark:border-white/10">
