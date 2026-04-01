@@ -56,15 +56,18 @@ export function hasModuleAccess(params: {
     return true;
   }
 
+  if (module === "payments") {
+    const financeRole = jobTitle === "CAISSIERE" || jobTitle === "COMPTABLE";
+    const kinshasaDirection = teamIncludes(teamName, ["KINSHASA", "DIRECTION GENERALE", "DIRECTION GÉNÉRALE"]);
+    return financeRole && kinshasaDirection;
+  }
+
   if (role === "ADMIN") {
     return true;
   }
 
-  // Without assignment/function, home and profile stay visible. Exception: cashier/accountant can access payments.
+  // Without assignment/function, only home and profile are visible until affectation.
   if (!isAssignedNonAdmin(jobTitle, teamName)) {
-    if (module === "payments") {
-      return jobTitle === "CAISSIERE" || jobTitle === "COMPTABLE";
-    }
     return false;
   }
 
@@ -86,11 +89,6 @@ export function hasModuleAccess(params: {
 
   if (module === "invoices") {
     return true;
-  }
-
-  if (module === "payments") {
-    return jobTitle === "CAISSIERE"
-      || jobTitle === "COMPTABLE";
   }
 
   if (module === "procurement") {
