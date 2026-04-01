@@ -5,129 +5,28 @@ import { PaymentEntryForm } from "@/components/payment-entry-form";
 import { requirePageModuleAccess } from "@/lib/rbac";
 import { prisma } from "@/lib/prisma";
 
-type ReportMode = "date" | "month" | "year" | "semester";
-
 type SearchParams = {
   startDate?: string;
   endDate?: string;
-  mode?: string;
-  date?: string;
-  weekStart?: string;
-  month?: string;
-  year?: string;
-  semester?: string;
-  semesterYear?: string;
   airlineId?: string;
 };
-
-function parseYear(value?: string) {
-  if (!value) return null;
-  const parsed = Number.parseInt(value, 10);
-  if (!Number.isFinite(parsed) || parsed < 2000 || parsed > 2100) return null;
-  return parsed;
-}
 
 function dateRangeFromParams(params: SearchParams) {
   const now = new Date();
   const defaultDay = now.toISOString().slice(0, 10);
-
-  if (params.startDate || params.endDate) {
-    const startRaw = params.startDate ?? defaultDay;
-    const endRaw = params.endDate ?? startRaw;
-    const start = new Date(`${startRaw}T00:00:00.000Z`);
-    const end = new Date(`${endRaw}T00:00:00.000Z`);
-    end.setUTCDate(end.getUTCDate() + 1);
-    return {
-      mode: "date" as ReportMode,
-      start,
-      end,
-      label: `Rapport du ${startRaw} au ${endRaw}`,
-    };
-  }
-
-  if (params.mode === "week") {
-    const nowDay = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
-    const dayIndex = nowDay.getUTCDay();
-    const diffToMonday = (dayIndex + 6) % 7;
-    const defaultMonday = new Date(nowDay);
-    defaultMonday.setUTCDate(defaultMonday.getUTCDate() - diffToMonday);
-
-    const rawWeekStart = params.weekStart;
-    const monday = rawWeekStart
-      ? new Date(`${rawWeekStart}T00:00:00.000Z`)
-      : defaultMonday;
-    const start = new Date(Date.UTC(monday.getUTCFullYear(), monday.getUTCMonth(), monday.getUTCDate(), 0, 0, 0, 0));
-    const end = new Date(start);
-    end.setUTCDate(end.getUTCDate() + 7);
-
-    return {
-      mode: "date" as ReportMode,
-      start,
-      end,
-      label: `Rapport hebdomadaire du ${start.toISOString().slice(0, 10)} au ${new Date(end.getTime() - 1).toISOString().slice(0, 10)}`,
-    };
-  }
-
-  const mode = (["date", "month", "year", "semester"].includes(params.mode ?? "")
-    ? params.mode
-    : "date") as ReportMode;
-
-  if (mode === "date") {
-    const rawDate = params.date;
-    const date = rawDate ? new Date(`${rawDate}T00:00:00.000Z`) : now;
-    const year = date.getUTCFullYear();
-    const month = date.getUTCMonth();
-    const day = date.getUTCDate();
-    const start = new Date(Date.UTC(year, month, day, 0, 0, 0, 0));
-    const end = new Date(Date.UTC(year, month, day + 1, 0, 0, 0, 0));
-    return {
-      mode,
-      start,
-      end,
-      label: `Rapport du ${start.toISOString().slice(0, 10)}`,
-    };
-  }
-
-  if (mode === "year") {
-    const year = parseYear(params.year) ?? now.getUTCFullYear();
-    const start = new Date(Date.UTC(year, 0, 1, 0, 0, 0, 0));
-    const end = new Date(Date.UTC(year + 1, 0, 1, 0, 0, 0, 0));
-    return {
-      mode,
-      start,
-      end,
-      label: `Rapport annuel ${year}`,
-    };
-  }
-
-  if (mode === "semester") {
-    const semester = params.semester === "2" ? 2 : 1;
-    const year = parseYear(params.semesterYear) ?? now.getUTCFullYear();
-    const startMonth = semester === 1 ? 0 : 6;
-    const endMonth = semester === 1 ? 6 : 12;
-    const start = new Date(Date.UTC(year, startMonth, 1, 0, 0, 0, 0));
-    const end = new Date(Date.UTC(year, endMonth, 1, 0, 0, 0, 0));
-    return {
-      mode,
-      start,
-      end,
-      label: `Rapport S${semester} ${year}`,
-    };
-  }
-
-  const rawMonth = params.month;
-  const monthMatch = rawMonth?.match(/^(\d{4})-(\d{2})$/);
-  const year = monthMatch ? Number.parseInt(monthMatch[1], 10) : now.getUTCFullYear();
-  const month = monthMatch ? Number.parseInt(monthMatch[2], 10) - 1 : now.getUTCMonth();
-  const safeMonth = Math.min(11, Math.max(0, month));
-  const start = new Date(Date.UTC(year, safeMonth, 1, 0, 0, 0, 0));
-  const end = new Date(Date.UTC(year, safeMonth + 1, 1, 0, 0, 0, 0));
+  const startRaw = params.startDate ?? defaultDay;
+  const endRaw = params.endDate ?? startRaw;
+  
+  const start = new Date(`${startRaw}T00:00:00.000Z`);
+  const end = new Date(`${endRaw}T00:00:00.000Z`);
+  end.setUTCDate(end.getUTCDate() + 1);
 
   return {
-    mode,
     start,
     end,
-    label: `Rapport mensuel ${start.toISOString().slice(0, 7)}`,
+    startRaw,
+    endRaw,
+    label: `Du ${startRaw} au ${endRaw}`,
   };
 }
 
@@ -139,41 +38,18 @@ export default async function PaymentsPage({
   searchParams?: Promise<SearchParams>;
 }) {
   const { role, session } = await requirePageModuleAccess("payments", ["ADMIN", "ACCOUNTANT", "EMPLOYEE"]);
-  // Lecture : CAISSIERE, COMPTABLE, ADMIN
-  // Écriture : CAISSIERE uniquement
   const canWrite = session.user.jobTitle === "CAISSIERE";
   const resolvedSearchParams = (await searchParams) ?? {};
   const range = dateRangeFromParams(resolvedSearchParams);
 
   const now = new Date();
   const currentDate = now.toISOString().slice(0, 10);
-  const uiMode = (["date", "week", "month"].includes(resolvedSearchParams.mode ?? "")
-    ? resolvedSearchParams.mode
-    : "date") as "date" | "week" | "month";
-  const currentWeekStart = resolvedSearchParams.weekStart ?? (() => {
-    const today = new Date();
-    const dayIndex = today.getUTCDay();
-    const diffToMonday = (dayIndex + 6) % 7;
-    const monday = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate()));
-    monday.setUTCDate(monday.getUTCDate() - diffToMonday);
-    return monday.toISOString().slice(0, 10);
-  })();
-  const currentMonth = resolvedSearchParams.month ?? currentDate.slice(0, 7);
-  const currentStartDate = range.start.toISOString().slice(0, 10);
-  const currentEndDate = new Date(range.end.getTime() - 1).toISOString().slice(0, 10);
-  const exactPeriodLabel = uiMode === "date"
-    ? `Date: ${currentStartDate}`
-    : `Période du ${currentStartDate} au ${currentEndDate}`;
   const selectedAirlineId = resolvedSearchParams.airlineId && resolvedSearchParams.airlineId !== "ALL"
     ? resolvedSearchParams.airlineId
     : undefined;
   const reportQuery = new URLSearchParams({
-    startDate: currentStartDate,
-    endDate: currentEndDate,
-    mode: uiMode,
-    date: resolvedSearchParams.date ?? currentDate,
-    weekStart: currentWeekStart,
-    month: currentMonth,
+    startDate: range.startRaw,
+    endDate: range.endRaw,
     ...(selectedAirlineId ? { airlineId: selectedAirlineId } : {}),
   }).toString();
 
@@ -266,43 +142,18 @@ export default async function PaymentsPage({
       </section>
 
       <section className="mb-6 rounded-2xl border border-black/10 bg-white p-4 dark:border-white/10 dark:bg-zinc-900">
-        <form method="GET" className="grid gap-3 lg:grid-cols-5 lg:items-end">
-
-          <div>
-            <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-black/60 dark:text-white/60">Mode</label>
-            <select name="mode" defaultValue={uiMode} className="w-full rounded-md border border-black/15 bg-white px-3 py-2 text-sm dark:border-white/15 dark:bg-zinc-900">
-              <option value="date">Journalier</option>
-              <option value="week">Hebdomadaire</option>
-              <option value="month">Mensuel</option>
-            </select>
-          </div>
-
-          <div>
-            <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-black/60 dark:text-white/60">Date (jour)</label>
-            <input type="date" name="date" defaultValue={resolvedSearchParams.date ?? currentDate} className="w-full rounded-md border border-black/15 bg-white px-3 py-2 text-sm dark:border-white/15 dark:bg-zinc-900" />
-          </div>
-
-          <div>
-            <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-black/60 dark:text-white/60">Début semaine</label>
-            <input type="date" name="weekStart" defaultValue={currentWeekStart} className="w-full rounded-md border border-black/15 bg-white px-3 py-2 text-sm dark:border-white/15 dark:bg-zinc-900" />
-          </div>
-
-          <div>
-            <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-black/60 dark:text-white/60">Mois</label>
-            <input type="month" name="month" defaultValue={currentMonth} className="w-full rounded-md border border-black/15 bg-white px-3 py-2 text-sm dark:border-white/15 dark:bg-zinc-900" />
-          </div>
-
+        <form method="GET" className="grid gap-3 sm:grid-cols-3 sm:items-end">
           <div>
             <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-black/60 dark:text-white/60">Du</label>
-            <input type="date" name="startDate" defaultValue={currentStartDate} className="w-full rounded-md border border-black/15 bg-white px-3 py-2 text-sm dark:border-white/15 dark:bg-zinc-900" />
+            <input type="date" name="startDate" defaultValue={range.startRaw} className="w-full rounded-md border border-black/15 bg-white px-3 py-2 text-sm dark:border-white/15 dark:bg-zinc-900" />
           </div>
 
           <div>
             <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-black/60 dark:text-white/60">Au</label>
-            <input type="date" name="endDate" defaultValue={currentEndDate} className="w-full rounded-md border border-black/15 bg-white px-3 py-2 text-sm dark:border-white/15 dark:bg-zinc-900" />
+            <input type="date" name="endDate" defaultValue={range.endRaw} className="w-full rounded-md border border-black/15 bg-white px-3 py-2 text-sm dark:border-white/15 dark:bg-zinc-900" />
           </div>
 
-          <div className="lg:col-span-2">
+          <div>
             <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-black/60 dark:text-white/60">Compagnie</label>
             <select name="airlineId" defaultValue={resolvedSearchParams.airlineId ?? "ALL"} className="w-full rounded-md border border-black/15 bg-white px-3 py-2 text-sm dark:border-white/15 dark:bg-zinc-900">
               <option value="ALL">Toutes compagnies</option>
@@ -331,7 +182,7 @@ export default async function PaymentsPage({
           </a>
         </div>
         <p className="mt-3 text-xs text-black/60 dark:text-white/60">
-          {range.label} • {exactPeriodLabel}
+          {range.label}
         </p>
       </section>
 

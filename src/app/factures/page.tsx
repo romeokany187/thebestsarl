@@ -7,15 +7,8 @@ export const dynamic = "force-dynamic";
 
 type SearchParams = {
   month?: string;
-  startDate?: string;
-  endDate?: string;
-  q?: string;
   airlineId?: string;
   status?: string;
-  seller?: string;
-  minAmount?: string;
-  maxAmount?: string;
-  sort?: string;
 };
 
 function dateRangeFromParams(params: SearchParams) {
@@ -35,25 +28,17 @@ function dateRangeFromParams(params: SearchParams) {
       monthRaw: rawMonth,
       start,
       end,
-      startRaw: start.toISOString().slice(0, 10),
-      endRaw: endInclusive,
     };
   }
 
-  const defaultDay = now.toISOString().slice(0, 10);
-  const startRaw = params.startDate ?? defaultDay;
-  const endRaw = params.endDate ?? startRaw;
-  const start = new Date(`${startRaw}T00:00:00.000Z`);
-  const end = new Date(`${endRaw}T00:00:00.000Z`);
-  end.setUTCDate(end.getUTCDate() + 1);
-  return { monthRaw: "", start, end, startRaw, endRaw };
-}
-
-function parseOptionalAmount(value?: string) {
-  if (!value) return null;
-  const parsed = Number.parseFloat(value);
-  if (!Number.isFinite(parsed) || parsed < 0) return null;
-  return parsed;
+  // Fallback: current month
+  const start = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1, 0, 0, 0, 0));
+  const end = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1, 0, 0, 0, 0));
+  return {
+    monthRaw: defaultMonth,
+    start,
+    end,
+  };
 }
 
 type InvoiceStatus = "PAID" | "PARTIAL" | "UNPAID";
@@ -77,8 +62,7 @@ export default async function FacturesPage({
 }) {
   const { role } = await requirePageModuleAccess("invoices", ["ADMIN", "MANAGER", "EMPLOYEE", "ACCOUNTANT"]);
   const resolvedSearchParams = (await searchParams) ?? {};
-  const { monthRaw, start, end, startRaw, endRaw } = dateRangeFromParams(resolvedSearchParams);
-  const query = resolvedSearchParams.q?.trim() ?? "";
+  const { monthRaw, start, end } = dateRangeFromParams(resolvedSearchParams);
   const selectedAirlineId = resolvedSearchParams.airlineId && resolvedSearchParams.airlineId !== "ALL"
     ? resolvedSearchParams.airlineId
     : "ALL";
@@ -87,15 +71,6 @@ export default async function FacturesPage({
     || resolvedSearchParams.status === "UNPAID")
     ? resolvedSearchParams.status
     : "ALL";
-  const sellerQuery = resolvedSearchParams.seller?.trim() ?? "";
-  const minAmount = parseOptionalAmount(resolvedSearchParams.minAmount);
-  const maxAmount = parseOptionalAmount(resolvedSearchParams.maxAmount);
-  const sort = (resolvedSearchParams.sort === "date_asc"
-    || resolvedSearchParams.sort === "amount_desc"
-    || resolvedSearchParams.sort === "amount_asc"
-    || resolvedSearchParams.sort === "balance_desc")
-    ? resolvedSearchParams.sort
-    : "date_desc";
 
   const [airlines, tickets] = await Promise.all([
     prisma.airline.findMany({
@@ -139,42 +114,12 @@ export default async function FacturesPage({
     };
   });
 
-  const lowerQuery = query.toLowerCase();
-  const lowerSellerQuery = sellerQuery.toLowerCase();
-
   const filteredInvoices = invoices.filter((invoice) => {
     if (selectedStatus !== "ALL" && invoice.status !== selectedStatus) return false;
-    if (minAmount !== null && invoice.amount < minAmount) return false;
-    if (maxAmount !== null && invoice.amount > maxAmount) return false;
-
-    if (lowerSellerQuery) {
-      const sellerOk = invoice.sellerName.toLowerCase().includes(lowerSellerQuery);
-      if (!sellerOk) return false;
-    }
-
-    if (lowerQuery) {
-      const haystack = [
-        invoice.invoiceNumber,
-        invoice.ticketNumber,
-        invoice.customerName,
-        invoice.airlineCode,
-        invoice.airlineName,
-        invoice.sellerName,
-      ].join(" ").toLowerCase();
-
-      if (!haystack.includes(lowerQuery)) return false;
-    }
-
     return true;
   });
 
-  const sortedInvoices = filteredInvoices.slice().sort((a, b) => {
-    if (sort === "date_asc") return a.soldAt.getTime() - b.soldAt.getTime();
-    if (sort === "amount_desc") return b.amount - a.amount;
-    if (sort === "amount_asc") return a.amount - b.amount;
-    if (sort === "balance_desc") return b.balance - a.balance;
-    return b.soldAt.getTime() - a.soldAt.getTime();
-  });
+  const sortedInvoices = filteredInvoices.slice().sort((a, b) => b.soldAt.getTime() - a.soldAt.getTime());
 
   const totalBilled = sortedInvoices.reduce((sum, invoice) => sum + invoice.amount, 0);
   const totalPaid = sortedInvoices.reduce((sum, invoice) => sum + invoice.paidAmount, 0);
@@ -193,22 +138,10 @@ export default async function FacturesPage({
       </section>
 
       <section className="mb-6 rounded-2xl border border-black/10 bg-white p-4 dark:border-white/10 dark:bg-zinc-900">
-        <form method="GET" className="grid gap-3 lg:grid-cols-4 lg:items-end">
+        <form method="GET" className="grid gap-3 sm:grid-cols-4 sm:items-end">
           <div>
             <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-black/60 dark:text-white/60">Mois</label>
             <input type="month" name="month" defaultValue={monthRaw} className="w-full rounded-md border border-black/15 bg-white px-3 py-2 text-sm dark:border-white/15 dark:bg-zinc-900" />
-          </div>
-          <div>
-            <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-black/60 dark:text-white/60">Du</label>
-            <input type="date" name="startDate" defaultValue={startRaw} className="w-full rounded-md border border-black/15 bg-white px-3 py-2 text-sm dark:border-white/15 dark:bg-zinc-900" />
-          </div>
-          <div>
-            <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-black/60 dark:text-white/60">Au</label>
-            <input type="date" name="endDate" defaultValue={endRaw} className="w-full rounded-md border border-black/15 bg-white px-3 py-2 text-sm dark:border-white/15 dark:bg-zinc-900" />
-          </div>
-          <div>
-            <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-black/60 dark:text-white/60">Recherche</label>
-            <input type="search" name="q" defaultValue={query} placeholder="PNR, client, compagnie..." className="w-full rounded-md border border-black/15 bg-white px-3 py-2 text-sm dark:border-white/15 dark:bg-zinc-900" />
           </div>
 
           <div>
@@ -222,38 +155,12 @@ export default async function FacturesPage({
           </div>
 
           <div>
-            <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-black/60 dark:text-white/60">Statut facture</label>
+            <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-black/60 dark:text-white/60">Statut</label>
             <select name="status" defaultValue={selectedStatus} className="w-full rounded-md border border-black/15 bg-white px-3 py-2 text-sm dark:border-white/15 dark:bg-zinc-900">
               <option value="ALL">Tous statuts</option>
               <option value="PAID">Payée</option>
               <option value="PARTIAL">Partielle</option>
               <option value="UNPAID">Impayée</option>
-            </select>
-          </div>
-
-          <div>
-            <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-black/60 dark:text-white/60">Vendeur</label>
-            <input type="search" name="seller" defaultValue={sellerQuery} placeholder="Nom du vendeur..." className="w-full rounded-md border border-black/15 bg-white px-3 py-2 text-sm dark:border-white/15 dark:bg-zinc-900" />
-          </div>
-
-          <div>
-            <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-black/60 dark:text-white/60">Montant min</label>
-            <input type="number" min="0" step="0.01" name="minAmount" defaultValue={resolvedSearchParams.minAmount ?? ""} className="w-full rounded-md border border-black/15 bg-white px-3 py-2 text-sm dark:border-white/15 dark:bg-zinc-900" />
-          </div>
-
-          <div>
-            <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-black/60 dark:text-white/60">Montant max</label>
-            <input type="number" min="0" step="0.01" name="maxAmount" defaultValue={resolvedSearchParams.maxAmount ?? ""} className="w-full rounded-md border border-black/15 bg-white px-3 py-2 text-sm dark:border-white/15 dark:bg-zinc-900" />
-          </div>
-
-          <div>
-            <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-black/60 dark:text-white/60">Tri</label>
-            <select name="sort" defaultValue={sort} className="w-full rounded-md border border-black/15 bg-white px-3 py-2 text-sm dark:border-white/15 dark:bg-zinc-900">
-              <option value="date_desc">Date décroissante</option>
-              <option value="date_asc">Date croissante</option>
-              <option value="amount_desc">Montant décroissant</option>
-              <option value="amount_asc">Montant croissant</option>
-              <option value="balance_desc">Solde restant décroissant</option>
             </select>
           </div>
 
