@@ -74,6 +74,7 @@ export function TeamAssignmentAdmin({
   const [newTeamKind, setNewTeamKind] = useState<"AGENCE" | "PARTENAIRE">("AGENCE");
   const [savingId, setSavingId] = useState("");
   const [creatingTeam, setCreatingTeam] = useState(false);
+  const [deletingTeamId, setDeletingTeamId] = useState("");
 
   const selectedTeam = teamOptions.find((team) => team.id === selectedTeamId) ?? null;
 
@@ -88,7 +89,8 @@ export function TeamAssignmentAdmin({
   );
 
   const isManagerOfSelectedTeam = actorRole === "MANAGER" && selectedTeam?.name === actorTeamName;
-  const canManageSelectedTeam = actorRole === "ADMIN" || isManagerOfSelectedTeam;
+  const isExecutiveManager = actorRole === "ADMIN" || actorRole === "DIRECTEUR_GENERAL";
+  const canManageSelectedTeam = isExecutiveManager || isManagerOfSelectedTeam;
 
   const currentLeader = useMemo(
     () => teamMembers.find((member) => member.role === "MANAGER") ?? null,
@@ -175,8 +177,8 @@ export function TeamAssignmentAdmin({
   }
 
   async function switchLeaderRole(userId: string, makeLeader: boolean, currentJobTitle: JobTitle, currentTeamId: string | null) {
-    if (actorRole !== "ADMIN") {
-      setStatus("Seul un administrateur peut changer le chef d'équipe.");
+    if (!isExecutiveManager) {
+      setStatus("Seuls l'administrateur et la direction générale peuvent changer le chef d'équipe.");
       return;
     }
 
@@ -205,6 +207,42 @@ export function TeamAssignmentAdmin({
 
     setStatus(makeLeader ? "Chef d'équipe mis à jour." : "Chef d'équipe retiré.");
     setSavingId("");
+  }
+
+  async function deleteSelectedTeam() {
+    if (!selectedTeam) return;
+
+    if (!isExecutiveManager) {
+      setStatus("Seuls l'administrateur et la direction générale peuvent supprimer une équipe.");
+      return;
+    }
+
+    const confirmed = window.confirm(`Supprimer définitivement l'équipe "${selectedTeam.name}" ?`);
+    if (!confirmed) return;
+
+    setDeletingTeamId(selectedTeam.id);
+    setStatus("Suppression de l'équipe...");
+
+    const response = await fetch(`/api/teams/${selectedTeam.id}`, {
+      method: "DELETE",
+    });
+
+    const payload = await response.json().catch(() => null);
+
+    if (!response.ok) {
+      setStatus(payload?.error ?? "Impossible de supprimer l'équipe.");
+      setDeletingTeamId("");
+      return;
+    }
+
+    setRows((prev) => prev.map((row) => (row.teamId === selectedTeam.id
+      ? { ...row, teamId: null, teamName: "Sans équipe" }
+      : row)));
+    setTeamOptions((prev) => prev.filter((team) => team.id !== selectedTeam.id));
+    setSelectedTeamId("");
+    setIsTeamWindowOpen(false);
+    setStatus("Équipe supprimée avec succès.");
+    setDeletingTeamId("");
   }
 
   async function createTeam() {
@@ -353,12 +391,15 @@ export function TeamAssignmentAdmin({
           <button
             type="button"
             onClick={createTeam}
-            disabled={creatingTeam || actorRole === "ACCOUNTANT"}
+            disabled={creatingTeam || !isExecutiveManager}
             className="rounded-md bg-black px-3 py-2 text-xs font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50 dark:bg-white dark:text-black"
           >
             {creatingTeam ? "Création..." : "Créer équipe"}
           </button>
         </div>
+        {!isExecutiveManager ? (
+          <p className="mt-2 text-xs text-amber-600">Seuls l'administrateur et la direction générale peuvent créer ou supprimer une équipe.</p>
+        ) : null}
       </div>
 
       {selectedTeam && isTeamWindowOpen ? (
@@ -367,6 +408,16 @@ export function TeamAssignmentAdmin({
             <div className="mb-3 flex items-center justify-between">
               <h3 className="text-base font-semibold">Paramètres de l&apos;équipe</h3>
               <div className="flex items-center gap-2">
+                {isExecutiveManager ? (
+                  <button
+                    type="button"
+                    onClick={deleteSelectedTeam}
+                    disabled={deletingTeamId === selectedTeam.id || teamMembers.length > 0}
+                    className="rounded-md border border-red-300 px-3 py-1.5 text-xs font-semibold text-red-700 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-red-700/60 dark:text-red-300 dark:hover:bg-red-950/30"
+                  >
+                    {deletingTeamId === selectedTeam.id ? "Suppression..." : "Supprimer l'équipe"}
+                  </button>
+                ) : null}
                 <select
                   value={selectedTeamId}
                   onChange={(event) => setSelectedTeamId(event.target.value)}
@@ -466,7 +517,7 @@ export function TeamAssignmentAdmin({
                     <button
                       type="button"
                       onClick={() => switchLeaderRole(user.id, user.role !== "MANAGER", user.jobTitle, user.teamId)}
-                      disabled={actorRole !== "ADMIN" || savingId === user.id}
+                      disabled={!isExecutiveManager || savingId === user.id}
                       className="rounded-md border border-black/15 px-2.5 py-1 text-[11px] font-semibold hover:bg-black/5 disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/20 dark:hover:bg-white/10"
                     >
                       {user.role === "MANAGER" ? "Retirer chef" : "Nommer chef"}

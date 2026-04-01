@@ -19,7 +19,7 @@ function isLegacyPlaceholderTeam(name: string) {
 }
 
 export async function GET() {
-  const access = await requireApiModuleAccess("teams", ["ADMIN", "MANAGER", "ACCOUNTANT"]);
+  const access = await requireApiModuleAccess("teams", ["ADMIN", "DIRECTEUR_GENERAL", "MANAGER", "ACCOUNTANT"]);
   if (access.error) return access.error;
 
   const teams = await prisma.team.findMany({
@@ -42,7 +42,7 @@ export async function GET() {
 }
 
 export async function POST(request: NextRequest) {
-  const access = await requireApiModuleAccess("teams", ["ADMIN", "MANAGER"]);
+  const access = await requireApiModuleAccess("teams", ["ADMIN", "DIRECTEUR_GENERAL"]);
   if (access.error) return access.error;
 
   const body = await request.json();

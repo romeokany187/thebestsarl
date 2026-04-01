@@ -24,7 +24,7 @@ export default async function TeamsPage({
 }: {
   searchParams?: Promise<SearchParams>;
 }) {
-  const { role, session } = await requirePageModuleAccess("teams", ["ADMIN", "MANAGER", "ACCOUNTANT"]);
+  const { role, session } = await requirePageModuleAccess("teams", ["ADMIN", "DIRECTEUR_GENERAL", "MANAGER", "ACCOUNTANT"]);
   const resolvedSearchParams = (await searchParams) ?? {};
 
   await prisma.team.upsert({
@@ -98,7 +98,7 @@ export default async function TeamsPage({
   return (
     <AppShell
       role={role}
-      accessNote="Vue organisation: structure des équipes, répartition des rôles et contacts internes."
+      accessNote="Vue organisation: structure des équipes, répartition des rôles et administration des agences et partenaires."
     >
       <section className="mb-6">
         <h1 className="text-2xl font-semibold tracking-tight">Équipes</h1>
