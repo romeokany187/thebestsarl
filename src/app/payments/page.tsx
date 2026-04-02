@@ -10,6 +10,7 @@ import { requirePageModuleAccess } from "@/lib/rbac";
 import { prisma } from "@/lib/prisma";
 
 const paymentOrderClient = (prisma as unknown as { paymentOrder: any }).paymentOrder;
+const paymentClient = (prisma as unknown as { payment: any }).payment;
 const cashOperationClient = (prisma as unknown as { cashOperation: any }).cashOperation;
 
 type SearchParams = {
@@ -135,6 +136,8 @@ export default async function PaymentsPage({
     endDate: range.endRaw,
     ...(selectedAirlineId ? { airlineId: selectedAirlineId } : {}),
   }).toString();
+  const cashJournalReportQuery = `${reportQuery}&reportType=cash-journal`;
+  const cashSummaryReportQuery = `${reportQuery}&reportType=cash-summary`;
 
   const paymentsData = await Promise.all([
     prisma.airline.findMany({
@@ -205,7 +208,7 @@ export default async function PaymentsPage({
       orderBy: { occurredAt: "desc" },
       take: 250,
     }),
-    prisma.payment.findMany({
+    paymentClient.findMany({
       where: {
         paidAt: { lt: range.start },
       },
@@ -726,11 +729,46 @@ export default async function PaymentsPage({
             </div>
 
             <section className="rounded-2xl border border-black/10 bg-white p-4 dark:border-white/10 dark:bg-zinc-900">
-              <h2 className="text-sm font-semibold">Synthèse caisse</h2>
-              <p className="mt-2 text-xs text-black/60 dark:text-white/60">
-                Solde USD: ouverture {openingUsd.toFixed(2)} USD, clôture {closingUsd.toFixed(2)} USD. Solde CDF: ouverture {openingCdf.toFixed(2)} CDF, clôture {closingCdf.toFixed(2)} CDF.
-                Contrôle global (équivalent USD): ouverture {openingBalance.toFixed(2)} USD, entrées {grossInflows.toFixed(2)} USD, sorties {cashOutflows.toFixed(2)} USD, variation nette {netCashVariation.toFixed(2)} USD, clôture {closingBalance.toFixed(2)} USD ({accountingConsistency ? "OK" : "écart"}).
-              </p>
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <h2 className="text-sm font-semibold">Synthèse caisse</h2>
+                  <p className="mt-2 text-xs text-black/60 dark:text-white/60">
+                    Solde USD: ouverture {openingUsd.toFixed(2)} USD, clôture {closingUsd.toFixed(2)} USD. Solde CDF: ouverture {openingCdf.toFixed(2)} CDF, clôture {closingCdf.toFixed(2)} CDF.
+                    Contrôle global (équivalent USD): ouverture {openingBalance.toFixed(2)} USD, entrées {grossInflows.toFixed(2)} USD, sorties {cashOutflows.toFixed(2)} USD, variation nette {netCashVariation.toFixed(2)} USD, clôture {closingBalance.toFixed(2)} USD ({accountingConsistency ? "OK" : "écart"}).
+                  </p>
+                </div>
+
+                <div className="flex flex-wrap gap-2 text-xs">
+                  <a
+                    href={`/api/payments/report?${cashJournalReportQuery}`}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex rounded-md border border-black/20 px-2.5 py-1 font-semibold hover:bg-black/5 dark:border-white/20 dark:hover:bg-white/10"
+                  >
+                    Lire PDF journal caisse
+                  </a>
+                  <a
+                    href={`/api/payments/report?${cashJournalReportQuery}&download=1`}
+                    className="inline-flex rounded-md border border-black/20 px-2.5 py-1 font-semibold hover:bg-black/5 dark:border-white/20 dark:hover:bg-white/10"
+                  >
+                    Télécharger PDF journal caisse
+                  </a>
+                  <a
+                    href={`/api/payments/report?${cashSummaryReportQuery}`}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex rounded-md border border-black/20 px-2.5 py-1 font-semibold hover:bg-black/5 dark:border-white/20 dark:hover:bg-white/10"
+                  >
+                    Lire PDF récapitulatif caisse
+                  </a>
+                  <a
+                    href={`/api/payments/report?${cashSummaryReportQuery}&download=1`}
+                    className="inline-flex rounded-md border border-black/20 px-2.5 py-1 font-semibold hover:bg-black/5 dark:border-white/20 dark:hover:bg-white/10"
+                  >
+                    Télécharger PDF récapitulatif caisse
+                  </a>
+                </div>
+              </div>
             </section>
 
             {canWrite ? (
