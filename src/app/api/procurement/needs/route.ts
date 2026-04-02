@@ -5,6 +5,11 @@ import { requireApiModuleAccess } from "@/lib/rbac";
 import { needRequestSchema } from "@/lib/validators";
 import { quoteFromItems, serializeNeedQuote } from "@/lib/need-lines";
 
+function normalizeMoneyCurrency(value: string | null | undefined): "USD" | "CDF" {
+  const normalized = (value ?? "CDF").trim().toUpperCase();
+  return normalized === "USD" ? "USD" : "CDF";
+}
+
 export async function GET(request: NextRequest) {
   const access = await requireApiModuleAccess("procurement", ["ADMIN", "MANAGER", "EMPLOYEE", "ACCOUNTANT"]);
   if (access.error) return access.error;
@@ -71,6 +76,8 @@ export async function POST(request: NextRequest) {
       },
     ], quoteOptions);
 
+  const requestCurrency = normalizeMoneyCurrency(parsed.data.currency);
+
   if (quote.items.length === 0) {
     return NextResponse.json({ error: "Ajoutez au moins une ligne valide dans le devis (désignation, quantité, prix unitaire)." }, { status: 400 });
   }
@@ -95,7 +102,7 @@ export async function POST(request: NextRequest) {
         quantity: quote.items.reduce((sum, item) => sum + item.quantity, 0),
         unit: "LOT",
         estimatedAmount: quote.totalGeneral,
-        currency: parsed.data.currency?.toUpperCase() ?? "XAF",
+        currency: requestCurrency,
         status: "SUBMITTED",
         requesterId: me.id,
         submittedAt: new Date(),

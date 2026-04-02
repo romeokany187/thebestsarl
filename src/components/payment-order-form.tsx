@@ -7,7 +7,7 @@ export function PaymentOrderForm() {
   const router = useRouter();
   const [description, setDescription] = useState("");
   const [amount, setAmount] = useState("");
-  const [currency, setCurrency] = useState("XAF");
+  const [currency, setCurrency] = useState<"CDF" | "USD">("CDF");
   const [state, setState] = useState<"idle" | "loading" | "success" | "error">("idle");
   const [message, setMessage] = useState("");
 
@@ -31,7 +31,7 @@ export function PaymentOrderForm() {
         body: JSON.stringify({
           description: description.trim(),
           amount: normalizedAmount,
-          currency: currency.trim().toUpperCase(),
+          currency,
         }),
       });
 
@@ -46,7 +46,7 @@ export function PaymentOrderForm() {
       setMessage("Ordre de paiement envoyé à l'Admin pour validation.");
       setDescription("");
       setAmount("");
-      setCurrency("XAF");
+      setCurrency("CDF");
       router.refresh();
     } catch {
       setState("error");
@@ -57,7 +57,7 @@ export function PaymentOrderForm() {
   return (
     <form onSubmit={(event) => void submitOrder(event)} className="mb-6 rounded-2xl border border-black/10 bg-white p-4 shadow-sm dark:border-white/10 dark:bg-zinc-900">
       <h2 className="text-sm font-semibold">Nouvel ordre de paiement (DG)</h2>
-      <p className="mt-1 text-xs text-black/60 dark:text-white/60">Après soumission, l'Admin reçoit une notification pour validation.</p>
+      <p className="mt-1 text-xs text-black/60 dark:text-white/60">Après soumission, l'Admin reçoit une notification pour validation. La devise peut être en CDF ou en USD.</p>
       <div className="mt-3 grid gap-3 md:grid-cols-3">
         <input
           value={description}
@@ -75,14 +75,15 @@ export function PaymentOrderForm() {
           className="rounded-md border border-black/15 bg-white px-3 py-2 text-sm dark:border-white/15 dark:bg-zinc-900"
           disabled={state === "loading"}
         />
-        <input
+        <select
           value={currency}
-          onChange={(event) => setCurrency(event.target.value)}
-          placeholder="Devise"
-          maxLength={3}
-          className="rounded-md border border-black/15 bg-white px-3 py-2 text-sm uppercase dark:border-white/15 dark:bg-zinc-900"
+          onChange={(event) => setCurrency(event.target.value as "CDF" | "USD")}
+          className="rounded-md border border-black/15 bg-white px-3 py-2 text-sm dark:border-white/15 dark:bg-zinc-900"
           disabled={state === "loading"}
-        />
+        >
+          <option value="CDF">CDF</option>
+          <option value="USD">USD</option>
+        </select>
       </div>
       <div className="mt-3 flex items-center gap-2">
         <button

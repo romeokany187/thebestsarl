@@ -540,11 +540,25 @@ export default async function PaymentsPage({
       currency: ticket.currency,
     }));
 
-  const pendingNeedsAmount = pendingNeeds.reduce(
-    (sum, need) => sum + (typeof need.estimatedAmount === "number" ? need.estimatedAmount : 0),
-    0,
+  const pendingNeedTotals = pendingNeeds.reduce(
+    (sum, need) => {
+      const amount = typeof need.estimatedAmount === "number" ? need.estimatedAmount : 0;
+      const currency = normalizeMoneyCurrency(need.currency);
+      if (currency === "USD") sum.usd += amount;
+      else sum.cdf += amount;
+      return sum;
+    },
+    { usd: 0, cdf: 0 },
   );
-  const pendingPaymentOrdersAmount = paymentOrders.reduce((sum, order) => sum + order.amount, 0);
+  const pendingPaymentOrderTotals = paymentOrders.reduce(
+    (sum, order) => {
+      const currency = normalizeMoneyCurrency(order.currency);
+      if (currency === "USD") sum.usd += order.amount;
+      else sum.cdf += order.amount;
+      return sum;
+    },
+    { usd: 0, cdf: 0 },
+  );
 
   return (
     <AppShell
@@ -827,7 +841,7 @@ export default async function PaymentsPage({
           <div className="space-y-4">
             <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
               <KpiCard label="Besoins en attente" value={`${pendingNeeds.length}`} />
-              <KpiCard label="Montant estimé" value={`${pendingNeedsAmount.toFixed(2)} XAF`} />
+              <KpiCard label="Montant estimé CDF" value={`${pendingNeedTotals.cdf.toFixed(2)} CDF`} hint={`USD ${pendingNeedTotals.usd.toFixed(2)}`} />
             </div>
 
             <section className="overflow-hidden rounded-2xl border border-black/10 bg-white shadow-sm dark:border-white/10 dark:bg-zinc-900">
@@ -853,7 +867,7 @@ export default async function PaymentsPage({
                         <td className="px-4 py-3 font-medium">{need.code ?? "-"}</td>
                         <td className="px-4 py-3">{need.title}</td>
                         <td className="px-4 py-3">{need.requester?.name ?? "-"}</td>
-                        <td className="px-4 py-3">{typeof need.estimatedAmount === "number" ? `${need.estimatedAmount.toFixed(2)} ${need.currency ?? "XAF"}` : "-"}</td>
+                        <td className="px-4 py-3">{typeof need.estimatedAmount === "number" ? `${need.estimatedAmount.toFixed(2)} ${normalizeMoneyCurrency(need.currency)}` : "-"}</td>
                         <td className="px-4 py-3">{need.status}</td>
                       </tr>
                     ))}
@@ -874,7 +888,7 @@ export default async function PaymentsPage({
           <div className="space-y-4">
             <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
               <KpiCard label="OP en attente" value={`${paymentOrders.length}`} />
-              <KpiCard label="Montant total en attente" value={`${pendingPaymentOrdersAmount.toFixed(2)} XAF`} />
+              <KpiCard label="Montant OP CDF" value={`${pendingPaymentOrderTotals.cdf.toFixed(2)} CDF`} hint={`USD ${pendingPaymentOrderTotals.usd.toFixed(2)}`} />
             </div>
 
             {role === "DIRECTEUR_GENERAL" ? (
@@ -910,7 +924,7 @@ export default async function PaymentsPage({
                       <tr key={order.id} className="border-t border-black/5 dark:border-white/10">
                         <td className="px-4 py-3">{new Date(order.createdAt).toLocaleDateString("fr-FR")}</td>
                         <td className="px-4 py-3">{order.description}</td>
-                        <td className="px-4 py-3">{order.amount.toFixed(2)} {order.currency}</td>
+                        <td className="px-4 py-3">{order.amount.toFixed(2)} {normalizeMoneyCurrency(order.currency)}</td>
                         <td className="px-4 py-3">{order.issuedBy?.name ?? "-"}</td>
                         <td className="px-4 py-3">{order.status}</td>
                       </tr>

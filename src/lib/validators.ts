@@ -1,6 +1,11 @@
 import { PaymentStatus, ReportPeriod, ReportStatus, SaleNature, SiteType, TravelClass } from "@prisma/client";
 import { z } from "zod";
 
+const moneyCurrencySchema = z.preprocess(
+  (value) => (typeof value === "string" ? value.trim().toUpperCase() : value),
+  z.enum(["USD", "CDF", "XAF"]).transform((value) => (value === "XAF" ? "CDF" : value)),
+);
+
 export const reportSchema = z.object({
   title: z.string().min(3),
   content: z.string().min(10),
@@ -223,7 +228,7 @@ export const needRequestSchema = z.object({
   quantity: z.number().positive().optional(),
   unit: z.string().min(1).max(20).optional(),
   estimatedAmount: z.number().nonnegative().optional(),
-  currency: z.string().min(3).max(3).optional(),
+  currency: moneyCurrencySchema.optional(),
   items: z.array(
     z.object({
       designation: z.string().min(2).max(180),
@@ -260,7 +265,7 @@ export const stockMovementSchema = z.object({
 export const paymentOrderCreationSchema = z.object({
   description: z.string().min(5).max(500),
   amount: z.number().positive(),
-  currency: z.string().length(3).optional(),
+  currency: moneyCurrencySchema.optional(),
 });
 
 export const paymentOrderApprovalSchema = z.object({

@@ -113,6 +113,11 @@ function hasCashExecutionMarker(value?: string | null) {
   return (value ?? "").includes("EXECUTION_CAISSE:");
 }
 
+function normalizeMoneyCurrency(value?: string | null): "USD" | "CDF" {
+  const normalized = (value ?? "CDF").trim().toUpperCase();
+  return normalized === "USD" ? "USD" : "CDF";
+}
+
 type UserOption = { id: string; name: string; teamName: string | null };
 
 export function ProcurementHub({
@@ -149,6 +154,7 @@ export function ProcurementHub({
   const [needLines, setNeedLines] = useState<NeedLineForm[]>([
     { designation: "", description: "", quantity: "1", unitPrice: "0" },
   ]);
+  const [needCurrency, setNeedCurrency] = useState<"CDF" | "USD">("CDF");
   const [selectedBeneficiaryTeam, setSelectedBeneficiaryTeam] = useState<NeedBeneficiaryTeam>("KINSHASA");
   const [selectedBeneficiaryPerson, setSelectedBeneficiaryPerson] = useState("");
 
@@ -281,7 +287,7 @@ export function ProcurementHub({
         beneficiaryTeam: String(formData.get("beneficiaryTeam") ?? "KINSHASA"),
         beneficiaryPersonId,
         beneficiaryPersonName,
-        currency: String(formData.get("currency") ?? "XAF").trim() || "XAF",
+        currency: needCurrency,
         items,
       }),
     });
@@ -295,6 +301,7 @@ export function ProcurementHub({
     setNeedStatus("État de besoin émis et transféré à la Direction Générale.");
     form.reset();
     setNeedLines([{ designation: "", description: "", quantity: "1", unitPrice: "0" }]);
+    setNeedCurrency("CDF");
     setSelectedBeneficiaryTeam("KINSHASA");
     setSelectedBeneficiaryPerson("");
     await refreshData();
@@ -481,7 +488,7 @@ export function ProcurementHub({
                               className="rounded-md border px-2 py-2 text-sm"
                             />
                             <div className="flex items-center rounded-md border bg-black/5 px-3 py-2 text-sm font-semibold dark:bg-white/10">
-                              Total: {lineTotal.toFixed(2)}
+                              Total: {lineTotal.toFixed(2)} {needCurrency}
                             </div>
                           </div>
                         </div>
@@ -490,14 +497,22 @@ export function ProcurementHub({
                   </div>
                   <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
                     <div className="text-sm font-semibold">
-                      Total général: {quoteTotal.toFixed(2)}
+                      Total général: {quoteTotal.toFixed(2)} {needCurrency}
                     </div>
                   </div>
                 </div>
-                <div className="grid grid-cols-[120px,120px] gap-2">
-                  <input name="currency" defaultValue="XAF" maxLength={3} placeholder="Devise" className="rounded-md border px-3 py-2 text-sm uppercase" />
+                <div className="grid grid-cols-[160px] gap-2">
+                  <select
+                    name="currency"
+                    value={needCurrency}
+                    onChange={(event) => setNeedCurrency(event.target.value as "CDF" | "USD")}
+                    className="rounded-md border px-3 py-2 text-sm"
+                  >
+                    <option value="CDF">CDF</option>
+                    <option value="USD">USD</option>
+                  </select>
                 </div>
-                <p className="text-[11px] text-black/55 dark:text-white/55">Format devis: chaque ligne = désignation + description + quantité + prix unitaire.</p>
+                <p className="text-[11px] text-black/55 dark:text-white/55">Format devis: chaque ligne = désignation + description + quantité + prix unitaire. Devise disponible: USD ou CDF.</p>
                 <button className="rounded-md bg-black px-3 py-2 text-sm font-semibold text-white dark:bg-white dark:text-black">Émettre</button>
               </form>
             ) : (
@@ -618,7 +633,7 @@ export function ProcurementHub({
                   <td className="px-3 py-2 text-xs">{meta.beneficiaryPersonName ?? "-"}</td>
                   <td className="px-3 py-2">
                     {typeof need.estimatedAmount === "number"
-                      ? `${new Intl.NumberFormat("fr-FR").format(need.estimatedAmount)} ${need.currency ?? "XAF"}`
+                      ? `${new Intl.NumberFormat("fr-FR").format(need.estimatedAmount)} ${normalizeMoneyCurrency(need.currency)}`
                       : "-"}
                   </td>
                   <td className="px-3 py-2">

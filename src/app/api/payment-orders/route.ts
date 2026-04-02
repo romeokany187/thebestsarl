@@ -5,6 +5,11 @@ import { paymentOrderCreationSchema } from "@/lib/validators";
 
 const paymentOrderClient = (prisma as unknown as { paymentOrder: any }).paymentOrder;
 
+function normalizeMoneyCurrency(value: string | null | undefined): "USD" | "CDF" {
+  const normalized = (value ?? "CDF").trim().toUpperCase();
+  return normalized === "USD" ? "USD" : "CDF";
+}
+
 export async function POST(request: NextRequest) {
   const access = await requireApiRoles(["DIRECTEUR_GENERAL"]);
   if (access.error) return access.error;
@@ -33,11 +38,12 @@ export async function POST(request: NextRequest) {
   }
 
   const now = new Date();
+  const orderCurrency = normalizeMoneyCurrency(parsed.data.currency);
   const paymentOrder = await paymentOrderClient.create({
     data: {
       description: parsed.data.description,
       amount: parsed.data.amount,
-      currency: parsed.data.currency || "XAF",
+      currency: orderCurrency,
       status: "SUBMITTED",
       issuedById: me.id,
       submittedAt: now,
@@ -58,12 +64,12 @@ export async function POST(request: NextRequest) {
       data: admins.map((admin) => ({
         userId: admin.id,
         title: "Nouvel ordre de paiement à approuver",
-        message: `${me.name} a créé un ordre de paiement de ${parsed.data.amount} ${parsed.data.currency || "XAF"}. Description: ${parsed.data.description}`,
+        message: `${me.name} a créé un ordre de paiement de ${parsed.data.amount} ${orderCurrency}. Description: ${parsed.data.description}`,
         type: "PAYMENT_ORDER_APPROVAL_REQUIRED",
         metadata: {
           paymentOrderId: paymentOrder.id,
           amount: parsed.data.amount,
-          currency: parsed.data.currency || "XAF",
+          currency: orderCurrency,
           description: parsed.data.description,
           issuedBy: me.name,
           source: "INBOX_APPROVAL",

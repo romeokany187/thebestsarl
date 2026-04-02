@@ -5,6 +5,11 @@ import { prisma } from "@/lib/prisma";
 
 const paymentOrderClient = (prisma as unknown as { paymentOrder: any }).paymentOrder;
 
+function normalizeMoneyCurrency(value: string | null | undefined): "USD" | "CDF" {
+  const normalized = (value ?? "CDF").trim().toUpperCase();
+  return normalized === "USD" ? "USD" : "CDF";
+}
+
 export const dynamic = "force-dynamic";
 
 export default async function DgPaymentOrdersPage() {
@@ -55,7 +60,7 @@ export default async function DgPaymentOrdersPage() {
                 <tr key={order.id} className="border-t border-black/5 dark:border-white/10">
                   <td className="px-4 py-3">{new Date(order.createdAt).toLocaleDateString("fr-FR")}</td>
                   <td className="px-4 py-3">{order.description}</td>
-                  <td className="px-4 py-3">{order.amount.toFixed(2)} {order.currency}</td>
+                  <td className="px-4 py-3">{order.amount.toFixed(2)} {normalizeMoneyCurrency(order.currency)}</td>
                   <td className="px-4 py-3">{order.approvedBy?.name ?? "-"}</td>
                   <td className="px-4 py-3">{order.executedBy?.name ?? "-"}</td>
                   <td className="px-4 py-3">{order.status}</td>
