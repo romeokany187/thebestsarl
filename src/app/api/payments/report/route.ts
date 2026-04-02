@@ -11,6 +11,7 @@ type ReportMode = "date" | "month" | "year";
 type ReportType = "payments" | "cash-journal" | "cash-summary";
 type VirtualChannel = "AIRTEL_MONEY" | "ORANGE_MONEY" | "MPESA" | "EQUITY";
 
+const paymentClient = (prisma as unknown as { payment: any }).payment;
 const paymentOrderClient = (prisma as unknown as { paymentOrder: any }).paymentOrder;
 const cashOperationClient = (prisma as unknown as { cashOperation: any }).cashOperation;
 const virtualChannels: Array<{ key: VirtualChannel; label: string }> = [
@@ -190,7 +191,7 @@ export async function GET(request: NextRequest) {
   const airlineId = request.nextUrl.searchParams.get("airlineId")?.trim() || undefined;
 
   const [rows, tickets, airline, cashOperationsInRange, cashOperationsBeforeRange, ticketPaymentsBeforeRange, pendingNeeds, paymentOrders] = await Promise.all([
-    prisma.payment.findMany({
+    paymentClient.findMany({
       where: {
         paidAt: { gte: range.start, lt: range.end },
         ...(airlineId ? { ticket: { airlineId } } : {}),
@@ -256,7 +257,7 @@ export async function GET(request: NextRequest) {
       orderBy: { occurredAt: "asc" },
       take: 5000,
     }),
-    prisma.payment.findMany({
+    paymentClient.findMany({
       where: { paidAt: { lt: range.start } },
       select: {
         amount: true,
@@ -321,12 +322,14 @@ export async function GET(request: NextRequest) {
   const partialPaid = partialTickets.reduce((sum, ticket) => sum + ticket.paidAmountUsd, 0);
   const partialCoverage = partialBilled > 0 ? (partialPaid / partialBilled) * 100 : 0;
 
-  const byMethod = rows.reduce((map, row) => {
+  const byMethod = (rows as Array<any>).reduce<Map<string, number>>((map, row) => {
     const key = row.method.trim() || "AUTRE";
     map.set(key, (map.get(key) ?? 0) + normalizeAmountUsd(row));
     return map;
   }, new Map<string, number>());
-  const topMethods = Array.from(byMethod.entries()).sort((a, b) => b[1] - a[1]).slice(0, 4);
+  const topMethods = Array.from(byMethod.entries())
+    .sort((a: [string, number], b: [string, number]) => b[1] - a[1])
+    .slice(0, 4);
 
   const ticketInflowsBefore = ticketPaymentsBeforeRange.reduce((sum: number, payment: any) => sum + normalizeAmountUsd(payment), 0);
   const cashOpsSignedBefore = cashOperationsBeforeRange.reduce((sum: number, operation: any) => {
@@ -419,41 +422,55 @@ export async function GET(request: NextRequest) {
       { openingUsd: 0, openingCdf: 0, inUsd: 0, outUsd: 0, inCdf: 0, outCdf: 0 },
     ]),
   ) as Record<VirtualChannel, { openingUsd: number; openingCdf: number; inUsd: number; outUsd: number; inCdf: number; outCdf: number }>;
+  const cashBilletageStats = { openingUsd: 0, openingCdf: 0, inUsd: 0, outUsd: 0, inCdf: 0, outCdf: 0 };
 
   for (const payment of ticketPaymentsBeforeRange as Array<any>) {
     const channel = detectVirtualChannel(payment.method);
-    if (!channel) continue;
     const currency = normalizeMoneyCurrency(payment.currency);
+    if (!channel) {
+      if (currency === "USD") cashBilletageStats.openingUsd += payment.amount;
+      else cashBilletageStats.openingCdf += payment.amount;
+      continue;
+    }
     if (currency === "USD") initialVirtualStats[channel].openingUsd += payment.amount;
     else initialVirtualStats[channel].openingCdf += payment.amount;
   }
 
   for (const operation of cashOperationsBeforeRange as Array<any>) {
     const channel = detectVirtualChannel(operation.method);
-    if (!channel) continue;
     const currency = normalizeMoneyCurrency(operation.currency);
-    if (currency === "USD") initialVirtualStats[channel].openingUsd += operation.direction === "INFLOW" ? operation.amount : -operation.amount;
-    else initialVirtualStats[channel].openingCdf += operation.direction === "INFLOW" ? operation.amount : -operation.amount;
+    const signedAmount = operation.direction === "INFLOW" ? operation.amount : -operation.amount;
+    if (!channel) {
+      if (currency === "USD") cashBilletageStats.openingUsd += signedAmount;
+      else cashBilletageStats.openingCdf += signedAmount;
+      continue;
+    }
+    if (currency === "USD") initialVirtualStats[channel].openingUsd += signedAmount;
+    else initialVirtualStats[channel].openingCdf += signedAmount;
   }
 
   for (const payment of rows as Array<any>) {
     const channel = detectVirtualChannel(payment.method);
-    if (!channel) continue;
     const currency = normalizeMoneyCurrency(payment.currency);
+    if (!channel) {
+      if (currency === "USD") cashBilletageStats.inUsd += payment.amount;
+      else cashBilletageStats.inCdf += payment.amount;
+      continue;
+    }
     if (currency === "USD") initialVirtualStats[channel].inUsd += payment.amount;
     else initialVirtualStats[channel].inCdf += payment.amount;
   }
 
   for (const operation of cashOperationsInRange as Array<any>) {
     const channel = detectVirtualChannel(operation.method);
-    if (!channel) continue;
     const currency = normalizeMoneyCurrency(operation.currency);
+    const target = !channel ? cashBilletageStats : initialVirtualStats[channel];
     if (currency === "USD") {
-      if (operation.direction === "INFLOW") initialVirtualStats[channel].inUsd += operation.amount;
-      else initialVirtualStats[channel].outUsd += operation.amount;
+      if (operation.direction === "INFLOW") target.inUsd += operation.amount;
+      else target.outUsd += operation.amount;
     } else {
-      if (operation.direction === "INFLOW") initialVirtualStats[channel].inCdf += operation.amount;
-      else initialVirtualStats[channel].outCdf += operation.amount;
+      if (operation.direction === "INFLOW") target.inCdf += operation.amount;
+      else target.outCdf += operation.amount;
     }
   }
 
@@ -467,6 +484,39 @@ export async function GET(request: NextRequest) {
       closingCdf: stats.openingCdf + stats.inCdf - stats.outCdf,
     };
   });
+  const channelRows = [
+    ...virtualRows,
+    {
+      key: "CASH",
+      label: "Cash / Billetage",
+      ...cashBilletageStats,
+      closingUsd: cashBilletageStats.openingUsd + cashBilletageStats.inUsd - cashBilletageStats.outUsd,
+      closingCdf: cashBilletageStats.openingCdf + cashBilletageStats.inCdf - cashBilletageStats.outCdf,
+    },
+  ];
+  const channelTotals = channelRows.reduce(
+    (sum, row) => {
+      sum.openingUsd += row.openingUsd;
+      sum.openingCdf += row.openingCdf;
+      sum.inUsd += row.inUsd;
+      sum.outUsd += row.outUsd;
+      sum.inCdf += row.inCdf;
+      sum.outCdf += row.outCdf;
+      sum.closingUsd += row.closingUsd;
+      sum.closingCdf += row.closingCdf;
+      return sum;
+    },
+    {
+      openingUsd: 0,
+      openingCdf: 0,
+      inUsd: 0,
+      outUsd: 0,
+      inCdf: 0,
+      outCdf: 0,
+      closingUsd: 0,
+      closingCdf: 0,
+    },
+  );
 
   const pendingNeedTotals = pendingNeeds.reduce((sum: { usd: number; cdf: number }, need: any) => {
     const amount = typeof need.estimatedAmount === "number" ? need.estimatedAmount : 0;
@@ -592,7 +642,7 @@ export async function GET(request: NextRequest) {
       : "Méthodes dominantes: -";
     page.drawText(short(methodsLabel, 160), { x: 24, y: 452, size: 7.8, font, color: textBlack });
 
-    page.drawText("2. Soldes virtuels par canal", { x: 24, y: 432, size: 9.4, font: fontBold, color: textBlack });
+    page.drawText("2. Soldes par canal + cash (billetage)", { x: 24, y: 432, size: 9.4, font: fontBold, color: textBlack });
     const headers = ["Canal", "Ouv USD", "Ent USD", "Sort USD", "Clôt USD", "Ouv CDF", "Ent CDF", "Sort CDF", "Clôt CDF"];
     const x = [24, 118, 205, 285, 365, 450, 540, 620, 705];
     headers.forEach((header, index) => {
@@ -601,7 +651,7 @@ export async function GET(request: NextRequest) {
     page.drawLine({ start: { x: 24, y: 414 }, end: { x: 818, y: 414 }, thickness: 0.6, color: lineGray });
 
     let y = 399;
-    for (const row of virtualRows) {
+    for (const row of channelRows) {
       const values = [
         row.label,
         row.openingUsd.toFixed(2),
@@ -614,11 +664,28 @@ export async function GET(request: NextRequest) {
         row.closingCdf.toFixed(2),
       ];
       values.forEach((value, index) => {
-        page.drawText(short(value, index === 0 ? 14 : 10), { x: x[index], y, size: 7.1, font, color: textBlack });
+        page.drawText(short(value, index === 0 ? 18 : 10), { x: x[index], y, size: 7.1, font, color: textBlack });
       });
       page.drawLine({ start: { x: 24, y: y - 3 }, end: { x: 818, y: y - 3 }, thickness: 0.25, color: lineGray });
       y -= 12;
     }
+
+    page.drawLine({ start: { x: 24, y: y - 1 }, end: { x: 818, y: y - 1 }, thickness: 0.6, color: lineGray });
+    y -= 10;
+    const totalValues = [
+      "TOTAL",
+      channelTotals.openingUsd.toFixed(2),
+      channelTotals.inUsd.toFixed(2),
+      channelTotals.outUsd.toFixed(2),
+      channelTotals.closingUsd.toFixed(2),
+      channelTotals.openingCdf.toFixed(2),
+      channelTotals.inCdf.toFixed(2),
+      channelTotals.outCdf.toFixed(2),
+      channelTotals.closingCdf.toFixed(2),
+    ];
+    totalValues.forEach((value, index) => {
+      page.drawText(short(value, index === 0 ? 18 : 10), { x: x[index], y, size: 7.2, font: fontBold, color: textBlack });
+    });
 
     page.drawText("3. Engagements en attente", { x: 24, y: 205, size: 9.4, font: fontBold, color: textBlack });
     page.drawText(`États de besoin en attente: ${pendingNeedTotals.cdf.toFixed(2)} CDF • ${pendingNeedTotals.usd.toFixed(2)} USD`, { x: 24, y: 191, size: 8.2, font, color: textBlack });

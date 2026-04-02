@@ -801,13 +801,7 @@ export default async function PaymentsPage({
                   rel="noreferrer"
                   className="inline-flex rounded-md border border-black/20 px-2.5 py-1 font-semibold hover:bg-black/5 dark:border-white/20 dark:hover:bg-white/10"
                 >
-                  Lire PDF journal caisse
-                </a>
-                <a
-                  href={`/api/payments/report?${cashJournalReportQuery}&download=1`}
-                  className="inline-flex rounded-md border border-black/20 px-2.5 py-1 font-semibold hover:bg-black/5 dark:border-white/20 dark:hover:bg-white/10"
-                >
-                  Télécharger PDF journal caisse
+                  Voir le journal de caisse
                 </a>
                 <a
                   href={`/api/payments/report?${cashSummaryReportQuery}`}
@@ -815,13 +809,7 @@ export default async function PaymentsPage({
                   rel="noreferrer"
                   className="inline-flex rounded-md border border-black/20 px-2.5 py-1 font-semibold hover:bg-black/5 dark:border-white/20 dark:hover:bg-white/10"
                 >
-                  Lire PDF récapitulatif caisse
-                </a>
-                <a
-                  href={`/api/payments/report?${cashSummaryReportQuery}&download=1`}
-                  className="inline-flex rounded-md border border-black/20 px-2.5 py-1 font-semibold hover:bg-black/5 dark:border-white/20 dark:hover:bg-white/10"
-                >
-                  Télécharger PDF récapitulatif caisse
+                  Voir le récapitulatif caisse
                 </a>
               </div>
             </section>
