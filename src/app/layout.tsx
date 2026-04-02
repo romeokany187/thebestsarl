@@ -17,8 +17,11 @@ export const metadata: Metadata = {
   title: "THEBEST SARL - Gestion Opérationnelle",
   description: "Plateforme de gestion des rapports, présences et ventes billets.",
   icons: {
-    icon: "/favicon-thebest.png",
-    shortcut: "/favicon-thebest.png",
+    icon: [
+      { url: "/favicon.ico", type: "image/x-icon" },
+      { url: "/favicon-thebest.png", type: "image/png" },
+    ],
+    shortcut: "/favicon.ico",
     apple: "/favicon-thebest.png",
   },
 };
