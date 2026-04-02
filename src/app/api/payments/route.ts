@@ -5,10 +5,43 @@ import { requireApiModuleAccess } from "@/lib/rbac";
 import { paymentCreateSchema } from "@/lib/validators";
 import { isMailConfigured, sendMailBatch } from "@/lib/mail";
 
+const cashOperationClient = (prisma as unknown as { cashOperation: any }).cashOperation;
+
 function computePaymentStatus(totalDue: number, totalPaid: number): PaymentStatus {
   if (totalPaid <= 0) return PaymentStatus.UNPAID;
   if (totalPaid + 0.0001 >= totalDue) return PaymentStatus.PAID;
   return PaymentStatus.PARTIAL;
+}
+
+function normalizeMoneyCurrency(value: string | null | undefined): "USD" | "CDF" {
+  const normalized = (value ?? "USD").trim().toUpperCase();
+  return normalized === "CDF" || normalized === "XAF" || normalized === "FC" ? "CDF" : "USD";
+}
+
+function parsePositiveNumber(raw: string | undefined, fallback: number): number {
+  if (!raw) return fallback;
+  const parsed = Number(raw);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+}
+
+function amountToUsd(amount: number, currency: "USD" | "CDF", fxRateUsdToCdf: number): number {
+  return currency === "USD" ? amount : amount / fxRateUsdToCdf;
+}
+
+function amountToCdf(amount: number, currency: "USD" | "CDF", fxRateUsdToCdf: number): number {
+  return currency === "CDF" ? amount : amount * fxRateUsdToCdf;
+}
+
+function amountToTicketCurrency(
+  amount: number,
+  paymentCurrency: "USD" | "CDF",
+  ticketCurrency: "USD" | "CDF",
+  fxRateUsdToCdf: number,
+): number {
+  if (paymentCurrency === ticketCurrency) return amount;
+  return ticketCurrency === "USD"
+    ? amountToUsd(amount, paymentCurrency, fxRateUsdToCdf)
+    : amountToCdf(amount, paymentCurrency, fxRateUsdToCdf);
 }
 
 export async function POST(request: NextRequest) {
@@ -31,6 +64,21 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
     }
 
+    const latestRateOperation = await cashOperationClient.findFirst({
+      where: {
+        fxRateUsdToCdf: { not: null },
+      },
+      orderBy: { occurredAt: "desc" },
+      select: { fxRateUsdToCdf: true },
+    });
+
+    const fxRateUsdToCdf = latestRateOperation?.fxRateUsdToCdf
+      ?? parsePositiveNumber(process.env.CASH_DEFAULT_USD_TO_CDF_RATE, 2800);
+
+    if (!fxRateUsdToCdf || fxRateUsdToCdf <= 0) {
+      return NextResponse.json({ error: "Taux USD/CDF indisponible pour enregistrer le paiement." }, { status: 400 });
+    }
+
     const result = await prisma.$transaction(async (tx) => {
       const ticket = await tx.ticketSale.findUnique({
         where: { id: parsed.data.ticketId },
@@ -41,8 +89,20 @@ export async function POST(request: NextRequest) {
         throw new Error("BILLET_INTROUVABLE");
       }
 
-      const alreadyPaid = ticket.payments.reduce((sum, payment) => sum + payment.amount, 0);
-      const nextPaidTotal = alreadyPaid + parsed.data.amount;
+      const ticketCurrency = normalizeMoneyCurrency(ticket.currency);
+      const paymentCurrency = normalizeMoneyCurrency(parsed.data.currency ?? ticket.currency);
+      const alreadyPaid = ticket.payments.reduce((sum, payment) => {
+        const existingPaymentCurrency = normalizeMoneyCurrency((payment as { currency?: string | null }).currency ?? ticket.currency);
+        const existingRate = (payment as { fxRateUsdToCdf?: number | null }).fxRateUsdToCdf ?? fxRateUsdToCdf;
+        return sum + amountToTicketCurrency(payment.amount, existingPaymentCurrency, ticketCurrency, existingRate);
+      }, 0);
+      const paymentEquivalentInTicketCurrency = amountToTicketCurrency(
+        parsed.data.amount,
+        paymentCurrency,
+        ticketCurrency,
+        fxRateUsdToCdf,
+      );
+      const nextPaidTotal = alreadyPaid + paymentEquivalentInTicketCurrency;
 
       if (nextPaidTotal > ticket.amount + 0.0001) {
         throw new Error("DEPASSEMENT");
@@ -52,6 +112,10 @@ export async function POST(request: NextRequest) {
         data: {
           ticketId: ticket.id,
           amount: parsed.data.amount,
+          currency: paymentCurrency,
+          fxRateUsdToCdf,
+          amountUsd: amountToUsd(parsed.data.amount, paymentCurrency, fxRateUsdToCdf),
+          amountCdf: amountToCdf(parsed.data.amount, paymentCurrency, fxRateUsdToCdf),
           method: parsed.data.method,
           reference: parsed.data.reference,
           paidAt: parsed.data.paidAt,
@@ -64,7 +128,6 @@ export async function POST(request: NextRequest) {
         where: { id: ticket.id },
         data: {
           paymentStatus: nextStatus,
-          currency: "USD",
         },
         select: {
           id: true,
@@ -80,6 +143,8 @@ export async function POST(request: NextRequest) {
         payment,
         ticket: updatedTicket,
         paidTotal: nextPaidTotal,
+        ticketEquivalentAmount: paymentEquivalentInTicketCurrency,
+        fxRateUsdToCdf,
       };
     });
 
@@ -100,7 +165,7 @@ export async function POST(request: NextRequest) {
         data: accountants.map((user) => ({
           userId: user.id,
           title: `Nouveau paiement billet ${result.ticket.ticketNumber}`,
-          message: `Encaissement de ${result.payment.amount.toFixed(2)} USD enregistré par la caissière. Total encaissé: ${result.paidTotal.toFixed(2)} USD.`,
+          message: `Encaissement de ${result.payment.amount.toFixed(2)} ${result.payment.currency} enregistré par la caissière. Total encaissé billet: ${result.paidTotal.toFixed(2)} ${result.ticket.currency}.`,
           type: "PAYMENT_ENTRY",
           metadata: {
             ticketId: result.ticket.id,
@@ -108,11 +173,15 @@ export async function POST(request: NextRequest) {
             customerName: result.ticket.customerName,
             paymentId: result.payment.id,
             paymentAmount: result.payment.amount,
+            paymentCurrency: result.payment.currency,
+            paymentEquivalentTicketCurrency: result.ticketEquivalentAmount,
             paidTotal: result.paidTotal,
             ticketAmount: result.ticket.amount,
+            ticketCurrency: result.ticket.currency,
             paymentMethod: result.payment.method,
             paymentReference: result.payment.reference,
             paymentStatus: result.ticket.paymentStatus,
+            fxRateUsdToCdf: result.fxRateUsdToCdf,
             actorId: access.session.user.id,
             actorName: access.session.user.name ?? "Caissiere",
             source: "PAYMENTS_MODULE",
@@ -133,12 +202,14 @@ export async function POST(request: NextRequest) {
               "",
               `Billet: ${result.ticket.ticketNumber}`,
               `Client: ${result.ticket.customerName}`,
-              `Montant encaisse: ${result.payment.amount.toFixed(2)} USD`,
-              `Total encaisse billet: ${result.paidTotal.toFixed(2)} USD`,
-              `Montant billet: ${result.ticket.amount.toFixed(2)} USD`,
+              `Montant encaisse: ${result.payment.amount.toFixed(2)} ${result.payment.currency}`,
+              `Equivalent billet: ${result.ticketEquivalentAmount.toFixed(2)} ${result.ticket.currency}`,
+              `Total encaisse billet: ${result.paidTotal.toFixed(2)} ${result.ticket.currency}`,
+              `Montant billet: ${result.ticket.amount.toFixed(2)} ${result.ticket.currency}`,
               `Statut billet: ${result.ticket.paymentStatus}`,
               `Methode: ${result.payment.method}`,
               `Reference: ${result.payment.reference ?? "-"}`,
+              `Taux du jour: 1 USD = ${result.fxRateUsdToCdf.toFixed(2)} CDF`,
               `Saisi par: ${access.session.user.name ?? "Caissiere"}`,
               "",
               `Consulter: ${paymentsUrl}`,
@@ -147,12 +218,14 @@ export async function POST(request: NextRequest) {
               <p><strong>THEBEST SARL - Ecriture de paiement billet</strong></p>
               <p><strong>Billet:</strong> ${result.ticket.ticketNumber}<br/>
               <strong>Client:</strong> ${result.ticket.customerName}<br/>
-              <strong>Montant encaissé:</strong> ${result.payment.amount.toFixed(2)} USD<br/>
-              <strong>Total encaissé billet:</strong> ${result.paidTotal.toFixed(2)} USD<br/>
-              <strong>Montant billet:</strong> ${result.ticket.amount.toFixed(2)} USD<br/>
+              <strong>Montant encaissé:</strong> ${result.payment.amount.toFixed(2)} ${result.payment.currency}<br/>
+              <strong>Equivalent billet:</strong> ${result.ticketEquivalentAmount.toFixed(2)} ${result.ticket.currency}<br/>
+              <strong>Total encaissé billet:</strong> ${result.paidTotal.toFixed(2)} ${result.ticket.currency}<br/>
+              <strong>Montant billet:</strong> ${result.ticket.amount.toFixed(2)} ${result.ticket.currency}<br/>
               <strong>Statut billet:</strong> ${result.ticket.paymentStatus}<br/>
               <strong>Méthode:</strong> ${result.payment.method}<br/>
               <strong>Référence:</strong> ${result.payment.reference ?? "-"}<br/>
+              <strong>Taux du jour:</strong> 1 USD = ${result.fxRateUsdToCdf.toFixed(2)} CDF<br/>
               <strong>Saisi par:</strong> ${access.session.user.name ?? "Caissière"}</p>
               <p><a href="${paymentsUrl}">Ouvrir le module paiements</a></p>
             `,

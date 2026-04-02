@@ -36,6 +36,11 @@ function dateRangeFromParams(params: SearchParams) {
   };
 }
 
+function normalizeMoneyCurrency(value: string | null | undefined): "USD" | "CDF" {
+  const normalized = (value ?? "USD").trim().toUpperCase();
+  return normalized === "CDF" || normalized === "XAF" || normalized === "FC" ? "CDF" : "USD";
+}
+
 function normalizeCashAmountUsd(operation: {
   amount: number;
   currency?: string | null;
@@ -46,7 +51,7 @@ function normalizeCashAmountUsd(operation: {
   if (typeof operation.amountUsd === "number") {
     return operation.amountUsd;
   }
-  const currency = (operation.currency ?? "USD").toUpperCase();
+  const currency = normalizeMoneyCurrency(operation.currency);
   if (currency === "USD") {
     return operation.amount;
   }
@@ -64,12 +69,28 @@ function normalizeCashAmountCdf(operation: {
   if (typeof operation.amountCdf === "number") {
     return operation.amountCdf;
   }
-  const currency = (operation.currency ?? "USD").toUpperCase();
+  const currency = normalizeMoneyCurrency(operation.currency);
   if (currency === "CDF") {
     return operation.amount;
   }
   const rate = operation.fxRateUsdToCdf ?? (operation.fxRateToUsd && operation.fxRateToUsd > 0 ? 1 / operation.fxRateToUsd : 2800);
   return operation.amount * rate;
+}
+
+function normalizePaymentAmountForTicket(payment: {
+  amount: number;
+  currency?: string | null;
+  amountUsd?: number | null;
+  amountCdf?: number | null;
+  fxRateToUsd?: number | null;
+  fxRateUsdToCdf?: number | null;
+}, ticketCurrencyRaw: string | null | undefined): number {
+  const ticketCurrency = normalizeMoneyCurrency(ticketCurrencyRaw);
+  const paymentCurrency = normalizeMoneyCurrency(payment.currency ?? ticketCurrencyRaw);
+  if (paymentCurrency === ticketCurrency) {
+    return payment.amount;
+  }
+  return ticketCurrency === "USD" ? normalizeCashAmountUsd(payment) : normalizeCashAmountCdf(payment);
 }
 
 type VirtualChannel = "AIRTEL_MONEY" | "ORANGE_MONEY" | "MPESA" | "EQUITY";
@@ -185,6 +206,10 @@ export default async function PaymentsPage({
       },
       select: {
         amount: true,
+        currency: true,
+        amountUsd: true,
+        amountCdf: true,
+        fxRateUsdToCdf: true,
         method: true,
       },
       take: 5000,
@@ -218,7 +243,21 @@ export default async function PaymentsPage({
   ] = paymentsData as [any[], any[], any[], any[], any[], any[], any[], any[]];
 
   const ticketsWithComputedStatus = tickets.map((ticket) => {
-    const paidAmount = ticket.payments.reduce((sum: number, payment: { amount: number }) => sum + payment.amount, 0);
+    const paidAmount = ticket.payments.reduce(
+      (
+        sum: number,
+        payment: { amount: number; currency?: string | null; amountUsd?: number | null; amountCdf?: number | null; fxRateToUsd?: number | null; fxRateUsdToCdf?: number | null },
+      ) => sum + normalizePaymentAmountForTicket(payment, ticket.currency),
+      0,
+    );
+    const paidAmountUsd = ticket.payments.reduce(
+      (
+        sum: number,
+        payment: { amount: number; currency?: string | null; amountUsd?: number | null; amountCdf?: number | null; fxRateToUsd?: number | null; fxRateUsdToCdf?: number | null },
+      ) => sum + normalizeCashAmountUsd(payment),
+      0,
+    );
+    const amountUsd = normalizeCashAmountUsd({ amount: ticket.amount, currency: ticket.currency });
     const computedStatus = paidAmount <= 0
       ? PaymentStatus.UNPAID
       : paidAmount + 0.0001 >= ticket.amount
@@ -228,26 +267,31 @@ export default async function PaymentsPage({
     return {
       ...ticket,
       paidAmount,
+      paidAmountUsd,
+      amountUsd,
       computedStatus,
     };
   });
 
-  const totalTicketAmount = ticketsWithComputedStatus.reduce((sum, ticket) => sum + ticket.amount, 0);
-  const totalPaid = ticketsWithComputedStatus.reduce((sum, ticket) => sum + ticket.paidAmount, 0);
+  const totalTicketAmount = ticketsWithComputedStatus.reduce((sum, ticket) => sum + ticket.amountUsd, 0);
+  const totalPaid = ticketsWithComputedStatus.reduce((sum, ticket) => sum + ticket.paidAmountUsd, 0);
   const receivables = Math.max(0, totalTicketAmount - totalPaid);
   const paidTickets = ticketsWithComputedStatus.filter((ticket) => ticket.computedStatus === PaymentStatus.PAID);
   const unpaidTickets = ticketsWithComputedStatus.filter((ticket) => ticket.computedStatus === PaymentStatus.UNPAID);
   const partialTickets = ticketsWithComputedStatus.filter((ticket) => ticket.computedStatus === PaymentStatus.PARTIAL);
 
-  const collectedTotal = paidTickets.reduce((sum, ticket) => sum + ticket.amount, 0);
-  const partialBilled = partialTickets.reduce((sum, ticket) => sum + ticket.amount, 0);
-  const partialCollected = partialTickets.reduce((sum, ticket) => sum + ticket.paidAmount, 0);
+  const collectedTotal = paidTickets.reduce((sum, ticket) => sum + ticket.amountUsd, 0);
+  const partialBilled = partialTickets.reduce((sum, ticket) => sum + ticket.amountUsd, 0);
+  const partialCollected = partialTickets.reduce((sum, ticket) => sum + ticket.paidAmountUsd, 0);
   const partialOutstanding = Math.max(0, partialBilled - partialCollected);
-  const unpaidTotal = unpaidTickets.reduce((sum, ticket) => sum + ticket.amount, 0);
+  const unpaidTotal = unpaidTickets.reduce((sum, ticket) => sum + ticket.amountUsd, 0);
   const collectionRate = totalTicketAmount > 0 ? (totalPaid / totalTicketAmount) * 100 : 0;
   const partialCoverageRate = partialBilled > 0 ? (partialCollected / partialBilled) * 100 : 0;
 
-  const ticketInflowsBefore = ticketPaymentsBeforeStart.reduce((sum, payment) => sum + payment.amount, 0);
+  const ticketInflowsBefore = ticketPaymentsBeforeStart.reduce(
+    (sum: number, payment: { amount: number; currency?: string; amountUsd?: number; amountCdf?: number; fxRateUsdToCdf?: number }) => sum + normalizeCashAmountUsd(payment),
+    0,
+  );
   const cashOpsSignedBefore = cashOperationsBeforeStart.reduce(
     (sum: number, operation: { direction: string; amount: number; currency?: string; amountUsd?: number; fxRateToUsd?: number; fxRateUsdToCdf?: number }) => {
       const normalized = normalizeCashAmountUsd(operation);
@@ -257,23 +301,42 @@ export default async function PaymentsPage({
   );
   const openingBalance = ticketInflowsBefore + cashOpsSignedBefore;
 
+  const openingUsdFromTicketPayments = ticketPaymentsBeforeStart
+    .filter((payment: { currency?: string | null }) => normalizeMoneyCurrency(payment.currency) === "USD")
+    .reduce((sum: number, payment: { amount: number }) => sum + payment.amount, 0);
+  const openingCdfFromTicketPayments = ticketPaymentsBeforeStart
+    .filter((payment: { currency?: string | null }) => normalizeMoneyCurrency(payment.currency) === "CDF")
+    .reduce((sum: number, payment: { amount: number }) => sum + payment.amount, 0);
+
   const openingUsdFromOps = cashOperationsBeforeStart.reduce(
     (sum: number, operation: { direction: string; amount: number; currency?: string }) => {
-      const currency = (operation.currency ?? "USD").toUpperCase();
+      const currency = normalizeMoneyCurrency(operation.currency);
       if (currency !== "USD") return sum;
       return sum + (operation.direction === "INFLOW" ? operation.amount : -operation.amount);
     },
     0,
   );
-  const openingCdf = cashOperationsBeforeStart.reduce(
+  const openingCdfFromOps = cashOperationsBeforeStart.reduce(
     (sum: number, operation: { direction: string; amount: number; currency?: string }) => {
-      const currency = (operation.currency ?? "USD").toUpperCase();
+      const currency = normalizeMoneyCurrency(operation.currency);
       if (currency !== "CDF") return sum;
       return sum + (operation.direction === "INFLOW" ? operation.amount : -operation.amount);
     },
     0,
   );
-  const openingUsd = ticketInflowsBefore + openingUsdFromOps;
+  const openingUsd = openingUsdFromTicketPayments + openingUsdFromOps;
+  const openingCdf = openingCdfFromTicketPayments + openingCdfFromOps;
+
+  const ticketPaymentInflowsUsd = payments.reduce(
+    (sum: number, payment: { amount: number; currency?: string; amountUsd?: number; amountCdf?: number; fxRateToUsd?: number; fxRateUsdToCdf?: number }) => sum + normalizeCashAmountUsd(payment),
+    0,
+  );
+  const ticketPaymentInflowUsd = payments
+    .filter((payment: { currency?: string | null; ticket?: { currency?: string | null } }) => normalizeMoneyCurrency(payment.currency ?? payment.ticket?.currency) === "USD")
+    .reduce((sum: number, payment: { amount: number }) => sum + payment.amount, 0);
+  const ticketPaymentInflowCdf = payments
+    .filter((payment: { currency?: string | null; ticket?: { currency?: string | null } }) => normalizeMoneyCurrency(payment.currency ?? payment.ticket?.currency) === "CDF")
+    .reduce((sum: number, payment: { amount: number }) => sum + payment.amount, 0);
 
   const otherInflows = cashOperations
     .filter((operation: { direction: string }) => operation.direction === "INFLOW")
@@ -282,7 +345,7 @@ export default async function PaymentsPage({
     .filter((operation: { direction: string }) => operation.direction === "OUTFLOW")
     .reduce((sum: number, operation: { amount: number; currency?: string; amountUsd?: number; fxRateToUsd?: number; fxRateUsdToCdf?: number }) => sum + normalizeCashAmountUsd(operation), 0);
 
-  const grossInflows = totalPaid + otherInflows;
+  const grossInflows = ticketPaymentInflowsUsd + otherInflows;
   const netCashVariation = grossInflows - cashOutflows;
   const closingBalance = openingBalance + netCashVariation;
   const expensePressure = grossInflows > 0 ? (cashOutflows / grossInflows) * 100 : cashOutflows > 0 ? 100 : 0;
@@ -298,32 +361,35 @@ export default async function PaymentsPage({
   const accountingConsistency = Math.abs((openingBalance + grossInflows - cashOutflows) - closingBalance) <= 0.0001;
 
   const cashInflowUsd = cashOperations
-    .filter((operation: { direction: string; currency?: string }) => operation.direction === "INFLOW" && (operation.currency ?? "USD").toUpperCase() === "USD")
+    .filter((operation: { direction: string; currency?: string }) => operation.direction === "INFLOW" && normalizeMoneyCurrency(operation.currency) === "USD")
     .reduce((sum: number, operation: { amount: number }) => sum + operation.amount, 0);
   const cashOutflowUsd = cashOperations
-    .filter((operation: { direction: string; currency?: string }) => operation.direction === "OUTFLOW" && (operation.currency ?? "USD").toUpperCase() === "USD")
+    .filter((operation: { direction: string; currency?: string }) => operation.direction === "OUTFLOW" && normalizeMoneyCurrency(operation.currency) === "USD")
     .reduce((sum: number, operation: { amount: number }) => sum + operation.amount, 0);
   const cashInflowCdf = cashOperations
-    .filter((operation: { direction: string; currency?: string }) => operation.direction === "INFLOW" && (operation.currency ?? "USD").toUpperCase() === "CDF")
+    .filter((operation: { direction: string; currency?: string }) => operation.direction === "INFLOW" && normalizeMoneyCurrency(operation.currency) === "CDF")
     .reduce((sum: number, operation: { amount: number }) => sum + operation.amount, 0);
   const cashOutflowCdf = cashOperations
-    .filter((operation: { direction: string; currency?: string }) => operation.direction === "OUTFLOW" && (operation.currency ?? "USD").toUpperCase() === "CDF")
+    .filter((operation: { direction: string; currency?: string }) => operation.direction === "OUTFLOW" && normalizeMoneyCurrency(operation.currency) === "CDF")
     .reduce((sum: number, operation: { amount: number }) => sum + operation.amount, 0);
 
-  const closingUsd = openingUsd + totalPaid + cashInflowUsd - cashOutflowUsd;
-  const closingCdf = openingCdf + cashInflowCdf - cashOutflowCdf;
+  const closingUsd = openingUsd + ticketPaymentInflowUsd + cashInflowUsd - cashOutflowUsd;
+  const closingCdf = openingCdf + ticketPaymentInflowCdf + cashInflowCdf - cashOutflowCdf;
 
   const caisseRows = [
-    ...payments.map((payment) => ({
-      occurredAt: new Date(payment.paidAt),
-      typeOperation: "Entrée en caisse",
-      libelle: `Paiement billet ${payment.ticket.ticketNumber} - ${payment.ticket.customerName}`,
-      reference: payment.reference ?? "-",
-      usdIn: payment.amount,
-      usdOut: 0,
-      cdfIn: 0,
-      cdfOut: 0,
-    })),
+    ...payments.map((payment) => {
+      const currency = normalizeMoneyCurrency(payment.currency ?? payment.ticket.currency);
+      return {
+        occurredAt: new Date(payment.paidAt),
+        typeOperation: "Entrée en caisse",
+        libelle: `Paiement billet ${payment.ticket.ticketNumber} - ${payment.ticket.customerName}`,
+        reference: payment.reference ?? "-",
+        usdIn: currency === "USD" ? payment.amount : 0,
+        usdOut: 0,
+        cdfIn: currency === "CDF" ? payment.amount : 0,
+        cdfOut: 0,
+      };
+    }),
     ...cashOperations.map((operation: any) => {
       const currency = (operation.currency ?? "USD").toUpperCase();
       const isInflow = operation.direction === "INFLOW";
@@ -373,10 +439,15 @@ export default async function PaymentsPage({
     outCdf: number;
   }>;
 
-  for (const payment of ticketPaymentsBeforeStart as Array<{ amount: number; method?: string }>) {
+  for (const payment of ticketPaymentsBeforeStart as Array<{ amount: number; method?: string; currency?: string }>) {
     const channel = detectVirtualChannel(payment.method);
     if (!channel) continue;
-    initialVirtualStats[channel].openingUsd += payment.amount;
+    const currency = normalizeMoneyCurrency(payment.currency);
+    if (currency === "USD") {
+      initialVirtualStats[channel].openingUsd += payment.amount;
+    } else {
+      initialVirtualStats[channel].openingCdf += payment.amount;
+    }
   }
 
   for (const operation of cashOperationsBeforeStart as Array<{ direction: string; amount: number; method?: string; currency?: string }>) {
@@ -390,10 +461,15 @@ export default async function PaymentsPage({
     }
   }
 
-  for (const payment of payments as Array<{ amount: number; method?: string }>) {
+  for (const payment of payments as Array<{ amount: number; method?: string; currency?: string }>) {
     const channel = detectVirtualChannel(payment.method);
     if (!channel) continue;
-    initialVirtualStats[channel].inUsd += payment.amount;
+    const currency = normalizeMoneyCurrency(payment.currency);
+    if (currency === "USD") {
+      initialVirtualStats[channel].inUsd += payment.amount;
+    } else {
+      initialVirtualStats[channel].inCdf += payment.amount;
+    }
   }
 
   for (const operation of cashOperations as Array<{ direction: string; amount: number; method?: string; currency?: string }>) {
@@ -461,6 +537,7 @@ export default async function PaymentsPage({
       amount: ticket.amount,
       paidAmount: ticket.paidAmount,
       paymentStatus: ticket.computedStatus,
+      currency: ticket.currency,
     }));
 
   const pendingNeedsAmount = pendingNeeds.reduce(
@@ -476,13 +553,13 @@ export default async function PaymentsPage({
     >
       <section className="mb-6">
         <h1 className="text-2xl font-semibold tracking-tight">Paiements</h1>
-        <p className="text-sm text-black/60 dark:text-white/60">Pilotage financier des billets vendus et des paiements reçus (USD).</p>
+        <p className="text-sm text-black/60 dark:text-white/60">Pilotage financier des billets vendus et des paiements reçus (USD / CDF).</p>
       </section>
 
       <PaymentsWritingWorkspace
         closedSummary={(
           <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-            <KpiCard label="Total encaissé" value={`${grossInflows.toFixed(2)} USD`} hint={`Billets ${totalPaid.toFixed(2)} + autres ${otherInflows.toFixed(2)}`} />
+            <KpiCard label="Total encaissé" value={`${grossInflows.toFixed(2)} USD`} hint={`Billets ${ticketPaymentInflowsUsd.toFixed(2)} + autres ${otherInflows.toFixed(2)}`} />
             <KpiCard label="Total dépensé" value={`${cashOutflows.toFixed(2)} USD`} />
             <KpiCard label="Solde caisse USD" value={`${closingUsd.toFixed(2)} USD`} />
             <KpiCard label="Total caisse CDF" value={`${closingCdf.toFixed(2)} CDF`} />
@@ -544,9 +621,9 @@ export default async function PaymentsPage({
             </div>
 
             <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-              <KpiCard label="Billets payés" value={`${paidTickets.length}`} hint={`${paidTickets.reduce((sum, t) => sum + t.amount, 0).toFixed(2)} USD`} />
-              <KpiCard label="Billets impayés" value={`${unpaidTickets.length}`} hint={`${unpaidTotal.toFixed(2)} USD non encaissés`} />
-              <KpiCard label="Billets partiels" value={`${partialTickets.length}`} hint={`${partialCollected.toFixed(2)} / ${partialBilled.toFixed(2)} USD`} />
+              <KpiCard label="Billets payés" value={`${paidTickets.length}`} hint={`${paidTickets.reduce((sum, t) => sum + t.amountUsd, 0).toFixed(2)} USD`} />
+              <KpiCard label="Billets impayés" value={`${unpaidTickets.length}`} hint={`${unpaidTotal.toFixed(2)} USD eq non encaissés`} />
+              <KpiCard label="Billets partiels" value={`${partialTickets.length}`} hint={`${partialCollected.toFixed(2)} / ${partialBilled.toFixed(2)} USD eq`} />
               <KpiCard label="Tickets totalement payés" value={`${collectedTotal.toFixed(2)} USD`} />
             </div>
 
@@ -581,7 +658,7 @@ export default async function PaymentsPage({
                         <td className="px-4 py-3">{new Date(payment.paidAt).toLocaleDateString("fr-FR")}</td>
                         <td className="px-4 py-3 font-medium">{payment.ticket.ticketNumber}</td>
                         <td className="px-4 py-3">{payment.ticket.customerName}</td>
-                        <td className="px-4 py-3">{payment.amount.toFixed(2)} USD</td>
+                        <td className="px-4 py-3">{payment.amount.toFixed(2)} {normalizeMoneyCurrency(payment.currency ?? payment.ticket.currency)}</td>
                         <td className="px-4 py-3">{payment.method}</td>
                         <td className="px-4 py-3">{payment.reference ?? "-"}</td>
                         <td className="px-4 py-3">{payment.ticket.paymentStatus}</td>
@@ -604,9 +681,9 @@ export default async function PaymentsPage({
           <div className="space-y-4">
             <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
               <KpiCard label="Solde ouverture USD" value={`${openingUsd.toFixed(2)} USD`} />
-              <KpiCard label="Solde clôture USD" value={`${closingUsd.toFixed(2)} USD`} hint={`Billets ${totalPaid.toFixed(2)} + autres USD ${cashInflowUsd.toFixed(2)} - sorties USD ${cashOutflowUsd.toFixed(2)}`} />
+              <KpiCard label="Solde clôture USD" value={`${closingUsd.toFixed(2)} USD`} hint={`Billets USD ${ticketPaymentInflowUsd.toFixed(2)} + autres USD ${cashInflowUsd.toFixed(2)} - sorties USD ${cashOutflowUsd.toFixed(2)}`} />
               <KpiCard label="Solde ouverture CDF" value={`${openingCdf.toFixed(2)} CDF`} />
-              <KpiCard label="Solde clôture CDF" value={`${closingCdf.toFixed(2)} CDF`} hint={`Entrées CDF ${cashInflowCdf.toFixed(2)} - sorties CDF ${cashOutflowCdf.toFixed(2)}`} />
+              <KpiCard label="Solde clôture CDF" value={`${closingCdf.toFixed(2)} CDF`} hint={`Billets CDF ${ticketPaymentInflowCdf.toFixed(2)} + autres CDF ${cashInflowCdf.toFixed(2)} - sorties CDF ${cashOutflowCdf.toFixed(2)}`} />
             </div>
 
             <section className="rounded-2xl border border-black/10 bg-white p-4 dark:border-white/10 dark:bg-zinc-900">

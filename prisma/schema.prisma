@@ -353,14 +353,21 @@ model TicketSale {
 }
 
 model Payment {
-  id          String    @id @default(cuid())
-  ticketId    String
-  ticket      TicketSale @relation(fields: [ticketId], references: [id])
-  amount      Float
-  paidAt      DateTime  @default(now())
-  method      String
-  reference   String?
-  createdAt   DateTime  @default(now())
+  id             String     @id @default(cuid())
+  ticketId       String
+  ticket         TicketSale @relation(fields: [ticketId], references: [id])
+  amount         Float
+  currency       String     @default("USD")
+  fxRateUsdToCdf Float?
+  amountUsd      Float?
+  amountCdf      Float?
+  paidAt         DateTime   @default(now())
+  method         String
+  reference      String?
+  createdAt      DateTime   @default(now())
+
+  @@index([paidAt])
+  @@index([currency])
 }
 
 model CashOperation {

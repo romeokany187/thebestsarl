@@ -199,6 +199,7 @@ export const ticketUpdateSchema = z.object({
 export const paymentCreateSchema = z.object({
   ticketId: z.string().min(1),
   amount: z.number().positive(),
+  currency: z.string().min(3).max(3).optional(),
   method: z.string().min(2).max(80),
   reference: z.string().max(120).optional(),
   paidAt: z.coerce.date().optional(),

@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { FormEvent, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useState } from "react";
 
 function toLocalDateTimeInputValue(date: Date): string {
   const year = date.getFullYear();
@@ -12,6 +12,11 @@ function toLocalDateTimeInputValue(date: Date): string {
   return `${year}-${month}-${day}T${hours}:${minutes}`;
 }
 
+function normalizeCurrency(value: string | null | undefined): "USD" | "CDF" {
+  const normalized = (value ?? "USD").trim().toUpperCase();
+  return normalized === "CDF" || normalized === "XAF" || normalized === "FC" ? "CDF" : "USD";
+}
+
 type TicketOption = {
   id: string;
   ticketNumber: string;
@@ -19,12 +24,14 @@ type TicketOption = {
   amount: number;
   paidAmount: number;
   paymentStatus: "PAID" | "PARTIAL" | "UNPAID";
+  currency: string;
 };
 
 export function PaymentEntryForm({ tickets }: { tickets: TicketOption[] }) {
   const router = useRouter();
   const [ticketId, setTicketId] = useState<string>(tickets[0]?.id ?? "");
   const [amount, setAmount] = useState<string>("");
+  const [currency, setCurrency] = useState<string>(normalizeCurrency(tickets[0]?.currency));
   const [method, setMethod] = useState<string>("CASH");
   const [reference, setReference] = useState<string>("");
   const [paidAt, setPaidAt] = useState<string>(toLocalDateTimeInputValue(new Date()));
@@ -34,6 +41,14 @@ export function PaymentEntryForm({ tickets }: { tickets: TicketOption[] }) {
 
   const selected = useMemo(() => tickets.find((ticket) => ticket.id === ticketId) ?? null, [ticketId, tickets]);
   const remaining = selected ? Math.max(0, selected.amount - selected.paidAmount) : 0;
+  const ticketCurrency = normalizeCurrency(selected?.currency);
+  const paymentCurrency = normalizeCurrency(currency);
+
+  useEffect(() => {
+    if (selected) {
+      setCurrency(normalizeCurrency(selected.currency));
+    }
+  }, [selected?.id, selected?.currency]);
 
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -55,6 +70,7 @@ export function PaymentEntryForm({ tickets }: { tickets: TicketOption[] }) {
       body: JSON.stringify({
         ticketId,
         amount: numericAmount,
+        currency: paymentCurrency,
         method,
         reference: reference || undefined,
         paidAt: paidAt ? new Date(paidAt).toISOString() : undefined,
@@ -78,8 +94,8 @@ export function PaymentEntryForm({ tickets }: { tickets: TicketOption[] }) {
 
   return (
     <section className="mb-6 rounded-2xl border border-black/10 bg-white p-4 dark:border-white/10 dark:bg-zinc-900">
-      <h2 className="mb-3 text-sm font-semibold">Enregistrer un paiement (USD)</h2>
-      <form onSubmit={onSubmit} className="grid gap-3 lg:grid-cols-5 lg:items-end">
+      <h2 className="mb-3 text-sm font-semibold">Enregistrer un paiement billet (USD / CDF)</h2>
+      <form onSubmit={onSubmit} className="grid gap-3 lg:grid-cols-6 lg:items-end">
         <div className="lg:col-span-2">
           <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-black/60 dark:text-white/60">Billet</label>
           <select
@@ -89,7 +105,7 @@ export function PaymentEntryForm({ tickets }: { tickets: TicketOption[] }) {
           >
             {tickets.map((ticket) => (
               <option key={ticket.id} value={ticket.id}>
-                {ticket.ticketNumber} • {ticket.customerName} • Reste {Math.max(0, ticket.amount - ticket.paidAmount).toFixed(2)} USD
+                {ticket.ticketNumber} • {ticket.customerName} • Reste {Math.max(0, ticket.amount - ticket.paidAmount).toFixed(2)} {normalizeCurrency(ticket.currency)}
               </option>
             ))}
           </select>
@@ -106,6 +122,18 @@ export function PaymentEntryForm({ tickets }: { tickets: TicketOption[] }) {
             className="w-full rounded-md border border-black/15 bg-white px-3 py-2 text-sm dark:border-white/15 dark:bg-zinc-900"
             placeholder="0.00"
           />
+        </div>
+
+        <div>
+          <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-black/60 dark:text-white/60">Devise paiement</label>
+          <select
+            value={paymentCurrency}
+            onChange={(event) => setCurrency(event.target.value)}
+            className="w-full rounded-md border border-black/15 bg-white px-3 py-2 text-sm dark:border-white/15 dark:bg-zinc-900"
+          >
+            <option value="USD">USD</option>
+            <option value="CDF">CDF</option>
+          </select>
         </div>
 
         <div>
@@ -153,9 +181,14 @@ export function PaymentEntryForm({ tickets }: { tickets: TicketOption[] }) {
       </form>
 
       {selected ? (
-        <p className="mt-3 text-xs text-black/60 dark:text-white/60">
-          Facturé: {selected.amount.toFixed(2)} USD • Déjà encaissé: {selected.paidAmount.toFixed(2)} USD • Reste: {remaining.toFixed(2)} USD • Statut: {selected.paymentStatus}
-        </p>
+        <>
+          <p className="mt-3 text-xs text-black/60 dark:text-white/60">
+            Facturé: {selected.amount.toFixed(2)} {ticketCurrency} • Déjà encaissé: {selected.paidAmount.toFixed(2)} {ticketCurrency} • Reste: {remaining.toFixed(2)} {ticketCurrency} • Statut: {selected.paymentStatus}
+          </p>
+          <p className="mt-2 text-xs text-black/60 dark:text-white/60">
+            Paiement possible en <strong>USD</strong> ou <strong>CDF</strong>. {paymentCurrency !== ticketCurrency ? `La conversion vers ${ticketCurrency} se fait automatiquement au taux du jour.` : `Le billet est actuellement libellé en ${ticketCurrency}.`}
+          </p>
+        </>
       ) : null}
       {message ? <p className="mt-2 text-xs text-emerald-600">{message}</p> : null}
       {error ? <p className="mt-2 text-xs text-red-600">{error}</p> : null}
