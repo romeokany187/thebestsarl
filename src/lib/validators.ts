@@ -284,6 +284,7 @@ export const cashOperationCreateSchema = z.object({
   occurredAt: z.coerce.date().optional(),
   direction: z.enum(["INFLOW", "OUTFLOW"]),
   category: z.enum([
+    "OPENING_BALANCE",
     "OTHER_SALE",
     "COMMISSION_INCOME",
     "SERVICE_INCOME",

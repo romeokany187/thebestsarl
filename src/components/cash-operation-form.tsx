@@ -13,6 +13,7 @@ function toLocalDateTimeInputValue(date: Date): string {
 }
 
 const categories: Array<{ value: string; label: string }> = [
+  { value: "OPENING_BALANCE", label: "Solde d'ouverture manuel" },
   { value: "OTHER_SALE", label: "Autres ventes" },
   { value: "COMMISSION_INCOME", label: "Commissions" },
   { value: "SERVICE_INCOME", label: "Prestations de service" },
@@ -48,12 +49,17 @@ export function CashOperationForm() {
   const [message, setMessage] = useState<string>("");
   const [error, setError] = useState<string>("");
 
-  const referenceLabel = direction === "OUTFLOW"
-    ? "Référence justificative sortie"
-    : "Référence justificative entrée";
-  const referencePlaceholder = direction === "OUTFLOW"
-    ? "N° EDB / OP / pièce justificative"
-    : "N° bon d'entrée / reçu / pièce justificative";
+  const isOpeningBalance = category === "OPENING_BALANCE";
+  const referenceLabel = isOpeningBalance
+    ? "Référence ouverture"
+    : direction === "OUTFLOW"
+      ? "Référence justificative sortie"
+      : "Référence justificative entrée";
+  const referencePlaceholder = isOpeningBalance
+    ? "N° PV / fiche d'ouverture / pièce initiale"
+    : direction === "OUTFLOW"
+      ? "N° EDB / OP / pièce justificative"
+      : "N° bon d'entrée / reçu / pièce justificative";
 
   const conversionTargetCurrency = conversionSourceCurrency === "USD" ? "CDF" : "USD";
   const numericRatePreview = Number.parseFloat(fxRateUsdToCdf);
@@ -83,6 +89,12 @@ export function CashOperationForm() {
 
     if (!description.trim()) {
       setError("Ajoutez un libellé comptable.");
+      setLoading(false);
+      return;
+    }
+
+    if (isOpeningBalance && direction !== "INFLOW") {
+      setError("Le solde d'ouverture doit être saisi comme une entrée de fonds.");
       setLoading(false);
       return;
     }
@@ -206,13 +218,17 @@ export function CashOperationForm() {
   return (
     <section className="mb-6 rounded-2xl border border-black/10 bg-white p-4 dark:border-white/10 dark:bg-zinc-900">
       <h2 className="mb-3 text-sm font-semibold">Journal de caisse - Nouvelle opération</h2>
+      <p className="mb-3 text-xs text-black/60 dark:text-white/60">
+        Commencez par saisir manuellement les soldes d'ouverture avec la catégorie <strong>Solde d'ouverture manuel</strong>, puis enregistrez les mouvements du jour.
+      </p>
       <form onSubmit={onSubmit} className="grid gap-3 lg:grid-cols-4 lg:items-end">
         <div>
           <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-black/60 dark:text-white/60">Type</label>
           <select
             value={direction}
             onChange={(event) => setDirection(event.target.value as "INFLOW" | "OUTFLOW")}
-            className="w-full rounded-md border border-black/15 bg-white px-3 py-2 text-sm dark:border-white/15 dark:bg-zinc-900"
+            disabled={isOpeningBalance}
+            className="w-full rounded-md border border-black/15 bg-white px-3 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-60 dark:border-white/15 dark:bg-zinc-900"
           >
             <option value="INFLOW">Entrée de fonds</option>
             <option value="OUTFLOW">Sortie de fonds</option>
@@ -223,7 +239,14 @@ export function CashOperationForm() {
           <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-black/60 dark:text-white/60">Catégorie</label>
           <select
             value={category}
-            onChange={(event) => setCategory(event.target.value)}
+            onChange={(event) => {
+              const nextCategory = event.target.value;
+              setCategory(nextCategory);
+              if (nextCategory === "OPENING_BALANCE") {
+                setDirection("INFLOW");
+                setMethod("CASH");
+              }
+            }}
             className="w-full rounded-md border border-black/15 bg-white px-3 py-2 text-sm dark:border-white/15 dark:bg-zinc-900"
           >
             {categories.map((item) => (

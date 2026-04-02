@@ -78,6 +78,7 @@ enum CashDirection {
 }
 
 enum CashOperationCategory {
+  OPENING_BALANCE
   OTHER_SALE
   COMMISSION_INCOME
   SERVICE_INCOME

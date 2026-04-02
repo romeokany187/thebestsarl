@@ -48,6 +48,24 @@ export async function POST(request: NextRequest) {
   const targetAmountUsd = amountToUsd(targetAmount, targetCurrency, fxRateUsdToCdf);
   const targetAmountCdf = amountToCdf(targetAmount, targetCurrency, fxRateUsdToCdf);
 
+  const openingExists = await (prisma as unknown as { cashOperation: any }).cashOperation.findFirst({
+    where: {
+      occurredAt: { lte: occurredAt },
+      category: "OPENING_BALANCE",
+      currency: sourceCurrency,
+      method: "CASH",
+    },
+    select: { id: true },
+    orderBy: { occurredAt: "desc" },
+  });
+
+  if (!openingExists) {
+    return NextResponse.json(
+      { error: `Renseignez d'abord le solde d'ouverture manuel en ${sourceCurrency} pour la caisse avant toute conversion.` },
+      { status: 400 },
+    );
+  }
+
   const ticketInflows = await prisma.payment.aggregate({
     where: {
       paidAt: { lte: occurredAt },

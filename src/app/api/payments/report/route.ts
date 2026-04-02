@@ -147,6 +147,87 @@ function detectVirtualChannel(methodRaw: string | null | undefined): VirtualChan
   return null;
 }
 
+type BalanceBucket = "CASH" | VirtualChannel;
+type BalanceSnapshot = {
+  usd: number;
+  cdf: number;
+  initializedUsd: boolean;
+  initializedCdf: boolean;
+};
+
+function buildEmptyOpeningBuckets(): Record<BalanceBucket, BalanceSnapshot> {
+  return {
+    CASH: { usd: 0, cdf: 0, initializedUsd: false, initializedCdf: false },
+    AIRTEL_MONEY: { usd: 0, cdf: 0, initializedUsd: false, initializedCdf: false },
+    ORANGE_MONEY: { usd: 0, cdf: 0, initializedUsd: false, initializedCdf: false },
+    MPESA: { usd: 0, cdf: 0, initializedUsd: false, initializedCdf: false },
+    EQUITY: { usd: 0, cdf: 0, initializedUsd: false, initializedCdf: false },
+  };
+}
+
+function bucketFromMethod(methodRaw: string | null | undefined): BalanceBucket {
+  return detectVirtualChannel(methodRaw) ?? "CASH";
+}
+
+function computeOpeningBuckets(
+  ticketPayments: Array<{ amount: number; currency?: string | null; method?: string | null; paidAt?: Date | string | null }>,
+  cashOperations: Array<{ amount: number; currency?: string | null; method?: string | null; direction: string; category?: string | null; occurredAt?: Date | string | null }>,
+): Record<BalanceBucket, BalanceSnapshot> {
+  const buckets = buildEmptyOpeningBuckets();
+  const events = [
+    ...ticketPayments.map((payment) => ({
+      at: new Date(payment.paidAt ?? new Date(0)),
+      bucket: bucketFromMethod(payment.method),
+      currency: normalizeMoneyCurrency(payment.currency),
+      amount: payment.amount,
+      direction: "INFLOW" as const,
+      category: null,
+    })),
+    ...cashOperations.map((operation) => ({
+      at: new Date(operation.occurredAt ?? new Date(0)),
+      bucket: bucketFromMethod(operation.method),
+      currency: normalizeMoneyCurrency(operation.currency),
+      amount: operation.amount,
+      direction: operation.direction === "OUTFLOW" ? "OUTFLOW" as const : "INFLOW" as const,
+      category: operation.category ?? null,
+    })),
+  ].sort((a, b) => {
+    const diff = a.at.getTime() - b.at.getTime();
+    if (diff !== 0) return diff;
+    if (a.category === "OPENING_BALANCE") return -1;
+    if (b.category === "OPENING_BALANCE") return 1;
+    return 0;
+  });
+
+  for (const event of events) {
+    const snapshot = buckets[event.bucket];
+    if (event.category === "OPENING_BALANCE") {
+      if (event.currency === "USD") {
+        snapshot.usd = event.amount;
+        snapshot.initializedUsd = true;
+      } else {
+        snapshot.cdf = event.amount;
+        snapshot.initializedCdf = true;
+      }
+      continue;
+    }
+
+    if (event.currency === "USD") {
+      if (!snapshot.initializedUsd) continue;
+      snapshot.usd += event.direction === "INFLOW" ? event.amount : -event.amount;
+    } else {
+      if (!snapshot.initializedCdf) continue;
+      snapshot.cdf += event.direction === "INFLOW" ? event.amount : -event.amount;
+    }
+  }
+
+  return buckets;
+}
+
+function bucketUsdEquivalent(snapshot: Pick<BalanceSnapshot, "usd" | "cdf">, fxRateUsdToCdf = 2800) {
+  return snapshot.usd + (snapshot.cdf / fxRateUsdToCdf);
+}
+
 function short(value: string, max: number) {
   const clean = value.trim();
   if (clean.length <= max) return clean;
@@ -260,6 +341,7 @@ export async function GET(request: NextRequest) {
     paymentClient.findMany({
       where: { paidAt: { lt: range.start } },
       select: {
+        paidAt: true,
         amount: true,
         currency: true,
         amountUsd: true,
@@ -331,29 +413,13 @@ export async function GET(request: NextRequest) {
     .sort((a: [string, number], b: [string, number]) => b[1] - a[1])
     .slice(0, 4);
 
-  const ticketInflowsBefore = ticketPaymentsBeforeRange.reduce((sum: number, payment: any) => sum + normalizeAmountUsd(payment), 0);
-  const cashOpsSignedBefore = cashOperationsBeforeRange.reduce((sum: number, operation: any) => {
-    const normalized = normalizeAmountUsd(operation);
-    return sum + (operation.direction === "INFLOW" ? normalized : -normalized);
-  }, 0);
-  const openingBalance = ticketInflowsBefore + cashOpsSignedBefore;
-
-  const openingUsdFromTicketPayments = ticketPaymentsBeforeRange
-    .filter((payment: any) => normalizeMoneyCurrency(payment.currency) === "USD")
-    .reduce((sum: number, payment: any) => sum + payment.amount, 0);
-  const openingCdfFromTicketPayments = ticketPaymentsBeforeRange
-    .filter((payment: any) => normalizeMoneyCurrency(payment.currency) === "CDF")
-    .reduce((sum: number, payment: any) => sum + payment.amount, 0);
-  const openingUsdFromOps = cashOperationsBeforeRange.reduce((sum: number, op: any) => {
-    if (normalizeMoneyCurrency(op.currency) !== "USD") return sum;
-    return sum + (op.direction === "INFLOW" ? op.amount : -op.amount);
-  }, 0);
-  const openingCdfFromOps = cashOperationsBeforeRange.reduce((sum: number, op: any) => {
-    if (normalizeMoneyCurrency(op.currency) !== "CDF") return sum;
-    return sum + (op.direction === "INFLOW" ? op.amount : -op.amount);
-  }, 0);
-  const openingUsd = openingUsdFromTicketPayments + openingUsdFromOps;
-  const openingCdf = openingCdfFromTicketPayments + openingCdfFromOps;
+  const openingBuckets = computeOpeningBuckets(ticketPaymentsBeforeRange, cashOperationsBeforeRange);
+  const openingBalance = (Object.values(openingBuckets) as Array<BalanceSnapshot>).reduce(
+    (sum, snapshot) => sum + bucketUsdEquivalent(snapshot),
+    0,
+  );
+  const openingUsd = openingBuckets.CASH.usd;
+  const openingCdf = openingBuckets.CASH.cdf;
 
   const ticketPaymentInflowsUsdEq = rows.reduce((sum: number, payment: any) => sum + normalizeAmountUsd(payment), 0);
   const ticketPaymentInflowUsd = rows.filter((payment: any) => normalizeMoneyCurrency(payment.currency ?? payment.ticket.currency) === "USD").reduce((sum: number, payment: any) => sum + payment.amount, 0);
@@ -419,35 +485,24 @@ export async function GET(request: NextRequest) {
   const initialVirtualStats = Object.fromEntries(
     virtualChannels.map(({ key }) => [
       key,
-      { openingUsd: 0, openingCdf: 0, inUsd: 0, outUsd: 0, inCdf: 0, outCdf: 0 },
+      {
+        openingUsd: openingBuckets[key].usd,
+        openingCdf: openingBuckets[key].cdf,
+        inUsd: 0,
+        outUsd: 0,
+        inCdf: 0,
+        outCdf: 0,
+      },
     ]),
   ) as Record<VirtualChannel, { openingUsd: number; openingCdf: number; inUsd: number; outUsd: number; inCdf: number; outCdf: number }>;
-  const cashBilletageStats = { openingUsd: 0, openingCdf: 0, inUsd: 0, outUsd: 0, inCdf: 0, outCdf: 0 };
-
-  for (const payment of ticketPaymentsBeforeRange as Array<any>) {
-    const channel = detectVirtualChannel(payment.method);
-    const currency = normalizeMoneyCurrency(payment.currency);
-    if (!channel) {
-      if (currency === "USD") cashBilletageStats.openingUsd += payment.amount;
-      else cashBilletageStats.openingCdf += payment.amount;
-      continue;
-    }
-    if (currency === "USD") initialVirtualStats[channel].openingUsd += payment.amount;
-    else initialVirtualStats[channel].openingCdf += payment.amount;
-  }
-
-  for (const operation of cashOperationsBeforeRange as Array<any>) {
-    const channel = detectVirtualChannel(operation.method);
-    const currency = normalizeMoneyCurrency(operation.currency);
-    const signedAmount = operation.direction === "INFLOW" ? operation.amount : -operation.amount;
-    if (!channel) {
-      if (currency === "USD") cashBilletageStats.openingUsd += signedAmount;
-      else cashBilletageStats.openingCdf += signedAmount;
-      continue;
-    }
-    if (currency === "USD") initialVirtualStats[channel].openingUsd += signedAmount;
-    else initialVirtualStats[channel].openingCdf += signedAmount;
-  }
+  const cashBilletageStats = {
+    openingUsd: openingBuckets.CASH.usd,
+    openingCdf: openingBuckets.CASH.cdf,
+    inUsd: 0,
+    outUsd: 0,
+    inCdf: 0,
+    outCdf: 0,
+  };
 
   for (const payment of rows as Array<any>) {
     const channel = detectVirtualChannel(payment.method);
