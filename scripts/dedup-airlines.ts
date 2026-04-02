@@ -98,23 +98,20 @@ async function main() {
   let totalRulesTransferred = 0;
   let totalDuplicatesDeleted = 0;
 
-  // 2. Traiter chaque famille de doublons connue
-  for (const group of groups) {
-    const members = allAirlines.filter((a) => {
-      const code = a.code.toUpperCase();
-      const normalizedName = normalizeName(a.name);
-      return group.matches(code, normalizedName);
-    });
+  async function mergeMembers(label: string, members: AirlineWithCounts[], preferredCodes: string[] = []) {
+    if (members.length <= 1) return;
 
-    if (members.length <= 1) {
-      continue;
-    }
+    const canonical = [...members].sort((a, b) => {
+      const aPreferred = preferredCodes.includes(a.code.toUpperCase()) ? 1 : 0;
+      const bPreferred = preferredCodes.includes(b.code.toUpperCase()) ? 1 : 0;
+      return (bPreferred * 1_000_000 + b._count.commissionRules * 10_000 + b._count.tickets)
+        - (aPreferred * 1_000_000 + a._count.commissionRules * 10_000 + a._count.tickets);
+    })[0];
+    const duplicates = members.filter((member) => member.id !== canonical.id);
 
-    const sorted = [...members].sort((a, b) => candidateScore(b, group) - candidateScore(a, group));
-    const canonical = sorted[0];
-    const duplicates = sorted.slice(1);
+    if (duplicates.length === 0) return;
 
-    console.log(`\nFamille: ${group.label}`);
+    console.log(`\nFamille: ${label}`);
     console.log(`  Canonique: code=${canonical.code}, name=${canonical.name}, tickets=${canonical._count.tickets}, rules=${canonical._count.commissionRules}`);
 
     for (const dup of duplicates) {
@@ -143,6 +140,33 @@ async function main() {
       totalDuplicatesDeleted++;
       console.log(`    Réaffecté ${reassigned.count} billet(s), puis supprimé ${dup.code}`);
     }
+  }
+
+  // 2. Traiter chaque famille de doublons connue
+  for (const group of groups) {
+    const members = allAirlines.filter((a) => {
+      const code = a.code.toUpperCase();
+      const normalizedName = normalizeName(a.name);
+      return group.matches(code, normalizedName);
+    });
+    await mergeMembers(group.label, members, group.preferredCodes);
+  }
+
+  // 3. Traiter tous les doublons restants avec le même nom normalisé
+  const remainingAirlines = await prisma.airline.findMany({
+    include: { _count: { select: { tickets: true, commissionRules: true } } },
+    orderBy: { name: "asc" },
+  });
+  const byNormalizedName = new Map<string, AirlineWithCounts[]>();
+  for (const airline of remainingAirlines) {
+    const key = normalizeName(airline.name);
+    if (!key) continue;
+    byNormalizedName.set(key, [...(byNormalizedName.get(key) ?? []), airline]);
+  }
+
+  for (const [normalizedKey, members] of byNormalizedName.entries()) {
+    if (members.length <= 1) continue;
+    await mergeMembers(`Nom normalisé: ${normalizedKey}`, members);
   }
 
   if (totalDuplicatesDeleted === 0) {

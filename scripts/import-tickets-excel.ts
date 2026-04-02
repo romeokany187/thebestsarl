@@ -263,6 +263,26 @@ function makeAirlineCode(name: string, usedCodes: Set<string>) {
   return code;
 }
 
+const airlineAliases = [
+  { canonicalCode: "ACG", canonicalName: "Air Congo", codeAliases: ["ACG", "AIR"], nameAliases: ["aircongo", "aircongosa"] },
+  { canonicalCode: "CAA", canonicalName: "CAA", codeAliases: ["CAA"], nameAliases: ["caa"] },
+  { canonicalCode: "FST", canonicalName: "Air Fast", codeAliases: ["FST"], nameAliases: ["airfast", "airfastcongo"] },
+  { canonicalCode: "ET", canonicalName: "Ethiopian Airlines", codeAliases: ["ET", "ETH", "ETI"], nameAliases: ["ethiopian", "ethiopianairlines"] },
+  { canonicalCode: "KQ", canonicalName: "Kenya Airways", codeAliases: ["KQ", "KEN"], nameAliases: ["kenya", "kenyaairways"] },
+  { canonicalCode: "MGB", canonicalName: "Mont Gabaon", codeAliases: ["MGB", "MG"], nameAliases: ["montgabaon", "montgabon"] },
+  { canonicalCode: "WB", canonicalName: "RwandAir", codeAliases: ["WB"], nameAliases: ["rwandair", "rwandaair"] },
+  { canonicalCode: "UR", canonicalName: "Uganda Airlines", codeAliases: ["UR", "UGA"], nameAliases: ["ugandaair", "ugandaairlines"] },
+  { canonicalCode: "TC", canonicalName: "Air Tanzania", codeAliases: ["TC", "TAN"], nameAliases: ["airtanzania", "tanzania"] },
+  { canonicalCode: "DKT", canonicalName: "Dakota", codeAliases: ["DKT", "DAK"], nameAliases: ["dakota"] },
+] as const;
+
+function normalizeAirlineCode(value: string | null | undefined) {
+  const cleaned = (value ?? "").trim().toUpperCase().replace(/[^A-Z0-9]/g, "");
+  if (!cleaned) return null;
+  const alias = airlineAliases.find((candidate) => candidate.codeAliases.includes(cleaned as never));
+  return alias?.canonicalCode ?? cleaned;
+}
+
 function normalizeLookupKey(value: string) {
   return value
     .trim()
@@ -276,6 +296,57 @@ function normalizeLookupKey(value: string) {
 
 function compactLookupKey(value: string) {
   return normalizeLookupKey(value).replace(/\s+/g, "");
+}
+
+function resolveAirlineIdentity(codeRaw: string | null | undefined, nameRaw: string | null | undefined) {
+  const normalizedName = compactLookupKey(nameRaw ?? "");
+  const normalizedCode = normalizeAirlineCode(codeRaw);
+  const alias = airlineAliases.find((candidate) => {
+    if (normalizedCode && candidate.codeAliases.includes(normalizedCode as never)) {
+      return true;
+    }
+    return normalizedName
+      ? candidate.nameAliases.some((entry) => normalizedName.includes(entry) || entry.includes(normalizedName))
+      : false;
+  });
+
+  const canonicalCode = alias?.canonicalCode ?? normalizedCode;
+  const canonicalName = alias?.canonicalName ?? (nameRaw?.trim().replace(/\s+/g, " ") || "Compagnie inconnue");
+  const lookupKeys = new Set<string>([
+    normalizeLookupKey(canonicalName),
+    compactLookupKey(canonicalName),
+    normalizeLookupKey(nameRaw ?? ""),
+    compactLookupKey(nameRaw ?? ""),
+    canonicalCode?.toLowerCase() ?? "",
+  ]);
+
+  alias?.nameAliases.forEach((entry) => lookupKeys.add(entry));
+
+  return {
+    canonicalCode,
+    canonicalName,
+    lookupKeys: Array.from(lookupKeys).filter(Boolean),
+  };
+}
+
+function registerAirlineLookups<T extends { code: string; name: string }>(
+  airlineByCode: Map<string, T>,
+  airlineByName: Map<string, T>,
+  airline: T,
+) {
+  const normalizedCode = normalizeAirlineCode(airline.code);
+  if (normalizedCode) {
+    airlineByCode.set(normalizedCode, airline);
+  }
+  const rawCode = airline.code.trim().toUpperCase();
+  if (rawCode) {
+    airlineByCode.set(rawCode, airline);
+  }
+
+  const identity = resolveAirlineIdentity(airline.code, airline.name);
+  identity.lookupKeys.forEach((key) => {
+    airlineByName.set(key, airline);
+  });
 }
 
 function addLookupCandidate(candidates: Set<string>, value: string) {
@@ -491,8 +562,11 @@ async function main() {
     });
   });
 
-  const airlineByCode = new Map(airlines.map((airline) => [airline.code.trim().toUpperCase(), airline]));
-  const airlineByName = new Map(airlines.map((airline) => [airline.name.trim().toLowerCase(), airline]));
+  const airlineByCode = new Map<string, (typeof airlines)[number]>();
+  const airlineByName = new Map<string, (typeof airlines)[number]>();
+  airlines.forEach((airline) => {
+    registerAirlineLookups(airlineByCode, airlineByName, airline);
+  });
   const usedAirlineCodes = new Set(airlines.map((airline) => airline.code.trim().toUpperCase()));
   const ticketCountByAirlineId = new Map(ticketCounts.map((entry) => [entry.airlineId, entry._count._all]));
 
@@ -609,27 +683,30 @@ async function main() {
 
         const airlineCodeRaw = asString(pickValue(row, ["airlineCode", "compagnieCode", "code compagnie", "code"]));
         const airlineNameRaw = asString(pickValue(row, ["airlineName", "compagnie", "airline"])) ?? "Compagnie inconnue";
-        const airlineCode = airlineCodeRaw?.toUpperCase() ?? null;
+        const airlineIdentity = resolveAirlineIdentity(airlineCodeRaw, airlineNameRaw);
 
-        let airline = airlineCode ? airlineByCode.get(airlineCode) : null;
-        if (!airline && airlineNameRaw) {
-          airline = airlineByName.get(airlineNameRaw.toLowerCase()) ?? null;
+        let airline = airlineIdentity.canonicalCode ? airlineByCode.get(airlineIdentity.canonicalCode) : null;
+        if (!airline) {
+          for (const lookupKey of airlineIdentity.lookupKeys) {
+            airline = airlineByName.get(lookupKey) ?? null;
+            if (airline) break;
+          }
         }
 
         if (!airline) {
-          const code = airlineCode ?? makeAirlineCode(airlineNameRaw, usedAirlineCodes);
+          const code = airlineIdentity.canonicalCode ?? makeAirlineCode(airlineIdentity.canonicalName, usedAirlineCodes);
+          usedAirlineCodes.add(code);
           const createdAirline = args.dryRun
-            ? { id: `dry-${code}`, code, name: airlineNameRaw }
+            ? { id: `dry-${code}`, code, name: airlineIdentity.canonicalName }
             : await prisma.airline.upsert({
               where: { code },
-              update: { name: airlineNameRaw },
-              create: { code, name: airlineNameRaw },
+              update: { name: airlineIdentity.canonicalName },
+              create: { code, name: airlineIdentity.canonicalName },
               select: { id: true, code: true, name: true },
             });
 
           airline = createdAirline;
-          airlineByCode.set(createdAirline.code.toUpperCase(), createdAirline);
-          airlineByName.set(createdAirline.name.toLowerCase(), createdAirline);
+          registerAirlineLookups(airlineByCode, airlineByName, createdAirline);
         }
 
         const soldMonth = soldAt.getUTCMonth() + 1;
