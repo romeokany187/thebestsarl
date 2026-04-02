@@ -234,6 +234,48 @@ function short(value: string, max: number) {
   return `${clean.slice(0, max - 1)}…`;
 }
 
+function wrapTextToWidth(value: string, font: any, fontSize: number, maxWidth: number) {
+  const clean = value.trim();
+  if (!clean) return ["-"];
+
+  const lines: string[] = [];
+  let currentLine = "";
+
+  const pushWord = (word: string) => {
+    const candidate = currentLine ? `${currentLine} ${word}` : word;
+    if (font.widthOfTextAtSize(candidate, fontSize) <= maxWidth) {
+      currentLine = candidate;
+      return;
+    }
+
+    if (currentLine) {
+      lines.push(currentLine);
+      currentLine = "";
+    }
+
+    if (font.widthOfTextAtSize(word, fontSize) <= maxWidth) {
+      currentLine = word;
+      return;
+    }
+
+    let chunk = "";
+    for (const char of word) {
+      const nextChunk = `${chunk}${char}`;
+      if (font.widthOfTextAtSize(nextChunk, fontSize) <= maxWidth) {
+        chunk = nextChunk;
+      } else {
+        if (chunk) lines.push(chunk);
+        chunk = char;
+      }
+    }
+    currentLine = chunk;
+  };
+
+  clean.split(/\s+/).forEach(pushWord);
+  if (currentLine) lines.push(currentLine);
+  return lines;
+}
+
 async function readFirstExistingFile(candidates: string[]) {
   for (const candidate of candidates) {
     try {
@@ -650,7 +692,10 @@ export async function GET(request: NextRequest) {
     y -= 12;
 
     for (const row of caisseLedger) {
-      if (y < 38) {
+      const libelleLines = wrapTextToWidth(row.libelle, font, 7.1, x[3] - x[2] - 8);
+      const rowHeight = Math.max(12, libelleLines.length * 8 + 2);
+
+      if (y - rowHeight < 38) {
         page = pdf.addPage([842, 595]);
         drawHeader(true);
         drawTableHeader(504);
@@ -660,7 +705,7 @@ export async function GET(request: NextRequest) {
       const values = [
         row.occurredAt.toISOString().slice(0, 10),
         short(row.typeOperation, 12),
-        short(row.libelle, 34),
+        "",
         row.usdIn > 0 ? row.usdIn.toFixed(2) : "-",
         row.usdOut > 0 ? row.usdOut.toFixed(2) : "-",
         row.usdBalance.toFixed(2),
@@ -671,11 +716,16 @@ export async function GET(request: NextRequest) {
       ];
 
       values.forEach((value, index) => {
+        if (index === 2) return;
         page.drawText(value, { x: x[index], y, size: 7.1, font, color: textBlack });
       });
 
-      page.drawLine({ start: { x: 24, y: y - 3 }, end: { x: 818, y: y - 3 }, thickness: 0.25, color: lineGray });
-      y -= 11;
+      libelleLines.forEach((line, index) => {
+        page.drawText(line, { x: x[2], y: y - index * 7.5, size: 7.1, font, color: textBlack });
+      });
+
+      page.drawLine({ start: { x: 24, y: y - rowHeight + 2 }, end: { x: 818, y: y - rowHeight + 2 }, thickness: 0.25, color: lineGray });
+      y -= rowHeight;
     }
   } else if (reportType === "cash-summary") {
     filenameBase = "recap-caisse";
