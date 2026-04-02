@@ -88,6 +88,22 @@ export async function POST(request: NextRequest) {
 
   const normalizedAmountUsd = amountToUsd(data.amount, currency, fxRateUsdToCdf);
   const normalizedAmountCdf = amountToCdf(data.amount, currency, fxRateUsdToCdf);
+  const initialOpeningExists = await cashOperationClient.findFirst({
+    where: {
+      occurredAt: { lte: occurredAt },
+      category: "OPENING_BALANCE",
+    },
+    select: { id: true },
+    orderBy: { occurredAt: "desc" },
+  });
+
+  if (data.category !== "OPENING_BALANCE" && !initialOpeningExists) {
+    return NextResponse.json(
+      { error: "Le tout premier encodage de caisse doit être un solde d'ouverture manuel. Après cela, les reports à nouveau seront automatiques." },
+      { status: 400 },
+    );
+  }
+
   const singleOutflowAlertLimit = parsePositiveNumber(process.env.CASH_SINGLE_OUTFLOW_ALERT_LIMIT_USD, DEFAULT_SINGLE_OUTFLOW_ALERT_LIMIT_USD);
   const dailyOutflowCap = parsePositiveNumber(process.env.CASH_DAILY_OUTFLOW_CAP_USD, DEFAULT_DAILY_OUTFLOW_CAP_USD);
   const { start: dayStart, end: dayEnd } = utcDayBounds(occurredAt);
@@ -99,22 +115,6 @@ export async function POST(request: NextRequest) {
   try {
     operation = await prisma.$transaction(async (tx) => {
       if (data.direction === "OUTFLOW") {
-        const openingMethod = (data.method ?? "CASH").trim().toUpperCase() || "CASH";
-        const openingExists = await (tx as unknown as { cashOperation: any }).cashOperation.findFirst({
-          where: {
-            occurredAt: { lte: occurredAt },
-            category: "OPENING_BALANCE",
-            currency,
-            method: openingMethod,
-          },
-          select: { id: true },
-          orderBy: { occurredAt: "desc" },
-        });
-
-        if (!openingExists) {
-          throw new Error(`OPENING_REQUIRED:${currency}:${openingMethod}`);
-        }
-
         const ticketInflows = await tx.payment.aggregate({
           where: {
             paidAt: { lte: occurredAt },
@@ -273,15 +273,6 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         {
           error: `Plafond journalier dépassé: cumul ${projected} USD pour un plafond autorisé de ${cap} USD. Alertez le comptable avant tout nouveau décaissement.`,
-        },
-        { status: 400 },
-      );
-    }
-    if (error instanceof Error && error.message.startsWith("OPENING_REQUIRED:")) {
-      const [, requiredCurrency, requiredMethod] = error.message.split(":");
-      return NextResponse.json(
-        {
-          error: `Renseignez d'abord le solde d'ouverture manuel en ${requiredCurrency} pour ${requiredMethod === "CASH" ? "la caisse" : requiredMethod}.`,
         },
         { status: 400 },
       );

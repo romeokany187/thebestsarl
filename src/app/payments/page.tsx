@@ -202,11 +202,11 @@ function computeOpeningBuckets(
     }
 
     if (event.currency === "USD") {
-      if (!snapshot.initializedUsd) continue;
       snapshot.usd += event.direction === "INFLOW" ? event.amount : -event.amount;
+      snapshot.initializedUsd = true;
     } else {
-      if (!snapshot.initializedCdf) continue;
       snapshot.cdf += event.direction === "INFLOW" ? event.amount : -event.amount;
+      snapshot.initializedCdf = true;
     }
   }
 

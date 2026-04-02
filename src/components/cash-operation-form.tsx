@@ -219,7 +219,7 @@ export function CashOperationForm() {
     <section className="mb-6 rounded-2xl border border-black/10 bg-white p-4 dark:border-white/10 dark:bg-zinc-900">
       <h2 className="mb-3 text-sm font-semibold">Journal de caisse - Nouvelle opération</h2>
       <p className="mb-3 text-xs text-black/60 dark:text-white/60">
-        Commencez par saisir manuellement les soldes d'ouverture avec la catégorie <strong>Solde d'ouverture manuel</strong>, puis enregistrez les mouvements du jour.
+        Au tout premier démarrage, saisissez manuellement les soldes d'ouverture avec la catégorie <strong>Solde d'ouverture manuel</strong>. Ensuite, le report à nouveau des mois suivants se calcule automatiquement.
       </p>
       <form onSubmit={onSubmit} className="grid gap-3 lg:grid-cols-4 lg:items-end">
         <div>

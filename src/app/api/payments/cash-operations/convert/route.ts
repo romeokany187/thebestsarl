@@ -52,8 +52,6 @@ export async function POST(request: NextRequest) {
     where: {
       occurredAt: { lte: occurredAt },
       category: "OPENING_BALANCE",
-      currency: sourceCurrency,
-      method: "CASH",
     },
     select: { id: true },
     orderBy: { occurredAt: "desc" },
@@ -61,7 +59,7 @@ export async function POST(request: NextRequest) {
 
   if (!openingExists) {
     return NextResponse.json(
-      { error: `Renseignez d'abord le solde d'ouverture manuel en ${sourceCurrency} pour la caisse avant toute conversion.` },
+      { error: "Le tout premier encodage de caisse doit être un solde d'ouverture manuel. Ensuite les reports à nouveau seront automatiques." },
       { status: 400 },
     );
   }
