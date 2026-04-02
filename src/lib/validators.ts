@@ -206,7 +206,7 @@ export const paymentCreateSchema = z.object({
   amount: z.number().positive(),
   currency: z.string().min(3).max(3).optional(),
   method: z.string().min(2).max(80),
-  reference: z.string().max(120).optional(),
+  reference: z.string().trim().min(3).max(120),
   paidAt: z.coerce.date().optional(),
 });
 

@@ -25,6 +25,7 @@ type TicketOption = {
   paidAmount: number;
   paymentStatus: "PAID" | "PARTIAL" | "UNPAID";
   currency: string;
+  invoiceNumber: string;
 };
 
 export function PaymentEntryForm({ tickets }: { tickets: TicketOption[] }) {
@@ -33,7 +34,7 @@ export function PaymentEntryForm({ tickets }: { tickets: TicketOption[] }) {
   const [amount, setAmount] = useState<string>("");
   const [currency, setCurrency] = useState<string>(normalizeCurrency(tickets[0]?.currency));
   const [method, setMethod] = useState<string>("CASH");
-  const [reference, setReference] = useState<string>("");
+  const [reference, setReference] = useState<string>(tickets[0]?.invoiceNumber ?? "");
   const [paidAt, setPaidAt] = useState<string>(toLocalDateTimeInputValue(new Date()));
   const [loading, setLoading] = useState<boolean>(false);
   const [message, setMessage] = useState<string>("");
@@ -47,8 +48,11 @@ export function PaymentEntryForm({ tickets }: { tickets: TicketOption[] }) {
   useEffect(() => {
     if (selected) {
       setCurrency(normalizeCurrency(selected.currency));
+      setReference(selected.invoiceNumber);
+    } else {
+      setReference("");
     }
-  }, [selected?.id, selected?.currency]);
+  }, [selected?.id, selected?.currency, selected?.invoiceNumber]);
 
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -64,6 +68,18 @@ export function PaymentEntryForm({ tickets }: { tickets: TicketOption[] }) {
       return;
     }
 
+    if (!reference.trim()) {
+      setError("Le numéro de facture est obligatoire pour encaisser un billet.");
+      setLoading(false);
+      return;
+    }
+
+    if (selected && reference.trim() !== selected.invoiceNumber) {
+      setError(`La référence du paiement doit être le numéro de facture ${selected.invoiceNumber}.`);
+      setLoading(false);
+      return;
+    }
+
     const response = await fetch("/api/payments", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -72,7 +88,7 @@ export function PaymentEntryForm({ tickets }: { tickets: TicketOption[] }) {
         amount: numericAmount,
         currency: paymentCurrency,
         method,
-        reference: reference || undefined,
+        reference: reference.trim(),
         paidAt: paidAt ? new Date(paidAt).toISOString() : undefined,
       }),
     });
@@ -87,7 +103,7 @@ export function PaymentEntryForm({ tickets }: { tickets: TicketOption[] }) {
 
     setMessage("Paiement enregistré et statut billet mis à jour.");
     setAmount("");
-    setReference("");
+    setReference(selected?.invoiceNumber ?? "");
     setLoading(false);
     router.refresh();
   }
@@ -152,12 +168,13 @@ export function PaymentEntryForm({ tickets }: { tickets: TicketOption[] }) {
         </div>
 
         <div>
-          <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-black/60 dark:text-white/60">Référence</label>
+          <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-black/60 dark:text-white/60">N° facture</label>
           <input
             value={reference}
-            onChange={(event) => setReference(event.target.value)}
-            className="w-full rounded-md border border-black/15 bg-white px-3 py-2 text-sm dark:border-white/15 dark:bg-zinc-900"
-            placeholder="Optionnel"
+            readOnly
+            required
+            className="w-full rounded-md border border-black/15 bg-black/5 px-3 py-2 text-sm font-medium dark:border-white/15 dark:bg-white/10"
+            placeholder="Numéro de facture"
           />
         </div>
 
@@ -186,7 +203,7 @@ export function PaymentEntryForm({ tickets }: { tickets: TicketOption[] }) {
             Facturé: {selected.amount.toFixed(2)} {ticketCurrency} • Déjà encaissé: {selected.paidAmount.toFixed(2)} {ticketCurrency} • Reste: {remaining.toFixed(2)} {ticketCurrency} • Statut: {selected.paymentStatus}
           </p>
           <p className="mt-2 text-xs text-black/60 dark:text-white/60">
-            Paiement possible en <strong>USD</strong> ou <strong>CDF</strong>. {paymentCurrency !== ticketCurrency ? `La conversion vers ${ticketCurrency} se fait automatiquement au taux du jour.` : `Le billet est actuellement libellé en ${ticketCurrency}.`}
+            Référence obligatoire: <strong>{selected.invoiceNumber}</strong>. {paymentCurrency !== ticketCurrency ? `La conversion vers ${ticketCurrency} se fait automatiquement au taux du jour.` : `Le billet est actuellement libellé en ${ticketCurrency}.`}
           </p>
         </>
       ) : null}

@@ -5,6 +5,7 @@ import { CashOperationForm } from "@/components/cash-operation-form";
 import { KpiCard } from "@/components/kpi-card";
 import { PaymentEntryForm } from "@/components/payment-entry-form";
 import { PaymentsWritingWorkspace } from "@/components/payments-writing-workspace";
+import { invoiceNumberFromChronology } from "@/lib/invoice";
 import { requirePageModuleAccess } from "@/lib/rbac";
 import { prisma } from "@/lib/prisma";
 
@@ -145,7 +146,11 @@ export default async function PaymentsPage({
         soldAt: { gte: range.start, lt: range.end },
         ...(selectedAirlineId ? { airlineId: selectedAirlineId } : {}),
       },
-      include: { airline: true, payments: true },
+      include: {
+        airline: true,
+        payments: true,
+        seller: { select: { team: { select: { name: true } } } },
+      },
       orderBy: { soldAt: "desc" },
       take: 800,
     }),
@@ -242,6 +247,18 @@ export default async function PaymentsPage({
     cashOperationsBeforeStart,
   ] = paymentsData as [any[], any[], any[], any[], any[], any[], any[], any[]];
 
+  const sequenceByTicketId = new Map<string, number>();
+  tickets
+    .slice()
+    .sort((a, b) => {
+      const diff = new Date(a.soldAt).getTime() - new Date(b.soldAt).getTime();
+      if (diff !== 0) return diff;
+      return String(a.id).localeCompare(String(b.id));
+    })
+    .forEach((ticket, index) => {
+      sequenceByTicketId.set(ticket.id, index + 1);
+    });
+
   const ticketsWithComputedStatus = tickets.map((ticket) => {
     const paidAmount = ticket.payments.reduce(
       (
@@ -264,12 +281,19 @@ export default async function PaymentsPage({
         ? PaymentStatus.PAID
         : PaymentStatus.PARTIAL;
 
+    const invoiceNumber = invoiceNumberFromChronology({
+      soldAt: new Date(ticket.soldAt),
+      sellerTeamName: ticket.seller?.team?.name ?? null,
+      sequence: sequenceByTicketId.get(ticket.id) ?? 1,
+    });
+
     return {
       ...ticket,
       paidAmount,
       paidAmountUsd,
       amountUsd,
       computedStatus,
+      invoiceNumber,
     };
   });
 
@@ -538,6 +562,7 @@ export default async function PaymentsPage({
       paidAmount: ticket.paidAmount,
       paymentStatus: ticket.computedStatus,
       currency: ticket.currency,
+      invoiceNumber: ticket.invoiceNumber,
     }));
 
   const pendingNeedTotals = pendingNeeds.reduce(

@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { requireApiModuleAccess } from "@/lib/rbac";
 import { paymentCreateSchema } from "@/lib/validators";
 import { isMailConfigured, sendMailBatch } from "@/lib/mail";
+import { invoiceNumberFromChronology } from "@/lib/invoice";
 
 const cashOperationClient = (prisma as unknown as { cashOperation: any }).cashOperation;
 
@@ -82,11 +83,36 @@ export async function POST(request: NextRequest) {
     const result = await prisma.$transaction(async (tx) => {
       const ticket = await tx.ticketSale.findUnique({
         where: { id: parsed.data.ticketId },
-        include: { payments: true },
+        include: {
+          payments: true,
+          seller: { select: { team: { select: { name: true } } } },
+        },
       });
 
       if (!ticket) {
         throw new Error("BILLET_INTROUVABLE");
+      }
+
+      const year = ticket.soldAt.getUTCFullYear();
+      const yearStart = new Date(Date.UTC(year, 0, 1, 0, 0, 0, 0));
+      const yearEnd = new Date(Date.UTC(year + 1, 0, 1, 0, 0, 0, 0));
+      const sequence = await tx.ticketSale.count({
+        where: {
+          soldAt: { gte: yearStart, lt: yearEnd },
+          OR: [
+            { soldAt: { lt: ticket.soldAt } },
+            { soldAt: ticket.soldAt, id: { lte: ticket.id } },
+          ],
+        },
+      });
+      const expectedInvoiceNumber = invoiceNumberFromChronology({
+        soldAt: ticket.soldAt,
+        sellerTeamName: ticket.seller?.team?.name ?? null,
+        sequence,
+      });
+
+      if (parsed.data.reference.trim() !== expectedInvoiceNumber) {
+        throw new Error("REFERENCE_FACTURE_INVALIDE");
       }
 
       const ticketCurrency = normalizeMoneyCurrency(ticket.currency);
@@ -117,7 +143,7 @@ export async function POST(request: NextRequest) {
           amountUsd: amountToUsd(parsed.data.amount, paymentCurrency, fxRateUsdToCdf),
           amountCdf: amountToCdf(parsed.data.amount, paymentCurrency, fxRateUsdToCdf),
           method: parsed.data.method,
-          reference: parsed.data.reference,
+          reference: expectedInvoiceNumber,
           paidAt: parsed.data.paidAt,
         },
       });
@@ -248,6 +274,9 @@ export async function POST(request: NextRequest) {
       }
       if (error.message === "DEPASSEMENT") {
         return NextResponse.json({ error: "Le paiement dépasse le montant facturé du billet." }, { status: 400 });
+      }
+      if (error.message === "REFERENCE_FACTURE_INVALIDE") {
+        return NextResponse.json({ error: "La référence du paiement doit être exactement le numéro de facture du billet." }, { status: 400 });
       }
     }
 
