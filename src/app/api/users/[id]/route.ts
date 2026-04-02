@@ -210,6 +210,7 @@ export async function DELETE(_request: NextRequest, context: RouteContext) {
     where: { id },
     select: {
       id: true,
+      name: true,
       role: true,
       _count: {
         select: {
@@ -224,6 +225,10 @@ export async function DELETE(_request: NextRequest, context: RouteContext) {
           needReviews: true,
           stockMovements: true,
           archiveUploads: true,
+          paymentOrdersIssued: true,
+          paymentOrdersApproved: true,
+          paymentOrdersExecuted: true,
+          cashOperations: true,
         },
       },
     },
@@ -237,16 +242,37 @@ export async function DELETE(_request: NextRequest, context: RouteContext) {
     return NextResponse.json({ error: "Suppression d'un administrateur interdite." }, { status: 400 });
   }
 
-  const dependencyTotal = Object.values(existing._count).reduce((sum, count) => sum + count, 0);
-  if (dependencyTotal > 0) {
+  const blockingDependencies = [
+    { label: "rapport(s) rédigé(s)", count: existing._count.reports },
+    { label: "présence(s)", count: existing._count.attendances },
+    { label: "actualité(s)", count: existing._count.newsPosts },
+    { label: "état(s) de besoin soumis", count: existing._count.needRequests },
+    { label: "mouvement(s) de stock", count: existing._count.stockMovements },
+    { label: "ordre(s) de paiement émis", count: existing._count.paymentOrdersIssued },
+    { label: "opération(s) de caisse", count: existing._count.cashOperations },
+  ].filter((item) => item.count > 0);
+
+  if (blockingDependencies.length > 0) {
     return NextResponse.json(
       {
-        error: "Suppression impossible: cet utilisateur possède déjà des données liées (rapports, billets, présences, etc.).",
+        error: `Suppression impossible: cet utilisateur possède encore des données opérationnelles (${blockingDependencies.map((item) => `${item.count} ${item.label}`).join(", ")}).`,
       },
       { status: 400 },
     );
   }
 
-  await prisma.user.delete({ where: { id } });
+  await prisma.$transaction(async (tx) => {
+    await tx.userNotification.deleteMany({ where: { userId: id } });
+    await tx.auditLog.deleteMany({ where: { actorId: id } });
+    await tx.workerReport.updateMany({ where: { reviewerId: id }, data: { reviewerId: null } });
+    await tx.needRequest.updateMany({ where: { reviewedById: id }, data: { reviewedById: null } });
+    await tx.paymentOrder.updateMany({ where: { approvedById: id }, data: { approvedById: null } });
+    await tx.paymentOrder.updateMany({ where: { executedById: id }, data: { executedById: null } });
+    await tx.archiveDocument.updateMany({ where: { createdById: id }, data: { createdById: null } });
+    await tx.ticketSale.updateMany({ where: { sellerId: id, sellerName: null }, data: { sellerName: existing.name } });
+    await tx.ticketSale.updateMany({ where: { sellerId: id }, data: { sellerId: null } });
+    await tx.user.delete({ where: { id } });
+  });
+
   return NextResponse.json({ success: true });
 }
