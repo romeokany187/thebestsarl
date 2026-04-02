@@ -17,6 +17,7 @@ type SearchParams = {
   startDate?: string;
   endDate?: string;
   airlineId?: string;
+  cashMonth?: string;
 };
 
 function dateRangeFromParams(params: SearchParams) {
@@ -24,7 +25,7 @@ function dateRangeFromParams(params: SearchParams) {
   const defaultDay = now.toISOString().slice(0, 10);
   const startRaw = params.startDate ?? defaultDay;
   const endRaw = params.endDate ?? startRaw;
-  
+
   const start = new Date(`${startRaw}T00:00:00.000Z`);
   const end = new Date(`${endRaw}T00:00:00.000Z`);
   end.setUTCDate(end.getUTCDate() + 1);
@@ -35,6 +36,25 @@ function dateRangeFromParams(params: SearchParams) {
     startRaw,
     endRaw,
     label: `Du ${startRaw} au ${endRaw}`,
+  };
+}
+
+function monthRangeFromValue(rawMonth?: string) {
+  const fallbackMonth = new Date().toISOString().slice(0, 7);
+  const monthRaw = rawMonth && /^\d{4}-\d{2}$/.test(rawMonth) ? rawMonth : fallbackMonth;
+  const [yearPart, monthPart] = monthRaw.split("-");
+  const year = Number.parseInt(yearPart, 10);
+  const monthIndex = Math.max(0, Math.min(11, Number.parseInt(monthPart, 10) - 1));
+  const start = new Date(Date.UTC(year, monthIndex, 1, 0, 0, 0, 0));
+  const end = new Date(Date.UTC(year, monthIndex + 1, 1, 0, 0, 0, 0));
+
+  return {
+    start,
+    end,
+    monthRaw,
+    startRaw: start.toISOString().slice(0, 10),
+    endRaw: new Date(end.getTime() - 1).toISOString().slice(0, 10),
+    label: `Journal de caisse du ${start.toISOString().slice(0, 10)} au ${new Date(end.getTime() - 1).toISOString().slice(0, 10)}`,
   };
 }
 
@@ -125,9 +145,8 @@ export default async function PaymentsPage({
   const canWrite = session.user.jobTitle === "CAISSIERE" && role !== "ADMIN" && role !== "DIRECTEUR_GENERAL";
   const resolvedSearchParams = (await searchParams) ?? {};
   const range = dateRangeFromParams(resolvedSearchParams);
+  const cashRange = monthRangeFromValue(resolvedSearchParams.cashMonth);
 
-  const now = new Date();
-  const currentDate = now.toISOString().slice(0, 10);
   const selectedAirlineId = resolvedSearchParams.airlineId && resolvedSearchParams.airlineId !== "ALL"
     ? resolvedSearchParams.airlineId
     : undefined;
@@ -136,8 +155,16 @@ export default async function PaymentsPage({
     endDate: range.endRaw,
     ...(selectedAirlineId ? { airlineId: selectedAirlineId } : {}),
   }).toString();
-  const cashJournalReportQuery = `${reportQuery}&reportType=cash-journal`;
-  const cashSummaryReportQuery = `${reportQuery}&reportType=cash-summary`;
+  const cashJournalReportQuery = new URLSearchParams({
+    reportType: "cash-journal",
+    mode: "month",
+    month: cashRange.monthRaw,
+  }).toString();
+  const cashSummaryReportQuery = new URLSearchParams({
+    reportType: "cash-summary",
+    mode: "month",
+    month: cashRange.monthRaw,
+  }).toString();
 
   const paymentsData = await Promise.all([
     prisma.airline.findMany({
@@ -176,6 +203,22 @@ export default async function PaymentsPage({
       orderBy: { paidAt: "desc" },
       take: 250,
     }),
+    paymentClient.findMany({
+      where: {
+        paidAt: { gte: cashRange.start, lt: cashRange.end },
+      },
+      include: {
+        ticket: {
+          select: {
+            ticketNumber: true,
+            customerName: true,
+            currency: true,
+          },
+        },
+      },
+      orderBy: { paidAt: "desc" },
+      take: 5000,
+    }),
     paymentOrderClient.findMany({
       where: {
         status: "SUBMITTED",
@@ -200,7 +243,7 @@ export default async function PaymentsPage({
     }),
     cashOperationClient.findMany({
       where: {
-        occurredAt: { gte: range.start, lt: range.end },
+        occurredAt: { gte: cashRange.start, lt: cashRange.end },
       },
       include: {
         createdBy: { select: { name: true, jobTitle: true } },
@@ -210,7 +253,7 @@ export default async function PaymentsPage({
     }),
     paymentClient.findMany({
       where: {
-        paidAt: { lt: range.start },
+        paidAt: { lt: cashRange.start },
       },
       select: {
         amount: true,
@@ -224,7 +267,7 @@ export default async function PaymentsPage({
     }),
     cashOperationClient.findMany({
       where: {
-        occurredAt: { lt: range.start },
+        occurredAt: { lt: cashRange.start },
       },
       select: {
         amount: true,
@@ -243,12 +286,13 @@ export default async function PaymentsPage({
     airlines,
     tickets,
     payments,
+    cashPayments,
     paymentOrders,
     pendingNeeds,
     cashOperations,
     ticketPaymentsBeforeStart,
     cashOperationsBeforeStart,
-  ] = paymentsData as [any[], any[], any[], any[], any[], any[], any[], any[]];
+  ] = paymentsData as [any[], any[], any[], any[], any[], any[], any[], any[], any[]];
 
   const sequenceByTicketId = new Map<string, number>();
   tickets
@@ -354,14 +398,14 @@ export default async function PaymentsPage({
   const openingUsd = openingUsdFromTicketPayments + openingUsdFromOps;
   const openingCdf = openingCdfFromTicketPayments + openingCdfFromOps;
 
-  const ticketPaymentInflowsUsd = payments.reduce(
+  const ticketPaymentInflowsUsd = cashPayments.reduce(
     (sum: number, payment: { amount: number; currency?: string; amountUsd?: number; amountCdf?: number; fxRateToUsd?: number; fxRateUsdToCdf?: number }) => sum + normalizeCashAmountUsd(payment),
     0,
   );
-  const ticketPaymentInflowUsd = payments
+  const ticketPaymentInflowUsd = cashPayments
     .filter((payment: { currency?: string | null; ticket?: { currency?: string | null } }) => normalizeMoneyCurrency(payment.currency ?? payment.ticket?.currency) === "USD")
     .reduce((sum: number, payment: { amount: number }) => sum + payment.amount, 0);
-  const ticketPaymentInflowCdf = payments
+  const ticketPaymentInflowCdf = cashPayments
     .filter((payment: { currency?: string | null; ticket?: { currency?: string | null } }) => normalizeMoneyCurrency(payment.currency ?? payment.ticket?.currency) === "CDF")
     .reduce((sum: number, payment: { amount: number }) => sum + payment.amount, 0);
 
@@ -404,7 +448,7 @@ export default async function PaymentsPage({
   const closingCdf = openingCdf + ticketPaymentInflowCdf + cashInflowCdf - cashOutflowCdf;
 
   const caisseRows = [
-    ...payments.map((payment) => {
+    ...cashPayments.map((payment) => {
       const currency = normalizeMoneyCurrency(payment.currency ?? payment.ticket.currency);
       return {
         occurredAt: new Date(payment.paidAt),
@@ -488,7 +532,7 @@ export default async function PaymentsPage({
     }
   }
 
-  for (const payment of payments as Array<{ amount: number; method?: string; currency?: string }>) {
+  for (const payment of cashPayments as Array<{ amount: number; method?: string; currency?: string }>) {
     const channel = detectVirtualChannel(payment.method);
     if (!channel) continue;
     const currency = normalizeMoneyCurrency(payment.currency);
@@ -730,44 +774,55 @@ export default async function PaymentsPage({
 
             <section className="rounded-2xl border border-black/10 bg-white p-4 dark:border-white/10 dark:bg-zinc-900">
               <div className="flex flex-wrap items-start justify-between gap-3">
-                <div>
+                <div className="max-w-3xl">
                   <h2 className="text-sm font-semibold">Synthèse caisse</h2>
                   <p className="mt-2 text-xs text-black/60 dark:text-white/60">
-                    Solde USD: ouverture {openingUsd.toFixed(2)} USD, clôture {closingUsd.toFixed(2)} USD. Solde CDF: ouverture {openingCdf.toFixed(2)} CDF, clôture {closingCdf.toFixed(2)} CDF.
+                    {cashRange.label}. Solde USD: ouverture {openingUsd.toFixed(2)} USD, clôture {closingUsd.toFixed(2)} USD. Solde CDF: ouverture {openingCdf.toFixed(2)} CDF, clôture {closingCdf.toFixed(2)} CDF.
                     Contrôle global (équivalent USD): ouverture {openingBalance.toFixed(2)} USD, entrées {grossInflows.toFixed(2)} USD, sorties {cashOutflows.toFixed(2)} USD, variation nette {netCashVariation.toFixed(2)} USD, clôture {closingBalance.toFixed(2)} USD ({accountingConsistency ? "OK" : "écart"}).
                   </p>
                 </div>
 
-                <div className="flex flex-wrap gap-2 text-xs">
-                  <a
-                    href={`/api/payments/report?${cashJournalReportQuery}`}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="inline-flex rounded-md border border-black/20 px-2.5 py-1 font-semibold hover:bg-black/5 dark:border-white/20 dark:hover:bg-white/10"
-                  >
-                    Lire PDF journal caisse
-                  </a>
-                  <a
-                    href={`/api/payments/report?${cashJournalReportQuery}&download=1`}
-                    className="inline-flex rounded-md border border-black/20 px-2.5 py-1 font-semibold hover:bg-black/5 dark:border-white/20 dark:hover:bg-white/10"
-                  >
-                    Télécharger PDF journal caisse
-                  </a>
-                  <a
-                    href={`/api/payments/report?${cashSummaryReportQuery}`}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="inline-flex rounded-md border border-black/20 px-2.5 py-1 font-semibold hover:bg-black/5 dark:border-white/20 dark:hover:bg-white/10"
-                  >
-                    Lire PDF récapitulatif caisse
-                  </a>
-                  <a
-                    href={`/api/payments/report?${cashSummaryReportQuery}&download=1`}
-                    className="inline-flex rounded-md border border-black/20 px-2.5 py-1 font-semibold hover:bg-black/5 dark:border-white/20 dark:hover:bg-white/10"
-                  >
-                    Télécharger PDF récapitulatif caisse
-                  </a>
-                </div>
+                <form method="GET" className="flex flex-wrap items-end gap-2 text-xs">
+                  <input type="hidden" name="startDate" value={range.startRaw} />
+                  <input type="hidden" name="endDate" value={range.endRaw} />
+                  <input type="hidden" name="airlineId" value={resolvedSearchParams.airlineId ?? "ALL"} />
+                  <div>
+                    <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-black/60 dark:text-white/60">Mois du journal</label>
+                    <input type="month" name="cashMonth" defaultValue={cashRange.monthRaw} className="rounded-md border border-black/15 bg-white px-3 py-2 text-sm dark:border-white/15 dark:bg-zinc-900" />
+                  </div>
+                  <button type="submit" className="rounded-md bg-black px-3 py-2 text-xs font-semibold text-white dark:bg-white dark:text-black">Afficher</button>
+                </form>
+              </div>
+
+              <div className="mt-3 flex flex-wrap gap-2 text-xs">
+                <a
+                  href={`/api/payments/report?${cashJournalReportQuery}`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex rounded-md border border-black/20 px-2.5 py-1 font-semibold hover:bg-black/5 dark:border-white/20 dark:hover:bg-white/10"
+                >
+                  Lire PDF journal caisse
+                </a>
+                <a
+                  href={`/api/payments/report?${cashJournalReportQuery}&download=1`}
+                  className="inline-flex rounded-md border border-black/20 px-2.5 py-1 font-semibold hover:bg-black/5 dark:border-white/20 dark:hover:bg-white/10"
+                >
+                  Télécharger PDF journal caisse
+                </a>
+                <a
+                  href={`/api/payments/report?${cashSummaryReportQuery}`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex rounded-md border border-black/20 px-2.5 py-1 font-semibold hover:bg-black/5 dark:border-white/20 dark:hover:bg-white/10"
+                >
+                  Lire PDF récapitulatif caisse
+                </a>
+                <a
+                  href={`/api/payments/report?${cashSummaryReportQuery}&download=1`}
+                  className="inline-flex rounded-md border border-black/20 px-2.5 py-1 font-semibold hover:bg-black/5 dark:border-white/20 dark:hover:bg-white/10"
+                >
+                  Télécharger PDF récapitulatif caisse
+                </a>
               </div>
             </section>
 
@@ -781,7 +836,7 @@ export default async function PaymentsPage({
 
             <section className="overflow-hidden rounded-2xl border border-black/10 bg-white shadow-sm dark:border-white/10 dark:bg-zinc-900">
               <div className="border-b border-black/10 px-4 py-3 dark:border-white/10">
-                <h2 className="text-sm font-semibold">Journal caisse (logique feuille CAISSE)</h2>
+                <h2 className="text-sm font-semibold">Journal caisse (mois sélectionné - logique feuille CAISSE)</h2>
               </div>
               <div className="overflow-x-auto">
                 <table className="min-w-full text-sm">
@@ -801,7 +856,7 @@ export default async function PaymentsPage({
                   </thead>
                   <tbody>
                     <tr className="border-t border-black/5 bg-black/2 dark:border-white/10 dark:bg-white/3">
-                      <td className="px-4 py-3 font-semibold">{range.startRaw}</td>
+                      <td className="px-4 py-3 font-semibold">{cashRange.startRaw}</td>
                       <td className="px-4 py-3 font-semibold">Report à nouveau</td>
                       <td className="px-4 py-3 text-black/60 dark:text-white/60">Solde d'ouverture période</td>
                       <td className="px-4 py-3">-</td>

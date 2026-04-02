@@ -27,7 +27,7 @@ function parseYear(value: string | null) {
   return parsed;
 }
 
-function dateRangeFromParams(params: URLSearchParams) {
+function dateRangeFromParams(params: URLSearchParams, defaultMode: ReportMode = "date") {
   const now = new Date();
   const defaultDay = now.toISOString().slice(0, 10);
   const startDate = params.get("startDate");
@@ -62,7 +62,7 @@ function dateRangeFromParams(params: URLSearchParams) {
 
   const mode = (["date", "month", "year"].includes(params.get("mode") ?? "")
     ? params.get("mode")
-    : "date") as ReportMode;
+    : defaultMode) as ReportMode;
 
   if (mode === "year") {
     const year = parseYear(params.get("year")) ?? now.getUTCFullYear();
@@ -183,7 +183,10 @@ export async function GET(request: NextRequest) {
   const reportType = (["payments", "cash-journal", "cash-summary"].includes(request.nextUrl.searchParams.get("reportType") ?? "")
     ? request.nextUrl.searchParams.get("reportType")
     : "payments") as ReportType;
-  const range = dateRangeFromParams(request.nextUrl.searchParams);
+  const range = dateRangeFromParams(
+    request.nextUrl.searchParams,
+    reportType === "cash-journal" || reportType === "cash-summary" ? "month" : "date",
+  );
   const airlineId = request.nextUrl.searchParams.get("airlineId")?.trim() || undefined;
 
   const [rows, tickets, airline, cashOperationsInRange, cashOperationsBeforeRange, ticketPaymentsBeforeRange, pendingNeeds, paymentOrders] = await Promise.all([
