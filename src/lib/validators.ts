@@ -303,7 +303,7 @@ export const cashOperationCreateSchema = z.object({
   fxRateToUsd: z.number().positive().optional(),
   fxRateUsdToCdf: z.number().positive().optional(),
   method: z.string().trim().min(2).max(60),
-  reference: z.string().trim().max(180).optional(),
+  reference: z.string().trim().min(2, "La référence de la pièce justificative est obligatoire.").max(180),
   description: z.string().trim().min(5).max(500),
 });
 
@@ -312,6 +312,6 @@ export const cashConversionSchema = z.object({
   sourceCurrency: z.enum(["USD", "CDF"]),
   sourceAmount: z.number().positive(),
   fxRateUsdToCdf: z.number().positive(),
-  reference: z.string().trim().max(180).optional(),
+  reference: z.string().trim().min(2, "La référence de conversion est obligatoire.").max(180),
   description: z.string().trim().min(5).max(500).optional(),
 });

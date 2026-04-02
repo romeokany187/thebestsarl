@@ -102,7 +102,7 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const ref = data.reference?.trim() || `FX-${Date.now()}`;
+  const ref = data.reference.trim();
   const label = data.description?.trim() || `Conversion caisse ${sourceCurrency} -> ${targetCurrency}`;
 
   const created = await prisma.$transaction(async (tx) => {

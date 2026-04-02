@@ -48,6 +48,13 @@ export function CashOperationForm() {
   const [message, setMessage] = useState<string>("");
   const [error, setError] = useState<string>("");
 
+  const referenceLabel = direction === "OUTFLOW"
+    ? "Référence justificative sortie"
+    : "Référence justificative entrée";
+  const referencePlaceholder = direction === "OUTFLOW"
+    ? "N° EDB / OP / pièce justificative"
+    : "N° bon d'entrée / reçu / pièce justificative";
+
   const conversionTargetCurrency = conversionSourceCurrency === "USD" ? "CDF" : "USD";
   const numericRatePreview = Number.parseFloat(fxRateUsdToCdf);
   const numericConversionSourceAmountPreview = Number.parseFloat(conversionSourceAmount);
@@ -80,6 +87,14 @@ export function CashOperationForm() {
       return;
     }
 
+    if (!reference.trim()) {
+      setError(direction === "OUTFLOW"
+        ? "Le numéro justificatif de sortie est obligatoire (EDB, OP ou autre pièce)."
+        : "Le numéro de bon d'entrée, reçu ou autre pièce justificative est obligatoire.");
+      setLoading(false);
+      return;
+    }
+
     const normalizedCurrency = currency;
 
     if (!occurredAt) {
@@ -97,7 +112,7 @@ export function CashOperationForm() {
         amount: numericAmount,
         currency: normalizedCurrency,
         method: method.trim(),
-        reference: reference.trim() || undefined,
+        reference: reference.trim(),
         description: description.trim(),
         occurredAt: new Date(occurredAt).toISOString(),
       }),
@@ -151,6 +166,12 @@ export function CashOperationForm() {
       return;
     }
 
+    if (!conversionReference.trim()) {
+      setError("La référence de la pièce justificative de conversion est obligatoire.");
+      setConversionLoading(false);
+      return;
+    }
+
     const response = await fetch("/api/payments/cash-operations/convert", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -158,7 +179,7 @@ export function CashOperationForm() {
         sourceCurrency: conversionSourceCurrency,
         sourceAmount,
         fxRateUsdToCdf: rate,
-        reference: conversionReference.trim() || undefined,
+        reference: conversionReference.trim(),
         description: conversionDescription.trim() || undefined,
         occurredAt: new Date(conversionOccurredAt).toISOString(),
       }),
@@ -252,12 +273,13 @@ export function CashOperationForm() {
         </div>
 
         <div>
-          <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-black/60 dark:text-white/60">Référence</label>
+          <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-black/60 dark:text-white/60">{referenceLabel}</label>
           <input
             value={reference}
             onChange={(event) => setReference(event.target.value)}
+            required
             className="w-full rounded-md border border-black/15 bg-white px-3 py-2 text-sm dark:border-white/15 dark:bg-zinc-900"
-            placeholder="Optionnel"
+            placeholder={referencePlaceholder}
           />
         </div>
 
@@ -352,12 +374,13 @@ export function CashOperationForm() {
           </button>
 
           <div>
-            <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-black/60 dark:text-white/60">Référence</label>
+            <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-black/60 dark:text-white/60">Référence conversion</label>
             <input
               value={conversionReference}
               onChange={(event) => setConversionReference(event.target.value)}
+              required
               className="w-full rounded-md border border-black/15 bg-white px-3 py-2 text-sm dark:border-white/15 dark:bg-zinc-900"
-              placeholder="Optionnel"
+              placeholder="N° pièce justificative / bordereau"
             />
           </div>
 
@@ -373,7 +396,7 @@ export function CashOperationForm() {
         </form>
 
         <p className="mt-2 text-xs text-black/60 dark:text-white/60">
-          Crédit cible estimé: {conversionTargetAmountPreview.toFixed(2)} {conversionTargetCurrency} (taux 1 USD = {Number.isFinite(numericRatePreview) ? numericRatePreview.toFixed(2) : "0.00"} CDF)
+          Toute entrée, sortie ou conversion doit être rattachée à une pièce justificative. Crédit cible estimé: {conversionTargetAmountPreview.toFixed(2)} {conversionTargetCurrency} (taux 1 USD = {Number.isFinite(numericRatePreview) ? numericRatePreview.toFixed(2) : "0.00"} CDF)
         </p>
       </div>
 
