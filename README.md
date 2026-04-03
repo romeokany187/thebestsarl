@@ -134,6 +134,16 @@ Note importante pour la présence:
 
 4. Déployer puis exécuter la synchro Prisma (CI/CD ou local pointé vers prod)
 
+Important en production:
+- Éviter `prisma db push --accept-data-loss` pendant le build.
+- Utiliser d'abord les scripts de migration de données, puis appliquer le schéma.
+
+Exemple (normalisation des titres de poste):
+
+```bash
+npm run db:migrate:jobtitles
+```
+
 ## Comptes et accès
 
 - Connexion uniquement via Google (`/auth/signin`)
@@ -148,6 +158,7 @@ Note importante pour la présence:
 - `npm run lint` : lint
 - `npm run db:generate` : génération client Prisma
 - `npm run db:push` : synchronisation schéma DB
+- `npm run db:migrate:jobtitles` : migration des anciennes valeurs `JobTitle` vers les valeurs normalisées
 - `npm run db:seed` : données de démonstration
 - `npm run db:import:tickets:excel -- <fichier.xlsx>` : import en masse des billets depuis Excel
 
