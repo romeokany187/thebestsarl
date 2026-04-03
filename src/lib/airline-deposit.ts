@@ -44,10 +44,16 @@ type AirlineDepositMovementRecord = {
 
 export const AIRLINE_DEPOSIT_ACCOUNT_CONFIGS: AirlineDepositAccountConfig[] = [
   {
-    key: "SHARED_CAA_ACG_ET",
-    label: "Compte dépôt partagé CAA / Air Congo / Ethiopian",
-    airlineCodes: ["CAA", "ACG", "ET"],
-    airlineNames: ["CAA", "Air Congo", "Ethiopian Airlines"],
+    key: "CAA_DEPOSIT",
+    label: "Compte dépôt CAA",
+    airlineCodes: ["CAA"],
+    airlineNames: ["CAA"],
+  },
+  {
+    key: "SHARED_ACG_ET",
+    label: "Compte dépôt partagé Air Congo / Ethiopian",
+    airlineCodes: ["ACG", "ET"],
+    airlineNames: ["Air Congo", "Ethiopian Airlines"],
   },
   {
     key: "MONT_GABAON",
@@ -69,10 +75,29 @@ export const AIRLINE_DEPOSIT_ACCOUNT_CONFIGS: AirlineDepositAccountConfig[] = [
   },
 ];
 
+const LEGACY_ACCOUNT_KEY_ALIASES: Record<string, string> = {
+  SHARED_CAA_ACG_ET: "SHARED_ACG_ET",
+};
+
 const accountByKey = new Map(AIRLINE_DEPOSIT_ACCOUNT_CONFIGS.map((config) => [config.key, config]));
 const accountByAirlineCode = new Map(
   AIRLINE_DEPOSIT_ACCOUNT_CONFIGS.flatMap((config) => config.airlineCodes.map((code) => [code, config] as const)),
 );
+
+function normalizeAccountKey(value: string | null | undefined) {
+  const normalized = (value ?? "").trim().toUpperCase();
+  return LEGACY_ACCOUNT_KEY_ALIASES[normalized] ?? normalized;
+}
+
+function accountKeysForLookup(key: string | null | undefined) {
+  const canonicalKey = normalizeAccountKey(key);
+  return [
+    canonicalKey,
+    ...Object.entries(LEGACY_ACCOUNT_KEY_ALIASES)
+      .filter(([, target]) => target === canonicalKey)
+      .map(([legacyKey]) => legacyKey),
+  ].filter(Boolean);
+}
 
 export function normalizeAirlineCode(value: string | null | undefined) {
   return (value ?? "").trim().toUpperCase();
@@ -80,7 +105,7 @@ export function normalizeAirlineCode(value: string | null | undefined) {
 
 export function getAirlineDepositAccountByKey(key: string | null | undefined) {
   if (!key) return null;
-  return accountByKey.get(key) ?? null;
+  return accountByKey.get(normalizeAccountKey(key)) ?? null;
 }
 
 export function getAirlineDepositAccountByAirlineCode(code: string | null | undefined) {
@@ -100,7 +125,7 @@ function movementSignedAmount(movementType: AirlineDepositMovementTypeValue, amo
 export async function getAirlineDepositBalance(client: Prisma.TransactionClient, accountKey: string) {
   const movementClient = (client as unknown as { airlineDepositMovement: { findMany: (args?: any) => Promise<Array<{ amount: number; movementType: AirlineDepositMovementTypeValue }>> } }).airlineDepositMovement;
   const movements = await movementClient.findMany({
-    where: { accountKey },
+    where: { accountKey: { in: accountKeysForLookup(accountKey) } },
     select: { amount: true, movementType: true },
   });
 
@@ -183,20 +208,21 @@ export async function buildAirlineDepositAccountSummaries(
   [...(movements as AirlineDepositMovementRecord[])]
     .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime() || a.id.localeCompare(b.id))
     .forEach((movement) => {
-      const bucket = totals.get(movement.accountKey) ?? { balance: 0, totalCredits: 0, totalDebits: 0 };
+      const normalizedAccountKey = normalizeAccountKey(movement.accountKey);
+      const bucket = totals.get(normalizedAccountKey) ?? { balance: 0, totalCredits: 0, totalDebits: 0 };
       bucket.balance += movementSignedAmount(movement.movementType, movement.amount);
       if (movement.movementType === "CREDIT") {
         bucket.totalCredits += movement.amount;
       } else {
         bucket.totalDebits += movement.amount;
       }
-      totals.set(movement.accountKey, bucket);
+      totals.set(normalizedAccountKey, bucket);
     });
 
   return AIRLINE_DEPOSIT_ACCOUNT_CONFIGS.map((config) => {
     const bucket = totals.get(config.key) ?? { balance: 0, totalCredits: 0, totalDebits: 0 };
     const recentMovements = (movements as AirlineDepositMovementRecord[])
-      .filter((movement) => movement.accountKey === config.key)
+      .filter((movement) => normalizeAccountKey(movement.accountKey) === config.key)
       .slice(0, recentLimit)
       .map((movement) => ({
         id: movement.id,
