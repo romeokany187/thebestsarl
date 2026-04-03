@@ -8,11 +8,11 @@ function jobTitleLabel(jobTitle: string) {
     COMMERCIAL: "Commercial",
     COMPTABLE: "Comptable",
     AUDITEUR: "Auditeur",
-    CAISSIERE: "Caissière",
-    RELATION_PUBLIQUE: "Relations publiques & ressources humaines",
-    APPROVISIONNEMENT_MARKETING: "Chargé des approvisionnements",
+    CAISSIER: "Caissier",
+    RELATION_PUBLIQUE: "Relation publique",
+    APPROVISIONNEMENT: "Chargé des approvisionnements",
     AGENT_TERRAIN: "Non affecté",
-    DIRECTION_GENERALE: "Direction générale",
+    DIRECTION_GENERALE: "Directeur Général",
   };
 
   return labels[jobTitle] ?? jobTitle;
@@ -22,9 +22,9 @@ const titleKeywordsByJobTitle: Record<string, string[]> = {
   COMMERCIAL: ["VENTE", "COMMERCIAL"],
   COMPTABLE: ["FINAN", "COMPTABLE"],
   AUDITEUR: ["AUDIT", "CONFORM"],
-  CAISSIERE: ["CAISSE", "CAISS"],
+  CAISSIER: ["CAISSE", "CAISS"],
   RELATION_PUBLIQUE: ["RH", "RESSOURCE", "RELATION PUBLIQUE"],
-  APPROVISIONNEMENT_MARKETING: ["APPROVISION", "STOCK", "ACHAT"],
+  APPROVISIONNEMENT: ["APPROVISION", "STOCK", "ACHAT"],
   AGENT_TERRAIN: ["TERRAIN", "ACTIVITE"],
   DIRECTION_GENERALE: ["DIRECTION", "PILOTAGE"],
 };

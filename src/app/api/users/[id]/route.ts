@@ -35,7 +35,7 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
 
   const canManageAssignment = actor.role === "ADMIN" || actor.jobTitle === "DIRECTION_GENERALE";
   if (!canManageAssignment) {
-    return NextResponse.json({ error: "Affectation réservée à l'administrateur ou à la Direction Générale." }, { status: 403 });
+    return NextResponse.json({ error: "Affectation réservée à l'administrateur ou au Directeur Général." }, { status: 403 });
   }
 
   const { id } = await context.params;
@@ -198,7 +198,7 @@ export async function DELETE(_request: NextRequest, context: RouteContext) {
 
   const canDeleteUser = actor.role === "ADMIN" || actor.jobTitle === "DIRECTION_GENERALE";
   if (!canDeleteUser) {
-    return NextResponse.json({ error: "Suppression réservée à l'administrateur ou à la Direction Générale." }, { status: 403 });
+    return NextResponse.json({ error: "Suppression réservée à l'administrateur ou au Directeur Général." }, { status: 403 });
   }
 
   const { id } = await context.params;

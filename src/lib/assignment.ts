@@ -2,22 +2,24 @@ export type JobTitleValue =
   | "COMMERCIAL"
   | "COMPTABLE"
   | "AUDITEUR"
-  | "CAISSIERE"
+  | "CAISSIER"
   | "RELATION_PUBLIQUE"
-  | "APPROVISIONNEMENT_MARKETING"
+  | "APPROVISIONNEMENT"
   | "AGENT_TERRAIN"
-  | "DIRECTION_GENERALE";
+  | "DIRECTION_GENERALE"
+  | "CHEF_AGENCE";
 
 export function jobTitleLabel(jobTitle: string) {
   const labels: Record<string, string> = {
     COMMERCIAL: "Commercial",
     COMPTABLE: "Comptable",
     AUDITEUR: "Auditeur",
-    CAISSIERE: "Caissière",
-    RELATION_PUBLIQUE: "Relations publiques & ressources humaines",
-    APPROVISIONNEMENT_MARKETING: "Chargé des approvisionnements",
+    CAISSIER: "Caissier",
+    RELATION_PUBLIQUE: "Relation publique",
+    APPROVISIONNEMENT: "Chargé des approvisionnements",
     AGENT_TERRAIN: "Non affecté",
-    DIRECTION_GENERALE: "Direction générale",
+    DIRECTION_GENERALE: "Directeur Général",
+    CHEF_AGENCE: "Chef d'agence",
   };
 
   return labels[jobTitle] ?? jobTitle;
@@ -28,7 +30,7 @@ export function assignmentCapabilities(jobTitle: string) {
     return ["Encodage billets", "Suivi ventes", "Mise à jour de ses billets"];
   }
 
-  if (jobTitle === "CAISSIERE" || jobTitle === "COMPTABLE") {
+  if (jobTitle === "CAISSIER" || jobTitle === "COMPTABLE") {
     return ["Encaissements", "Suivi créances", "Validation paiements"];
   }
 
@@ -41,10 +43,10 @@ export function assignmentCapabilities(jobTitle: string) {
   }
 
   if (jobTitle === "RELATION_PUBLIQUE") {
-    return ["Relations publiques", "Suivi RH", "Coordination institutionnelle"];
+    return ["Relation publique", "Communication institutionnelle", "Coordination"];
   }
 
-  if (jobTitle === "APPROVISIONNEMENT_MARKETING") {
+  if (jobTitle === "APPROVISIONNEMENT") {
     return ["Approvisionnement", "Suivi fournisseurs", "Coordination logistique"];
   }
 
@@ -60,5 +62,5 @@ export function canImportTicketWorkbook(role: string, _explicitPermission?: bool
 }
 
 export function canProcessPayments(jobTitle: string) {
-  return jobTitle === "COMPTABLE" || jobTitle === "CAISSIERE";
+  return jobTitle === "COMPTABLE" || jobTitle === "CAISSIER";
 }

@@ -32,9 +32,9 @@ export async function PATCH(request: NextRequest) {
     return NextResponse.json({ error: "Utilisateur introuvable." }, { status: 404 });
   }
 
-  if (me.jobTitle !== "CAISSIERE") {
+  if (me.jobTitle !== "CAISSIER") {
     return NextResponse.json(
-      { error: "Exécution d'ordre de paiement réservée à la Caissière." },
+      { error: "Exécution d'ordre de paiement réservée au caissier." },
       { status: 403 },
     );
   }
@@ -196,7 +196,7 @@ export async function PATCH(request: NextRequest) {
       `Validation Admin: ${paymentOrder.approvedBy?.name ?? "-"} (${paymentOrder.approvedAt ? new Date(paymentOrder.approvedAt).toLocaleString("fr-FR") : "-"})`,
       `Commentaire Admin: ${paymentOrder.reviewComment?.trim() || "-"}`,
       `Exécution caisse: ${now.toLocaleString("fr-FR")}`,
-      `Caissière: ${me.name}`,
+      `Caissier: ${me.name}`,
       `Référence caisse: ${parsed.data.referenceDoc}`,
       `Écriture sortie caisse: ${updated.cashOperationId}`,
       parsed.data.executionComment?.trim() ? `Commentaire caisse: ${parsed.data.executionComment.trim()}` : null,

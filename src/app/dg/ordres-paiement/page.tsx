@@ -64,7 +64,7 @@ export default async function DgPaymentOrdersPage() {
                 <th className="px-4 py-3 text-left font-semibold">Description</th>
                 <th className="px-4 py-3 text-left font-semibold">Montant</th>
                 <th className="px-4 py-3 text-left font-semibold">Admin</th>
-                <th className="px-4 py-3 text-left font-semibold">Caissière</th>
+                <th className="px-4 py-3 text-left font-semibold">Caissier</th>
                 <th className="px-4 py-3 text-left font-semibold">Statut</th>
                 <th className="px-4 py-3 text-left font-semibold">PDF</th>
               </tr>

@@ -246,7 +246,7 @@ export async function POST(request: NextRequest) {
     if (!payload.compareResult) {
       decisionSuggestion = "ESCALATE";
       reasons.push("Mission caisse sans fichier de mouvements externe: analyse incomplete.");
-      actions.push({ title: "Charger l'etat des mouvements de caisse (excel/csv/pdf tabulaire)", priority: "HIGH", owner: "CAISSIERE", dueInDays: 1 });
+      actions.push({ title: "Charger l'etat des mouvements de caisse (excel/csv/pdf tabulaire)", priority: "HIGH", owner: "CAISSIER", dueInDays: 1 });
       confidenceSignals.push(28);
     } else {
       reasons.push(`Etat caisse compare: verdict strict ${strictVerdict}, ${payload.compareResult.summary.mismatches} ecart(s), ${issueRank.amountDiff} ecart(s) montant.`);
@@ -259,12 +259,12 @@ export async function POST(request: NextRequest) {
       } else if (strictTextMismatches > 0 || strictAmountMismatches > 0) {
         decisionSuggestion = "ESCALATE";
         reasons.push("La comparaison stricte signale des divergences de valeur qu'il faut resoudre avant cloture.");
-        actions.push({ title: "Corriger les lignes non identiques (texte/chiffres) puis relancer", priority: "HIGH", owner: "CAISSIERE", dueInDays: 1 });
+        actions.push({ title: "Corriger les lignes non identiques (texte/chiffres) puis relancer", priority: "HIGH", owner: "CAISSIER", dueInDays: 1 });
         confidenceSignals.push(86);
       } else if (payload.compareResult.summary.mismatches > 0) {
         decisionSuggestion = "REJECT";
         reasons.push("Des ecarts non critiques existent, ajustement requis avant cloture.");
-        actions.push({ title: "Corriger les references de mouvements caisse puis relancer", priority: "MEDIUM", owner: "CAISSIERE", dueInDays: 2 });
+        actions.push({ title: "Corriger les references de mouvements caisse puis relancer", priority: "MEDIUM", owner: "CAISSIER", dueInDays: 2 });
         confidenceSignals.push(71);
       } else {
         decisionSuggestion = "VALIDATE";

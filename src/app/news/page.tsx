@@ -34,7 +34,7 @@ export default async function NewsPage() {
             <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-black/55 dark:text-white/55">Communication interne</p>
             <h1 className="mt-1 text-2xl font-semibold tracking-tight">Nouvelles</h1>
             <p className="mt-1 text-sm text-black/65 dark:text-white/65">
-              Publications officielles de la Direction Générale.
+              Publications officielles du Directeur Général.
             </p>
           </div>
           <div className="rounded-full border border-black/15 bg-white/70 px-3 py-1 text-xs font-semibold dark:border-white/20 dark:bg-zinc-800/70">
@@ -91,7 +91,7 @@ export default async function NewsPage() {
               Lecture: tous les profils autorisés.
             </p>
             <p className="mt-1 text-xs text-black/65 dark:text-white/65">
-              Rédaction/publication: administrateur et direction générale.
+              Rédaction/publication: administrateur et Directeur Général.
             </p>
           </section>
         </aside>

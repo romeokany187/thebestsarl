@@ -67,7 +67,7 @@ async function main() {
   const procurementOfficer = await prisma.user.upsert({
     where: { email: "appro@thebestsarl.com" },
     update: {
-      jobTitle: JobTitle.APPROVISIONNEMENT_MARKETING,
+      jobTitle: JobTitle.APPROVISIONNEMENT,
       role: Role.EMPLOYEE,
       teamId: kinshasaTeam.id,
     },
@@ -76,7 +76,7 @@ async function main() {
       email: "appro@thebestsarl.com",
       passwordHash,
       role: Role.EMPLOYEE,
-      jobTitle: JobTitle.APPROVISIONNEMENT_MARKETING,
+      jobTitle: JobTitle.APPROVISIONNEMENT,
       teamId: kinshasaTeam.id,
     },
   });

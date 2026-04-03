@@ -102,6 +102,14 @@ const links = [
   { href: "/admin", label: "Admin", module: "admin" as AppModule, roles: ["ADMIN", "DIRECTEUR_GENERAL"] as AppRole[] },
 ];
 
+function displayRoleLabel(role: AppRole) {
+  if (role === "ADMIN") return "Admin";
+  if (role === "DIRECTEUR_GENERAL") return "Directeur Général";
+  if (role === "MANAGER") return "Chef d'agence";
+  if (role === "ACCOUNTANT") return "Comptable";
+  return "Employé";
+}
+
 export async function AppShell({
   children,
   role,
@@ -139,7 +147,7 @@ export async function AppShell({
       module: link.module,
     });
   });
-  const roleLabel = role ? `Rôle ${role}` : null;
+  const roleLabel = role ? `Rôle ${displayRoleLabel(role)}` : null;
 
   return (
     <div className="min-h-screen bg-background text-foreground">

@@ -69,7 +69,7 @@ export function hasModuleAccess(params: {
   }
 
   if (module === "payments") {
-    const financeRole = jobTitle === "CAISSIERE" || jobTitle === "COMPTABLE";
+    const financeRole = jobTitle === "CAISSIER" || jobTitle === "COMPTABLE";
     const kinshasaDirection = teamIncludes(teamName, ["KINSHASA", "DIRECTION GENERALE", "DIRECTION GÉNÉRALE"]);
     return financeRole && kinshasaDirection;
   }
@@ -100,7 +100,7 @@ export function hasModuleAccess(params: {
   }
 
   if (module === "procurement") {
-    return jobTitle === "APPROVISIONNEMENT_MARKETING"
+    return jobTitle === "APPROVISIONNEMENT"
       || teamIncludes(teamName, ["APPRO", "STOCK", "MARKETING"]);
   }
 

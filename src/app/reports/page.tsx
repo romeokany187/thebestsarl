@@ -10,11 +10,11 @@ function jobTitleLabel(jobTitle: string) {
     COMMERCIAL: "Commercial",
     COMPTABLE: "Comptable",
     AUDITEUR: "Auditeur",
-    CAISSIERE: "Caissière",
-    RELATION_PUBLIQUE: "Relations publiques & ressources humaines",
-    APPROVISIONNEMENT_MARKETING: "Chargé des approvisionnements",
+    CAISSIER: "Caissier",
+    RELATION_PUBLIQUE: "Relation publique",
+    APPROVISIONNEMENT: "Chargé des approvisionnements",
     AGENT_TERRAIN: "Non affecté",
-    DIRECTION_GENERALE: "Direction générale",
+    DIRECTION_GENERALE: "Directeur Général",
   };
 
   return labels[jobTitle] ?? jobTitle;
@@ -35,7 +35,7 @@ const adminReportSections = [
     title: "Rapports comptable et caisse",
     description: "Flux financiers, caisse et rapprochements",
     accentClass: "bg-emerald-50 text-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-300",
-    matches: ["COMPTABLE", "CAISSIERE"],
+    matches: ["COMPTABLE", "CAISSIER"],
   },
   {
     key: "AUDIT",
@@ -46,8 +46,8 @@ const adminReportSections = [
   },
   {
     key: "RH",
-    title: "Rapports RH et relations publiques",
-    description: "Personnel, coordination interne et communication",
+    title: "Rapports relation publique",
+    description: "Communication institutionnelle et coordination",
     accentClass: "bg-fuchsia-50 text-fuchsia-700 dark:bg-fuchsia-900/20 dark:text-fuchsia-300",
     matches: ["RELATION_PUBLIQUE"],
   },
@@ -56,7 +56,7 @@ const adminReportSections = [
     title: "Rapports approvisionnement",
     description: "Stocks, besoins et suivi fournisseurs",
     accentClass: "bg-blue-50 text-blue-700 dark:bg-blue-900/20 dark:text-blue-300",
-    matches: ["APPROVISIONNEMENT_MARKETING"],
+    matches: ["APPROVISIONNEMENT"],
   },
 ] as const;
 

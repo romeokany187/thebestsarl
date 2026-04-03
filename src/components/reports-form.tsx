@@ -6,11 +6,12 @@ type JobTitle =
   | "COMMERCIAL"
   | "COMPTABLE"
   | "AUDITEUR"
-  | "CAISSIERE"
+  | "CAISSIER"
   | "RELATION_PUBLIQUE"
-  | "APPROVISIONNEMENT_MARKETING"
+  | "APPROVISIONNEMENT"
   | "AGENT_TERRAIN"
-  | "DIRECTION_GENERALE";
+  | "DIRECTION_GENERALE"
+  | "CHEF_AGENCE";
 
 type UserOption = { id: string; name: string; role: string; jobTitle: JobTitle; service: string };
 
@@ -52,8 +53,8 @@ const rubricByJobTitle: Record<JobTitle, JobTemplate> = {
       { title: "Recommandations et suivi", prompt: "Actions correctives proposees et calendrier de verification." },
     ],
   },
-  CAISSIERE: {
-    intro: "Rapport de caisse axe sur les flux quotidiens et la maitrise des ecarts.",
+  CAISSIER: {
+    intro: "Rapport du caissier axe sur les flux quotidiens et la maitrise des ecarts.",
     sections: [
       { title: "Etat de caisse", prompt: "Encaissements, decaissements, solde journalier et mouvements clés." },
       { title: "Operations de caisse", prompt: "Recus emis, paiements recus, remises et validations effectuees." },
@@ -62,15 +63,15 @@ const rubricByJobTitle: Record<JobTitle, JobTemplate> = {
     ],
   },
   RELATION_PUBLIQUE: {
-    intro: "Rapport RP/RH axe sur la communication interne et la gestion du personnel.",
+    intro: "Rapport de relation publique axe sur la communication institutionnelle et la coordination.",
     sections: [
-      { title: "Situation RH et communication", prompt: "Climat interne, informations diffusees, coordinations menees." },
-      { title: "Activites menees", prompt: "Actions RH, entretiens, accompagnements, communication institutionnelle." },
-      { title: "Points sensibles", prompt: "Reclamations, conflits, incidents RH, contraintes organisationnelles." },
+      { title: "Situation de communication", prompt: "Informations diffusees, coordinations menees, image institutionnelle." },
+      { title: "Activites menees", prompt: "Relations publiques, accompagnements et communication institutionnelle." },
+      { title: "Points sensibles", prompt: "Reclamations, incidents de communication et contraintes organisationnelles." },
       { title: "Plan d'amelioration", prompt: "Mesures prevues pour renforcer l'organisation et la communication." },
     ],
   },
-  APPROVISIONNEMENT_MARKETING: {
+  APPROVISIONNEMENT: {
     intro: "Rapport approvisionnement axe sur les besoins, commandes et disponibilites de stock.",
     sections: [
       { title: "Etat des besoins et stocks", prompt: "Articles critiques, niveaux de stock, urgences d'approvisionnement." },
@@ -97,17 +98,27 @@ const rubricByJobTitle: Record<JobTitle, JobTemplate> = {
       { title: "Orientations prioritaires", prompt: "Cap a suivre, objectifs et chantiers prioritaires." },
     ],
   },
+  CHEF_AGENCE: {
+    intro: "Rapport du Chef d'agence axe sur le pilotage local et la coordination d'equipe.",
+    sections: [
+      { title: "Vue locale", prompt: "Synthese des resultats de l'agence et de la performance par service." },
+      { title: "Coordination d'equipe", prompt: "Animation, delegations, suivis des collaborateurs." },
+      { title: "Points d'attention", prompt: "Blocages locaux, ressources limitantes, alertes." },
+      { title: "Plan d'action", prompt: "Priorites operationnelles, objectifs et chantiers a piloter." },
+    ],
+  },
 };
 
 const titleByJobTitle: Record<JobTitle, string> = {
   COMMERCIAL: "Rapport de vente commerciale",
   COMPTABLE: "Rapport financier comptable",
   AUDITEUR: "Rapport d'audit de conformite",
-  CAISSIERE: "Rapport de caisse",
-  RELATION_PUBLIQUE: "Rapport RH et relations publiques",
-  APPROVISIONNEMENT_MARKETING: "Rapport d'approvisionnement",
+  CAISSIER: "Rapport de caisse",
+  RELATION_PUBLIQUE: "Rapport de relation publique",
+  APPROVISIONNEMENT: "Rapport d'approvisionnement",
   AGENT_TERRAIN: "Rapport d'activite terrain",
-  DIRECTION_GENERALE: "Rapport de direction generale",
+  DIRECTION_GENERALE: "Rapport du Directeur Général",
+  CHEF_AGENCE: "Rapport du Manager",
 };
 
 export function ReportsForm({ users }: { users: UserOption[] }) {

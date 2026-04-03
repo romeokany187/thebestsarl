@@ -234,7 +234,7 @@ export default async function PaymentsPage({
   searchParams?: Promise<SearchParams>;
 }) {
   const { role, session } = await requirePageModuleAccess("payments", ["ADMIN", "DIRECTEUR_GENERAL", "ACCOUNTANT", "EMPLOYEE"]);
-  const canWrite = session.user.jobTitle === "CAISSIERE" && role !== "ADMIN" && role !== "DIRECTEUR_GENERAL";
+  const canWrite = session.user.jobTitle === "CAISSIER" && role !== "ADMIN" && role !== "DIRECTEUR_GENERAL";
   const resolvedSearchParams = (await searchParams) ?? {};
   const range = dateRangeFromParams(resolvedSearchParams);
   const cashRange = monthRangeFromValue(resolvedSearchParams.cashMonth);

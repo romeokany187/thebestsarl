@@ -6,11 +6,12 @@ type JobTitle =
   | "COMMERCIAL"
   | "COMPTABLE"
   | "AUDITEUR"
-  | "CAISSIERE"
+  | "CAISSIER"
   | "RELATION_PUBLIQUE"
-  | "APPROVISIONNEMENT_MARKETING"
+  | "APPROVISIONNEMENT"
   | "AGENT_TERRAIN"
-  | "DIRECTION_GENERALE";
+  | "DIRECTION_GENERALE"
+  | "CHEF_AGENCE";
 
 type UserRow = {
   id: string;
@@ -25,12 +26,21 @@ const jobOptions: Array<{ value: JobTitle; label: string }> = [
   { value: "COMMERCIAL", label: "Commercial" },
   { value: "COMPTABLE", label: "Comptable" },
   { value: "AUDITEUR", label: "Auditeur" },
-  { value: "CAISSIERE", label: "Caissière" },
-  { value: "RELATION_PUBLIQUE", label: "Relations publiques & ressources humaines" },
-  { value: "APPROVISIONNEMENT_MARKETING", label: "Chargé des approvisionnements" },
+  { value: "CAISSIER", label: "Caissier" },
+  { value: "RELATION_PUBLIQUE", label: "Relation publique" },
+  { value: "APPROVISIONNEMENT", label: "Chargé des approvisionnements" },
   { value: "AGENT_TERRAIN", label: "Non affecté" },
-  { value: "DIRECTION_GENERALE", label: "Direction générale" },
+  { value: "DIRECTION_GENERALE", label: "Directeur Général" },
+  { value: "CHEF_AGENCE", label: "Chef d'agence" },
 ];
+
+function roleLabel(role: string) {
+  if (role === "ADMIN") return "Admin";
+  if (role === "DIRECTEUR_GENERAL") return "Directeur Général";
+  if (role === "MANAGER") return "Chef d'agence";
+  if (role === "ACCOUNTANT") return "Comptable";
+  return "Employé";
+}
 
 export function UserJobTitleAdmin({ users }: { users: UserRow[] }) {
   const [rows, setRows] = useState(users);
@@ -102,9 +112,9 @@ export function UserJobTitleAdmin({ users }: { users: UserRow[] }) {
   return (
     <section className="rounded-xl border border-black/10 bg-white p-4 dark:border-white/10 dark:bg-zinc-900">
       <div className="mb-3">
-        <h2 className="text-lg font-semibold">Attribution des postes (admin / direction générale)</h2>
+        <h2 className="text-lg font-semibold">Attribution des postes (admin / Directeur Général)</h2>
         <p className="text-xs text-black/60 dark:text-white/60">
-          Les employés ne peuvent pas modifier leur poste. Seuls l&apos;admin et la direction générale peuvent nommer, changer ou supprimer un utilisateur.
+          Les employés ne peuvent pas modifier leur poste. Seuls l&apos;admin et le Directeur Général peuvent nommer, changer ou supprimer un utilisateur.
         </p>
       </div>
 
@@ -125,7 +135,7 @@ export function UserJobTitleAdmin({ users }: { users: UserRow[] }) {
               <tr key={user.id} className="border-t border-black/5 dark:border-white/10">
                 <td className="px-3 py-2">{user.name}</td>
                 <td className="px-3 py-2">{user.email}</td>
-                <td className="px-3 py-2">{user.role}</td>
+                <td className="px-3 py-2">{roleLabel(user.role)}</td>
                 <td className="px-3 py-2">{user.teamName}</td>
                 <td className="px-3 py-2">
                   <select

@@ -93,7 +93,7 @@ export async function PATCH(request: NextRequest) {
   if (nextStatus === "APPROVED") {
     const cashiers = await prisma.user.findMany({
       where: {
-        jobTitle: "CAISSIERE",
+        jobTitle: "CAISSIER",
       },
       select: { id: true },
       take: 160,

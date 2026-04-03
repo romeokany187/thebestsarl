@@ -54,7 +54,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Utilisateur introuvable." }, { status: 404 });
   }
 
-  if (me.role === "EMPLOYEE" && me.jobTitle !== "APPROVISIONNEMENT_MARKETING") {
+  if (me.role === "EMPLOYEE" && me.jobTitle !== "APPROVISIONNEMENT") {
     return NextResponse.json({ error: "Seul le service approvisionnement peut émettre un état de besoin." }, { status: 403 });
   }
 
@@ -163,7 +163,7 @@ export async function PATCH(request: NextRequest) {
     return NextResponse.json({ error: "Utilisateur introuvable." }, { status: 404 });
   }
 
-  if (me.role === "EMPLOYEE" && me.jobTitle !== "APPROVISIONNEMENT_MARKETING") {
+  if (me.role === "EMPLOYEE" && me.jobTitle !== "APPROVISIONNEMENT") {
     return NextResponse.json({ error: "Seul le service approvisionnement peut modifier un état de besoin." }, { status: 403 });
   }
 

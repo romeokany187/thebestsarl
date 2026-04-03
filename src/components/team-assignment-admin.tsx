@@ -15,21 +15,23 @@ type JobTitle =
   | "COMMERCIAL"
   | "COMPTABLE"
   | "AUDITEUR"
-  | "CAISSIERE"
+  | "CAISSIER"
   | "RELATION_PUBLIQUE"
-  | "APPROVISIONNEMENT_MARKETING"
+  | "APPROVISIONNEMENT"
   | "AGENT_TERRAIN"
-  | "DIRECTION_GENERALE";
+  | "DIRECTION_GENERALE"
+  | "CHEF_AGENCE";
 
 const jobOptions: Array<{ value: JobTitle; label: string }> = [
   { value: "COMMERCIAL", label: "Commercial" },
   { value: "COMPTABLE", label: "Comptable" },
   { value: "AUDITEUR", label: "Auditeur" },
-  { value: "CAISSIERE", label: "Caissière" },
-  { value: "RELATION_PUBLIQUE", label: "Relations publiques & ressources humaines" },
-  { value: "APPROVISIONNEMENT_MARKETING", label: "Chargé des approvisionnements" },
+  { value: "CAISSIER", label: "Caissier" },
+  { value: "RELATION_PUBLIQUE", label: "Relation publique" },
+  { value: "APPROVISIONNEMENT", label: "Chargé des approvisionnements" },
   { value: "AGENT_TERRAIN", label: "Non affecté" },
-  { value: "DIRECTION_GENERALE", label: "Direction générale" },
+  { value: "DIRECTION_GENERALE", label: "Directeur Général" },
+  { value: "CHEF_AGENCE", label: "Chef d'agence" },
 ];
 
 type UserRow = {
@@ -44,8 +46,8 @@ type UserRow = {
 
 function roleLabel(role: UserRole) {
   if (role === "ADMIN") return "Admin";
-  if (role === "DIRECTEUR_GENERAL") return "Direction générale";
-  if (role === "MANAGER") return "Chef";
+  if (role === "DIRECTEUR_GENERAL") return "Directeur Général";
+  if (role === "MANAGER") return "Chef d'agence";
   if (role === "ACCOUNTANT") return "Comptable";
   return "Collaborateur";
 }
@@ -178,7 +180,7 @@ export function TeamAssignmentAdmin({
 
   async function switchLeaderRole(userId: string, makeLeader: boolean, currentJobTitle: JobTitle, currentTeamId: string | null) {
     if (!isExecutiveManager) {
-      setStatus("Seuls l'administrateur et la direction générale peuvent changer le chef d'équipe.");
+      setStatus("Seuls l'administrateur et le Directeur Général peuvent changer le chef d'équipe.");
       return;
     }
 
@@ -213,7 +215,7 @@ export function TeamAssignmentAdmin({
     if (!selectedTeam) return;
 
     if (!isExecutiveManager) {
-      setStatus("Seuls l'administrateur et la direction générale peuvent supprimer une équipe.");
+      setStatus("Seuls l'administrateur et le Directeur Général peuvent supprimer une équipe.");
       return;
     }
 
@@ -398,7 +400,7 @@ export function TeamAssignmentAdmin({
           </button>
         </div>
         {!isExecutiveManager ? (
-          <p className="mt-2 text-xs text-amber-600">Seuls l'administrateur et la direction générale peuvent créer ou supprimer une équipe.</p>
+          <p className="mt-2 text-xs text-amber-600">Seuls l'administrateur et le Directeur Général peuvent créer ou supprimer une équipe.</p>
         ) : null}
       </div>
 

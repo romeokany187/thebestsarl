@@ -18,7 +18,7 @@ export async function POST(request: NextRequest) {
 
   const canValidate = access.role === "DIRECTEUR_GENERAL" || access.role === "ADMIN";
   if (!canValidate) {
-    return NextResponse.json({ error: "Validation réservée à la Direction Générale." }, { status: 403 });
+    return NextResponse.json({ error: "Validation réservée au Directeur Général." }, { status: 403 });
   }
 
   const body = await request.json();
@@ -84,7 +84,7 @@ export async function POST(request: NextRequest) {
   if (nextStatus === "APPROVED") {
     const cashierUsers = await prisma.user.findMany({
       where: {
-        jobTitle: "CAISSIERE",
+        jobTitle: "CAISSIER",
       },
       select: { id: true },
       take: 160,
@@ -94,7 +94,7 @@ export async function POST(request: NextRequest) {
       notifications.push({
         userId: cashier.id,
         title: "EDB approuvé à exécuter",
-        message: `L'état de besoin \"${updated.title}\" est approuvé par la Direction Générale. Exécuter la caisse depuis votre inbox.`,
+        message: `L'état de besoin \"${updated.title}\" est approuvé par le Directeur Général. Exécuter la caisse depuis votre inbox.`,
         type: "PROCUREMENT_FINANCE_EXECUTION",
         metadata: {
           needRequestId: updated.id,
@@ -111,7 +111,7 @@ export async function POST(request: NextRequest) {
       where: {
         OR: [
           { role: "ACCOUNTANT" },
-          { jobTitle: { in: ["CAISSIERE", "COMPTABLE"] } },
+          { jobTitle: { in: ["CAISSIER", "COMPTABLE"] } },
         ],
       },
       select: { id: true },

@@ -83,7 +83,7 @@ function drawHeader(logo: PDFImage | null, page: PDFPage, titleFont: PDFFont) {
     color: TEXT_BLACK,
   });
 
-  page.drawText("Direction Générale", {
+  page.drawText("Directeur Général", {
     x: 220,
     y: height - 92,
     size: 10.5,
@@ -109,7 +109,7 @@ function drawHeader(logo: PDFImage | null, page: PDFPage, titleFont: PDFFont) {
 function drawFooter(page: PDFPage, fontBold: PDFFont, printedBy: string) {
   const { width } = page.getSize();
 
-  page.drawText("Document officiel - Direction Générale", {
+  page.drawText("Document officiel - Directeur Général", {
     x: 38,
     y: 26,
     size: 8.2,

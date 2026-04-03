@@ -18,11 +18,11 @@ export async function POST(request: NextRequest) {
   if (access.error) return access.error;
 
   if (access.role === "ADMIN" || access.role === "DIRECTEUR_GENERAL") {
-    return NextResponse.json({ error: "Admin et Direction Générale ont un accès lecture seule sur les écritures de caisse." }, { status: 403 });
+    return NextResponse.json({ error: "Admin et Directeur Général ont un accès lecture seule sur les écritures de caisse." }, { status: 403 });
   }
 
-  if (access.session.user.jobTitle !== "CAISSIERE") {
-    return NextResponse.json({ error: "Seule la caissière est autorisée à enregistrer des conversions de caisse." }, { status: 403 });
+  if (access.session.user.jobTitle !== "CAISSIER") {
+    return NextResponse.json({ error: "Seul le caissier est autorisé à enregistrer des conversions de caisse." }, { status: 403 });
   }
 
   const body = await request.json();

@@ -43,7 +43,7 @@ export async function POST(request: NextRequest) {
   const canCreate = access.role === "DIRECTEUR_GENERAL";
   if (!canCreate) {
     return NextResponse.json(
-      { error: "Création d'ordre de paiement réservée à la Direction Générale." },
+      { error: "Création d'ordre de paiement réservée au Directeur Général." },
       { status: 403 },
     );
   }

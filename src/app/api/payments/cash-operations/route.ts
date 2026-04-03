@@ -37,11 +37,11 @@ export async function POST(request: NextRequest) {
   if (access.error) return access.error;
 
   if (access.role === "ADMIN" || access.role === "DIRECTEUR_GENERAL") {
-    return NextResponse.json({ error: "Admin et Direction Générale ont un accès lecture seule sur les écritures de caisse." }, { status: 403 });
+    return NextResponse.json({ error: "Admin et Directeur Général ont un accès lecture seule sur les écritures de caisse." }, { status: 403 });
   }
 
-  if (access.session.user.jobTitle !== "CAISSIERE") {
-    return NextResponse.json({ error: "Seule la caissière est autorisée à enregistrer les opérations de caisse." }, { status: 403 });
+  if (access.session.user.jobTitle !== "CAISSIER") {
+    return NextResponse.json({ error: "Seul le caissier est autorisé à enregistrer les opérations de caisse." }, { status: 403 });
   }
 
   const body = await request.json();
@@ -323,7 +323,7 @@ export async function POST(request: NextRequest) {
           reference: operation.reference,
           description: operation.description,
           actorId: access.session.user.id,
-          actorName: access.session.user.name ?? "Caissiere",
+          actorName: access.session.user.name ?? "Caissier",
           source: "CASH_LEDGER",
         },
       })),
@@ -350,7 +350,7 @@ export async function POST(request: NextRequest) {
             `Méthode: ${operation.method}`,
             `Référence: ${operation.reference ?? "-"}`,
             `Libellé: ${operation.description}`,
-            `Saisi par: ${access.session.user.name ?? "Caissiere"}`,
+            `Saisi par: ${access.session.user.name ?? "Caissier"}`,
             "",
             `Consulter: ${paymentsUrl}`,
           ].join("\n"),
@@ -366,7 +366,7 @@ export async function POST(request: NextRequest) {
             <strong>Méthode:</strong> ${operation.method}<br/>
             <strong>Référence:</strong> ${operation.reference ?? "-"}<br/>
             <strong>Libellé:</strong> ${operation.description}<br/>
-            <strong>Saisi par:</strong> ${access.session.user.name ?? "Caissière"}</p>
+            <strong>Saisi par:</strong> ${access.session.user.name ?? "Caissier"}</p>
             <p><a href="${paymentsUrl}">Ouvrir le module comptabilité caisse</a></p>
           `,
           replyTo: access.session.user.email ?? undefined,

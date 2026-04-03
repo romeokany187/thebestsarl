@@ -50,11 +50,11 @@ export async function POST(request: NextRequest) {
   if (access.error) return access.error;
 
   if (access.role === "ADMIN" || access.role === "DIRECTEUR_GENERAL") {
-    return NextResponse.json({ error: "Admin et Direction Générale ont un accès lecture seule sur les écritures de paiement." }, { status: 403 });
+    return NextResponse.json({ error: "Admin et Directeur Général ont un accès lecture seule sur les écritures de paiement." }, { status: 403 });
   }
 
-  if (access.session.user.jobTitle !== "CAISSIERE") {
-    return NextResponse.json({ error: "Seule la caissière est autorisée à enregistrer des paiements." }, { status: 403 });
+  if (access.session.user.jobTitle !== "CAISSIER") {
+    return NextResponse.json({ error: "Seul le caissier est autorisé à enregistrer des paiements." }, { status: 403 });
   }
 
   try {
@@ -191,7 +191,7 @@ export async function POST(request: NextRequest) {
         data: accountants.map((user) => ({
           userId: user.id,
           title: `Nouveau paiement billet ${result.ticket.ticketNumber}`,
-          message: `Encaissement de ${result.payment.amount.toFixed(2)} ${result.payment.currency} enregistré par la caissière. Total encaissé billet: ${result.paidTotal.toFixed(2)} ${result.ticket.currency}.`,
+          message: `Encaissement de ${result.payment.amount.toFixed(2)} ${result.payment.currency} enregistré par le caissier. Total encaissé billet: ${result.paidTotal.toFixed(2)} ${result.ticket.currency}.`,
           type: "PAYMENT_ENTRY",
           metadata: {
             ticketId: result.ticket.id,
@@ -209,7 +209,7 @@ export async function POST(request: NextRequest) {
             paymentStatus: result.ticket.paymentStatus,
             fxRateUsdToCdf: result.fxRateUsdToCdf,
             actorId: access.session.user.id,
-            actorName: access.session.user.name ?? "Caissiere",
+            actorName: access.session.user.name ?? "Caissier",
             source: "PAYMENTS_MODULE",
           },
         })),
@@ -236,7 +236,7 @@ export async function POST(request: NextRequest) {
               `Methode: ${result.payment.method}`,
               `Reference: ${result.payment.reference ?? "-"}`,
               `Taux du jour: 1 USD = ${result.fxRateUsdToCdf.toFixed(2)} CDF`,
-              `Saisi par: ${access.session.user.name ?? "Caissiere"}`,
+              `Saisi par: ${access.session.user.name ?? "Caissier"}`,
               "",
               `Consulter: ${paymentsUrl}`,
             ].join("\n"),
@@ -252,7 +252,7 @@ export async function POST(request: NextRequest) {
               <strong>Méthode:</strong> ${result.payment.method}<br/>
               <strong>Référence:</strong> ${result.payment.reference ?? "-"}<br/>
               <strong>Taux du jour:</strong> 1 USD = ${result.fxRateUsdToCdf.toFixed(2)} CDF<br/>
-              <strong>Saisi par:</strong> ${access.session.user.name ?? "Caissière"}</p>
+              <strong>Saisi par:</strong> ${access.session.user.name ?? "Caissier"}</p>
               <p><a href="${paymentsUrl}">Ouvrir le module paiements</a></p>
             `,
             replyTo: access.session.user.email ?? undefined,

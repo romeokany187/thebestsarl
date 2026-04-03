@@ -32,8 +32,8 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Utilisateur introuvable." }, { status: 404 });
   }
 
-  if (me.jobTitle !== "CAISSIERE") {
-    return NextResponse.json({ error: "Exécution réservée à la Caissière." }, { status: 403 });
+  if (me.jobTitle !== "CAISSIER") {
+    return NextResponse.json({ error: "Exécution réservée au caissier." }, { status: 403 });
   }
 
   const body = await request.json();
@@ -192,7 +192,7 @@ export async function POST(request: NextRequest) {
       `Validation DG: ${need.reviewedBy?.name ?? "-"} (${need.approvedAt ? new Date(need.approvedAt).toLocaleString("fr-FR") : "-"})`,
       `Commentaire DG: ${need.reviewComment?.trim() || "-"}`,
       `Exécution caisse: ${now.toLocaleString("fr-FR")}`,
-      `Caissière: ${me.name}`,
+      `Caissier: ${me.name}`,
       `Référence caisse: ${parsed.data.referenceDoc}`,
       `Écriture sortie caisse: ${updated.cashOperationId}`,
       parsed.data.executionComment?.trim() ? `Commentaire caisse: ${parsed.data.executionComment.trim()}` : null,

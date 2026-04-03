@@ -113,7 +113,7 @@ async function main() {
   const resetRomeoo = await prisma.user.updateMany({
     where: {
       email: "romeoo.thebest@gmail.com",
-      jobTitle: JobTitle.APPROVISIONNEMENT_MARKETING,
+      jobTitle: JobTitle.APPROVISIONNEMENT,
     },
     data: {
       jobTitle: JobTitle.AGENT_TERRAIN,

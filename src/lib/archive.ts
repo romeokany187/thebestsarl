@@ -63,7 +63,7 @@ export function canReadArchiveFolder(role: ArchiveAppRole, jobTitle: string | nu
     return role === "ADMIN" || (jobTitle ?? "") === "DIRECTION_GENERALE";
   }
 
-  return role === "ACCOUNTANT" || (jobTitle ?? "") === "CAISSIERE" || (jobTitle ?? "") === "COMPTABLE";
+  return role === "ACCOUNTANT" || (jobTitle ?? "") === "CAISSIER" || (jobTitle ?? "") === "COMPTABLE";
 }
 
 export function canWriteArchiveFolder(role: ArchiveAppRole, jobTitle: string | null | undefined, folder: ArchiveFolder) {

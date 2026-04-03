@@ -38,11 +38,11 @@ function jobTitleLabel(jobTitle: string) {
     COMMERCIAL: "Commercial",
     COMPTABLE: "Comptable",
     AUDITEUR: "Auditeur",
-    CAISSIERE: "Caissière",
-    RELATION_PUBLIQUE: "Relations publiques & ressources humaines",
-    APPROVISIONNEMENT_MARKETING: "Chargé des approvisionnements",
+    CAISSIER: "Caissier",
+    RELATION_PUBLIQUE: "Relation publique",
+    APPROVISIONNEMENT: "Chargé des approvisionnements",
     AGENT_TERRAIN: "Non affecté",
-    DIRECTION_GENERALE: "Direction générale",
+    DIRECTION_GENERALE: "Directeur Général",
   };
 
   return labels[jobTitle] ?? jobTitle;
@@ -167,7 +167,7 @@ export default async function ReportPrintPage({ params }: PageProps) {
 
         <section className="mt-auto grid gap-3 border-t border-zinc-200 pt-4 sm:grid-cols-[1fr_auto] sm:items-center">
           <div className="text-center sm:text-left">
-            <p className="text-xs font-semibold uppercase tracking-[0.12em] text-zinc-700">Direction Generale</p>
+            <p className="text-xs font-semibold uppercase tracking-[0.12em] text-zinc-700">Directeur Général</p>
             <p className="mt-1 text-sm text-zinc-900">Validation officielle</p>
           </div>
           <div className="flex justify-center sm:justify-end" />
