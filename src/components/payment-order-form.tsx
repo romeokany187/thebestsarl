@@ -102,20 +102,20 @@ export function PaymentOrderForm() {
         />
       </div>
 
-      <div className="mt-3 grid gap-3 md:grid-cols-[1fr_220px_160px_140px]">
-        <textarea
+      <div className="mt-3 grid gap-3 md:grid-cols-[minmax(0,1fr)_180px_120px_96px]">
+        <input
+          type="text"
           value={description}
           onChange={(event) => setDescription(event.target.value)}
-          placeholder="Description détaillée de l'ordre de paiement"
+          placeholder="Description"
           maxLength={1500}
-          rows={3}
-          className="rounded-md border border-black/15 bg-white px-3 py-2 text-sm dark:border-white/15 dark:bg-zinc-900"
+          className="min-w-0 rounded-md border border-black/15 bg-white px-3 py-2 text-sm dark:border-white/15 dark:bg-zinc-900"
           disabled={state === "loading"}
         />
         <select
           value={assignment}
           onChange={(event) => setAssignment(event.target.value as PaymentOrderAssignment)}
-          className="rounded-md border border-black/15 bg-white px-3 py-2 text-sm dark:border-white/15 dark:bg-zinc-900"
+          className="min-w-0 rounded-md border border-black/15 bg-white px-3 py-2 text-sm dark:border-white/15 dark:bg-zinc-900"
           disabled={state === "loading"}
         >
           {Object.entries(ASSIGNMENT_LABELS).map(([value, label]) => (
@@ -127,13 +127,13 @@ export function PaymentOrderForm() {
           onChange={(event) => setAmount(event.target.value)}
           placeholder="Montant"
           inputMode="decimal"
-          className="rounded-md border border-black/15 bg-white px-3 py-2 text-sm dark:border-white/15 dark:bg-zinc-900"
+          className="min-w-0 rounded-md border border-black/15 bg-white px-3 py-2 text-sm dark:border-white/15 dark:bg-zinc-900"
           disabled={state === "loading"}
         />
         <select
           value={currency}
           onChange={(event) => setCurrency(event.target.value as "CDF" | "USD")}
-          className="rounded-md border border-black/15 bg-white px-3 py-2 text-sm dark:border-white/15 dark:bg-zinc-900"
+          className="min-w-0 rounded-md border border-black/15 bg-white px-3 py-2 text-sm dark:border-white/15 dark:bg-zinc-900"
           disabled={state === "loading"}
         >
           <option value="CDF">CDF</option>
