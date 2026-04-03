@@ -239,6 +239,10 @@ export const needRequestSchema = z.object({
   ).min(1).optional(),
 });
 
+export const needRequestUpdateSchema = needRequestSchema.extend({
+  needRequestId: z.string().min(1),
+});
+
 export const needApprovalSchema = z.object({
   needRequestId: z.string().min(1),
   status: z.enum(["APPROVED", "REJECTED"]),

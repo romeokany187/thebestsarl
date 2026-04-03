@@ -261,7 +261,10 @@ export async function GET(request: NextRequest, context: RouteContext) {
   };
 
   const drawMetaLine = (label: string, value: string, valueColor = black) => {
-    ensureSpace(16);
+    const valueLines = wrapTextByWidth(value, CONTENT_RIGHT - 170, regularFont, 10.2);
+    const blockHeight = Math.max(16, valueLines.length * 12 + 4);
+    ensureSpace(blockHeight);
+
     page.drawText(`${label}:`, {
       x: CONTENT_LEFT,
       y,
@@ -269,14 +272,18 @@ export async function GET(request: NextRequest, context: RouteContext) {
       font: boldFont,
       color: black,
     });
-    page.drawText(value, {
-      x: 170,
-      y,
-      size: 10.2,
-      font: boldFont,
-      color: valueColor,
+
+    valueLines.forEach((line, index) => {
+      page.drawText(line, {
+        x: 170,
+        y: y - (index * 12),
+        size: 10.2,
+        font: regularFont,
+        color: valueColor,
+      });
     });
-    y -= 16;
+
+    y -= blockHeight;
   };
 
   page.drawText(`Réf: ${need.code ?? `EDB-${need.id.slice(0, 8).toUpperCase()}`}`, {
@@ -370,7 +377,7 @@ export async function GET(request: NextRequest, context: RouteContext) {
 
     for (const [index, item] of quote.items.entries()) {
       const designationLines = wrapTextByWidth(item.designation, colWidths.designation, boldFont, 9.2);
-      const descriptionLines = wrapTextByWidth(item.description || "-", colWidths.description, boldFont, 9.2);
+      const descriptionLines = wrapTextByWidth(item.description || "-", colWidths.description, regularFont, 9.2);
       const rowLineCount = Math.max(designationLines.length, descriptionLines.length, 1);
       const rowHeight = Math.max(34, rowLineCount * 13 + 16);
 
@@ -397,7 +404,7 @@ export async function GET(request: NextRequest, context: RouteContext) {
           page.drawText(d1, { x: xCols[1], y: lineY, size: 9.2, font: boldFont, color: black });
         }
         if (d2) {
-          page.drawText(d2, { x: xCols[2], y: lineY, size: 9.2, font: boldFont, color: black });
+          page.drawText(d2, { x: xCols[2], y: lineY, size: 9.2, font: regularFont, color: black });
         }
       }
 
@@ -475,7 +482,7 @@ export async function GET(request: NextRequest, context: RouteContext) {
     });
 
     const commentText = need.reviewComment?.trim() ? `Commentaire: ${need.reviewComment}` : "Commentaire: -";
-    const commentLines = wrapTextByWidth(commentText, 360, boldFont, 9.2).slice(0, 2);
+    const commentLines = wrapTextByWidth(commentText, 360, regularFont, 9.2);
     let commentY = FOOTER_BLOCK_TOP - 34;
     commentLines.forEach((line) => {
       targetPage.drawText(line, {

@@ -73,14 +73,18 @@ function parseNeedMeta(details: string) {
   type NeedMeta = {
     urgencyLevel: NeedUrgencyLevel | null;
     beneficiaryTeam: NeedBeneficiaryTeam | null;
+    beneficiaryPersonId: string | null;
     beneficiaryPersonName: string | null;
+    items: Array<{ designation: string; description: string; quantity: number; unitPrice: number }>;
   };
 
   try {
     const parsed = JSON.parse(details) as {
       urgencyLevel?: string;
       beneficiaryTeam?: string;
+      beneficiaryPersonId?: string;
       beneficiaryPersonName?: string;
+      items?: Array<{ designation?: string; description?: string; quantity?: number; unitPrice?: number }>;
     };
     const urgencyLevel = parsed.urgencyLevel;
     const beneficiaryTeam = parsed.beneficiaryTeam;
@@ -93,11 +97,20 @@ function parseNeedMeta(details: string) {
         beneficiaryTeam === "KINSHASA" || beneficiaryTeam === "LUBUMBASHI" || beneficiaryTeam === "MBUJIMAYI"
           ? beneficiaryTeam
           : null,
+      beneficiaryPersonId: typeof parsed.beneficiaryPersonId === "string" ? parsed.beneficiaryPersonId : null,
       beneficiaryPersonName: typeof parsed.beneficiaryPersonName === "string" ? parsed.beneficiaryPersonName : null,
+      items: Array.isArray(parsed.items)
+        ? parsed.items.map((item) => ({
+          designation: String(item.designation ?? ""),
+          description: String(item.description ?? ""),
+          quantity: Number(item.quantity ?? 1),
+          unitPrice: Number(item.unitPrice ?? 0),
+        }))
+        : [],
     };
     return meta;
   } catch {
-    const meta: NeedMeta = { urgencyLevel: null, beneficiaryTeam: null, beneficiaryPersonName: null };
+    const meta: NeedMeta = { urgencyLevel: null, beneficiaryTeam: null, beneficiaryPersonId: null, beneficiaryPersonName: null, items: [] };
     return meta;
   }
 }
@@ -148,6 +161,9 @@ export function ProcurementHub({
   const [needStatus, setNeedStatus] = useState("");
   const [stockStatus, setStockStatus] = useState("");
   const [approvalStatus, setApprovalStatus] = useState("");
+  const [editingNeedId, setEditingNeedId] = useState<string | null>(null);
+  const [needTitle, setNeedTitle] = useState("");
+  const [selectedUrgencyLevel, setSelectedUrgencyLevel] = useState<NeedUrgencyLevel>("NORMALE");
   const [stockReportMonth, setStockReportMonth] = useState(defaultReportMonth);
   const [needStatusFilter, setNeedStatusFilter] = useState<"ALL" | NeedStatus>("ALL");
   const [needSearch, setNeedSearch] = useState("");
@@ -215,8 +231,46 @@ export function ProcurementHub({
     });
   }, [needs, needSearch, needStatusFilter]);
 
+  const isEditingNeed = editingNeedId !== null;
+
+  function isNeedEditable(need: NeedItem) {
+    return (need.status === "SUBMITTED" || need.status === "DRAFT") && !hasCashExecutionMarker(need.reviewComment);
+  }
+
   function updateNeedLine(index: number, key: keyof NeedLineForm, value: string) {
     setNeedLines((prev) => prev.map((line, lineIndex) => (lineIndex === index ? { ...line, [key]: value } : line)));
+  }
+
+  function resetNeedForm() {
+    setEditingNeedId(null);
+    setNeedTitle("");
+    setSelectedUrgencyLevel("NORMALE");
+    setSelectedBeneficiaryTeam("KINSHASA");
+    setSelectedBeneficiaryPerson("");
+    setNeedCurrency("CDF");
+    setNeedLines([{ designation: "", description: "", quantity: "1", unitPrice: "0" }]);
+  }
+
+  function startNeedEdit(need: NeedItem) {
+    const meta = parseNeedMeta(need.details);
+    setEditingNeedId(need.id);
+    setNeedTitle(need.title);
+    setSelectedUrgencyLevel(meta.urgencyLevel ?? "NORMALE");
+    setSelectedBeneficiaryTeam(meta.beneficiaryTeam ?? "KINSHASA");
+    setSelectedBeneficiaryPerson(meta.beneficiaryPersonId ?? "");
+    setNeedCurrency(normalizeMoneyCurrency(need.currency));
+    setNeedLines(
+      meta.items.length > 0
+        ? meta.items.map((item) => ({
+          designation: item.designation,
+          description: item.description,
+          quantity: String(item.quantity || 1),
+          unitPrice: String(item.unitPrice || 0),
+        }))
+        : [{ designation: need.title, description: "", quantity: String(need.quantity || 1), unitPrice: String(need.estimatedAmount || 0) }],
+    );
+    setNeedStatus(`État de besoin ${need.code ?? need.title} chargé pour modification.`);
+    window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
   function addNeedLine() {
@@ -254,9 +308,6 @@ export function ProcurementHub({
     event.preventDefault();
     if (!canCreateNeed) return;
 
-    const form = event.currentTarget;
-    const formData = new FormData(form);
-
     const items = needLines
       .map((line) => ({
         designation: line.designation.trim(),
@@ -273,18 +324,19 @@ export function ProcurementHub({
 
     setNeedStatus("Émission en cours...");
 
-    const beneficiaryPersonId = String(formData.get("beneficiaryPersonId") ?? "").trim() || undefined;
+    const beneficiaryPersonId = selectedBeneficiaryPerson.trim() || undefined;
     const beneficiaryPersonName = beneficiaryPersonId
       ? allUsers.find((u) => u.id === beneficiaryPersonId)?.name
       : undefined;
 
     const response = await fetch("/api/procurement/needs", {
-      method: "POST",
+      method: isEditingNeed ? "PATCH" : "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        title: String(formData.get("title") ?? ""),
-        urgencyLevel: String(formData.get("urgencyLevel") ?? "NORMALE"),
-        beneficiaryTeam: String(formData.get("beneficiaryTeam") ?? "KINSHASA"),
+        ...(isEditingNeed ? { needRequestId: editingNeedId } : {}),
+        title: needTitle,
+        urgencyLevel: selectedUrgencyLevel,
+        beneficiaryTeam: selectedBeneficiaryTeam,
         beneficiaryPersonId,
         beneficiaryPersonName,
         currency: needCurrency,
@@ -298,12 +350,8 @@ export function ProcurementHub({
       return;
     }
 
-    setNeedStatus("État de besoin émis et transféré à la Direction Générale.");
-    form.reset();
-    setNeedLines([{ designation: "", description: "", quantity: "1", unitPrice: "0" }]);
-    setNeedCurrency("CDF");
-    setSelectedBeneficiaryTeam("KINSHASA");
-    setSelectedBeneficiaryPerson("");
+    setNeedStatus(isEditingNeed ? "État de besoin modifié avec succès." : "État de besoin émis et transféré à la Direction Générale.");
+    resetNeedForm();
     await refreshData();
   }
 
@@ -377,16 +425,36 @@ export function ProcurementHub({
       {hideNeedWorkflow ? null : (
         <div className="grid gap-6 lg:grid-cols-[420px,1fr]">
           <section className="rounded-xl border border-black/10 bg-white p-4 dark:border-white/10 dark:bg-zinc-900">
-            <h2 className="text-base font-semibold">Émettre un état de besoin</h2>
-            <p className="mt-1 text-xs text-black/60 dark:text-white/60">
-              Le document est transmis à la Direction Générale (inbox) pour décision.
-            </p>
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <h2 className="text-base font-semibold">{isEditingNeed ? "Modifier un état de besoin" : "Émettre un état de besoin"}</h2>
+                <p className="mt-1 text-xs text-black/60 dark:text-white/60">
+                  Le document est transmis à la Direction Générale (inbox) pour décision tant qu'aucune approbation ou aucun rejet n'a encore été enregistré.
+                </p>
+              </div>
+              {isEditingNeed ? (
+                <button
+                  type="button"
+                  onClick={resetNeedForm}
+                  className="rounded-md border border-black/20 px-2.5 py-1 text-xs font-semibold hover:bg-black/5 dark:border-white/20 dark:hover:bg-white/10"
+                >
+                  Annuler
+                </button>
+              ) : null}
+            </div>
 
             {canCreateNeed ? (
               <form onSubmit={submitNeed} className="mt-3 grid gap-2">
-                <input name="title" required placeholder="Objet du besoin" className="rounded-md border px-3 py-2 text-sm" />
+                <input
+                  name="title"
+                  required
+                  value={needTitle}
+                  onChange={(event) => setNeedTitle(event.target.value)}
+                  placeholder="Objet du besoin"
+                  className="rounded-md border px-3 py-2 text-sm"
+                />
                 <div className="grid gap-2 sm:grid-cols-2">
-                  <select name="urgencyLevel" defaultValue="NORMALE" required className="rounded-md border px-3 py-2 text-sm">
+                  <select name="urgencyLevel" value={selectedUrgencyLevel} onChange={(event) => setSelectedUrgencyLevel(event.target.value as NeedUrgencyLevel)} required className="rounded-md border px-3 py-2 text-sm">
                     <option value="CRITIQUE">Urgence critique</option>
                     <option value="ELEVEE">Urgence élevée</option>
                     <option value="NORMALE">Urgence normale</option>
@@ -513,7 +581,9 @@ export function ProcurementHub({
                   </select>
                 </div>
                 <p className="text-[11px] text-black/55 dark:text-white/55">Format devis: chaque ligne = désignation + description + quantité + prix unitaire. Devise disponible: USD ou CDF.</p>
-                <button className="rounded-md bg-black px-3 py-2 text-sm font-semibold text-white dark:bg-white dark:text-black">Émettre</button>
+                <button className="rounded-md bg-black px-3 py-2 text-sm font-semibold text-white dark:bg-white dark:text-black">
+                  {isEditingNeed ? "Enregistrer les modifications" : "Émettre"}
+                </button>
               </form>
             ) : (
               <p className="mt-3 rounded-md border border-dashed border-black/20 px-3 py-2 text-xs text-black/70 dark:border-white/20 dark:text-white/70">
@@ -660,6 +730,15 @@ export function ProcurementHub({
                       >
                         PDF
                       </a>
+                      {canCreateNeed && isNeedEditable(need) ? (
+                        <button
+                          type="button"
+                          onClick={() => startNeedEdit(need)}
+                          className="inline-flex rounded-md border border-emerald-300 px-2.5 py-1 text-[11px] font-semibold text-emerald-700 hover:bg-emerald-50 dark:border-emerald-700/60 dark:text-emerald-300 dark:hover:bg-emerald-950/40"
+                        >
+                          Modifier
+                        </button>
+                      ) : null}
                     </div>
                   </td>
                 </tr>
