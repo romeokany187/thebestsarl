@@ -43,7 +43,7 @@ const links = [
     href: "/deposit",
     label: "Dépôts compagnies",
     module: "payments" as AppModule,
-    roles: ["ACCOUNTANT", "EMPLOYEE"] as AppRole[],
+    roles: ["DIRECTEUR_GENERAL", "ACCOUNTANT", "EMPLOYEE"] as AppRole[],
   },
   {
     href: "/dg/ordres-paiement",

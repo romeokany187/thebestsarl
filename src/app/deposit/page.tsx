@@ -7,7 +7,7 @@ import { requirePageModuleAccess } from "@/lib/rbac";
 export const dynamic = "force-dynamic";
 
 export default async function DepositPage() {
-  const { role } = await requirePageModuleAccess("payments", ["ACCOUNTANT", "EMPLOYEE"]);
+  const { role } = await requirePageModuleAccess("payments", ["DIRECTEUR_GENERAL", "ACCOUNTANT", "EMPLOYEE"]);
 
   const accounts = await buildAirlineDepositAccountSummaries(
     prisma as unknown as { airlineDepositMovement: { findMany: (args: unknown) => Promise<any[]> } },
@@ -16,7 +16,7 @@ export default async function DepositPage() {
   return (
     <AppShell
       role={role}
-      accessNote="Espace comptable dédié aux opérations de dépôt compagnies: approvisionnements, suivi des soldes et historique des mouvements."
+      accessNote="Espace DG / comptable dédié aux opérations de dépôt compagnies: approvisionnements, suivi des soldes et historique des mouvements."
     >
       <section className="mb-6">
         <h1 className="text-2xl font-semibold">Dépôts compagnies</h1>
