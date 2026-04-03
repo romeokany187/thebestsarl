@@ -9,7 +9,7 @@ import { airlineDepositTopUpSchema } from "@/lib/validators";
 import { requireApiModuleAccess } from "@/lib/rbac";
 
 export async function GET() {
-  const access = await requireApiModuleAccess("payments", ["ACCOUNTANT"]);
+  const access = await requireApiModuleAccess("payments", ["ACCOUNTANT", "EMPLOYEE"]);
   if (access.error) {
     return access.error;
   }
@@ -21,7 +21,7 @@ export async function GET() {
 }
 
 export async function POST(request: NextRequest) {
-  const access = await requireApiModuleAccess("payments", ["ACCOUNTANT"]);
+  const access = await requireApiModuleAccess("payments", ["ACCOUNTANT", "EMPLOYEE"]);
   if (access.error) {
     return access.error;
   }

@@ -7,7 +7,7 @@ import { requirePageModuleAccess } from "@/lib/rbac";
 export const dynamic = "force-dynamic";
 
 export default async function DepositPage() {
-  const { role } = await requirePageModuleAccess("payments", ["ACCOUNTANT"]);
+  const { role } = await requirePageModuleAccess("payments", ["ACCOUNTANT", "EMPLOYEE"]);
 
   const accounts = await buildAirlineDepositAccountSummaries(
     prisma as unknown as { airlineDepositMovement: { findMany: (args: unknown) => Promise<any[]> } },
