@@ -1,5 +1,4 @@
 import { AppShell } from "@/components/app-shell";
-import { AirlineDepositAccountManager } from "@/components/airline-deposit-account-manager";
 import { TicketForm } from "@/components/ticket-form";
 import { TicketImportForm } from "@/components/ticket-import-form";
 import { TicketRowActions } from "@/components/ticket-row-actions";
@@ -58,7 +57,6 @@ export default async function SalesPage({
   const roleTicketFilter = role === "EMPLOYEE" ? { sellerId: session.user.id } : {};
   const canCreateTicket = role === "ADMIN" || role === "MANAGER" || role === "EMPLOYEE";
   const canManageTickets = role === "ADMIN" || role === "EMPLOYEE";
-  const canAccessAirlineDeposits = role === "ACCOUNTANT";
   const canImportTickets = canImportTicketWorkbook(role, session.user.canImportTicketWorkbook);
   const canReplaceImportedPeriod = role === "ADMIN" || role === "MANAGER";
   const accessNote = canCreateTicket
@@ -100,11 +98,9 @@ export default async function SalesPage({
       take: 200,
     }),
     canImportTickets ? listTicketWorkbookImportHistory() : Promise.resolve([]),
-    canAccessAirlineDeposits
-      ? buildAirlineDepositAccountSummaries(
-        prisma as unknown as { airlineDepositMovement: { findMany: (args: unknown) => Promise<any[]> } },
-      )
-      : Promise.resolve([]),
+    buildAirlineDepositAccountSummaries(
+      prisma as unknown as { airlineDepositMovement: { findMany: (args: unknown) => Promise<any[]> } },
+    ),
   ]);
 
   const caaAirline = airlines.find((airline) => airline.code === "CAA");
@@ -201,13 +197,6 @@ export default async function SalesPage({
           <button type="submit" className="rounded-md bg-black px-4 py-2 text-sm font-semibold text-white dark:bg-white dark:text-black">Rechercher</button>
         </form>
       </section>
-
-      {canAccessAirlineDeposits ? (
-        <AirlineDepositAccountManager
-          accounts={depositAccounts}
-          canManage={true}
-        />
-      ) : null}
 
       <div className="grid gap-6 lg:grid-cols-[400px,1fr]">
         {canCreateTicket ? (
