@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { requireApiModuleAccess } from "@/lib/rbac";
 import { ticketUpdateSchema } from "@/lib/validators";
 import { computeCommissionAmount, pickCommissionRule } from "@/lib/commission";
+import { getAirlineDepositAccountByAirlineCode, recordAirlineDepositMovement } from "@/lib/airline-deposit";
 import { ensureAirlineCatalog } from "@/lib/airline-catalog";
 
 type Params = { params: Promise<{ id: string }> };
@@ -53,6 +54,9 @@ export async function PATCH(request: NextRequest, { params }: Params) {
     if (!targetAirline) {
       return NextResponse.json({ error: "Compagnie introuvable." }, { status: 400 });
     }
+
+    const previousDepositAccount = getAirlineDepositAccountByAirlineCode(existing.airline.code);
+    const nextDepositAccount = getAirlineDepositAccountByAirlineCode(targetAirline.code);
 
     const nextTicket = {
       ...existing,
@@ -271,12 +275,67 @@ export async function PATCH(request: NextRequest, { params }: Params) {
         });
       }
 
+      if (previousDepositAccount && nextDepositAccount && previousDepositAccount.key === nextDepositAccount.key) {
+        const deltaAmount = saved.amount - existing.amount;
+        if (Math.abs(deltaAmount) > 0.0001) {
+          await recordAirlineDepositMovement(tx, {
+            accountKey: nextDepositAccount.key,
+            movementType: deltaAmount > 0 ? "DEBIT" : "CREDIT",
+            amount: Math.abs(deltaAmount),
+            reference: `AJUST ${saved.ticketNumber}`,
+            description: deltaAmount > 0
+              ? `Ajustement débit billet ${saved.ticketNumber} - ${targetAirline.name}`
+              : `Ajustement crédit billet ${saved.ticketNumber} - ${targetAirline.name}`,
+            airlineId: saved.airlineId,
+            ticketSaleId: saved.id,
+            createdById: access.session.user.id,
+          });
+        }
+      } else {
+        if (previousDepositAccount) {
+          await recordAirlineDepositMovement(tx, {
+            accountKey: previousDepositAccount.key,
+            movementType: "CREDIT",
+            amount: existing.amount,
+            reference: `TRANSFERT ${existing.ticketNumber}`,
+            description: `Restitution ancienne compagnie pour billet ${existing.ticketNumber} - ${existing.airline.name}`,
+            airlineId: existing.airlineId,
+            ticketSaleId: existing.id,
+            createdById: access.session.user.id,
+          });
+        }
+
+        if (nextDepositAccount) {
+          await recordAirlineDepositMovement(tx, {
+            accountKey: nextDepositAccount.key,
+            movementType: "DEBIT",
+            amount: saved.amount,
+            reference: `PNR ${saved.ticketNumber}`,
+            description: `Débit automatique billet ${saved.ticketNumber} - ${targetAirline.name}`,
+            airlineId: saved.airlineId,
+            ticketSaleId: saved.id,
+            createdById: access.session.user.id,
+            createdAt: saved.soldAt,
+          });
+        }
+      }
+
       return saved;
     });
 
     return NextResponse.json({ data: updated });
   } catch (error) {
     console.error("PATCH /api/tickets/[id] failed", error);
+
+    if (error instanceof Error && error.message.startsWith("INSUFFICIENT_AIRLINE_DEPOSIT:")) {
+      const [, label, available, requested] = error.message.split(":");
+      return NextResponse.json(
+        {
+          error: `${label}: solde insuffisant (${available} USD disponibles pour ${requested} USD demandés). Veuillez d'abord créditer le compte dépôt compagnie.`,
+        },
+        { status: 400 },
+      );
+    }
 
     if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
       return NextResponse.json(
@@ -299,14 +358,45 @@ export async function DELETE(_request: NextRequest, { params }: Params) {
     const { id } = await params;
     const existing = await prisma.ticketSale.findUnique({
       where: { id },
-      select: { id: true, sellerId: true },
+      select: {
+        id: true,
+        sellerId: true,
+        amount: true,
+        ticketNumber: true,
+        soldAt: true,
+        airlineId: true,
+        airline: {
+          select: {
+            code: true,
+            name: true,
+          },
+        },
+      },
     });
 
     if (!existing) {
       return NextResponse.json({ error: "Billet introuvable." }, { status: 404 });
     }
 
-    await prisma.ticketSale.delete({ where: { id } });
+    const depositAccount = getAirlineDepositAccountByAirlineCode(existing.airline.code);
+
+    await prisma.$transaction(async (tx) => {
+      if (depositAccount) {
+        await recordAirlineDepositMovement(tx, {
+          accountKey: depositAccount.key,
+          movementType: "CREDIT",
+          amount: existing.amount,
+          reference: `ANNUL ${existing.ticketNumber}`,
+          description: `Restitution après suppression billet ${existing.ticketNumber} - ${existing.airline.name}`,
+          airlineId: existing.airlineId,
+          ticketSaleId: existing.id,
+          createdById: access.session.user.id,
+        });
+      }
+
+      await tx.ticketSale.delete({ where: { id } });
+    });
+
     return NextResponse.json({ success: true });
   } catch (error) {
     console.error("DELETE /api/tickets/[id] failed", error);

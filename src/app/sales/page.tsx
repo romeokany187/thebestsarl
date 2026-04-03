@@ -1,10 +1,12 @@
 import { AppShell } from "@/components/app-shell";
+import { AirlineDepositAccountManager } from "@/components/airline-deposit-account-manager";
 import { TicketForm } from "@/components/ticket-form";
 import { TicketImportForm } from "@/components/ticket-import-form";
 import { TicketRowActions } from "@/components/ticket-row-actions";
 import { prisma } from "@/lib/prisma";
 import { requirePageModuleAccess } from "@/lib/rbac";
 import { ensureAirlineCatalog } from "@/lib/airline-catalog";
+import { buildAirlineDepositAccountSummaries } from "@/lib/airline-deposit";
 import { computeCaaCommissionMap } from "@/lib/caa-commission";
 import { canImportTicketWorkbook } from "@/lib/assignment";
 import { listTicketWorkbookImportHistory } from "@/lib/ticket-excel-import";
@@ -56,6 +58,7 @@ export default async function SalesPage({
   const roleTicketFilter = role === "EMPLOYEE" ? { sellerId: session.user.id } : {};
   const canCreateTicket = role === "ADMIN" || role === "MANAGER" || role === "EMPLOYEE";
   const canManageTickets = role === "ADMIN" || role === "EMPLOYEE";
+  const canManageAirlineDeposits = role === "ADMIN" || role === "ACCOUNTANT";
   const canImportTickets = canImportTicketWorkbook(role, session.user.canImportTicketWorkbook);
   const canReplaceImportedPeriod = role === "ADMIN" || role === "MANAGER";
   const accessNote = canCreateTicket
@@ -66,7 +69,7 @@ export default async function SalesPage({
 
   await ensureAirlineCatalog(prisma);
 
-  const [users, airlines, teams, tickets, importHistory] = await Promise.all([
+  const [users, airlines, teams, tickets, importHistory, depositAccounts] = await Promise.all([
     prisma.user.findMany({
       where:
         role === "EMPLOYEE"
@@ -97,6 +100,9 @@ export default async function SalesPage({
       take: 200,
     }),
     canImportTickets ? listTicketWorkbookImportHistory() : Promise.resolve([]),
+    buildAirlineDepositAccountSummaries(
+      prisma as unknown as { airlineDepositMovement: { findMany: (args: unknown) => Promise<any[]> } },
+    ),
   ]);
 
   const caaAirline = airlines.find((airline) => airline.code === "CAA");
@@ -194,6 +200,11 @@ export default async function SalesPage({
         </form>
       </section>
 
+      <AirlineDepositAccountManager
+        accounts={depositAccounts}
+        canManage={canManageAirlineDeposits}
+      />
+
       <div className="grid gap-6 lg:grid-cols-[400px,1fr]">
         {canCreateTicket ? (
           <div className="grid gap-6">
@@ -208,6 +219,12 @@ export default async function SalesPage({
                 id: team.id,
                 name: team.name,
                 kind: team.kind,
+              }))}
+              depositAccounts={depositAccounts.map((account) => ({
+                key: account.key,
+                label: account.label,
+                airlineCodes: account.airlineCodes,
+                balance: account.balance,
               }))}
             />
             {canImportTickets ? (

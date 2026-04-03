@@ -118,6 +118,11 @@ enum CommissionCalculationStatus {
   FINAL
 }
 
+enum AirlineDepositMovementType {
+  CREDIT
+  DEBIT
+}
+
 enum NeedRequestStatus {
   DRAFT
   SUBMITTED
@@ -184,6 +189,7 @@ model User {
   paymentOrdersApproved PaymentOrder[] @relation("PaymentOrderApprover")
   paymentOrdersExecuted PaymentOrder[] @relation("PaymentOrderExecutor")
   cashOperations   CashOperation[] @relation("CashOperationCreator")
+  airlineDepositMovements AirlineDepositMovement[] @relation("AirlineDepositMovementCreator")
   stockMovements StockMovement[] @relation("StockMovementActor")
   archiveUploads ArchiveDocument[] @relation("ArchiveUploader")
   createdAt     DateTime      @default(now())
@@ -296,6 +302,7 @@ model Airline {
   name            String
   tickets         TicketSale[]
   commissionRules CommissionRule[]
+  depositMovements AirlineDepositMovement[]
   createdAt       DateTime         @default(now())
   updatedAt       DateTime         @updatedAt
 }
@@ -349,6 +356,7 @@ model TicketSale {
   commissionModeApplied CommissionMode @default(IMMEDIATE)
   notes              String?
   payments           Payment[]
+  depositMovements   AirlineDepositMovement[]
   createdAt          DateTime      @default(now())
   updatedAt          DateTime      @updatedAt
 }
@@ -394,6 +402,28 @@ model CashOperation {
   @@index([direction])
   @@index([category])
   @@index([createdById])
+}
+
+model AirlineDepositMovement {
+  id           String                    @id @default(cuid())
+  accountKey   String
+  accountLabel String
+  movementType AirlineDepositMovementType
+  amount       Float
+  balanceAfter Float?
+  reference    String
+  description  String
+  airlineId    String?
+  airline      Airline?                  @relation(fields: [airlineId], references: [id], onDelete: SetNull)
+  ticketSaleId String?
+  ticketSale   TicketSale?               @relation(fields: [ticketSaleId], references: [id], onDelete: SetNull)
+  createdById  String?
+  createdBy    User?                     @relation("AirlineDepositMovementCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt    DateTime                  @default(now())
+
+  @@index([accountKey, createdAt])
+  @@index([airlineId, createdAt])
+  @@index([ticketSaleId])
 }
 
 model AuditLog {

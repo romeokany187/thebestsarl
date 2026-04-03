@@ -4,6 +4,7 @@ import { ticketSchema } from "@/lib/validators";
 import { calculateTicketMetrics } from "@/lib/kpi";
 import { requireApiModuleAccess } from "@/lib/rbac";
 import { computeCommissionAmount, pickCommissionRule } from "@/lib/commission";
+import { recordAirlineDepositMovement, getAirlineDepositAccountByAirlineCode } from "@/lib/airline-deposit";
 import { CommissionCalculationStatus, CommissionMode } from "@prisma/client";
 import { ensureAirlineCatalog } from "@/lib/airline-catalog";
 import { Prisma } from "@prisma/client";
@@ -67,6 +68,7 @@ export async function POST(request: NextRequest) {
     }
 
     const rule = pickCommissionRule(airline.commissionRules, parsed.data.route, parsed.data.travelClass);
+    const depositAccount = getAirlineDepositAccountByAirlineCode(airline.code);
 
     if (!rule) {
       return NextResponse.json({
@@ -225,6 +227,20 @@ export async function POST(request: NextRequest) {
         });
       }
 
+      if (depositAccount) {
+        await recordAirlineDepositMovement(tx, {
+          accountKey: depositAccount.key,
+          movementType: "DEBIT",
+          amount: created.amount,
+          reference: `PNR ${created.ticketNumber}`,
+          description: `Débit automatique billet ${created.ticketNumber} - ${airline.name}`,
+          airlineId: airline.id,
+          ticketSaleId: created.id,
+          createdById: access.session.user.id,
+          createdAt: created.soldAt,
+        });
+      }
+
       return created;
     });
 
@@ -255,6 +271,16 @@ export async function POST(request: NextRequest) {
     }, { status: 201 });
   } catch (error) {
     console.error("POST /api/tickets failed", error);
+
+    if (error instanceof Error && error.message.startsWith("INSUFFICIENT_AIRLINE_DEPOSIT:")) {
+      const [, label, available, requested] = error.message.split(":");
+      return NextResponse.json(
+        {
+          error: `${label}: solde insuffisant (${available} USD disponibles pour ${requested} USD demandés). Veuillez d'abord créditer le compte dépôt compagnie.`,
+        },
+        { status: 400 },
+      );
+    }
 
     if (error instanceof Prisma.PrismaClientKnownRequestError) {
       if (error.code === "P2002") {

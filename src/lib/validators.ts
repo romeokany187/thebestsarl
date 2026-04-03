@@ -280,6 +280,13 @@ export const paymentOrderExecutionSchema = z.object({
   executionComment: z.string().max(500).optional(),
 });
 
+export const airlineDepositTopUpSchema = z.object({
+  accountKey: z.string().trim().min(2).max(80),
+  amount: z.number().positive(),
+  reference: z.string().trim().min(2).max(180),
+  description: z.string().trim().min(3).max(300),
+});
+
 export const cashOperationCreateSchema = z.object({
   occurredAt: z.coerce.date().optional(),
   direction: z.enum(["INFLOW", "OUTFLOW"]),

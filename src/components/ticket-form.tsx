@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 type UserOption = { id: string; name: string };
 type AirlineOption = { id: string; name: string; code: string };
 type TeamOption = { id: string; name: string; kind: "AGENCE" | "PARTENAIRE" };
+type DepositAccountOption = { key: string; label: string; airlineCodes: string[]; balance: number };
 
 type EditableTicket = {
   id: string;
@@ -70,10 +71,12 @@ export function TicketForm({
   users,
   airlines,
   teams,
+  depositAccounts = [],
 }: {
   users: UserOption[];
   airlines: AirlineOption[];
   teams: TeamOption[];
+  depositAccounts?: DepositAccountOption[];
 }) {
   const [status, setStatus] = useState<string>("");
   const [statusType, setStatusType] = useState<"idle" | "success" | "error" | "loading">("idle");
@@ -124,6 +127,11 @@ export function TicketForm({
   const isAirCongo = selectedAirline?.code === "ACG";
   const isMontGabaon = selectedAirline?.code === "MGB";
   const isAirFast = selectedAirline?.code === "FST";
+  const selectedDepositAccount = useMemo(
+    () => depositAccounts.find((account) => selectedAirline?.code ? account.airlineCodes.includes(selectedAirline.code) : false) ?? null,
+    [depositAccounts, selectedAirline],
+  );
+  const requestedTicketAmount = Number(form.amount) || 0;
 
   const clientPayerValue = useMemo(() => {
     const customer = form.customerName.trim();
@@ -427,6 +435,11 @@ export function TicketForm({
       {isAirFast ? (
         <p className="text-xs text-black/60 dark:text-white/60">
           Air Fast: bonus spécial conservé (après 12 billets vendus, le 13ème est compté comme commission).
+        </p>
+      ) : null}
+      {selectedDepositAccount ? (
+        <p className={`text-xs ${requestedTicketAmount > selectedDepositAccount.balance ? "text-red-600 dark:text-red-300" : "text-black/60 dark:text-white/60"}`}>
+          {selectedDepositAccount.label}: solde disponible {selectedDepositAccount.balance.toFixed(2)} USD. Chaque billet de cette compagnie sera débité automatiquement.
         </p>
       ) : null}
 

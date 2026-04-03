@@ -1,6 +1,11 @@
 import { CommissionCalculationStatus, CommissionMode, PaymentStatus, Prisma, SaleNature, TravelClass } from "@prisma/client";
 import * as XLSX from "xlsx";
 import { prisma } from "@/lib/prisma";
+import {
+  buildAirlineDepositAccountSummaries,
+  getAirlineDepositAccountByAirlineCode,
+  recordAirlineDepositMovement,
+} from "@/lib/airline-deposit";
 
 type Row = Record<string, unknown>;
 
@@ -763,25 +768,57 @@ export async function importTicketWorkbookFromBuffer(options: TicketWorkbookImpo
   if (replaceExistingPeriod && !dryRun) {
     const existingPeriodTickets = await prisma.ticketSale.findMany({
       where: { soldAt: { gte: range.start, lte: range.end } },
-      select: { id: true },
+      select: {
+        id: true,
+        amount: true,
+        ticketNumber: true,
+        airlineId: true,
+        airline: {
+          select: {
+            code: true,
+            name: true,
+          },
+        },
+      },
     });
     const ticketIds = existingPeriodTickets.map((ticket) => ticket.id);
 
     if (ticketIds.length > 0) {
-      await prisma.payment.deleteMany({ where: { ticketId: { in: ticketIds } } });
-      await prisma.ticketSale.deleteMany({ where: { id: { in: ticketIds } } });
+      await prisma.$transaction(async (tx) => {
+        for (const ticket of existingPeriodTickets) {
+          const depositAccount = getAirlineDepositAccountByAirlineCode(ticket.airline.code);
+          if (!depositAccount) {
+            continue;
+          }
+
+          await recordAirlineDepositMovement(tx, {
+            accountKey: depositAccount.key,
+            movementType: "CREDIT",
+            amount: ticket.amount,
+            reference: `REMIMPORT ${ticket.ticketNumber}`,
+            description: `Restitution suite remplacement import - ${ticket.airline.name}`,
+            airlineId: ticket.airlineId,
+            ticketSaleId: ticket.id,
+          });
+        }
+
+        await tx.payment.deleteMany({ where: { ticketId: { in: ticketIds } } });
+        await tx.ticketSale.deleteMany({ where: { id: { in: ticketIds } } });
+      });
     }
   }
 
-  const [ticketCounts, existingTickets, consumedByAirline] = await Promise.all([
+  const [ticketCounts, existingTickets, consumedByAirline, depositAccountSummaries] = await Promise.all([
     prisma.ticketSale.groupBy({ by: ["airlineId"], _count: { _all: true } }),
     prisma.ticketSale.findMany({ select: { ticketNumber: true } }),
     prisma.ticketSale.groupBy({ by: ["airlineId"], _sum: { amount: true } }),
+    buildAirlineDepositAccountSummaries(prisma),
   ]);
 
   const ticketCountByAirlineId = new Map(ticketCounts.map((entry) => [entry.airlineId, entry._count._all]));
   const existingTicketNumbers = new Set(existingTickets.map((ticket) => ticket.ticketNumber));
   const consumedAmountByAirlineId = new Map(consumedByAirline.map((entry) => [entry.airlineId, entry._sum.amount ?? 0]));
+  const depositBalanceByAccountKey = new Map(depositAccountSummaries.map((account) => [account.key, account.balance]));
   const touchedAfterDepositRuleIds = new Set<string>();
 
   async function resolveSeller(input: { sellerEmail: string | null; sellerName: string | null }) {
@@ -930,6 +967,14 @@ export async function importTicketWorkbookFromBuffer(options: TicketWorkbookImpo
 
         const afterDepositRule = afterDepositRuleByAirlineId.get(airline.id) ?? null;
         const isAirFast = isAirFastLike(airline);
+        const depositAccount = getAirlineDepositAccountByAirlineCode(airline.code);
+
+        if (depositAccount) {
+          const availableDepositBalance = depositBalanceByAccountKey.get(depositAccount.key) ?? 0;
+          if (amount > availableDepositBalance + 0.0001) {
+            throw new Error(`${depositAccount.label}: solde insuffisant (${availableDepositBalance.toFixed(2)} USD disponibles). Créditer d'abord le compte dépôt.`);
+          }
+        }
 
         // Pour CAA (règle afterDeposit) et AirFast, la commission est calculée
         // exclusivement par la logique métier — la valeur du fichier est ignorée.
@@ -1009,9 +1054,28 @@ export async function importTicketWorkbookFromBuffer(options: TicketWorkbookImpo
         };
 
         if (dryRun) {
+          if (depositAccount) {
+            depositBalanceByAccountKey.set(depositAccount.key, (depositBalanceByAccountKey.get(depositAccount.key) ?? 0) - amount);
+          }
           summary.created += 1;
         } else {
-          await prisma.ticketSale.create({ data });
+          await prisma.$transaction(async (tx) => {
+            const createdTicket = await tx.ticketSale.create({ data });
+
+            if (depositAccount) {
+              await recordAirlineDepositMovement(tx, {
+                accountKey: depositAccount.key,
+                movementType: "DEBIT",
+                amount,
+                reference: `PNR ${normalizedTicketNumber}`,
+                description: `Débit automatique import billet ${normalizedTicketNumber} - ${airline.name}`,
+                airlineId: airline.id,
+                ticketSaleId: createdTicket.id,
+                createdAt: soldAt,
+              });
+              depositBalanceByAccountKey.set(depositAccount.key, (depositBalanceByAccountKey.get(depositAccount.key) ?? 0) - amount);
+            }
+          });
           existingTicketNumbers.add(normalizedTicketNumber);
           summary.created += 1;
         }
