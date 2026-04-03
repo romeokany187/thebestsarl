@@ -9,7 +9,7 @@ import { airlineDepositTopUpSchema } from "@/lib/validators";
 import { requireApiModuleAccess } from "@/lib/rbac";
 
 export async function GET() {
-  const access = await requireApiModuleAccess("sales", ["ADMIN", "MANAGER", "EMPLOYEE", "ACCOUNTANT"]);
+  const access = await requireApiModuleAccess("sales", ["ACCOUNTANT"]);
   if (access.error) {
     return access.error;
   }
@@ -21,16 +21,9 @@ export async function GET() {
 }
 
 export async function POST(request: NextRequest) {
-  const access = await requireApiModuleAccess("sales", ["ADMIN", "MANAGER", "EMPLOYEE", "ACCOUNTANT"]);
+  const access = await requireApiModuleAccess("sales", ["ACCOUNTANT"]);
   if (access.error) {
     return access.error;
-  }
-
-  if (access.role !== "ADMIN" && access.role !== "ACCOUNTANT") {
-    return NextResponse.json(
-      { error: "Seuls l'admin et le comptable peuvent créditer les comptes dépôts compagnies." },
-      { status: 403 },
-    );
   }
 
   const body = await request.json();

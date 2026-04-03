@@ -58,7 +58,7 @@ export default async function SalesPage({
   const roleTicketFilter = role === "EMPLOYEE" ? { sellerId: session.user.id } : {};
   const canCreateTicket = role === "ADMIN" || role === "MANAGER" || role === "EMPLOYEE";
   const canManageTickets = role === "ADMIN" || role === "EMPLOYEE";
-  const canManageAirlineDeposits = role === "ADMIN" || role === "ACCOUNTANT";
+  const canAccessAirlineDeposits = role === "ACCOUNTANT";
   const canImportTickets = canImportTicketWorkbook(role, session.user.canImportTicketWorkbook);
   const canReplaceImportedPeriod = role === "ADMIN" || role === "MANAGER";
   const accessNote = canCreateTicket
@@ -100,9 +100,11 @@ export default async function SalesPage({
       take: 200,
     }),
     canImportTickets ? listTicketWorkbookImportHistory() : Promise.resolve([]),
-    buildAirlineDepositAccountSummaries(
-      prisma as unknown as { airlineDepositMovement: { findMany: (args: unknown) => Promise<any[]> } },
-    ),
+    canAccessAirlineDeposits
+      ? buildAirlineDepositAccountSummaries(
+        prisma as unknown as { airlineDepositMovement: { findMany: (args: unknown) => Promise<any[]> } },
+      )
+      : Promise.resolve([]),
   ]);
 
   const caaAirline = airlines.find((airline) => airline.code === "CAA");
@@ -200,10 +202,12 @@ export default async function SalesPage({
         </form>
       </section>
 
-      <AirlineDepositAccountManager
-        accounts={depositAccounts}
-        canManage={canManageAirlineDeposits}
-      />
+      {canAccessAirlineDeposits ? (
+        <AirlineDepositAccountManager
+          accounts={depositAccounts}
+          canManage={true}
+        />
+      ) : null}
 
       <div className="grid gap-6 lg:grid-cols-[400px,1fr]">
         {canCreateTicket ? (

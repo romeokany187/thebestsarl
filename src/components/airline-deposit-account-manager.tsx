@@ -81,7 +81,7 @@ export function AirlineDepositAccountManager({
       <div className="mb-4 flex flex-col gap-1">
         <h2 className="text-lg font-semibold">Comptes dépôts compagnies</h2>
         <p className="text-sm text-black/60 dark:text-white/60">
-          Le comptable crédite ces comptes, puis chaque billet des compagnies concernées est débité automatiquement.
+          Section comptable: le comptable crédite ces comptes, puis chaque billet des compagnies concernées est débité automatiquement.
         </p>
       </div>
 
@@ -153,7 +153,7 @@ export function AirlineDepositAccountManager({
         </form>
       ) : (
         <p className="mb-4 text-xs text-black/60 dark:text-white/60">
-          Consultation uniquement: le crédit manuel de ces comptes est réservé au comptable et à l&apos;administration.
+          Section réservée au comptable.
         </p>
       )}
 
