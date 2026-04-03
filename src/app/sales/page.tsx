@@ -93,26 +93,19 @@ export default async function SalesPage({
 }) {
   const resolvedSearchParams = (await searchParams) ?? {};
   const dateRange = rangeFromSearch(resolvedSearchParams);
-  const { session, role } = await requirePageModuleAccess("sales", ["ADMIN", "MANAGER", "EMPLOYEE", "ACCOUNTANT"]);
-  const roleTicketFilter = role === "EMPLOYEE" ? { sellerId: session.user.id } : {};
-  const canCreateTicket = role === "ADMIN" || role === "MANAGER" || role === "EMPLOYEE";
-  const canManageTickets = role === "ADMIN" || role === "EMPLOYEE";
+  const { session, role } = await requirePageModuleAccess("sales", ["ADMIN", "DIRECTEUR_GENERAL", "MANAGER", "EMPLOYEE", "ACCOUNTANT"]);
+  const roleTicketFilter = {};
+  const canCreateTicket = true;
+  const canManageTickets = true;
   const canImportTickets = canImportTicketWorkbook(role, session.user.canImportTicketWorkbook);
   const canReplaceImportedPeriod = role === "ADMIN" || role === "MANAGER";
-  const accessNote = canCreateTicket
-    ? role === "EMPLOYEE"
-      ? "Accès commercial personnel: création et suivi de vos ventes."
-      : "Accès commercial étendu: création et suivi des ventes de l'agence."
-    : "Accès financier lecture seule: consultation des ventes et commissions.";
+  const accessNote = "Accès commercial complet: tous les utilisateurs autorisés peuvent encoder, modifier et supprimer les billets.";
 
   await ensureAirlineCatalog(prisma);
 
   const [users, airlines, teams, tickets, importHistory, depositAccounts] = await Promise.all([
     prisma.user.findMany({
-      where:
-        role === "EMPLOYEE"
-          ? { id: session.user.id }
-          : { role: { in: ["EMPLOYEE", "MANAGER", "ADMIN"] } },
+      where: { role: { in: ["EMPLOYEE", "MANAGER", "ADMIN", "ACCOUNTANT"] } },
       select: { id: true, name: true },
       orderBy: { name: "asc" },
     }),
@@ -126,7 +119,6 @@ export default async function SalesPage({
     }),
     prisma.ticketSale.findMany({
       where: {
-        ...(role === "EMPLOYEE" ? { sellerId: session.user.id } : {}),
         soldAt: {
           gte: dateRange.start,
           lt: dateRange.endExclusive,
@@ -147,7 +139,6 @@ export default async function SalesPage({
   const caaRule = caaAirline?.commissionRules
     .filter((rule) => rule.isActive && rule.commissionMode === "AFTER_DEPOSIT")
     .sort((a, b) => b.startsAt.getTime() - a.startsAt.getTime())[0];
-  const airFastAirline = airlines.find((airline) => airline.code === "FST");
   const caaTargetAmount = caaRule?.depositStockTargetAmount ?? 0;
   const caaBatchCommission = caaRule?.batchCommissionAmount ?? 0;
   const orderedCaaTicketsUntilPeriodEnd = caaAirline
@@ -181,29 +172,6 @@ export default async function SalesPage({
     }
     return ticket.commissionAmount ?? ticket.amount * (ticket.commissionRateUsed / 100);
   };
-
-  const caaConsumedInPeriod = caaTicketsInPeriod.reduce((sum, ticket) => sum + ticket.amount, 0);
-  const caaCommissionEarned = caaTicketsInPeriod.reduce((sum, ticket) => sum + commissionOf(ticket), 0);
-  const caaLotsReached = caaBatchCommission > 0 ? Math.round(caaCommissionEarned / caaBatchCommission) : 0;
-
-  const caaConsumedUntilEnd = caaAirline
-    ? orderedCaaTicketsUntilPeriodEnd.reduce((sum, ticket) => sum + ticket.amount, 0)
-    : 0;
-  const caaRemainder = caaTargetAmount > 0 ? caaConsumedUntilEnd % caaTargetAmount : 0;
-  const caaRemainingToNextLot = caaTargetAmount > 0
-    ? caaConsumedUntilEnd === 0
-      ? caaTargetAmount
-      : caaRemainder === 0
-        ? 0
-        : Math.max(0, caaTargetAmount - caaRemainder)
-    : 0;
-  const airFastTicketCount = airFastAirline
-    ? tickets.filter((ticket) => ticket.airlineId === airFastAirline.id).length
-    : 0;
-  const airFastNextBonusIn = airFastAirline
-    ? (13 - (airFastTicketCount % 13 || 13))
-    : 0;
-  const airFastBonusReached = airFastAirline ? Math.floor(airFastTicketCount / 13) : 0;
 
   const selectableAirlines = Array.from(
     airlines.reduce((map, airline) => {
@@ -288,28 +256,6 @@ export default async function SalesPage({
         )}
 
         <div className="overflow-hidden rounded-xl border border-black/10 bg-white dark:border-white/10 dark:bg-zinc-900">
-          {(caaRule || airFastAirline) ? (
-            <div className="border-b border-black/10 p-3 text-xs dark:border-white/10">
-              <div className="grid gap-2 sm:grid-cols-2">
-                {caaRule ? (
-                  <div className="rounded-md border border-black/10 px-3 py-2 dark:border-white/10">
-                    <p className="font-semibold">Suivi CAA</p>
-                    <p className="text-black/60 dark:text-white/60">
-                      Cumul période: {caaConsumedInPeriod.toFixed(2)} USD • Lots: {caaLotsReached} • Commission: {caaCommissionEarned.toFixed(2)} USD • Reste prochain lot: {caaRemainingToNextLot.toFixed(2)} USD
-                    </p>
-                  </div>
-                ) : null}
-                {airFastAirline ? (
-                  <div className="rounded-md border border-black/10 px-3 py-2 dark:border-white/10">
-                    <p className="font-semibold">Suivi Air Fast</p>
-                    <p className="text-black/60 dark:text-white/60">
-                      Billets vendus: {airFastTicketCount} • Bonus gagnés: {airFastBonusReached} • Prochain bonus dans: {airFastNextBonusIn} billet(s)
-                    </p>
-                  </div>
-                ) : null}
-              </div>
-            </div>
-          ) : null}
           <div className="tickets-scroll h-[70vh] w-full overflow-scroll overscroll-contain">
           <table className="min-w-300 text-sm">
             <thead className="bg-black/5 dark:bg-white/10">

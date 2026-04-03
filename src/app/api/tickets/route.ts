@@ -8,7 +8,6 @@ import { recordAirlineDepositMovement, getAirlineDepositAccountByAirlineCode } f
 import { CommissionCalculationStatus, CommissionMode } from "@prisma/client";
 import { ensureAirlineCatalog } from "@/lib/airline-catalog";
 import { Prisma } from "@prisma/client";
-import { canSellTickets } from "@/lib/assignment";
 import { invoiceNumberFromChronology } from "@/lib/invoice";
 
 function clamp(value: number, min: number, max: number) {
@@ -39,13 +38,9 @@ export async function GET() {
 }
 
 export async function POST(request: NextRequest) {
-  const access = await requireApiModuleAccess("sales", ["ADMIN", "MANAGER", "EMPLOYEE"]);
+  const access = await requireApiModuleAccess("sales", ["ADMIN", "DIRECTEUR_GENERAL", "MANAGER", "EMPLOYEE", "ACCOUNTANT"]);
   if (access.error) {
     return access.error;
-  }
-
-  if (access.role === "EMPLOYEE" && !canSellTickets(access.session.user.jobTitle ?? "")) {
-    return NextResponse.json({ error: "Fonction non autorisée pour l'encodage des billets." }, { status: 403 });
   }
 
   try {
