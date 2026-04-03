@@ -32,10 +32,15 @@ function candidateScore(airline: AirlineWithCounts, group: Group) {
 
 const groups: Group[] = [
   {
+    label: "Air Fast",
+    preferredCodes: ["FST"],
+    matches: (code, name) => name.includes("airfast") || name.includes("airfastcongo") || code === "FST" || code === "AI1",
+  },
+  {
     label: "Air Congo",
     preferredCodes: ["ACG"],
     matches: (code, name) =>
-      name.includes("aircong") || name.includes("aircingo") || code === "AIR" || /^AI\d+$/.test(code),
+      name.includes("aircong") || name.includes("aircingo") || code === "AIR" || (/^AI\d+$/.test(code) && !name.includes("airfast")),
   },
   {
     label: "Ethiopian Airlines",
@@ -60,7 +65,22 @@ const groups: Group[] = [
   {
     label: "Dakota",
     preferredCodes: ["DKT"],
-    matches: (code, name) => name.includes("dakota") || code === "DKT" || code === "DAK",
+    matches: (code, name) => name.includes("dakota") || code === "DKT" || code === "DAK" || /^DK\d+$/.test(code),
+  },
+  {
+    label: "Air France",
+    preferredCodes: ["AF"],
+    matches: (code, name) => name.includes("airfrance") || /^AF\d*$/.test(code),
+  },
+  {
+    label: "ASKY",
+    preferredCodes: ["KP"],
+    matches: (code, name) => name.includes("asky") || /^KP\d*$/.test(code),
+  },
+  {
+    label: "Brussels Airlines",
+    preferredCodes: ["SN"],
+    matches: (code, name) => name.includes("brussels") || /^SN\d*$/.test(code),
   },
   {
     label: "Rwanda Air",

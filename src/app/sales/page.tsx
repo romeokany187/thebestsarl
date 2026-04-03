@@ -46,6 +46,46 @@ function saleNatureLabel(value: string) {
   return value === "CREDIT" ? "Crédit" : "Cash";
 }
 
+function normalizeAirlineSelectionLabel(value: string) {
+  return value
+    .trim()
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]/g, "");
+}
+
+function canonicalAirlineSelectionKey(airline: { code: string; name: string }) {
+  const code = airline.code.trim().toUpperCase().replace(/[^A-Z0-9]/g, "");
+  const baseCode = code.replace(/\d+$/g, "");
+  const name = normalizeAirlineSelectionLabel(airline.name);
+
+  if (name.includes("airfast") || code === "AI1" || baseCode === "FST") return "FST";
+  if (name.includes("aircong") || name.includes("aircingo") || baseCode === "AIR" || (baseCode === "AI" && !name.includes("airfast"))) return "ACG";
+  if (name.includes("ethi") || ["ET", "ETH", "ETI"].includes(baseCode)) return "ET";
+  if (name.includes("kenya") || ["KQ", "KE", "KEN"].includes(baseCode)) return "KQ";
+  if (name === "caa" || ["CAA", "CA"].includes(baseCode)) return "CAA";
+  if (name.includes("montgabaon") || name.includes("montgabon") || ["MGB", "MG"].includes(baseCode)) return "MGB";
+  if (name.includes("dakota") || ["DKT", "DAK", "DK"].includes(baseCode)) return "DKT";
+  if (name.includes("asky") || baseCode === "KP") return "KP";
+  if (name.includes("airfrance") || baseCode === "AF") return "AF";
+  if (name.includes("brussels") || baseCode === "SN") return "SN";
+  if (name.includes("rwand")) return "WB";
+  if (name.includes("uganda")) return "UR";
+  if (name.includes("tanzania")) return "TC";
+
+  return `${baseCode || code}:${name}`;
+}
+
+function airlineSelectionScore(airline: { code: string; name: string; commissionRules: Array<unknown> }) {
+  const code = airline.code.trim().toUpperCase().replace(/[^A-Z0-9]/g, "");
+  let score = 0;
+  if (/^[A-Z]{2,3}$/.test(code)) score += 100;
+  if (airline.commissionRules.length > 0) score += 20;
+  score -= airline.name.length / 1000;
+  return score;
+}
+
 export default async function SalesPage({
   searchParams,
 }: {
@@ -165,6 +205,19 @@ export default async function SalesPage({
     : 0;
   const airFastBonusReached = airFastAirline ? Math.floor(airFastTicketCount / 13) : 0;
 
+  const selectableAirlines = Array.from(
+    airlines.reduce((map, airline) => {
+      const key = canonicalAirlineSelectionKey(airline);
+      const current = map.get(key);
+      if (!current || airlineSelectionScore(airline) > airlineSelectionScore(current)) {
+        map.set(key, airline);
+      }
+      return map;
+    }, new Map<string, (typeof airlines)[number]>()),
+  )
+    .map(([, airline]) => airline)
+    .sort((a, b) => a.name.localeCompare(b.name, "fr", { sensitivity: "base" }));
+
   return (
     <AppShell role={role} accessNote={accessNote}>
       <section className="mb-6">
@@ -203,7 +256,7 @@ export default async function SalesPage({
           <div className="grid gap-6">
             <TicketForm
               users={users}
-              airlines={airlines.map((airline) => ({
+              airlines={selectableAirlines.map((airline) => ({
                 id: airline.id,
                 name: airline.name,
                 code: airline.code,
