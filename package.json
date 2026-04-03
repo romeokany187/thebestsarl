@@ -10,6 +10,7 @@
     "db:generate": "prisma generate",
     "db:push": "prisma db push --accept-data-loss",
     "db:migrate:jobtitles": "tsx scripts/migrate-jobtitle-enum.ts",
+    "db:clone:prod-to-local": "bash scripts/clone-prod-to-local.sh",
     "db:seed": "tsx prisma/seed.ts",
     "db:import:tickets:excel": "tsx scripts/import-tickets-excel.ts",
     "db:dedup:airlines": "tsx scripts/dedup-airlines.ts",
