@@ -10,6 +10,15 @@ function normalizeMoneyCurrency(value: string | null | undefined): "USD" | "CDF"
   return normalized === "USD" ? "USD" : "CDF";
 }
 
+function paymentOrderAssignmentLabel(value: string | null | undefined) {
+  const normalized = (value ?? "A_MON_COMPTE").trim().toUpperCase();
+  if (normalized === "VISAS") return "Visas";
+  if (normalized === "SAFETY") return "Safety";
+  if (normalized === "BILLETTERIE") return "Billetterie";
+  if (normalized === "TSL") return "TSL";
+  return "À mon compte";
+}
+
 export const dynamic = "force-dynamic";
 
 export default async function DgPaymentOrdersPage() {
@@ -48,27 +57,46 @@ export default async function DgPaymentOrdersPage() {
             <thead className="bg-black/5 dark:bg-white/10">
               <tr>
                 <th className="px-4 py-3 text-left font-semibold">Créé le</th>
+                <th className="px-4 py-3 text-left font-semibold">Code OP</th>
+                <th className="px-4 py-3 text-left font-semibold">Bénéficiaire</th>
+                <th className="px-4 py-3 text-left font-semibold">Motif</th>
+                <th className="px-4 py-3 text-left font-semibold">Affectation</th>
                 <th className="px-4 py-3 text-left font-semibold">Description</th>
                 <th className="px-4 py-3 text-left font-semibold">Montant</th>
                 <th className="px-4 py-3 text-left font-semibold">Admin</th>
                 <th className="px-4 py-3 text-left font-semibold">Caissière</th>
                 <th className="px-4 py-3 text-left font-semibold">Statut</th>
+                <th className="px-4 py-3 text-left font-semibold">PDF</th>
               </tr>
             </thead>
             <tbody>
               {orders.map((order: any) => (
                 <tr key={order.id} className="border-t border-black/5 dark:border-white/10">
                   <td className="px-4 py-3">{new Date(order.createdAt).toLocaleDateString("fr-FR")}</td>
+                  <td className="px-4 py-3 font-mono text-xs font-semibold">{order.code ?? "-"}</td>
+                  <td className="px-4 py-3">{order.beneficiary || "-"}</td>
+                  <td className="px-4 py-3">{order.purpose || "-"}</td>
+                  <td className="px-4 py-3">{paymentOrderAssignmentLabel(order.assignment)}</td>
                   <td className="px-4 py-3">{order.description}</td>
                   <td className="px-4 py-3">{order.amount.toFixed(2)} {normalizeMoneyCurrency(order.currency)}</td>
                   <td className="px-4 py-3">{order.approvedBy?.name ?? "-"}</td>
                   <td className="px-4 py-3">{order.executedBy?.name ?? "-"}</td>
                   <td className="px-4 py-3">{order.status}</td>
+                  <td className="px-4 py-3">
+                    <a
+                      href={`/api/payment-orders/${order.id}/pdf`}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="inline-flex rounded-md border border-black/20 px-2.5 py-1 text-[11px] font-semibold hover:bg-black/5 dark:border-white/20 dark:hover:bg-white/10"
+                    >
+                      PDF
+                    </a>
+                  </td>
                 </tr>
               ))}
               {orders.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="px-4 py-8 text-center text-sm text-black/55 dark:text-white/55">
+                  <td colSpan={11} className="px-4 py-8 text-center text-sm text-black/55 dark:text-white/55">
                     Aucun ordre de paiement créé pour le moment.
                   </td>
                 </tr>

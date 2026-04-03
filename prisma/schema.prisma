@@ -465,7 +465,10 @@ model NeedRequest {
 model PaymentOrder {
   id              String              @id @default(cuid())
   code            String?             @unique
+  beneficiary     String              @default("")
+  purpose         String              @default("")
   description     String
+  assignment      String              @default("A_MON_COMPTE")
   amount          Float
   currency        String              @default("XAF")
   status          PaymentOrderStatus  @default(SUBMITTED)

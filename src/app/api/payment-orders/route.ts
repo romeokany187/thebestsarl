@@ -10,6 +10,23 @@ function normalizeMoneyCurrency(value: string | null | undefined): "USD" | "CDF"
   return normalized === "USD" ? "USD" : "CDF";
 }
 
+function normalizePaymentOrderAssignment(value: string | null | undefined) {
+  const normalized = (value ?? "A_MON_COMPTE").trim().toUpperCase();
+  if (["A_MON_COMPTE", "VISAS", "SAFETY", "BILLETTERIE", "TSL"].includes(normalized)) {
+    return normalized;
+  }
+  return "A_MON_COMPTE";
+}
+
+function paymentOrderAssignmentLabel(value: string | null | undefined) {
+  const normalized = normalizePaymentOrderAssignment(value);
+  if (normalized === "VISAS") return "Visas";
+  if (normalized === "SAFETY") return "Safety";
+  if (normalized === "BILLETTERIE") return "Billetterie";
+  if (normalized === "TSL") return "TSL";
+  return "À mon compte";
+}
+
 export async function POST(request: NextRequest) {
   const access = await requireApiRoles(["DIRECTEUR_GENERAL"]);
   if (access.error) return access.error;
@@ -39,15 +56,35 @@ export async function POST(request: NextRequest) {
 
   const now = new Date();
   const orderCurrency = normalizeMoneyCurrency(parsed.data.currency);
-  const paymentOrder = await paymentOrderClient.create({
-    data: {
-      description: parsed.data.description,
-      amount: parsed.data.amount,
-      currency: orderCurrency,
-      status: "SUBMITTED",
-      issuedById: me.id,
-      submittedAt: now,
-    },
+  const orderAssignment = normalizePaymentOrderAssignment(parsed.data.assignment);
+  const year = now.getUTCFullYear();
+  const yearStart = new Date(Date.UTC(year, 0, 1, 0, 0, 0, 0));
+  const yearEnd = new Date(Date.UTC(year + 1, 0, 1, 0, 0, 0, 0));
+
+  const paymentOrder = await prisma.$transaction(async (tx) => {
+    const count = await (tx as unknown as { paymentOrder: any }).paymentOrder.count({
+      where: {
+        createdAt: { gte: yearStart, lt: yearEnd },
+      },
+    });
+
+    const sequence = String(count + 1).padStart(3, "0");
+    const code = `TB-DG-OP-${sequence}-${year}`;
+
+    return (tx as unknown as { paymentOrder: any }).paymentOrder.create({
+      data: {
+        code,
+        beneficiary: parsed.data.beneficiary.trim(),
+        purpose: parsed.data.purpose.trim(),
+        description: parsed.data.description.trim(),
+        assignment: orderAssignment,
+        amount: parsed.data.amount,
+        currency: orderCurrency,
+        status: "SUBMITTED",
+        issuedById: me.id,
+        submittedAt: now,
+      },
+    });
   });
 
   // Notify all admins about the new payment order
@@ -64,10 +101,14 @@ export async function POST(request: NextRequest) {
       data: admins.map((admin) => ({
         userId: admin.id,
         title: "Nouvel ordre de paiement à approuver",
-        message: `${me.name} a créé un ordre de paiement de ${parsed.data.amount} ${orderCurrency}. Description: ${parsed.data.description}`,
+        message: `${me.name} a créé l'OP ${paymentOrder.code} pour ${parsed.data.beneficiary} • Motif: ${parsed.data.purpose} • Affectation: ${paymentOrderAssignmentLabel(orderAssignment)} • Montant: ${parsed.data.amount} ${orderCurrency}. Description: ${parsed.data.description}`,
         type: "PAYMENT_ORDER_APPROVAL_REQUIRED",
         metadata: {
           paymentOrderId: paymentOrder.id,
+          code: paymentOrder.code,
+          beneficiary: parsed.data.beneficiary,
+          purpose: parsed.data.purpose,
+          assignment: orderAssignment,
           amount: parsed.data.amount,
           currency: orderCurrency,
           description: parsed.data.description,
@@ -78,7 +119,12 @@ export async function POST(request: NextRequest) {
     });
   }
 
-  return NextResponse.json(paymentOrder, { status: 201 });
+  return NextResponse.json({
+    data: paymentOrder,
+    pdf: {
+      url: `/api/payment-orders/${paymentOrder.id}/pdf`,
+    },
+  }, { status: 201 });
 }
 
 export async function GET(request: NextRequest) {

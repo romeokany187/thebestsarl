@@ -156,7 +156,7 @@ export async function PATCH(request: NextRequest) {
         amountCdf: paymentCurrency === "CDF" ? paymentOrder.amount : paymentOrder.amount * fxRateUsdToCdf,
         method: "CASH",
         reference: parsed.data.referenceDoc,
-        description: `Exécution OP ${paymentOrder.code ?? paymentOrder.id} - ${paymentOrder.description}`,
+        description: `Exécution OP ${paymentOrder.code ?? paymentOrder.id} - ${paymentOrder.beneficiary} - ${paymentOrder.description}`,
         createdById: me.id,
       },
       select: { id: true },
@@ -186,7 +186,10 @@ export async function PATCH(request: NextRequest) {
 
   if (accountants.length > 0) {
     const message = [
-      `Ordre de paiement: ${paymentOrder.description}`,
+      `Ordre de paiement: ${paymentOrder.code ?? paymentOrder.id}`,
+      `Bénéficiaire: ${paymentOrder.beneficiary ?? "-"}`,
+      `Motif: ${paymentOrder.purpose ?? "-"}`,
+      `Description: ${paymentOrder.description}`,
       `Montant: ${paymentOrder.amount} ${paymentOrder.currency}`,
       `Demandeur: ${paymentOrder.issuedBy.name} (${paymentOrder.issuedBy.jobTitle})`,
       `Soumis: ${paymentOrder.submittedAt ? new Date(paymentOrder.submittedAt).toLocaleString("fr-FR") : "-"}`,

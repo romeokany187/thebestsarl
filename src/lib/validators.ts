@@ -266,8 +266,13 @@ export const stockMovementSchema = z.object({
   needRequestId: z.string().optional(),
 });
 
+export const paymentOrderAssignmentSchema = z.enum(["A_MON_COMPTE", "VISAS", "SAFETY", "BILLETTERIE", "TSL"]);
+
 export const paymentOrderCreationSchema = z.object({
-  description: z.string().min(5).max(500),
+  beneficiary: z.string().trim().min(2).max(180),
+  purpose: z.string().trim().min(2).max(180),
+  description: z.string().trim().min(5).max(1500),
+  assignment: paymentOrderAssignmentSchema,
   amount: z.number().positive(),
   currency: moneyCurrencySchema.optional(),
 });

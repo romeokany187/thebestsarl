@@ -34,7 +34,7 @@ export async function PATCH(request: NextRequest) {
 
   const paymentOrder = await paymentOrderClient.findUnique({
     where: { id: parsed.data.paymentOrderId },
-    select: { id: true, status: true, description: true, amount: true, currency: true },
+    select: { id: true, code: true, status: true, beneficiary: true, purpose: true, assignment: true, description: true, amount: true, currency: true },
   });
 
   if (!paymentOrder) {
@@ -79,7 +79,7 @@ export async function PATCH(request: NextRequest) {
     notifications.push({
       userId: issuer.issuedBy.id,
       title: "Décision sur votre ordre de paiement",
-      message: `Votre ordre de paiement de ${paymentOrder.amount} ${paymentOrder.currency} a été ${nextStatus === "APPROVED" ? "approuvé" : "rejeté"}.`,
+      message: `Votre ordre de paiement ${paymentOrder.code ?? ""} pour ${paymentOrder.beneficiary} (${paymentOrder.amount} ${paymentOrder.currency}) a été ${nextStatus === "APPROVED" ? "approuvé" : "rejeté"}.`,
       type: "PAYMENT_ORDER_DECISION",
       metadata: {
         paymentOrderId: updated.id,
@@ -103,7 +103,7 @@ export async function PATCH(request: NextRequest) {
       notifications.push({
         userId: cashier.id,
         title: "Ordre de paiement approuvé à exécuter",
-        message: `L'ordre de paiement de ${paymentOrder.amount} ${paymentOrder.currency} est approuvé. ${paymentOrder.description}. Exécutez depuis votre inbox.`,
+        message: `L'ordre de paiement ${paymentOrder.code ?? ""} pour ${paymentOrder.beneficiary} (${paymentOrder.amount} ${paymentOrder.currency}) est approuvé. ${paymentOrder.description}. Exécutez depuis votre inbox.`,
         type: "PAYMENT_ORDER_EXECUTION_REQUIRED",
         metadata: {
           paymentOrderId: updated.id,
