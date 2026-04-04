@@ -2,7 +2,18 @@ import { type NextAuthOptions } from "next-auth";
 import GoogleProvider from "next-auth/providers/google";
 import { prisma } from "@/lib/prisma";
 
-const adminEmail = process.env.ADMIN_EMAIL?.trim().toLowerCase();
+const DEFAULT_ADMIN_EMAIL = "romeokany187@gmail.com";
+
+function normalizeEmail(value?: string | null) {
+  return value?.trim().toLowerCase() ?? "";
+}
+
+const adminEmails = new Set(
+  `${process.env.ADMIN_EMAILS ?? ""},${process.env.ADMIN_EMAIL ?? ""},${DEFAULT_ADMIN_EMAIL}`
+    .split(",")
+    .map((email) => normalizeEmail(email))
+    .filter(Boolean),
+);
 
 export const authOptions: NextAuthOptions = {
   session: { strategy: "jwt" },
@@ -22,8 +33,8 @@ export const authOptions: NextAuthOptions = {
         return false;
       }
 
-      const normalizedEmail = user.email.trim().toLowerCase();
-      const isAdminEmail = Boolean(adminEmail && normalizedEmail === adminEmail);
+      const normalizedEmail = normalizeEmail(user.email);
+      const isAdminEmail = adminEmails.has(normalizedEmail);
 
       try {
         const existing = await prisma.user.findUnique({ where: { email: normalizedEmail } });

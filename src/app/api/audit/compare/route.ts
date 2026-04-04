@@ -423,12 +423,13 @@ async function compareVentes(
 ) {
   const airlineScopeRaw = (airlineScope ?? "").trim();
   const airlineScopeNormalized = normalizeCompany(airlineScopeRaw);
+  const airlineScopeCode = airlineScopeRaw.toUpperCase();
 
   const tickets = await prisma.ticketSale.findMany({
     where: {
       soldAt: { gte: range.start, lt: range.end },
       ...(airlineScopeRaw ? {
-        airline: { code: { equals: airlineScopeRaw, mode: "insensitive" as const } },
+        airline: { code: { equals: airlineScopeCode } },
       } : {}),
     },
     select: {

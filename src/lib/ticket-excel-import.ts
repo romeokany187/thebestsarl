@@ -636,8 +636,9 @@ export async function listTicketWorkbookImportHistory(
 ) {
   let actorId: string | undefined;
   if (filters?.actorEmail) {
+    const actorEmail = filters.actorEmail.trim().toLowerCase();
     const actor = await prisma.user.findFirst({
-      where: { email: { equals: filters.actorEmail, mode: "insensitive" } },
+      where: { email: { equals: actorEmail } },
       select: { id: true },
     });
     if (!actor) return [];

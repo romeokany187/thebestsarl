@@ -101,7 +101,7 @@ export async function POST(request: NextRequest) {
       data: admins.map((admin) => ({
         userId: admin.id,
         title: "Nouvel ordre de paiement à approuver",
-        message: `${me.name} a créé l'OP ${paymentOrder.code} pour ${parsed.data.beneficiary} • Motif: ${parsed.data.purpose} • Affectation: ${paymentOrderAssignmentLabel(orderAssignment)} • Montant: ${parsed.data.amount} ${orderCurrency}. Description: ${parsed.data.description}`,
+        message: `${me.name} a créé l'OP ${paymentOrder.code} pour ${parsed.data.beneficiary} • Motif: ${parsed.data.purpose} • Affectation: ${paymentOrderAssignmentLabel(orderAssignment)} • Montant: ${parsed.data.amount} ${orderCurrency}. Description: ${parsed.data.description}. Consultez le PDF OP avant d'approuver ou rejeter.`,
         type: "PAYMENT_ORDER_APPROVAL_REQUIRED",
         metadata: {
           paymentOrderId: paymentOrder.id,

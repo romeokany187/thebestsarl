@@ -30,14 +30,6 @@ export default async function ProfilePage() {
       })
     : null;
 
-  await prisma.userNotification.updateMany({
-    where: {
-      userId,
-      isRead: false,
-    },
-    data: { isRead: true },
-  });
-
   const notifications = await prisma.userNotification.findMany({
     where: { userId },
     orderBy: { createdAt: "desc" },
@@ -65,9 +57,9 @@ export default async function ProfilePage() {
   return (
     <AppShell role={role} accessNote="Profil connecté et inbox: informations du compte, notifications et activité récente.">
       <section className="mb-6">
-        <h1 className="text-2xl font-semibold tracking-tight">Profil & Inbox</h1>
+        <h1 className="text-2xl font-semibold tracking-tight">Profil</h1>
         <p className="text-sm text-black/60 dark:text-white/60">
-          Voici l&apos;identité connectée, ses permissions, notifications et événements récents.
+          Voici l&apos;identité connectée, ses permissions et l&apos;accès à votre centre de notifications.
         </p>
       </section>
 
@@ -102,6 +94,23 @@ export default async function ProfilePage() {
         </ul>
       </section>
 
+      <section className="mb-4 rounded-2xl border border-black/10 bg-white p-5 shadow-sm dark:border-white/10 dark:bg-zinc-900">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h2 className="text-lg font-semibold">Centre de notifications</h2>
+            <p className="text-sm text-black/60 dark:text-white/60">
+              Les alertes OP / EDB et les actions rapides sont maintenant centralisées dans une vue dédiée.
+            </p>
+          </div>
+          <a
+            href="/inbox"
+            className="rounded-md border border-black/20 px-3 py-1.5 text-xs font-semibold hover:bg-black/5 dark:border-white/20 dark:hover:bg-white/10"
+          >
+            Ouvrir les notifications {notifications.filter((notification) => !notification.isRead).length > 0 ? `(${notifications.filter((notification) => !notification.isRead).length})` : ""}
+          </a>
+        </div>
+      </section>
+
       <div className="mb-4">
         <AppMailComposer
           currentUserId={userId}
@@ -130,6 +139,41 @@ export default async function ProfilePage() {
                     </span>
                   </div>
                   <p className="mt-1 text-xs text-black/70 dark:text-white/70">{notification.message}</p>
+                  {(() => {
+                    const metadata = (notification.metadata ?? null) as { paymentOrderId?: string } | null;
+                    const paymentOrderId = typeof metadata?.paymentOrderId === "string"
+                      ? metadata.paymentOrderId
+                      : null;
+
+                    if (!paymentOrderId || !notification.type.startsWith("PAYMENT_ORDER_")) return null;
+
+                    const pdfLabel = notification.type === "PAYMENT_ORDER_APPROVAL_REQUIRED"
+                      ? "Lire PDF OP avant décision"
+                      : notification.type === "PAYMENT_ORDER_EXECUTION_REQUIRED"
+                        ? "Lire PDF OP avant exécution"
+                        : notification.type === "PAYMENT_ORDER_EXECUTED_NOTIFICATION"
+                          ? "Lire PDF OP final"
+                          : "Lire PDF OP";
+
+                    return (
+                      <div className="mt-2 flex flex-wrap items-center gap-2">
+                        <a
+                          href={`/api/payment-orders/${paymentOrderId}/pdf`}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="inline-flex rounded-md border border-black/20 px-2.5 py-1 text-[11px] font-semibold hover:bg-black/5 dark:border-white/20 dark:hover:bg-white/10"
+                        >
+                          {pdfLabel}
+                        </a>
+                        <a
+                          href={`/api/payment-orders/${paymentOrderId}/pdf?download=1`}
+                          className="inline-flex rounded-md border border-black/20 px-2.5 py-1 text-[11px] font-semibold hover:bg-black/5 dark:border-white/20 dark:hover:bg-white/10"
+                        >
+                          Télécharger PDF
+                        </a>
+                      </div>
+                    );
+                  })()}
                   {(() => {
                     const metadata = (notification.metadata ?? null) as { needRequestId?: string } | null;
                     const needRequestId = typeof metadata?.needRequestId === "string"

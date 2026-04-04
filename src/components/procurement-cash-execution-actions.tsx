@@ -68,14 +68,24 @@ export function ProcurementCashExecutionActions({ needRequestId }: { needRequest
         disabled={state === "loading"}
         className="w-full rounded-md border border-black/15 px-2.5 py-2 text-[11px] text-black dark:border-white/15 dark:bg-zinc-900 dark:text-white"
       />
-      <button
-        type="button"
-        onClick={() => void executeNeed()}
-        disabled={state === "loading"}
-        className="rounded-md border border-blue-300 px-2.5 py-1 text-[11px] font-semibold text-blue-700 hover:bg-blue-50 disabled:opacity-60 dark:border-blue-700/60 dark:text-blue-300 dark:hover:bg-blue-950/30"
-      >
-        Exécuter (Caisse)
-      </button>
+      <div className="flex flex-wrap items-center gap-2">
+        <a
+          href={`/api/procurement/needs/${needRequestId}/pdf`}
+          target="_blank"
+          rel="noreferrer"
+          className="rounded-md border border-black/20 px-2.5 py-1 text-[11px] font-semibold hover:bg-black/5 dark:border-white/20 dark:hover:bg-white/10"
+        >
+          Lire PDF EDB
+        </a>
+        <button
+          type="button"
+          onClick={() => void executeNeed()}
+          disabled={state === "loading"}
+          className="rounded-md border border-blue-300 px-2.5 py-1 text-[11px] font-semibold text-blue-700 hover:bg-blue-50 disabled:opacity-60 dark:border-blue-700/60 dark:text-blue-300 dark:hover:bg-blue-950/30"
+        >
+          Exécuter (Caisse)
+        </button>
+      </div>
       {message ? <span className="text-[11px] text-black/60 dark:text-white/60">{message}</span> : null}
     </div>
   );

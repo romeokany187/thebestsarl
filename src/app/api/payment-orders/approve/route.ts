@@ -79,7 +79,7 @@ export async function PATCH(request: NextRequest) {
     notifications.push({
       userId: issuer.issuedBy.id,
       title: "Décision sur votre ordre de paiement",
-      message: `Votre ordre de paiement ${paymentOrder.code ?? ""} pour ${paymentOrder.beneficiary} (${paymentOrder.amount} ${paymentOrder.currency}) a été ${nextStatus === "APPROVED" ? "approuvé" : "rejeté"}.`,
+      message: `Votre ordre de paiement ${paymentOrder.code ?? ""} pour ${paymentOrder.beneficiary} (${paymentOrder.amount} ${paymentOrder.currency}) a été ${nextStatus === "APPROVED" ? "approuvé" : "rejeté"}. Le PDF OP reflète maintenant cette décision.`,
       type: "PAYMENT_ORDER_DECISION",
       metadata: {
         paymentOrderId: updated.id,
@@ -103,7 +103,7 @@ export async function PATCH(request: NextRequest) {
       notifications.push({
         userId: cashier.id,
         title: "Ordre de paiement approuvé à exécuter",
-        message: `L'ordre de paiement ${paymentOrder.code ?? ""} pour ${paymentOrder.beneficiary} (${paymentOrder.amount} ${paymentOrder.currency}) est approuvé. ${paymentOrder.description}. Exécutez depuis votre inbox.`,
+        message: `L'ordre de paiement ${paymentOrder.code ?? ""} pour ${paymentOrder.beneficiary} (${paymentOrder.amount} ${paymentOrder.currency}) est approuvé. ${paymentOrder.description}. Lisez le PDF OP puis exécutez depuis votre inbox.`,
         type: "PAYMENT_ORDER_EXECUTION_REQUIRED",
         metadata: {
           paymentOrderId: updated.id,

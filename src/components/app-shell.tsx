@@ -11,7 +11,13 @@ const links = [
   { href: "/", label: "Dashboard", module: "home" as AppModule, roles: ["ADMIN", "DIRECTEUR_GENERAL", "MANAGER", "EMPLOYEE", "ACCOUNTANT"] as AppRole[] },
   {
     href: "/profile",
-    label: "Profil & Inbox",
+    label: "Profil",
+    module: "profile" as AppModule,
+    roles: ["ADMIN", "DIRECTEUR_GENERAL", "MANAGER", "EMPLOYEE", "ACCOUNTANT"] as AppRole[],
+  },
+  {
+    href: "/inbox",
+    label: "Notifications",
     module: "profile" as AppModule,
     roles: ["ADMIN", "DIRECTEUR_GENERAL", "MANAGER", "EMPLOYEE", "ACCOUNTANT"] as AppRole[],
   },
@@ -174,7 +180,7 @@ export async function AppShell({
                 className="flex items-center justify-between rounded-lg px-3 py-2 text-sm font-medium text-black/75 transition hover:bg-black/5 hover:text-black dark:text-white/75 dark:hover:bg-white/10 dark:hover:text-white"
               >
                 <span>{link.label}</span>
-                {link.module === "profile" && unreadNotifications > 0 ? (
+                {link.href === "/inbox" && unreadNotifications > 0 ? (
                   <span className="rounded-full bg-red-600 px-2 py-0.5 text-[10px] font-semibold text-white">
                     {unreadNotifications > 99 ? "99+" : unreadNotifications}
                   </span>
@@ -218,7 +224,7 @@ export async function AppShell({
                   className="shrink-0 rounded-full border border-black/10 bg-white px-3 py-1.5 text-xs font-semibold text-black/75 dark:border-white/15 dark:bg-zinc-900 dark:text-white/75"
                 >
                   {link.label}
-                  {link.module === "profile" && unreadNotifications > 0 ? ` (${unreadNotifications > 99 ? "99+" : unreadNotifications})` : ""}
+                  {link.href === "/inbox" && unreadNotifications > 0 ? ` (${unreadNotifications > 99 ? "99+" : unreadNotifications})` : ""}
                 </Link>
               ))}
             </nav>

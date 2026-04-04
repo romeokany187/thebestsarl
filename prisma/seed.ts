@@ -2,6 +2,7 @@ import bcrypt from "bcryptjs";
 import { PrismaClient, ReportPeriod, ReportStatus, Role, AttendanceStatus, PaymentStatus, JobTitle, CommissionMode, TravelClass, SaleNature } from "@prisma/client";
 
 const prisma = new PrismaClient();
+const defaultAdminEmail = (process.env.ADMIN_EMAIL ?? "romeokany187@gmail.com").trim().toLowerCase();
 
 async function main() {
   const passwordHash = await bcrypt.hash("password123", 10);
@@ -13,11 +14,15 @@ async function main() {
   });
 
   const admin = await prisma.user.upsert({
-    where: { email: "admin@thebestsarl.com" },
-    update: {},
+    where: { email: defaultAdminEmail },
+    update: {
+      role: Role.ADMIN,
+      jobTitle: JobTitle.DIRECTION_GENERALE,
+      teamId: kinshasaTeam.id,
+    },
     create: {
       name: "Admin Direction",
-      email: "admin@thebestsarl.com",
+      email: defaultAdminEmail,
       passwordHash,
       role: Role.ADMIN,
       jobTitle: JobTitle.DIRECTION_GENERALE,

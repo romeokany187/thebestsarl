@@ -165,10 +165,10 @@ export function InboxRealtimeLink({
   return (
     <>
       <Link
-        href="/profile"
+        href="/inbox"
         className="inline-flex items-center gap-2 rounded-full border border-black/15 px-3 py-1 text-xs font-semibold dark:border-white/20"
       >
-        <span>Inbox</span>
+        <span>Notifications</span>
         {unreadCount > 0 ? (
           <span className="rounded-full bg-red-600 px-1.5 py-0.5 text-[10px] font-semibold text-white">
             {unreadCount > 99 ? "99+" : unreadCount}

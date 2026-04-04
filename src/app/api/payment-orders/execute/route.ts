@@ -208,7 +208,7 @@ export async function PATCH(request: NextRequest) {
       data: accountants.map((accountant) => ({
         userId: accountant.id,
         title: "Ordre de paiement exécuté - notification comptable",
-        message,
+        message: `${message} | Consultez le PDF final de l'OP pour la traçabilité complète.`,
         type: "PAYMENT_ORDER_EXECUTED_NOTIFICATION",
         metadata: {
           paymentOrderId: updated.id,

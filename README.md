@@ -198,6 +198,41 @@ npm run db:import:tickets:excel -- ./imports/billets.xlsx --default-seller-email
 npm run db:import:tickets:excel -- ./imports/billets.xlsx --year 2026
 ```
 
+## Déploiement MySQL / Hostinger Node.js
+
+Pour préparer l'application à un hébergement Hostinger Node.js avec base MySQL/MariaDB gérée :
+
+1. Conserver `prisma/schema.prisma` pour l'environnement PostgreSQL actuel.
+2. Utiliser `prisma/schema.mysql.prisma` pour la cible Hostinger MySQL.
+3. Renseigner un `DATABASE_URL` MySQL du type :
+
+```dotenv
+DATABASE_URL="mysql://USER:PASSWORD@HOST:3306/thebestsarl"
+DIRECT_URL="mysql://USER:PASSWORD@HOST:3306/thebestsarl"
+```
+
+4. Générer et pousser le schéma MySQL :
+
+```bash
+export PRISMA_SCHEMA_FILE=prisma/schema.mysql.prisma
+npm run db:generate
+npm run db:validate:mysql
+npm run db:push
+npm run db:seed
+```
+
+5. Pour lancer/build l'app avec MySQL :
+
+```bash
+export PRISMA_SCHEMA_FILE=prisma/schema.mysql.prisma
+npm run build
+npm run start
+```
+
+6. Déployer ensuite l'app Node.js depuis GitHub sur Hostinger.
+
+> Le script `npm run db:migrate:jobtitles` est désormais compatible PostgreSQL **et** MySQL/MariaDB.
+
 ## Git + Vercel
 
 Initialiser Git local:
