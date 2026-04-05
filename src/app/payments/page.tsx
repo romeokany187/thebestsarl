@@ -1,4 +1,4 @@
-import { NeedRequestStatus, PaymentStatus } from "@prisma/client";
+import { PaymentStatus } from "@prisma/client";
 import { AppShell } from "@/components/app-shell";
 import { CashBilletageWorkspace } from "@/components/cash-billetage-workspace";
 import { CashOperationForm } from "@/components/cash-operation-form";
@@ -9,9 +9,66 @@ import { invoiceNumberFromChronology } from "@/lib/invoice";
 import { requirePageModuleAccess } from "@/lib/rbac";
 import { prisma } from "@/lib/prisma";
 
-const paymentOrderClient = (prisma as unknown as { paymentOrder: any }).paymentOrder;
-const paymentClient = (prisma as unknown as { payment: any }).payment;
-const cashOperationClient = (prisma as unknown as { cashOperation: any }).cashOperation;
+type AirlineRow = { id: string; code: string; name: string };
+type TicketPaymentRow = {
+  id: string;
+  paidAt: Date;
+  amount: number;
+  currency?: string | null;
+  amountUsd?: number | null;
+  amountCdf?: number | null;
+  fxRateToUsd?: number | null;
+  fxRateUsdToCdf?: number | null;
+  method?: string | null;
+  reference?: string | null;
+  ticket: {
+    ticketNumber: string;
+    customerName: string;
+    amount: number;
+    paymentStatus: string;
+    currency?: string | null;
+  };
+};
+
+type CashOperationRow = {
+  occurredAt: Date;
+  description: string;
+  reference?: string | null;
+  amount: number;
+  direction: string;
+  category?: string | null;
+  method?: string | null;
+  currency?: string | null;
+  amountUsd?: number | null;
+  fxRateToUsd?: number | null;
+  fxRateUsdToCdf?: number | null;
+};
+
+type TicketSaleRow = {
+  id: string;
+  soldAt: Date;
+  airlineId: string;
+  ticketNumber: string;
+  customerName: string;
+  amount: number;
+  currency?: string | null;
+  paymentStatus: PaymentStatus;
+  seller?: { team?: { name?: string | null } | null } | null;
+  payments: Array<{
+    amount: number;
+    currency?: string | null;
+    amountUsd?: number | null;
+    amountCdf?: number | null;
+    fxRateToUsd?: number | null;
+    fxRateUsdToCdf?: number | null;
+  }>;
+};
+
+type PaymentClient = { findMany(args: unknown): Promise<TicketPaymentRow[]> };
+type CashOperationClient = { findMany(args: unknown): Promise<CashOperationRow[]> };
+
+const paymentClient = (prisma as unknown as { payment: PaymentClient }).payment;
+const cashOperationClient = (prisma as unknown as { cashOperation: CashOperationClient }).cashOperation;
 
 type SearchParams = {
   startDate?: string;
@@ -61,15 +118,6 @@ function monthRangeFromValue(rawMonth?: string) {
 function normalizeMoneyCurrency(value: string | null | undefined): "USD" | "CDF" {
   const normalized = (value ?? "USD").trim().toUpperCase();
   return normalized === "CDF" || normalized === "XAF" || normalized === "FC" ? "CDF" : "USD";
-}
-
-function paymentOrderAssignmentLabel(value: string | null | undefined) {
-  const normalized = (value ?? "A_MON_COMPTE").trim().toUpperCase();
-  if (normalized === "VISAS") return "Visas";
-  if (normalized === "SAFETY") return "Safety";
-  if (normalized === "BILLETTERIE") return "Billetterie";
-  if (normalized === "TSL") return "TSL";
-  return "À mon compte";
 }
 
 function normalizeCashAmountUsd(operation: {
@@ -233,8 +281,10 @@ export default async function PaymentsPage({
 }: {
   searchParams?: Promise<SearchParams>;
 }) {
-  const { role, session } = await requirePageModuleAccess("payments", ["ADMIN", "DIRECTEUR_GENERAL", "ACCOUNTANT", "EMPLOYEE"]);
-  const canWrite = session.user.jobTitle === "CAISSIER" && role !== "ADMIN" && role !== "DIRECTEUR_GENERAL";
+  const { role, session } = await requirePageModuleAccess("payments", ["ADMIN", "DIRECTEUR_GENERAL", "ACCOUNTANT", "EMPLOYEE", "MANAGER"]);
+  const isCashier = session.user.jobTitle === "CAISSIER";
+  const isComptable = role === "ACCOUNTANT" || session.user.jobTitle === "COMPTABLE";
+  const canWrite = isCashier;
   const resolvedSearchParams = (await searchParams) ?? {};
   const range = dateRangeFromParams(resolvedSearchParams);
   const cashRange = monthRangeFromValue(resolvedSearchParams.cashMonth);
@@ -257,6 +307,12 @@ export default async function PaymentsPage({
     mode: "month",
     month: cashRange.monthRaw,
   }).toString();
+
+  const accessNote = isCashier
+    ? "Caisse: encaissement des billets, autres écritures et billetage caisse."
+    : isComptable
+      ? "Comptabilité: consultation des paiements, journaux et comptes virtuels en lecture seule."
+      : "Module financier réservé aux profils caisse et comptabilité."
 
   const paymentsData = await Promise.all([
     prisma.airline.findMany({
@@ -311,28 +367,6 @@ export default async function PaymentsPage({
       orderBy: { paidAt: "desc" },
       take: 5000,
     }),
-    paymentOrderClient.findMany({
-      where: {
-        status: "SUBMITTED",
-      },
-      include: {
-        issuedBy: { select: { name: true, jobTitle: true } },
-        approvedBy: { select: { name: true, jobTitle: true } },
-        executedBy: { select: { name: true, jobTitle: true } },
-      },
-      orderBy: { createdAt: "desc" },
-      take: 80,
-    }),
-    prisma.needRequest.findMany({
-      where: {
-        status: NeedRequestStatus.SUBMITTED,
-      },
-      include: {
-        requester: { select: { name: true, jobTitle: true } },
-      },
-      orderBy: { createdAt: "desc" },
-      take: 120,
-    }),
     cashOperationClient.findMany({
       where: {
         occurredAt: { gte: cashRange.start, lt: cashRange.end },
@@ -382,12 +416,18 @@ export default async function PaymentsPage({
     tickets,
     payments,
     cashPayments,
-    paymentOrders,
-    pendingNeeds,
     cashOperations,
     ticketPaymentsBeforeStart,
     cashOperationsBeforeStart,
-  ] = paymentsData as [any[], any[], any[], any[], any[], any[], any[], any[], any[]];
+  ] = paymentsData as [
+    AirlineRow[],
+    TicketSaleRow[],
+    TicketPaymentRow[],
+    TicketPaymentRow[],
+    CashOperationRow[],
+    Array<{ paidAt?: Date | string | null; amount: number; currency?: string | null; amountUsd?: number | null; amountCdf?: number | null; fxRateUsdToCdf?: number | null; method?: string | null }>,
+    Array<{ occurredAt?: Date | string | null; category?: string | null; amount: number; direction: string; method?: string | null; currency?: string | null; amountUsd?: number | null; fxRateToUsd?: number | null; fxRateUsdToCdf?: number | null }>,
+  ];
 
   const sequenceByTicketId = new Map<string, number>();
   tickets
@@ -449,7 +489,6 @@ export default async function PaymentsPage({
   const collectedTotal = paidTickets.reduce((sum, ticket) => sum + ticket.amountUsd, 0);
   const partialBilled = partialTickets.reduce((sum, ticket) => sum + ticket.amountUsd, 0);
   const partialCollected = partialTickets.reduce((sum, ticket) => sum + ticket.paidAmountUsd, 0);
-  const partialOutstanding = Math.max(0, partialBilled - partialCollected);
   const unpaidTotal = unpaidTickets.reduce((sum, ticket) => sum + ticket.amountUsd, 0);
   const collectionRate = totalTicketAmount > 0 ? (totalPaid / totalTicketAmount) * 100 : 0;
   const partialCoverageRate = partialBilled > 0 ? (partialCollected / partialBilled) * 100 : 0;
@@ -463,7 +502,10 @@ export default async function PaymentsPage({
   const openingCdf = openingBuckets.CASH.cdf;
 
   const ticketPaymentInflowsUsd = cashPayments.reduce(
-    (sum: number, payment: { amount: number; currency?: string; amountUsd?: number; amountCdf?: number; fxRateToUsd?: number; fxRateUsdToCdf?: number }) => sum + normalizeCashAmountUsd(payment),
+    (
+      sum: number,
+      payment: { amount: number; currency?: string | null; amountUsd?: number | null; amountCdf?: number | null; fxRateToUsd?: number | null; fxRateUsdToCdf?: number | null },
+    ) => sum + normalizeCashAmountUsd(payment),
     0,
   );
   const ticketPaymentInflowUsd = cashPayments
@@ -475,10 +517,16 @@ export default async function PaymentsPage({
 
   const otherInflows = cashOperations
     .filter((operation: { direction: string }) => operation.direction === "INFLOW")
-    .reduce((sum: number, operation: { amount: number; currency?: string; amountUsd?: number; fxRateToUsd?: number; fxRateUsdToCdf?: number }) => sum + normalizeCashAmountUsd(operation), 0);
+    .reduce(
+      (sum: number, operation: { amount: number; currency?: string | null; amountUsd?: number | null; fxRateToUsd?: number | null; fxRateUsdToCdf?: number | null }) => sum + normalizeCashAmountUsd(operation),
+      0,
+    );
   const cashOutflows = cashOperations
     .filter((operation: { direction: string }) => operation.direction === "OUTFLOW")
-    .reduce((sum: number, operation: { amount: number; currency?: string; amountUsd?: number; fxRateToUsd?: number; fxRateUsdToCdf?: number }) => sum + normalizeCashAmountUsd(operation), 0);
+    .reduce(
+      (sum: number, operation: { amount: number; currency?: string | null; amountUsd?: number | null; fxRateToUsd?: number | null; fxRateUsdToCdf?: number | null }) => sum + normalizeCashAmountUsd(operation),
+      0,
+    );
 
   const grossInflows = ticketPaymentInflowsUsd + otherInflows;
   const netCashVariation = grossInflows - cashOutflows;
@@ -496,16 +544,16 @@ export default async function PaymentsPage({
   const accountingConsistency = Math.abs((openingBalance + grossInflows - cashOutflows) - closingBalance) <= 0.0001;
 
   const cashInflowUsd = cashOperations
-    .filter((operation: { direction: string; currency?: string }) => operation.direction === "INFLOW" && normalizeMoneyCurrency(operation.currency) === "USD")
+    .filter((operation: { direction: string; currency?: string | null }) => operation.direction === "INFLOW" && normalizeMoneyCurrency(operation.currency) === "USD")
     .reduce((sum: number, operation: { amount: number }) => sum + operation.amount, 0);
   const cashOutflowUsd = cashOperations
-    .filter((operation: { direction: string; currency?: string }) => operation.direction === "OUTFLOW" && normalizeMoneyCurrency(operation.currency) === "USD")
+    .filter((operation: { direction: string; currency?: string | null }) => operation.direction === "OUTFLOW" && normalizeMoneyCurrency(operation.currency) === "USD")
     .reduce((sum: number, operation: { amount: number }) => sum + operation.amount, 0);
   const cashInflowCdf = cashOperations
-    .filter((operation: { direction: string; currency?: string }) => operation.direction === "INFLOW" && normalizeMoneyCurrency(operation.currency) === "CDF")
+    .filter((operation: { direction: string; currency?: string | null }) => operation.direction === "INFLOW" && normalizeMoneyCurrency(operation.currency) === "CDF")
     .reduce((sum: number, operation: { amount: number }) => sum + operation.amount, 0);
   const cashOutflowCdf = cashOperations
-    .filter((operation: { direction: string; currency?: string }) => operation.direction === "OUTFLOW" && normalizeMoneyCurrency(operation.currency) === "CDF")
+    .filter((operation: { direction: string; currency?: string | null }) => operation.direction === "OUTFLOW" && normalizeMoneyCurrency(operation.currency) === "CDF")
     .reduce((sum: number, operation: { amount: number }) => sum + operation.amount, 0);
 
   const closingUsd = openingUsd + ticketPaymentInflowUsd + cashInflowUsd - cashOutflowUsd;
@@ -525,7 +573,7 @@ export default async function PaymentsPage({
         cdfOut: 0,
       };
     }),
-    ...cashOperations.map((operation: any) => {
+    ...cashOperations.map((operation) => {
       const currency = (operation.currency ?? "USD").toUpperCase();
       const isInflow = operation.direction === "INFLOW";
       return {
@@ -541,17 +589,17 @@ export default async function PaymentsPage({
     }),
   ].sort((a, b) => a.occurredAt.getTime() - b.occurredAt.getTime());
 
-  let runningUsd = openingUsd;
-  let runningCdf = openingCdf;
-  const caisseLedger = caisseRows.map((row) => {
-    runningUsd += row.usdIn - row.usdOut;
-    runningCdf += row.cdfIn - row.cdfOut;
-    return {
+  const caisseLedger = caisseRows.reduce<Array<(typeof caisseRows)[number] & { usdBalance: number; cdfBalance: number }>>((rows, row) => {
+    const previous = rows[rows.length - 1];
+    const usdBalance = (previous?.usdBalance ?? openingUsd) + row.usdIn - row.usdOut;
+    const cdfBalance = (previous?.cdfBalance ?? openingCdf) + row.cdfIn - row.cdfOut;
+    rows.push({
       ...row,
-      usdBalance: runningUsd,
-      cdfBalance: runningCdf,
-    };
-  });
+      usdBalance,
+      cdfBalance,
+    });
+    return rows;
+  }, []);
 
   const initialVirtualStats = Object.fromEntries(
     virtualChannels.map(({ key }) => [
@@ -574,7 +622,7 @@ export default async function PaymentsPage({
     outCdf: number;
   }>;
 
-  for (const payment of cashPayments as Array<{ amount: number; method?: string; currency?: string }>) {
+  for (const payment of cashPayments as Array<{ amount: number; method?: string | null; currency?: string | null }>) {
     const channel = detectVirtualChannel(payment.method);
     if (!channel) continue;
     const currency = normalizeMoneyCurrency(payment.currency);
@@ -585,7 +633,7 @@ export default async function PaymentsPage({
     }
   }
 
-  for (const operation of cashOperations as Array<{ direction: string; amount: number; method?: string; currency?: string }>) {
+  for (const operation of cashOperations as Array<{ direction: string; amount: number; method?: string | null; currency?: string | null }>) {
     const channel = detectVirtualChannel(operation.method);
     if (!channel) continue;
     const currency = (operation.currency ?? "USD").toUpperCase();
@@ -650,38 +698,22 @@ export default async function PaymentsPage({
       amount: ticket.amount,
       paidAmount: ticket.paidAmount,
       paymentStatus: ticket.computedStatus,
-      currency: ticket.currency,
+      currency: ticket.currency ?? "USD",
       invoiceNumber: ticket.invoiceNumber,
     }));
-
-  const pendingNeedTotals = pendingNeeds.reduce(
-    (sum, need) => {
-      const amount = typeof need.estimatedAmount === "number" ? need.estimatedAmount : 0;
-      const currency = normalizeMoneyCurrency(need.currency);
-      if (currency === "USD") sum.usd += amount;
-      else sum.cdf += amount;
-      return sum;
-    },
-    { usd: 0, cdf: 0 },
-  );
-  const pendingPaymentOrderTotals = paymentOrders.reduce(
-    (sum, order) => {
-      const currency = normalizeMoneyCurrency(order.currency);
-      if (currency === "USD") sum.usd += order.amount;
-      else sum.cdf += order.amount;
-      return sum;
-    },
-    { usd: 0, cdf: 0 },
-  );
 
   return (
     <AppShell
       role={role}
-      accessNote="Vue financière: suivi des encaissements, des soldes clients et des créances à recouvrer."
+      accessNote={accessNote}
     >
       <section className="mb-6">
         <h1 className="text-2xl font-semibold tracking-tight">Paiements</h1>
-        <p className="text-sm text-black/60 dark:text-white/60">Pilotage financier des billets vendus et des paiements reçus (USD / CDF).</p>
+        <p className="text-sm text-black/60 dark:text-white/60">
+          {role === "ADMIN"
+            ? "Consultation des rapports financiers: journaux et récapitulatifs uniquement."
+            : "Pilotage financier des billets vendus et des paiements reçus (USD / CDF)."}
+        </p>
       </section>
 
       <PaymentsWritingWorkspace
@@ -745,7 +777,7 @@ export default async function PaymentsPage({
               <KpiCard label="Total facturé" value={`${totalTicketAmount.toFixed(2)} USD`} />
               <KpiCard label="Total encaissé" value={`${totalPaid.toFixed(2)} USD`} />
               <KpiCard label="Total créance" value={`${receivables.toFixed(2)} USD`} />
-              <KpiCard label="Taux d'encaissement" value={`${collectionRate.toFixed(1)}%`} hint={`Partiels couverts à ${partialCoverageRate.toFixed(1)}%`} />
+              <KpiCard label="Taux d&apos;encaissement" value={`${collectionRate.toFixed(1)}%`} hint={`Partiels couverts à ${partialCoverageRate.toFixed(1)}%`} />
             </div>
 
             <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
@@ -759,7 +791,7 @@ export default async function PaymentsPage({
               <PaymentEntryForm tickets={paymentTickets} />
             ) : (
               <section className="rounded-2xl border border-dashed border-black/20 bg-white/80 p-4 text-xs text-black/65 dark:border-white/20 dark:bg-zinc-900/70 dark:text-white/65">
-                Profil en lecture seule sur les écritures billets. Vous pouvez consulter les indicateurs et l'historique.
+                Profil en lecture seule sur les écritures billets. Vous pouvez consulter les indicateurs et l&apos;historique.
               </section>
             )}
 
@@ -805,7 +837,7 @@ export default async function PaymentsPage({
             </section>
           </div>
         )}
-        cashWorkspace={(
+        cashWorkspace={role === "ADMIN" ? null : (
           <div className="space-y-4">
             <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
               <KpiCard label="Solde ouverture USD" value={`${openingUsd.toFixed(2)} USD`} />
@@ -873,7 +905,7 @@ export default async function PaymentsPage({
                   <thead className="bg-black/5 dark:bg-white/10">
                     <tr>
                       <th className="px-4 py-3 text-left font-semibold">Date</th>
-                      <th className="px-4 py-3 text-left font-semibold">Type d'opération</th>
+                      <th className="px-4 py-3 text-left font-semibold">Type d&apos;opération</th>
                       <th className="px-4 py-3 text-left font-semibold">Libellé</th>
                       <th className="px-4 py-3 text-left font-semibold">USD Entrées</th>
                       <th className="px-4 py-3 text-left font-semibold">USD Sorties</th>
@@ -888,7 +920,7 @@ export default async function PaymentsPage({
                     <tr className="border-t border-black/5 bg-black/2 dark:border-white/10 dark:bg-white/3">
                       <td className="px-4 py-3 font-semibold">{cashRange.startRaw}</td>
                       <td className="px-4 py-3 font-semibold">Report à nouveau</td>
-                      <td className="px-4 py-3 text-black/60 dark:text-white/60">Solde d'ouverture période</td>
+                      <td className="px-4 py-3 text-black/60 dark:text-white/60">Solde d&apos;ouverture période</td>
                       <td className="px-4 py-3">-</td>
                       <td className="px-4 py-3">-</td>
                       <td className="px-4 py-3 font-semibold">{openingUsd.toFixed(2)} USD</td>
@@ -982,133 +1014,9 @@ export default async function PaymentsPage({
             </div>
           </div>
         )}
-        billetageWorkspace={(
+        billetageWorkspace={isCashier ? (
           <CashBilletageWorkspace expectedUsd={closingUsd} expectedCdf={closingCdf} />
-        )}
-        needsPendingWorkspace={(
-          <div className="space-y-4">
-            <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-              <KpiCard label="Besoins en attente" value={`${pendingNeeds.length}`} />
-              <KpiCard label="Montant estimé CDF" value={`${pendingNeedTotals.cdf.toFixed(2)} CDF`} hint={`USD ${pendingNeedTotals.usd.toFixed(2)}`} />
-            </div>
-
-            <section className="overflow-hidden rounded-2xl border border-black/10 bg-white shadow-sm dark:border-white/10 dark:bg-zinc-900">
-              <div className="border-b border-black/10 px-4 py-3 dark:border-white/10">
-                <h2 className="text-sm font-semibold">Etat des besoins en attente de validation</h2>
-              </div>
-              <div className="overflow-x-auto">
-                <table className="min-w-full text-sm">
-                  <thead className="bg-black/5 dark:bg-white/10">
-                    <tr>
-                      <th className="px-4 py-3 text-left font-semibold">Date</th>
-                      <th className="px-4 py-3 text-left font-semibold">Code</th>
-                      <th className="px-4 py-3 text-left font-semibold">Besoin</th>
-                      <th className="px-4 py-3 text-left font-semibold">Demandeur</th>
-                      <th className="px-4 py-3 text-left font-semibold">Montant estimé</th>
-                      <th className="px-4 py-3 text-left font-semibold">Statut</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {pendingNeeds.map((need: any) => (
-                      <tr key={need.id} className="border-t border-black/5 dark:border-white/10">
-                        <td className="px-4 py-3">{new Date(need.submittedAt ?? need.createdAt).toLocaleDateString("fr-FR")}</td>
-                        <td className="px-4 py-3 font-medium">{need.code ?? "-"}</td>
-                        <td className="px-4 py-3">{need.title}</td>
-                        <td className="px-4 py-3">{need.requester?.name ?? "-"}</td>
-                        <td className="px-4 py-3">{typeof need.estimatedAmount === "number" ? `${need.estimatedAmount.toFixed(2)} ${normalizeMoneyCurrency(need.currency)}` : "-"}</td>
-                        <td className="px-4 py-3">{need.status}</td>
-                      </tr>
-                    ))}
-                    {pendingNeeds.length === 0 ? (
-                      <tr>
-                        <td colSpan={6} className="px-4 py-8 text-center text-sm text-black/55 dark:text-white/55">
-                          Aucun besoin en attente de validation.
-                        </td>
-                      </tr>
-                    ) : null}
-                  </tbody>
-                </table>
-              </div>
-            </section>
-          </div>
-        )}
-        ordersPendingWorkspace={(
-          <div className="space-y-4">
-            <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-              <KpiCard label="OP en attente" value={`${paymentOrders.length}`} />
-              <KpiCard label="Montant OP CDF" value={`${pendingPaymentOrderTotals.cdf.toFixed(2)} CDF`} hint={`USD ${pendingPaymentOrderTotals.usd.toFixed(2)}`} />
-            </div>
-
-            {role === "DIRECTEUR_GENERAL" ? (
-              <section className="rounded-2xl border border-black/10 bg-white p-4 shadow-sm dark:border-white/10 dark:bg-zinc-900">
-                <h2 className="text-sm font-semibold">Ordres de paiement DG</h2>
-                <p className="mt-1 text-xs text-black/60 dark:text-white/60">La création d'OP se fait dans votre espace dédié.</p>
-                <a
-                  href="/dg/ordres-paiement"
-                  className="mt-3 inline-flex rounded-md border border-black/20 px-3 py-1.5 text-xs font-semibold hover:bg-black/5 dark:border-white/20 dark:hover:bg-white/10"
-                >
-                  Ouvrir l'espace DG OP
-                </a>
-              </section>
-            ) : null}
-
-            <section className="overflow-hidden rounded-2xl border border-black/10 bg-white shadow-sm dark:border-white/10 dark:bg-zinc-900">
-              <div className="border-b border-black/10 px-4 py-3 dark:border-white/10">
-                <h2 className="text-sm font-semibold">Ordres de paiement en attente de validation</h2>
-              </div>
-              <div className="overflow-x-auto">
-                <table className="min-w-full text-sm">
-                  <thead className="bg-black/5 dark:bg-white/10">
-                    <tr>
-                      <th className="px-4 py-3 text-left font-semibold">Créé le</th>
-                      <th className="px-4 py-3 text-left font-semibold">Code OP</th>
-                      <th className="px-4 py-3 text-left font-semibold">Bénéficiaire</th>
-                      <th className="px-4 py-3 text-left font-semibold">Motif</th>
-                      <th className="px-4 py-3 text-left font-semibold">Affectation</th>
-                      <th className="px-4 py-3 text-left font-semibold">Description</th>
-                      <th className="px-4 py-3 text-left font-semibold">Montant</th>
-                      <th className="px-4 py-3 text-left font-semibold">DG</th>
-                      <th className="px-4 py-3 text-left font-semibold">Statut</th>
-                      <th className="px-4 py-3 text-left font-semibold">PDF</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {paymentOrders.map((order: any) => (
-                      <tr key={order.id} className="border-t border-black/5 dark:border-white/10">
-                        <td className="px-4 py-3">{new Date(order.createdAt).toLocaleDateString("fr-FR")}</td>
-                        <td className="px-4 py-3 font-mono text-xs font-semibold">{order.code ?? "-"}</td>
-                        <td className="px-4 py-3">{order.beneficiary || "-"}</td>
-                        <td className="px-4 py-3">{order.purpose || "-"}</td>
-                        <td className="px-4 py-3">{paymentOrderAssignmentLabel(order.assignment)}</td>
-                        <td className="px-4 py-3">{order.description}</td>
-                        <td className="px-4 py-3">{order.amount.toFixed(2)} {normalizeMoneyCurrency(order.currency)}</td>
-                        <td className="px-4 py-3">{order.issuedBy?.name ?? "-"}</td>
-                        <td className="px-4 py-3">{order.status}</td>
-                        <td className="px-4 py-3">
-                          <a
-                            href={`/api/payment-orders/${order.id}/pdf`}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="inline-flex rounded-md border border-black/20 px-2.5 py-1 text-[11px] font-semibold hover:bg-black/5 dark:border-white/20 dark:hover:bg-white/10"
-                          >
-                            PDF
-                          </a>
-                        </td>
-                      </tr>
-                    ))}
-                    {paymentOrders.length === 0 ? (
-                      <tr>
-                        <td colSpan={10} className="px-4 py-8 text-center text-sm text-black/55 dark:text-white/55">
-                          Aucun ordre de paiement en attente de validation.
-                        </td>
-                      </tr>
-                    ) : null}
-                  </tbody>
-                </table>
-              </div>
-            </section>
-          </div>
-        )}
+        ) : null}
       />
     </AppShell>
   );

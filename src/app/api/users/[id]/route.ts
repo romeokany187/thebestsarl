@@ -33,7 +33,7 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
     return NextResponse.json({ error: "Utilisateur courant introuvable." }, { status: 404 });
   }
 
-  const canManageAssignment = actor.role === "ADMIN" || actor.jobTitle === "DIRECTION_GENERALE";
+  const canManageAssignment = actor.role === "ADMIN" || actor.role === "DIRECTEUR_GENERAL";
   if (!canManageAssignment) {
     return NextResponse.json({ error: "Affectation réservée à l'administrateur ou au Directeur Général." }, { status: 403 });
   }
@@ -196,7 +196,7 @@ export async function DELETE(_request: NextRequest, context: RouteContext) {
     return NextResponse.json({ error: "Utilisateur courant introuvable." }, { status: 404 });
   }
 
-  const canDeleteUser = actor.role === "ADMIN" || actor.jobTitle === "DIRECTION_GENERALE";
+  const canDeleteUser = actor.role === "ADMIN" || actor.role === "DIRECTEUR_GENERAL";
   if (!canDeleteUser) {
     return NextResponse.json({ error: "Suppression réservée à l'administrateur ou au Directeur Général." }, { status: 403 });
   }

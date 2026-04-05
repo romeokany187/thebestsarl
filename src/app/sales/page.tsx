@@ -7,7 +7,7 @@ import { requirePageModuleAccess } from "@/lib/rbac";
 import { ensureAirlineCatalog } from "@/lib/airline-catalog";
 import { buildAirlineDepositAccountSummaries } from "@/lib/airline-deposit";
 import { computeCaaCommissionMap } from "@/lib/caa-commission";
-import { canImportTicketWorkbook } from "@/lib/assignment";
+import { canImportTicketWorkbook, canManageTicketRecord, canSellTickets } from "@/lib/assignment";
 import { listTicketWorkbookImportHistory } from "@/lib/ticket-excel-import";
 
 export const dynamic = "force-dynamic";
@@ -94,12 +94,15 @@ export default async function SalesPage({
   const resolvedSearchParams = (await searchParams) ?? {};
   const dateRange = rangeFromSearch(resolvedSearchParams);
   const { session, role } = await requirePageModuleAccess("sales", ["ADMIN", "DIRECTEUR_GENERAL", "MANAGER", "EMPLOYEE", "ACCOUNTANT"]);
+  const currentJobTitle = session.user.jobTitle ?? "AGENT_TERRAIN";
   const roleTicketFilter = {};
-  const canCreateTicket = true;
-  const canManageTickets = true;
-  const canImportTickets = canImportTicketWorkbook(role, session.user.canImportTicketWorkbook);
-  const canReplaceImportedPeriod = role === "ADMIN" || role === "MANAGER";
-  const accessNote = "Accès commercial complet: tous les utilisateurs autorisés peuvent encoder, modifier et supprimer les billets.";
+  const canCreateTicket = canSellTickets(currentJobTitle);
+  const canManageTickets = canManageTicketRecord(role);
+  const canImportTickets = canImportTicketWorkbook(role, session.user.canImportTicketWorkbook, currentJobTitle);
+  const canReplaceImportedPeriod = role === "ADMIN";
+  const accessNote = canManageTickets
+    ? "Vente: tous les profils autorisés peuvent encoder les billets; l'admin peut en plus importer Excel, modifier et supprimer les billets déjà enregistrés."
+    : "Vente: vous pouvez encoder les billets normalement. L'import Excel, la modification et la suppression restent réservés à l'administrateur.";
 
   await ensureAirlineCatalog(prisma);
 
@@ -131,7 +134,7 @@ export default async function SalesPage({
     }),
     canImportTickets ? listTicketWorkbookImportHistory() : Promise.resolve([]),
     buildAirlineDepositAccountSummaries(
-      prisma as unknown as { airlineDepositMovement: { findMany: (args: unknown) => Promise<any[]> } },
+      prisma as unknown as { airlineDepositMovement: { findMany: (args: unknown) => Promise<unknown[]> } },
     ),
   ]);
 
@@ -191,7 +194,7 @@ export default async function SalesPage({
       <section className="mb-6">
         <h1 className="text-2xl font-semibold">Gestion des billets</h1>
         <p className="text-sm text-black/60 dark:text-white/60">
-          Encodage, modification et suppression des billets vendus.
+          Tout profil vente habilité peut encoder un billet. Seul l&apos;administrateur peut importer un fichier Excel, modifier un billet déjà enregistré ou le supprimer.
         </p>
       </section>
 
@@ -251,7 +254,7 @@ export default async function SalesPage({
           </div>
         ) : (
           <section className="rounded-xl border border-black/10 bg-white p-4 text-sm text-black/70 dark:border-white/10 dark:bg-zinc-900 dark:text-white/70">
-            Accès en lecture seule: vous pouvez consulter les ventes mais pas enregistrer de nouveaux billets.
+            Encodage des billets autorisé sur ce profil. Seul l&apos;import Excel est limité à l&apos;administrateur.
           </section>
         )}
 

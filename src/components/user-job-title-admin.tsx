@@ -13,14 +13,24 @@ type JobTitle =
   | "DIRECTION_GENERALE"
   | "CHEF_AGENCE";
 
+type UserRole = "ADMIN" | "DIRECTEUR_GENERAL" | "MANAGER" | "EMPLOYEE" | "ACCOUNTANT";
+
 type UserRow = {
   id: string;
   name: string;
   email: string;
-  role: string;
+  role: UserRole;
   jobTitle: JobTitle;
   teamName: string;
 };
+
+const roleOptions: Array<{ value: UserRole; label: string }> = [
+  { value: "ADMIN", label: "Admin" },
+  { value: "DIRECTEUR_GENERAL", label: "Directeur Général" },
+  { value: "MANAGER", label: "Chef d'agence" },
+  { value: "ACCOUNTANT", label: "Comptable" },
+  { value: "EMPLOYEE", label: "Employé" },
+];
 
 const jobOptions: Array<{ value: JobTitle; label: string }> = [
   { value: "COMMERCIAL", label: "Commercial" },
@@ -34,7 +44,7 @@ const jobOptions: Array<{ value: JobTitle; label: string }> = [
   { value: "CHEF_AGENCE", label: "Chef d'agence" },
 ];
 
-function roleLabel(role: string) {
+function roleLabel(role: UserRole) {
   if (role === "ADMIN") return "Admin";
   if (role === "DIRECTEUR_GENERAL") return "Directeur Général";
   if (role === "MANAGER") return "Chef d'agence";
@@ -48,12 +58,16 @@ export function UserJobTitleAdmin({ users }: { users: UserRow[] }) {
   const [savingId, setSavingId] = useState<string>("");
 
   const hasChanges = useMemo(
-    () => rows.some((row, index) => row.jobTitle !== users[index]?.jobTitle),
+    () => rows.some((row, index) => row.jobTitle !== users[index]?.jobTitle || row.role !== users[index]?.role),
     [rows, users],
   );
 
   function updateJobTitle(userId: string, jobTitle: JobTitle) {
     setRows((prev) => prev.map((row) => (row.id === userId ? { ...row, jobTitle } : row)));
+  }
+
+  function updateRole(userId: string, role: UserRole) {
+    setRows((prev) => prev.map((row) => (row.id === userId ? { ...row, role } : row)));
   }
 
   async function saveOne(userId: string) {
@@ -63,12 +77,12 @@ export function UserJobTitleAdmin({ users }: { users: UserRow[] }) {
     }
 
     setSavingId(userId);
-    setStatus("Mise à jour du poste...");
+    setStatus("Mise à jour du rôle et de la fonction...");
 
     const response = await fetch(`/api/users/${userId}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ jobTitle: row.jobTitle }),
+      body: JSON.stringify({ jobTitle: row.jobTitle, role: row.role }),
     });
 
     if (!response.ok) {
@@ -78,7 +92,7 @@ export function UserJobTitleAdmin({ users }: { users: UserRow[] }) {
       return;
     }
 
-    setStatus(`Poste mis à jour pour ${row.name}.`);
+    setStatus(`Rôle et/ou fonction mis à jour pour ${row.name}.`);
     setSavingId("");
   }
 
@@ -112,9 +126,9 @@ export function UserJobTitleAdmin({ users }: { users: UserRow[] }) {
   return (
     <section className="rounded-xl border border-black/10 bg-white p-4 dark:border-white/10 dark:bg-zinc-900">
       <div className="mb-3">
-        <h2 className="text-lg font-semibold">Attribution des postes (admin / Directeur Général)</h2>
+        <h2 className="text-lg font-semibold">Attribution des rôles et des fonctions</h2>
         <p className="text-xs text-black/60 dark:text-white/60">
-          Les employés ne peuvent pas modifier leur poste. Seuls l&apos;admin et le Directeur Général peuvent nommer, changer ou supprimer un utilisateur.
+          Le <strong>rôle système</strong> et la <strong>fonction métier</strong> sont désormais indépendants : changer l&apos;un ne modifie plus automatiquement l&apos;autre.
         </p>
       </div>
 
@@ -124,9 +138,9 @@ export function UserJobTitleAdmin({ users }: { users: UserRow[] }) {
             <tr>
               <th className="px-3 py-2 text-left">Employé</th>
               <th className="px-3 py-2 text-left">Email</th>
-              <th className="px-3 py-2 text-left">Accès</th>
+              <th className="px-3 py-2 text-left">Rôle système</th>
               <th className="px-3 py-2 text-left">Service</th>
-              <th className="px-3 py-2 text-left">Poste</th>
+              <th className="px-3 py-2 text-left">Fonction métier</th>
               <th className="px-3 py-2 text-left">Action</th>
             </tr>
           </thead>
@@ -135,7 +149,20 @@ export function UserJobTitleAdmin({ users }: { users: UserRow[] }) {
               <tr key={user.id} className="border-t border-black/5 dark:border-white/10">
                 <td className="px-3 py-2">{user.name}</td>
                 <td className="px-3 py-2">{user.email}</td>
-                <td className="px-3 py-2">{roleLabel(user.role)}</td>
+                <td className="px-3 py-2">
+                  <select
+                    className="w-full rounded-md border px-2 py-1.5"
+                    value={user.role}
+                    onChange={(event) => updateRole(user.id, event.target.value as UserRole)}
+                  >
+                    {roleOptions.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                  <p className="mt-1 text-[10px] text-black/55 dark:text-white/55">Actuel: {roleLabel(user.role)}</p>
+                </td>
                 <td className="px-3 py-2">{user.teamName}</td>
                 <td className="px-3 py-2">
                   <select

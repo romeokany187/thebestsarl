@@ -53,11 +53,15 @@ export function assignmentCapabilities(jobTitle: string) {
   return ["Opérations terrain", "Suivi activité", "Support équipe"];
 }
 
-export function canSellTickets(jobTitle: string) {
-  return Boolean(jobTitle && jobTitle.trim().length > 0);
+export function canSellTickets(_jobTitle: string) {
+  return true;
 }
 
-export function canImportTicketWorkbook(role: string, _explicitPermission?: boolean | null) {
+export function canManageTicketRecord(role: string) {
+  return role === "ADMIN";
+}
+
+export function canImportTicketWorkbook(role: string, _explicitPermission?: boolean | null, _jobTitle?: string | null) {
   return role === "ADMIN";
 }
 

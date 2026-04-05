@@ -9,6 +9,7 @@ import { CommissionCalculationStatus, CommissionMode } from "@prisma/client";
 import { ensureAirlineCatalog } from "@/lib/airline-catalog";
 import { Prisma } from "@prisma/client";
 import { invoiceNumberFromChronology } from "@/lib/invoice";
+import { canSellTickets } from "@/lib/assignment";
 
 function clamp(value: number, min: number, max: number) {
   return Math.max(min, Math.min(max, value));
@@ -41,6 +42,13 @@ export async function POST(request: NextRequest) {
   const access = await requireApiModuleAccess("sales", ["ADMIN", "DIRECTEUR_GENERAL", "MANAGER", "EMPLOYEE", "ACCOUNTANT"]);
   if (access.error) {
     return access.error;
+  }
+
+  if (!canSellTickets(access.session.user.jobTitle ?? "")) {
+    return NextResponse.json(
+      { error: "Le billetage est en lecture seule pour ce profil. Seul le caissier peut enregistrer un billet." },
+      { status: 403 },
+    );
   }
 
   try {

@@ -33,12 +33,12 @@ function parseIsoDate(value: FormDataEntryValue | null) {
 }
 
 export async function GET(request: NextRequest) {
-  const access = await requireApiModuleAccess("tickets", ["ADMIN"]);
+  const access = await requireApiModuleAccess("sales", ["ADMIN"]);
   if (access.error) {
     return access.error;
   }
 
-  if (!canImportTicketWorkbook(access.role, access.session.user.canImportTicketWorkbook)) {
+  if (!canImportTicketWorkbook(access.role, access.session.user.canImportTicketWorkbook, access.session.user.jobTitle)) {
     return NextResponse.json({ error: "Accès refusé." }, { status: 403 });
   }
 
@@ -65,13 +65,13 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
-  const access = await requireApiModuleAccess("tickets", ["ADMIN"]);
+  const access = await requireApiModuleAccess("sales", ["ADMIN"]);
   if (access.error) {
     return access.error;
   }
 
-  if (!canImportTicketWorkbook(access.role, access.session.user.canImportTicketWorkbook)) {
-    return NextResponse.json({ error: "Fonction non autorisée pour importer des billets." }, { status: 403 });
+  if (!canImportTicketWorkbook(access.role, access.session.user.canImportTicketWorkbook, access.session.user.jobTitle)) {
+    return NextResponse.json({ error: "L'import Excel des billets est réservé à l'administrateur." }, { status: 403 });
   }
 
   try {

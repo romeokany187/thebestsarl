@@ -6,6 +6,7 @@ import { ticketUpdateSchema } from "@/lib/validators";
 import { computeCommissionAmount, pickCommissionRule } from "@/lib/commission";
 import { getAirlineDepositAccountByAirlineCode, recordAirlineDepositMovement } from "@/lib/airline-deposit";
 import { ensureAirlineCatalog } from "@/lib/airline-catalog";
+import { canManageTicketRecord } from "@/lib/assignment";
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -17,6 +18,13 @@ export async function PATCH(request: NextRequest, { params }: Params) {
   const access = await requireApiModuleAccess("sales", ["ADMIN", "DIRECTEUR_GENERAL", "MANAGER", "EMPLOYEE", "ACCOUNTANT"]);
   if (access.error) {
     return access.error;
+  }
+
+  if (!canManageTicketRecord(access.role)) {
+    return NextResponse.json(
+      { error: "Seul l'administrateur peut modifier un billet déjà enregistré." },
+      { status: 403 },
+    );
   }
 
   try {
@@ -352,6 +360,13 @@ export async function DELETE(_request: NextRequest, { params }: Params) {
   const access = await requireApiModuleAccess("sales", ["ADMIN", "DIRECTEUR_GENERAL", "MANAGER", "EMPLOYEE", "ACCOUNTANT"]);
   if (access.error) {
     return access.error;
+  }
+
+  if (!canManageTicketRecord(access.role)) {
+    return NextResponse.json(
+      { error: "Seul l'administrateur peut supprimer un billet déjà enregistré." },
+      { status: 403 },
+    );
   }
 
   try {

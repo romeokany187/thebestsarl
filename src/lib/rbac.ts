@@ -60,18 +60,22 @@ export function hasModuleAccess(params: {
     return true;
   }
 
+  if (module === "payments") {
+    if (role === "ADMIN") {
+      return true;
+    }
+
+    const financeRole = role === "ACCOUNTANT" || jobTitle === "CAISSIER" || jobTitle === "COMPTABLE";
+    const kinshasaDirection = teamIncludes(teamName, ["KINSHASA", "DIRECTION GENERALE", "DIRECTION GÉNÉRALE"]);
+    return financeRole && kinshasaDirection;
+  }
+
   if (role === "ADMIN") {
     return true;
   }
 
   if (role === "DIRECTEUR_GENERAL") {
     return true;
-  }
-
-  if (module === "payments") {
-    const financeRole = jobTitle === "CAISSIER" || jobTitle === "COMPTABLE";
-    const kinshasaDirection = teamIncludes(teamName, ["KINSHASA", "DIRECTION GENERALE", "DIRECTION GÉNÉRALE"]);
-    return financeRole && kinshasaDirection;
   }
 
   if (module === "tickets") {

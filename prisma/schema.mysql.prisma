@@ -10,6 +10,7 @@ datasource db {
 
 enum Role {
   ADMIN
+  DIRECTEUR_GENERAL
   MANAGER
   EMPLOYEE
   ACCOUNTANT
