@@ -288,7 +288,8 @@ export default async function PaymentsPage({
   const { role, session } = await requirePageModuleAccess("payments", ["ADMIN", "DIRECTEUR_GENERAL", "ACCOUNTANT", "EMPLOYEE", "MANAGER"]);
   const isCashier = session.user.jobTitle === "CAISSIER";
   const isComptable = role === "ACCOUNTANT" || session.user.jobTitle === "COMPTABLE";
-  const canWrite = isCashier;
+  const isAdmin = role === "ADMIN";
+  const canWrite = isCashier || isAdmin;
   const resolvedSearchParams = (await searchParams) ?? {};
   const range = dateRangeFromParams(resolvedSearchParams);
   const cashRange = monthRangeFromValue(resolvedSearchParams.cashMonth);
@@ -312,11 +313,11 @@ export default async function PaymentsPage({
     month: cashRange.monthRaw,
   }).toString();
 
-  const accessNote = isCashier
-    ? "Caisse: encaissement des billets, autres écritures et billetage caisse."
+  const accessNote = canWrite
+    ? "Caisse et paiements: encaissements, écritures de caisse, conversions et exécutions financières autorisés."
     : isComptable
       ? "Comptabilité: consultation des paiements, journaux et comptes virtuels en lecture seule."
-      : "Module financier réservé aux profils caisse et comptabilité."
+      : "Module financier réservé aux profils autorisés."
 
   const paymentsData = await Promise.all([
     prisma.airline.findMany({
@@ -717,7 +718,7 @@ export default async function PaymentsPage({
         <h1 className="text-2xl font-semibold tracking-tight">Paiements</h1>
         <p className="text-sm text-black/60 dark:text-white/60">
           {role === "ADMIN"
-            ? "Consultation des rapports financiers: journaux et récapitulatifs uniquement."
+            ? "Pilotage financier complet: encaissements, écritures de caisse, conversions et suivi détaillé."
             : "Pilotage financier des billets vendus et des paiements reçus (USD / CDF)."}
         </p>
       </section>
@@ -843,7 +844,7 @@ export default async function PaymentsPage({
             </section>
           </div>
         )}
-        cashWorkspace={role === "ADMIN" ? null : (
+        cashWorkspace={(
           <div className="space-y-4">
             <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
               <KpiCard label="Solde ouverture USD" value={`${openingUsd.toFixed(2)} USD`} />
@@ -1020,7 +1021,7 @@ export default async function PaymentsPage({
             </div>
           </div>
         )}
-        billetageWorkspace={isCashier ? (
+        billetageWorkspace={canWrite ? (
           <CashBilletageWorkspace expectedUsd={closingUsd} expectedCdf={closingCdf} />
         ) : null}
       />

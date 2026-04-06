@@ -35,10 +35,6 @@ export async function POST(request: NextRequest) {
   const access = await requireApiModuleAccess("procurement", ["ADMIN", "MANAGER", "EMPLOYEE"]);
   if (access.error) return access.error;
 
-  if (access.role === "ADMIN") {
-    return NextResponse.json({ error: "Accès lecture seule: l'admin ne peut pas émettre d'état de besoin." }, { status: 403 });
-  }
-
   const body = await request.json();
   const parsed = needRequestSchema.safeParse(body);
   if (!parsed.success) {
@@ -143,10 +139,6 @@ export async function PATCH(request: NextRequest) {
   const access = await requireApiModuleAccess("procurement", ["ADMIN", "MANAGER", "EMPLOYEE"]);
   if (access.error) return access.error;
 
-  if (access.role === "ADMIN") {
-    return NextResponse.json({ error: "Accès lecture seule: l'admin ne peut pas modifier un état de besoin." }, { status: 403 });
-  }
-
   const body = await request.json();
   const parsed = needRequestUpdateSchema.safeParse(body);
   if (!parsed.success) {
@@ -187,9 +179,9 @@ export async function PATCH(request: NextRequest) {
     return NextResponse.json({ error: "État de besoin introuvable." }, { status: 404 });
   }
 
-  if (me.role !== "MANAGER" && existing.requesterId !== me.id) {
+  if (me.role !== "MANAGER" && me.role !== "ADMIN" && existing.requesterId !== me.id) {
     return NextResponse.json(
-      { error: "Seul le demandeur ou un manager peut modifier cet état de besoin." },
+      { error: "Seul le demandeur, un manager ou l'administrateur peut modifier cet état de besoin." },
       { status: 403 },
     );
   }

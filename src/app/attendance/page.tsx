@@ -39,14 +39,14 @@ export default async function AttendancePage({
   const resolvedSearchParams = (await searchParams) ?? {};
   const range = dateRangeFromParams(resolvedSearchParams);
   const canViewGlobalAttendance = role === "ADMIN" || role === "DIRECTEUR_GENERAL";
-  const canManageAttendance = role !== "ADMIN";
+  const canManageAttendance = true;
   const selectedUserId = canViewGlobalAttendance
     ? resolvedSearchParams.userId && resolvedSearchParams.userId !== "ALL"
       ? resolvedSearchParams.userId
       : undefined
     : session.user.id;
   const accessNote = canViewGlobalAttendance
-    ? "Accès direction: visualisation globale des présences et récapitulatifs journaliers de toute l'équipe."
+    ? "Accès direction: visualisation globale et gestion des présences de toute l'équipe."
     : "Accès personnel: vous signez votre présence et consultez uniquement vos propres lignes.";
 
   const users = !canViewGlobalAttendance
@@ -148,13 +148,7 @@ export default async function AttendancePage({
       </section>
 
       <div className="grid gap-6 lg:grid-cols-[380px,1fr]">
-        {canManageAttendance ? (
-          <AttendanceForm role={role} />
-        ) : (
-          <section className="rounded-xl border border-black/10 bg-white p-4 text-sm text-black/70 dark:border-white/10 dark:bg-zinc-900 dark:text-white/70">
-            Accès en lecture seule: vous pouvez consulter les présences mais pas les modifier.
-          </section>
-        )}
+        <AttendanceForm role={role} />
 
         <AttendanceRecordsTable
           initialRecords={records}

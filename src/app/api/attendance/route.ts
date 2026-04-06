@@ -48,7 +48,7 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
-  const access = await requireApiModuleAccess("attendance", ["MANAGER", "EMPLOYEE", "ACCOUNTANT"]);
+  const access = await requireApiModuleAccess("attendance", ["ADMIN", "MANAGER", "EMPLOYEE", "ACCOUNTANT"]);
   if (access.error) {
     return access.error;
   }
@@ -60,7 +60,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
   }
 
-  if (parsed.data.userId !== access.session.user.id) {
+  if (access.role !== "ADMIN" && parsed.data.userId !== access.session.user.id) {
     return NextResponse.json({ error: "Vous ne pouvez enregistrer que votre propre présence." }, { status: 403 });
   }
 

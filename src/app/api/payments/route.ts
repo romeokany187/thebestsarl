@@ -49,12 +49,8 @@ export async function POST(request: NextRequest) {
   const access = await requireApiModuleAccess("payments", ["ADMIN", "DIRECTEUR_GENERAL", "MANAGER", "ACCOUNTANT", "EMPLOYEE"]);
   if (access.error) return access.error;
 
-  if (access.role === "ADMIN" || access.role === "DIRECTEUR_GENERAL") {
-    return NextResponse.json({ error: "Admin et Directeur Général ont un accès lecture seule sur les écritures de paiement." }, { status: 403 });
-  }
-
-  if (access.session.user.jobTitle !== "CAISSIER") {
-    return NextResponse.json({ error: "Seul le caissier est autorisé à enregistrer des paiements." }, { status: 403 });
+  if (access.role !== "ADMIN" && access.session.user.jobTitle !== "CAISSIER") {
+    return NextResponse.json({ error: "Seuls l'administrateur et le caissier sont autorisés à enregistrer des paiements." }, { status: 403 });
   }
 
   try {

@@ -20,7 +20,7 @@ function parsePositiveNumber(raw: string | undefined, fallback: number): number 
 }
 
 export async function POST(request: NextRequest) {
-  const access = await requireApiRoles(["MANAGER", "EMPLOYEE", "ACCOUNTANT"]);
+  const access = await requireApiRoles(["ADMIN", "MANAGER", "EMPLOYEE", "ACCOUNTANT"]);
   if (access.error) return access.error;
 
   const me = await prisma.user.findUnique({
@@ -32,8 +32,8 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Utilisateur introuvable." }, { status: 404 });
   }
 
-  if (me.jobTitle !== "CAISSIER") {
-    return NextResponse.json({ error: "Exécution réservée au caissier." }, { status: 403 });
+  if (access.role !== "ADMIN" && me.jobTitle !== "CAISSIER") {
+    return NextResponse.json({ error: "Exécution réservée au caissier ou à l'administrateur." }, { status: 403 });
   }
 
   const body = await request.json();

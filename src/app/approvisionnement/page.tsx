@@ -44,17 +44,16 @@ export default async function ApprovisionnementPage() {
 
   const allUsers = allUsersRaw.map((u) => ({ id: u.id, name: u.name, teamName: u.team?.name ?? null }));
 
-  const isAdminReadOnly = role === "ADMIN";
-  const canCreateNeed = !isAdminReadOnly && (role === "MANAGER" || me?.jobTitle === "APPROVISIONNEMENT");
-  const canApproveNeed = false;
-  const canManageStock = !isAdminReadOnly && (role === "MANAGER" || me?.jobTitle === "APPROVISIONNEMENT");
+  const canCreateNeed = role === "ADMIN" || role === "MANAGER" || me?.jobTitle === "APPROVISIONNEMENT";
+  const canApproveNeed = role === "ADMIN" || role === "DIRECTEUR_GENERAL";
+  const canManageStock = role === "ADMIN" || role === "MANAGER" || me?.jobTitle === "APPROVISIONNEMENT";
 
   return (
     <AppShell
       role={role}
-      accessNote={isAdminReadOnly
-        ? "Mode lecture: consultation des états de besoin, fiche stock et rapports PDF uniquement."
-        : "Approvisionnement: émission des états de besoin, validation du Directeur Général via inbox, puis exécution financière et suivi stock avec traçabilité."}
+      accessNote={role === "ADMIN"
+        ? "Admin: accès complet à l’émission, la validation, l’exécution et la gestion de stock avec traçabilité."
+        : "Approvisionnement: émission des états de besoin, validation via inbox, exécution financière et suivi stock avec traçabilité."}
     >
       <section className="mb-6">
         <h1 className="text-2xl font-semibold tracking-tight">Approvisionnement</h1>
@@ -82,8 +81,8 @@ export default async function ApprovisionnementPage() {
         canCreateNeed={canCreateNeed}
         canApproveNeed={canApproveNeed}
         canManageStock={canManageStock}
-        hideNeedWorkflow={isAdminReadOnly}
-        hideDynamicStock={isAdminReadOnly}
+        hideNeedWorkflow={false}
+        hideDynamicStock={false}
         allUsers={allUsers}
       />
     </AppShell>

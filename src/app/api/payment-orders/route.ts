@@ -40,10 +40,10 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Utilisateur introuvable." }, { status: 404 });
   }
 
-  const canCreate = access.role === "DIRECTEUR_GENERAL";
+  const canCreate = access.role === "DIRECTEUR_GENERAL" || access.role === "ADMIN";
   if (!canCreate) {
     return NextResponse.json(
-      { error: "Création d'ordre de paiement réservée au Directeur Général." },
+      { error: "Création d'ordre de paiement réservée au Directeur Général ou à l'administrateur." },
       { status: 403 },
     );
   }
