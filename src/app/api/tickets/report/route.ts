@@ -6,7 +6,7 @@ import path from "node:path";
 import { prisma } from "@/lib/prisma";
 import { requireApiModuleAccess } from "@/lib/rbac";
 import { computeCaaCommissionMap } from "@/lib/caa-commission";
-import { getTicketTotalAmount } from "@/lib/ticket-pricing";
+import { getTicketCommissionAmount, getTicketTotalAmount } from "@/lib/ticket-pricing";
 
 type ReportMode = "date" | "month" | "year" | "semester";
 
@@ -244,11 +244,11 @@ export async function GET(request: NextRequest) {
     })
     : new Map<string, number>();
 
-  const ticketCommission = (ticket: { id: string; airline: { code: string }; amount: number; commissionAmount: number | null; commissionRateUsed: number }) => {
+  const ticketCommission = (ticket: { id: string; airline: { code: string }; amount: number; commissionAmount: number | null; commissionRateUsed: number; agencyMarkupAmount?: number | null; commissionCalculationStatus?: string | null; baseFareAmount?: number | null; commissionBaseAmount?: number | null }) => {
     if (ticket.airline.code === "CAA" && caaCommissionMap.has(ticket.id)) {
-      return caaCommissionMap.get(ticket.id) ?? 0;
+      return getTicketCommissionAmount(ticket, caaCommissionMap.get(ticket.id) ?? 0);
     }
-    return ticket.commissionAmount ?? ticket.amount * (ticket.commissionRateUsed / 100);
+    return getTicketCommissionAmount(ticket);
   };
 
   const pdf = await PDFDocument.create();

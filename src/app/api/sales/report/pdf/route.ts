@@ -5,7 +5,7 @@ import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { prisma } from "@/lib/prisma";
 import { requireApiModuleAccess } from "@/lib/rbac";
-import { getTicketTotalAmount } from "@/lib/ticket-pricing";
+import { getTicketCommissionAmount, getTicketTotalAmount } from "@/lib/ticket-pricing";
 
 type SearchParams = {
   startDate?: string;
@@ -415,16 +415,19 @@ export async function GET(request: NextRequest) {
     select: {
       soldAt: true,
       amount: true,
+      baseFareAmount: true,
+      commissionBaseAmount: true,
       commissionAmount: true,
       commissionRateUsed: true,
       agencyMarkupAmount: true,
+      commissionCalculationStatus: true,
       commissionModeApplied: true,
       airline: { select: { code: true } },
     },
   });
 
-  const ticketCommission = (ticket: { amount: number; commissionAmount?: number | null; commissionRateUsed?: number | null }) => (
-    ticket.commissionAmount ?? ticket.amount * ((ticket.commissionRateUsed ?? 0) / 100)
+  const ticketCommission = (ticket: { amount: number; commissionAmount?: number | null; commissionRateUsed?: number | null; agencyMarkupAmount?: number | null; commissionCalculationStatus?: string | null; baseFareAmount?: number | null; commissionBaseAmount?: number | null }) => (
+    getTicketCommissionAmount(ticket)
   );
 
   // Common aggregates

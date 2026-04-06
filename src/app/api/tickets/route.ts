@@ -73,12 +73,6 @@ export async function POST(request: NextRequest) {
     const rule = pickCommissionRule(airline.commissionRules, parsed.data.route, parsed.data.travelClass);
     const depositAccount = getAirlineDepositAccountByAirlineCode(airline.code);
 
-    if (!rule) {
-      return NextResponse.json({
-        error: "Aucune règle de commission active trouvée pour cette compagnie, itinéraire et classe.",
-      }, { status: 400 });
-    }
-
     const isAirCongo = airline.code === "ACG";
     const isMontGabaon = airline.code === "MGB";
     const isAirFast = airline.code === "FST";
@@ -90,7 +84,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const isAfterDepositMode = rule.commissionMode === CommissionMode.AFTER_DEPOSIT;
+    const isAfterDepositMode = rule?.commissionMode === CommissionMode.AFTER_DEPOSIT;
     const todayRaw = new Date().toISOString().slice(0, 10);
     const enforcedTravelDate = new Date(`${todayRaw}T00:00:00.000Z`);
     const consumedBeforeForAfterDeposit = isAfterDepositMode
@@ -107,50 +101,12 @@ export async function POST(request: NextRequest) {
     let baseFareAmount = parsed.data.baseFareAmount;
 
     if (!isAfterDepositMode) {
-      if (!baseFareAmount) {
-        const routeHistory = await prisma.ticketSale.findMany({
-          where: {
-            airlineId: parsed.data.airlineId,
-            route: parsed.data.route,
-            baseFareAmount: { not: null },
-            amount: { gt: 0 },
-            commissionCalculationStatus: CommissionCalculationStatus.FINAL,
-          },
-          select: { amount: true, baseFareAmount: true },
-          orderBy: { soldAt: "desc" },
-          take: 60,
-        });
-
-        const airlineHistory = routeHistory.length > 0
-          ? routeHistory
-          : await prisma.ticketSale.findMany({
-            where: {
-              airlineId: parsed.data.airlineId,
-              baseFareAmount: { not: null },
-              amount: { gt: 0 },
-              commissionCalculationStatus: CommissionCalculationStatus.FINAL,
-            },
-            select: { amount: true, baseFareAmount: true },
-            orderBy: { soldAt: "desc" },
-            take: 100,
-          });
-
-        const ratio = airlineHistory.length > 0
-          ? clamp(
-            airlineHistory.reduce((acc, ticket) => {
-              const baseFare = ticket.baseFareAmount ?? 0;
-              return acc + (ticket.amount > 0 ? baseFare / ticket.amount : 0);
-            }, 0) / airlineHistory.length,
-            0.2,
-            0.95,
-          )
-          : clamp(rule.defaultBaseFareRatio ?? 0.6, 0.2, 0.95);
-
-        commissionBaseAmount = parsed.data.amount * ratio;
-        baseFareAmount = commissionBaseAmount;
-        commissionCalculationStatus = CommissionCalculationStatus.ESTIMATED;
-      } else {
+      if (baseFareAmount && baseFareAmount > 0) {
         commissionBaseAmount = baseFareAmount;
+        commissionCalculationStatus = CommissionCalculationStatus.FINAL;
+      } else {
+        baseFareAmount = undefined;
+        commissionBaseAmount = 0;
         commissionCalculationStatus = CommissionCalculationStatus.FINAL;
       }
     } else {
@@ -182,13 +138,19 @@ export async function POST(request: NextRequest) {
             amount: nextAirFastSaleNumber % 13 === 0 ? parsed.data.amount : 0,
             modeApplied: CommissionMode.IMMEDIATE,
           }
-        : computeCommissionAmount(
-          commissionInputAmount,
-          isAfterDepositMode
-            ? { ...rule, depositStockConsumedAmount: consumedBeforeForAfterDeposit }
-            : rule,
-          0,
-        );
+        : rule
+          ? computeCommissionAmount(
+            commissionInputAmount,
+            isAfterDepositMode
+              ? { ...rule, depositStockConsumedAmount: consumedBeforeForAfterDeposit }
+              : rule,
+            0,
+          )
+          : {
+            ratePercent: 0,
+            amount: 0,
+            modeApplied: CommissionMode.IMMEDIATE,
+          };
 
     const commission = (isAfterDepositMode || isAirCongo || isMontGabaon || isAirFast)
       ? baseCommission

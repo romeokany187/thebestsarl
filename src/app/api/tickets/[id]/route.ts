@@ -74,7 +74,7 @@ export async function PATCH(request: NextRequest, { params }: Params) {
       amount: parsed.data.amount ?? existing.amount,
       route: parsed.data.route ?? existing.route,
       travelClass: parsed.data.travelClass ?? existing.travelClass,
-      baseFareAmount: parsed.data.baseFareAmount ?? existing.baseFareAmount,
+      baseFareAmount: parsed.data.baseFareAmount ?? (existing.commissionCalculationStatus === CommissionCalculationStatus.ESTIMATED ? null : existing.baseFareAmount),
       agencyMarkupAmount: parsed.data.agencyMarkupAmount ?? existing.agencyMarkupAmount,
     };
 
@@ -151,7 +151,7 @@ export async function PATCH(request: NextRequest, { params }: Params) {
     const isAirCongo = targetAirline.code === "ACG";
     const isMontGabaon = targetAirline.code === "MGB";
     const isAirFast = targetAirline.code === "FST";
-    const isAfterDepositMode = rule.commissionMode === CommissionMode.AFTER_DEPOSIT;
+    const isAfterDepositMode = rule?.commissionMode === CommissionMode.AFTER_DEPOSIT;
     const consumedBeforeForAfterDeposit = isAfterDepositMode
       ? (
         await prisma.ticketSale.aggregate({
@@ -175,32 +175,8 @@ export async function PATCH(request: NextRequest, { params }: Params) {
     let commissionCalculationStatus: CommissionCalculationStatus = CommissionCalculationStatus.FINAL;
 
     if (!isAfterDepositMode && !nextTicket.baseFareAmount) {
-      const airlineHistory = await prisma.ticketSale.findMany({
-        where: {
-          airlineId: nextAirlineId,
-          baseFareAmount: { not: null },
-          amount: { gt: 0 },
-          commissionCalculationStatus: CommissionCalculationStatus.FINAL,
-          id: { not: existing.id },
-        },
-        select: { amount: true, baseFareAmount: true },
-        orderBy: { soldAt: "desc" },
-        take: 80,
-      });
-
-      const ratio = airlineHistory.length > 0
-        ? clamp(
-          airlineHistory.reduce((acc, ticket) => {
-            const baseFare = ticket.baseFareAmount ?? 0;
-            return acc + (ticket.amount > 0 ? baseFare / ticket.amount : 0);
-          }, 0) / airlineHistory.length,
-          0.2,
-          0.95,
-        )
-        : clamp(rule.defaultBaseFareRatio ?? 0.6, 0.2, 0.95);
-
-      commissionBaseAmount = nextTicket.amount * ratio;
-      commissionCalculationStatus = CommissionCalculationStatus.ESTIMATED;
+      commissionBaseAmount = 0;
+      commissionCalculationStatus = CommissionCalculationStatus.FINAL;
     }
 
     const commissionInputAmount = isAfterDepositMode ? nextTicket.amount : commissionBaseAmount;
@@ -234,13 +210,19 @@ export async function PATCH(request: NextRequest, { params }: Params) {
             amount: airFastSaleOrder % 13 === 0 ? nextTicket.amount : 0,
             modeApplied: CommissionMode.IMMEDIATE,
           }
-        : computeCommissionAmount(
-          commissionInputAmount,
-          isAfterDepositMode
-            ? { ...rule, depositStockConsumedAmount: consumedBeforeForAfterDeposit }
-            : rule,
-          0,
-        );
+        : rule
+          ? computeCommissionAmount(
+            commissionInputAmount,
+            isAfterDepositMode
+              ? { ...rule, depositStockConsumedAmount: consumedBeforeForAfterDeposit }
+              : rule,
+            0,
+          )
+          : {
+            ratePercent: 0,
+            amount: 0,
+            modeApplied: CommissionMode.IMMEDIATE,
+          };
 
     const commission = (isAfterDepositMode || isAirCongo || isMontGabaon || isAirFast)
       ? baseCommission

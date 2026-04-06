@@ -4,7 +4,7 @@ import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
 import { prisma } from "@/lib/prisma";
 import { isMailConfigured, sendMailBatch } from "@/lib/mail";
 import { computeCaaCommissionMap } from "@/lib/caa-commission";
-import { getTicketTotalAmount } from "@/lib/ticket-pricing";
+import { getTicketCommissionAmount, getTicketTotalAmount } from "@/lib/ticket-pricing";
 
 type Frequency = "daily" | "weekly" | "monthly";
 type Params = { params: Promise<{ period: string }> };
@@ -374,9 +374,12 @@ export async function GET(request: NextRequest, { params }: Params) {
         airlineId: true,
         soldAt: true,
         amount: true,
+        baseFareAmount: true,
+        commissionBaseAmount: true,
         commissionAmount: true,
         commissionRateUsed: true,
         agencyMarkupAmount: true,
+        commissionCalculationStatus: true,
         commissionModeApplied: true,
         paymentStatus: true,
         sellerName: true,
@@ -423,11 +426,11 @@ export async function GET(request: NextRequest, { params }: Params) {
     })
     : new Map<string, number>();
 
-  const ticketCommission = (ticket: { id: string; airlineId: string; amount: number; commissionAmount: number | null; commissionRateUsed: number }) => {
+  const ticketCommission = (ticket: { id: string; airlineId: string; amount: number; commissionAmount: number | null; commissionRateUsed: number; agencyMarkupAmount?: number | null; commissionCalculationStatus?: string | null; baseFareAmount?: number | null; commissionBaseAmount?: number | null }) => {
     if (caaAirline && ticket.airlineId === caaAirline.id && caaCommissionMap.has(ticket.id)) {
-      return caaCommissionMap.get(ticket.id) ?? 0;
+      return getTicketCommissionAmount(ticket, caaCommissionMap.get(ticket.id) ?? 0);
     }
-    return ticket.commissionAmount ?? ticket.amount * (ticket.commissionRateUsed / 100);
+    return getTicketCommissionAmount(ticket);
   };
 
   const reportsRecipient = getReportsRecipient();

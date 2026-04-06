@@ -4,6 +4,9 @@ type TicketPricingInput = {
   commissionRateUsed?: number | null;
   agencyMarkupAmount?: number | null;
   commissionModeApplied?: string | null;
+  commissionCalculationStatus?: string | null;
+  baseFareAmount?: number | null;
+  commissionBaseAmount?: number | null;
   airline?: { code?: string | null } | null;
 };
 
@@ -29,7 +32,32 @@ function commissionAlreadyIncludesMarkup(ticket: TicketPricingInput) {
   return true;
 }
 
+function shouldUseMarkupOnly(ticket: TicketPricingInput) {
+  const status = (ticket.commissionCalculationStatus ?? "").trim().toUpperCase();
+  const hasRealBaseFare = typeof ticket.baseFareAmount === "number"
+    ? ticket.baseFareAmount > 0
+    : null;
+  const hasCommissionBase = typeof ticket.commissionBaseAmount === "number"
+    ? ticket.commissionBaseAmount > 0
+    : null;
+  const mode = (ticket.commissionModeApplied ?? "").trim().toUpperCase();
+
+  if (status === "ESTIMATED") {
+    return true;
+  }
+
+  if (hasRealBaseFare === false && hasCommissionBase === false && mode !== "AFTER_DEPOSIT") {
+    return true;
+  }
+
+  return false;
+}
+
 export function getTicketCommissionAmount(ticket: TicketPricingInput, overrideCommissionAmount?: number | null) {
+  if (shouldUseMarkupOnly(ticket)) {
+    return getTicketMarkupAmount(ticket);
+  }
+
   if (typeof overrideCommissionAmount === "number") {
     return round2(Math.max(0, overrideCommissionAmount));
   }
@@ -47,6 +75,10 @@ export function getTicketMarkupAmount(ticket: TicketPricingInput) {
 }
 
 export function getTicketBaseCommissionAmount(ticket: TicketPricingInput, overrideCommissionAmount?: number | null) {
+  if (shouldUseMarkupOnly(ticket)) {
+    return 0;
+  }
+
   const totalCommission = getTicketCommissionAmount(ticket, overrideCommissionAmount);
   if (!commissionAlreadyIncludesMarkup(ticket)) {
     return totalCommission;

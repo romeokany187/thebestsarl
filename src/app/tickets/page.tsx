@@ -4,7 +4,7 @@ import { requirePageModuleAccess } from "@/lib/rbac";
 import { prisma } from "@/lib/prisma";
 import { ensureAirlineCatalog } from "@/lib/airline-catalog";
 import { computeCaaCommissionMap } from "@/lib/caa-commission";
-import { getTicketTotalAmount } from "@/lib/ticket-pricing";
+import { getTicketCommissionAmount, getTicketTotalAmount } from "@/lib/ticket-pricing";
 
 export const dynamic = "force-dynamic";
 
@@ -331,18 +331,18 @@ export default async function TicketsPage({
     })
     : new Map<string, number>();
 
-  const monitorCurrentCommissionOf = (ticket: { id: string; airline: { code: string }; amount: number; commissionAmount: number | null; commissionRateUsed: number }) => {
+  const monitorCurrentCommissionOf = (ticket: { id: string; airline: { code: string }; amount: number; commissionAmount: number | null; commissionRateUsed: number; agencyMarkupAmount?: number | null; commissionCalculationStatus?: string | null; baseFareAmount?: number | null; commissionBaseAmount?: number | null }) => {
     if (ticket.airline.code === "CAA" && monitorCurrentCaaCommissionMap.has(ticket.id)) {
-      return monitorCurrentCaaCommissionMap.get(ticket.id) ?? 0;
+      return getTicketCommissionAmount(ticket, monitorCurrentCaaCommissionMap.get(ticket.id) ?? 0);
     }
-    return ticket.commissionAmount ?? ticket.amount * (ticket.commissionRateUsed / 100);
+    return getTicketCommissionAmount(ticket);
   };
 
-  const comparisonCommissionOf = (ticket: { id: string; airline: { code: string }; amount: number; commissionAmount: number | null; commissionRateUsed: number }) => {
+  const comparisonCommissionOf = (ticket: { id: string; airline: { code: string }; amount: number; commissionAmount: number | null; commissionRateUsed: number; agencyMarkupAmount?: number | null; commissionCalculationStatus?: string | null; baseFareAmount?: number | null; commissionBaseAmount?: number | null }) => {
     if (ticket.airline.code === "CAA" && comparisonCaaCommissionMap.has(ticket.id)) {
-      return comparisonCaaCommissionMap.get(ticket.id) ?? 0;
+      return getTicketCommissionAmount(ticket, comparisonCaaCommissionMap.get(ticket.id) ?? 0);
     }
-    return ticket.commissionAmount ?? ticket.amount * (ticket.commissionRateUsed / 100);
+    return getTicketCommissionAmount(ticket);
   };
 
   const monitorCurrentTotalOf = (ticket: { amount: number; commissionAmount: number | null; commissionRateUsed: number; agencyMarkupAmount?: number | null; airline: { code: string }; id: string }) => (
