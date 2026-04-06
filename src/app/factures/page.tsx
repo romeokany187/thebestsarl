@@ -123,7 +123,6 @@ export default async function FacturesPage({
     const paidAmount = ticket.payments.reduce((sum, payment) => sum + payment.amount, 0);
     const balance = Math.max(0, billedAmount - paidAmount);
     const status = statusFromAmounts(billedAmount, paidAmount);
-    const sellerName = ticket.seller?.name ?? ticket.sellerName ?? "-";
     return {
       ticketId: ticket.id,
       invoiceNumber,
@@ -132,7 +131,6 @@ export default async function FacturesPage({
       customerName: ticket.customerName,
       airlineCode: ticket.airline.code,
       airlineName: ticket.airline.name,
-      sellerName,
       amount: billedAmount,
       paidAmount,
       balance,
@@ -148,7 +146,6 @@ export default async function FacturesPage({
   const sortedInvoices = filteredInvoices.slice().sort((a, b) => b.soldAt.getTime() - a.soldAt.getTime());
 
   const totalBilled = sortedInvoices.reduce((sum, invoice) => sum + invoice.amount, 0);
-  const totalPaid = sortedInvoices.reduce((sum, invoice) => sum + invoice.paidAmount, 0);
   const totalBalance = sortedInvoices.reduce((sum, invoice) => sum + invoice.balance, 0);
 
   return (
@@ -194,7 +191,7 @@ export default async function FacturesPage({
         </form>
 
         <p className="mt-3 text-xs text-black/60 dark:text-white/60">
-          {sortedInvoices.length} facture(s) • Total: {totalBilled.toFixed(2)} USD • Encaissé: {totalPaid.toFixed(2)} USD • Solde: {totalBalance.toFixed(2)} USD
+          {sortedInvoices.length} facture(s) • Total: {totalBilled.toFixed(2)} USD • Solde: {totalBalance.toFixed(2)} USD
         </p>
       </section>
 
@@ -208,10 +205,8 @@ export default async function FacturesPage({
                 <th className="px-4 py-3 text-left font-semibold">PNR</th>
                 <th className="px-4 py-3 text-left font-semibold">Client</th>
                 <th className="px-4 py-3 text-left font-semibold">Compagnie</th>
-                <th className="px-4 py-3 text-left font-semibold">Vendeur</th>
                 <th className="px-4 py-3 text-left font-semibold">Statut</th>
                 <th className="px-4 py-3 text-left font-semibold">Total</th>
-                <th className="px-4 py-3 text-left font-semibold">Payé</th>
                 <th className="px-4 py-3 text-left font-semibold">Reste</th>
                 <th className="px-4 py-3 text-left font-semibold">Document</th>
               </tr>
@@ -224,14 +219,12 @@ export default async function FacturesPage({
                   <td className="px-4 py-3">{invoice.ticketNumber}</td>
                   <td className="px-4 py-3">{invoice.customerName}</td>
                   <td className="px-4 py-3">{invoice.airlineCode} - {invoice.airlineName}</td>
-                  <td className="px-4 py-3">{invoice.sellerName}</td>
                   <td className="px-4 py-3">
                     <span className="rounded-full border border-black/15 px-2 py-0.5 text-[11px] font-semibold dark:border-white/20">
                       {statusLabel(invoice.status)}
                     </span>
                   </td>
                   <td className="px-4 py-3">{invoice.amount.toFixed(2)} USD</td>
-                  <td className="px-4 py-3">{invoice.paidAmount.toFixed(2)} USD</td>
                   <td className="px-4 py-3">{invoice.balance.toFixed(2)} USD</td>
                   <td className="px-4 py-3">
                     <div className="flex flex-wrap items-center gap-2">
@@ -253,7 +246,7 @@ export default async function FacturesPage({
               ))}
               {sortedInvoices.length === 0 ? (
                 <tr>
-                  <td colSpan={11} className="px-4 py-8 text-center text-sm text-black/55 dark:text-white/55">
+                  <td colSpan={9} className="px-4 py-8 text-center text-sm text-black/55 dark:text-white/55">
                     Aucune facture trouvée pour ce filtre.
                   </td>
                 </tr>
