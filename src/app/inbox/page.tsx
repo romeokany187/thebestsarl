@@ -24,15 +24,10 @@ export default async function InboxPage() {
   });
 
   return (
-    <AppShell
-      role={role}
-      accessNote="Notifications simples: un clic sur chaque notification redirige vers la section OP / EDB appropriée."
-    >
+    <AppShell role={role}>
       <section className="mb-6">
         <h1 className="text-2xl font-semibold tracking-tight">Notifications</h1>
-        <p className="text-sm text-black/60 dark:text-white/60">
-          Ici, vous voyez uniquement vos notifications. Chaque notification a une seule action: cliquer pour être redirigé vers la bonne section de traitement.
-        </p>
+        <p className="text-sm text-black/60 dark:text-white/60">Suivi des notifications</p>
       </section>
 
       <NotificationCenter
