@@ -6,6 +6,7 @@ import path from "node:path";
 import { prisma } from "@/lib/prisma";
 import { requireApiModuleAccess } from "@/lib/rbac";
 import { invoiceFileName, invoiceNumberFromChronology } from "@/lib/invoice";
+import { getTicketTotalAmount } from "@/lib/ticket-pricing";
 
 type RouteContext = {
   params: Promise<{ ticketId: string }>;
@@ -39,6 +40,20 @@ function formatDate(value: Date) {
 function drawLabelValueRow(page: PDFPage, font: any, bold: any, y: number, label: string, value: string) {
   page.drawText(`${label} :`, { x: 38, y, size: 12, font: bold, color: rgb(0, 0, 0) });
   page.drawText(value || "-", { x: 130, y, size: 12, font, color: rgb(0, 0, 0) });
+}
+
+function fitTextToWidth(font: any, text: string, size: number, maxWidth: number) {
+  const value = (text || "-").trim() || "-";
+  if (font.widthOfTextAtSize(value, size) <= maxWidth) {
+    return value;
+  }
+
+  let trimmed = value;
+  while (trimmed.length > 1 && font.widthOfTextAtSize(`${trimmed}…`, size) > maxWidth) {
+    trimmed = trimmed.slice(0, -1);
+  }
+
+  return `${trimmed.trimEnd()}…`;
 }
 
 export async function GET(request: NextRequest, context: RouteContext) {
@@ -77,8 +92,9 @@ export async function GET(request: NextRequest, context: RouteContext) {
     sellerTeamName: ticket.seller?.team?.name ?? null,
     sequence,
   });
+  const billedAmount = getTicketTotalAmount(ticket);
   const paidAmount = ticket.payments.reduce((sum, payment) => sum + payment.amount, 0);
-  const balance = Math.max(0, ticket.amount - paidAmount);
+  const balance = Math.max(0, billedAmount - paidAmount);
 
   const pdf = await PDFDocument.create();
   pdf.registerFontkit(fontkit);
@@ -185,15 +201,15 @@ export async function GET(request: NextRequest, context: RouteContext) {
   const tableRight = 560;
   const tableTop = 528;
   const rowHeight = 24;
-  const colX = [34, 56, 192, 302, 388, 444, 500, 560];
+  const colX = [34, 56, 178, 286, 406, 455, 507, 560];
 
   page.drawRectangle({ x: tableLeft, y: tableTop - rowHeight, width: tableRight - tableLeft, height: rowHeight, borderColor: line, borderWidth: 1 });
   for (let i = 1; i < colX.length - 1; i += 1) {
     page.drawLine({ start: { x: colX[i], y: tableTop }, end: { x: colX[i], y: tableTop - rowHeight }, thickness: 1, color: line });
   }
 
-  const headers = ["#", "Beneficiaire", "Itineraire", "Dates", "Quantite", "PU $", "Total $"];
-  const headerX = [40, 60, 196, 306, 393, 452, 506];
+  const headers = ["#", "Beneficiaire", "Itineraire", "Dates", "Qte", "PU $", "Total $"];
+  const headerX = [40, 60, 182, 290, 413, 462, 513];
   headers.forEach((h, idx) => {
     page.drawText(h, { x: headerX[idx], y: tableTop - 15, size: 10, font: bold, color: black });
   });
@@ -205,17 +221,41 @@ export async function GET(request: NextRequest, context: RouteContext) {
   }
 
   page.drawText("1", { x: 42, y: tableTop - rowHeight - 18, size: 11, font: regular, color: black });
-  page.drawText(ticket.customerName, { x: 60, y: tableTop - rowHeight - 18, size: 11, font: regular, color: black });
-  page.drawText(`${ticket.route}`, { x: 196, y: tableTop - rowHeight - 18, size: 11, font: regular, color: black });
-  page.drawText(`Depart : ${formatDate(ticket.travelDate)}`, { x: 306, y: tableTop - rowHeight - 18, size: 10, font: regular, color: black });
-  page.drawText(`Retour : -`, { x: 306, y: tableTop - rowHeight - 36, size: 10, font: regular, color: black });
-  page.drawText("1", { x: 398, y: tableTop - rowHeight - 18, size: 11, font: regular, color: black });
-  page.drawText(`${ticket.amount.toFixed(2)} $`, { x: 448, y: tableTop - rowHeight - 18, size: 11, font: regular, color: black });
-  page.drawText(`${ticket.amount.toFixed(2)} $`, { x: 505, y: tableTop - rowHeight - 18, size: 11, font: regular, color: black });
+  page.drawText(fitTextToWidth(regular, ticket.customerName, 11, colX[2] - colX[1] - 8), {
+    x: 60,
+    y: tableTop - rowHeight - 18,
+    size: 11,
+    font: regular,
+    color: black,
+  });
+  page.drawText(fitTextToWidth(regular, `${ticket.route}`, 11, colX[3] - colX[2] - 8), {
+    x: 182,
+    y: tableTop - rowHeight - 18,
+    size: 11,
+    font: regular,
+    color: black,
+  });
+  page.drawText(fitTextToWidth(regular, `Depart : ${formatDate(ticket.travelDate)}`, 9.5, colX[4] - colX[3] - 10), {
+    x: 290,
+    y: tableTop - rowHeight - 18,
+    size: 9.5,
+    font: regular,
+    color: black,
+  });
+  page.drawText(fitTextToWidth(regular, "Retour : -", 9.5, colX[4] - colX[3] - 10), {
+    x: 290,
+    y: tableTop - rowHeight - 36,
+    size: 9.5,
+    font: regular,
+    color: black,
+  });
+  page.drawText("1", { x: 414, y: tableTop - rowHeight - 18, size: 11, font: regular, color: black });
+  page.drawText(`${billedAmount.toFixed(2)} $`, { x: 459, y: tableTop - rowHeight - 18, size: 11, font: regular, color: black });
+  page.drawText(`${billedAmount.toFixed(2)} $`, { x: 512, y: tableTop - rowHeight - 18, size: 11, font: regular, color: black });
 
   const summaryTop = rowBottom - 36;
   page.drawRectangle({ x: tableLeft, y: summaryTop, width: tableRight - tableLeft, height: 18, borderColor: line, borderWidth: 1 });
-  page.drawText(`Grand Total : ${ticket.amount.toFixed(2)} USD`, { x: 38, y: summaryTop + 5, size: 12, font: bold, color: black });
+  page.drawText(`Grand Total : ${billedAmount.toFixed(2)} USD`, { x: 38, y: summaryTop + 5, size: 12, font: bold, color: black });
 
   page.drawRectangle({ x: tableLeft, y: summaryTop - 18, width: tableRight - tableLeft, height: 18, borderColor: line, borderWidth: 1 });
   page.drawText("Les paiements", { x: 38, y: summaryTop - 13, size: 12, font: bold, color: black });
