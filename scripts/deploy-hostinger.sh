@@ -21,8 +21,13 @@ fi
 git remote remove origin >/dev/null 2>&1 || true
 git remote add origin '$REMOTE_REPO'
 git fetch origin main
+
+echo '[remote] Cleaning leftover files before checkout...'
+git clean -fd || true
+
 git checkout -B main origin/main
 git reset --hard origin/main
+git clean -fd
 
 echo '[remote] Installing dependencies...'
 npm install
