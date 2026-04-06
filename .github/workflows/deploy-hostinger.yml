@@ -1,0 +1,84 @@
+name: Deploy to Hostinger
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+concurrency:
+  group: hostinger-deploy
+  cancel-in-progress: true
+
+env:
+  HOSTINGER_HOST: 82.29.194.219
+  HOSTINGER_PORT: 65002
+  HOSTINGER_USER: u697417861
+  HOSTINGER_APP_DIR: /home/u697417861/domains/blue-spider-738233.hostingersite.com/nodejs
+  HOSTINGER_BUNDLE_DIR: /home/u697417861/domains/blue-spider-738233.hostingersite.com/.deploy
+  PRISMA_SCHEMA_FILE: prisma/schema.mysql.prisma
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build production app
+        run: npm run build:mysql
+
+      - name: Create deployment bundle
+        run: |
+          rm -rf .deploy
+          mkdir -p .deploy/app
+          rsync -a \
+            --exclude='.git' \
+            --exclude='.github' \
+            --exclude='.env*' \
+            --exclude='imports' \
+            --exclude='coverage' \
+            ./ .deploy/app/
+          tar -czf .deploy/thebestsarl-hostinger.tar.gz -C .deploy/app .
+
+      - name: Install sshpass
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y sshpass
+
+      - name: Upload bundle to Hostinger
+        env:
+          HOSTINGER_PASSWORD: ${{ secrets.HOSTINGER_PASSWORD }}
+        run: |
+          test -n "$HOSTINGER_PASSWORD"
+          sshpass -p "$HOSTINGER_PASSWORD" ssh -o StrictHostKeyChecking=no -p "$HOSTINGER_PORT" "$HOSTINGER_USER@$HOSTINGER_HOST" "mkdir -p '$HOSTINGER_BUNDLE_DIR' '$HOSTINGER_APP_DIR'"
+          sshpass -p "$HOSTINGER_PASSWORD" scp -P "$HOSTINGER_PORT" -o StrictHostKeyChecking=no .deploy/thebestsarl-hostinger.tar.gz "$HOSTINGER_USER@$HOSTINGER_HOST:$HOSTINGER_BUNDLE_DIR/"
+
+      - name: Extract bundle and restart app
+        env:
+          HOSTINGER_PASSWORD: ${{ secrets.HOSTINGER_PASSWORD }}
+        run: |
+          test -n "$HOSTINGER_PASSWORD"
+          sshpass -p "$HOSTINGER_PASSWORD" ssh -o StrictHostKeyChecking=no -p "$HOSTINGER_PORT" "$HOSTINGER_USER@$HOSTINGER_HOST" '
+            set -e
+            APP_DIR="'$HOSTINGER_APP_DIR'"
+            BUNDLE_DIR="'$HOSTINGER_BUNDLE_DIR'"
+            BUNDLE="$BUNDLE_DIR/thebestsarl-hostinger.tar.gz"
+
+            mkdir -p "$APP_DIR" "$BUNDLE_DIR"
+            find "$APP_DIR" -mindepth 1 -maxdepth 1 ! -name tmp -exec rm -rf {} +
+            tar -xzf "$BUNDLE" -C "$APP_DIR"
+            mkdir -p "$APP_DIR/tmp"
+            touch "$APP_DIR/tmp/restart.txt" || true
+          '
