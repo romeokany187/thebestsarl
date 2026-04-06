@@ -112,8 +112,8 @@ export function canAccessApprovalPage(role: string) {
   return role === "ADMIN" || role === "DIRECTEUR_GENERAL";
 }
 
-export function canAccessExecutionPage(jobTitle: string) {
-  return jobTitle === "CAISSIER";
+export function canAccessExecutionPage(jobTitle: string, role?: string) {
+  return jobTitle === "CAISSIER" || jobTitle === "COMPTABLE" || role === "ADMIN" || role === "ACCOUNTANT";
 }
 
 export function canAccessHistoryPage(role: string, jobTitle: string) {
@@ -158,8 +158,8 @@ export async function getApprovalWorkflowData(role: string) {
   };
 }
 
-export async function getExecutionWorkflowData(jobTitle: string) {
-  const canExecuteFromCash = canAccessExecutionPage(jobTitle);
+export async function getExecutionWorkflowData(jobTitle: string, role?: string) {
+  const canExecuteFromCash = canAccessExecutionPage(jobTitle, role);
   const paymentOrderClient = getPaymentOrderClient();
 
   const [paymentOrders, needs] = await Promise.all([

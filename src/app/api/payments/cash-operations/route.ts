@@ -32,12 +32,20 @@ function amountToCdf(amount: number, currency: string, fxRateUsdToCdf: number): 
   return amount * fxRateUsdToCdf;
 }
 
+function canWriteCashOperations(role: string, jobTitle: string | null | undefined) {
+  return role === "ADMIN" || role === "ACCOUNTANT" || jobTitle === "CAISSIER" || jobTitle === "COMPTABLE";
+}
+
+function canManageCashOperations(role: string, jobTitle: string | null | undefined) {
+  return role === "ADMIN" || role === "ACCOUNTANT" || jobTitle === "COMPTABLE";
+}
+
 export async function POST(request: NextRequest) {
   const access = await requireApiModuleAccess("payments", ["ADMIN", "DIRECTEUR_GENERAL", "MANAGER", "ACCOUNTANT", "EMPLOYEE"]);
   if (access.error) return access.error;
 
-  if (access.role !== "ADMIN" && access.session.user.jobTitle !== "CAISSIER") {
-    return NextResponse.json({ error: "Seuls l'administrateur et le caissier sont autorisés à enregistrer les opérations de caisse." }, { status: 403 });
+  if (!canWriteCashOperations(access.role, access.session.user.jobTitle)) {
+    return NextResponse.json({ error: "Seuls l'administrateur, le comptable et le caissier sont autorisés à enregistrer les opérations de caisse." }, { status: 403 });
   }
 
   const body = await request.json();
@@ -319,7 +327,7 @@ export async function POST(request: NextRequest) {
           reference: operation.reference,
           description: operation.description,
           actorId: access.session.user.id,
-          actorName: access.session.user.name ?? "Caissier",
+          actorName: access.session.user.name ?? "Agent financier",
           source: "CASH_LEDGER",
         },
       })),
@@ -346,7 +354,7 @@ export async function POST(request: NextRequest) {
             `Méthode: ${operation.method}`,
             `Référence: ${operation.reference ?? "-"}`,
             `Libellé: ${operation.description}`,
-            `Saisi par: ${access.session.user.name ?? "Caissier"}`,
+            `Saisi par: ${access.session.user.name ?? "Agent financier"}`,
             "",
             `Consulter: ${paymentsUrl}`,
           ].join("\n"),
@@ -362,7 +370,7 @@ export async function POST(request: NextRequest) {
             <strong>Méthode:</strong> ${operation.method}<br/>
             <strong>Référence:</strong> ${operation.reference ?? "-"}<br/>
             <strong>Libellé:</strong> ${operation.description}<br/>
-            <strong>Saisi par:</strong> ${access.session.user.name ?? "Caissier"}</p>
+            <strong>Saisi par:</strong> ${access.session.user.name ?? "Agent financier"}</p>
             <p><a href="${paymentsUrl}">Ouvrir le module comptabilité caisse</a></p>
           `,
           replyTo: access.session.user.email ?? undefined,
@@ -403,4 +411,151 @@ export async function POST(request: NextRequest) {
   }
 
   return NextResponse.json({ data: operation, thresholdAlert: thresholdAlertMessage }, { status: 201 });
+}
+
+export async function PATCH(request: NextRequest) {
+  const access = await requireApiModuleAccess("payments", ["ADMIN", "DIRECTEUR_GENERAL", "MANAGER", "ACCOUNTANT", "EMPLOYEE"]);
+  if (access.error) return access.error;
+
+  if (!canManageCashOperations(access.role, access.session.user.jobTitle)) {
+    return NextResponse.json({ error: "Seuls l'administrateur et le comptable peuvent modifier une écriture de caisse." }, { status: 403 });
+  }
+
+  try {
+    const body = await request.json();
+    const cashOperationId = typeof body?.cashOperationId === "string" ? body.cashOperationId.trim() : "";
+
+    if (!cashOperationId) {
+      return NextResponse.json({ error: "Écriture de caisse introuvable." }, { status: 400 });
+    }
+
+    const existing = await cashOperationClient.findUnique({
+      where: { id: cashOperationId },
+      select: {
+        id: true,
+        occurredAt: true,
+        direction: true,
+        category: true,
+        amount: true,
+        currency: true,
+        method: true,
+        reference: true,
+        description: true,
+        fxRateUsdToCdf: true,
+      },
+    });
+
+    if (!existing) {
+      return NextResponse.json({ error: "Écriture de caisse introuvable." }, { status: 404 });
+    }
+
+    const nextAmount = body?.amount !== undefined ? Number(body.amount) : existing.amount;
+    if (!Number.isFinite(nextAmount) || nextAmount <= 0) {
+      return NextResponse.json({ error: "Montant invalide pour la modification de l'écriture." }, { status: 400 });
+    }
+
+    const nextCurrency = ((typeof body?.currency === "string" ? body.currency : existing.currency) ?? "USD").trim().toUpperCase();
+    if (nextCurrency !== "USD" && nextCurrency !== "CDF") {
+      return NextResponse.json({ error: "Devise non supportée. Utilisez USD ou CDF." }, { status: 400 });
+    }
+
+    const allowedCategories = [
+      "OPENING_BALANCE",
+      "OTHER_SALE",
+      "COMMISSION_INCOME",
+      "SERVICE_INCOME",
+      "LOAN_INFLOW",
+      "ADVANCE_RECOVERY",
+      "SUPPLIER_PAYMENT",
+      "SALARY_PAYMENT",
+      "RENT_PAYMENT",
+      "TAX_PAYMENT",
+      "UTILITY_PAYMENT",
+      "TRANSPORT_PAYMENT",
+      "OTHER_EXPENSE",
+      "FX_CONVERSION",
+    ] as const;
+
+    const nextDirection = body?.direction === "OUTFLOW" ? "OUTFLOW" : body?.direction === "INFLOW" ? "INFLOW" : existing.direction;
+    const nextCategory = typeof body?.category === "string" && allowedCategories.includes(body.category as (typeof allowedCategories)[number])
+      ? body.category
+      : existing.category;
+
+    if (nextCategory === "OPENING_BALANCE" && nextDirection !== "INFLOW") {
+      return NextResponse.json({ error: "Le solde d'ouverture manuel doit être enregistré comme une entrée de fonds." }, { status: 400 });
+    }
+
+    const nextMethod = typeof body?.method === "string" && body.method.trim().length >= 2
+      ? body.method.trim()
+      : existing.method;
+    const nextReference = typeof body?.reference === "string" && body.reference.trim().length >= 2
+      ? body.reference.trim()
+      : existing.reference;
+    const nextDescription = typeof body?.description === "string" && body.description.trim().length >= 2
+      ? body.description.trim()
+      : existing.description;
+
+    const occurredAtRaw = typeof body?.occurredAt === "string" ? body.occurredAt : null;
+    const occurredAt = occurredAtRaw ? new Date(occurredAtRaw) : new Date(existing.occurredAt);
+    if (Number.isNaN(occurredAt.getTime())) {
+      return NextResponse.json({ error: "Date d'opération invalide." }, { status: 400 });
+    }
+
+    const latestRateOperation = await cashOperationClient.findFirst({
+      where: {
+        occurredAt: { lte: occurredAt },
+        fxRateUsdToCdf: { not: null },
+      },
+      select: { fxRateUsdToCdf: true, fxRateToUsd: true },
+      orderBy: { occurredAt: "desc" },
+    });
+
+    const fxRateUsdToCdf = latestRateOperation?.fxRateUsdToCdf
+      ?? (latestRateOperation?.fxRateToUsd && latestRateOperation.fxRateToUsd > 0 ? 1 / latestRateOperation.fxRateToUsd : undefined)
+      ?? existing.fxRateUsdToCdf
+      ?? parsePositiveNumber(process.env.CASH_DEFAULT_USD_TO_CDF_RATE, 2800);
+
+    const updated = await cashOperationClient.update({
+      where: { id: cashOperationId },
+      data: {
+        occurredAt,
+        direction: nextDirection,
+        category: nextCategory,
+        amount: nextAmount,
+        currency: nextCurrency,
+        fxRateToUsd: 1 / fxRateUsdToCdf,
+        fxRateUsdToCdf,
+        amountUsd: amountToUsd(nextAmount, nextCurrency, fxRateUsdToCdf),
+        amountCdf: amountToCdf(nextAmount, nextCurrency, fxRateUsdToCdf),
+        method: nextMethod,
+        reference: nextReference,
+        description: nextDescription,
+      },
+    });
+
+    return NextResponse.json({ data: updated }, { status: 200 });
+  } catch {
+    return NextResponse.json({ error: "Erreur serveur lors de la modification de l'écriture de caisse." }, { status: 500 });
+  }
+}
+
+export async function DELETE(request: NextRequest) {
+  const access = await requireApiModuleAccess("payments", ["ADMIN", "DIRECTEUR_GENERAL", "MANAGER", "ACCOUNTANT", "EMPLOYEE"]);
+  if (access.error) return access.error;
+
+  if (!canManageCashOperations(access.role, access.session.user.jobTitle)) {
+    return NextResponse.json({ error: "Seuls l'administrateur et le comptable peuvent supprimer une écriture de caisse." }, { status: 403 });
+  }
+
+  const cashOperationId = request.nextUrl.searchParams.get("cashOperationId")?.trim() ?? request.nextUrl.searchParams.get("id")?.trim() ?? "";
+  if (!cashOperationId) {
+    return NextResponse.json({ error: "Écriture de caisse introuvable." }, { status: 400 });
+  }
+
+  try {
+    await cashOperationClient.delete({ where: { id: cashOperationId } });
+    return NextResponse.json({ success: true }, { status: 200 });
+  } catch {
+    return NextResponse.json({ error: "Erreur serveur lors de la suppression de l'écriture de caisse." }, { status: 500 });
+  }
 }

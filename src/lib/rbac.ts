@@ -65,9 +65,7 @@ export function hasModuleAccess(params: {
       return true;
     }
 
-    const financeRole = role === "ACCOUNTANT" || jobTitle === "CAISSIER" || jobTitle === "COMPTABLE";
-    const kinshasaDirection = teamIncludes(teamName, ["KINSHASA", "DIRECTION GENERALE", "DIRECTION GÉNÉRALE"]);
-    return financeRole && kinshasaDirection;
+    return role === "ACCOUNTANT" || jobTitle === "CAISSIER" || jobTitle === "COMPTABLE";
   }
 
   if (role === "ADMIN") {

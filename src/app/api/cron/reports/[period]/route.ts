@@ -88,7 +88,13 @@ function isVirtualMethod(methodRaw: string | null | undefined) {
     || method.includes("M-PESA")
     || method.includes("MPESA")
     || method.includes("M PESA")
-    || method.includes("EQUITY");
+    || method.includes("EQUITY")
+    || method.includes("RAWBANK")
+    || method.includes("ROWBANK")
+    || method.includes("ROW BANK")
+    || method.includes("ILLICOCASH")
+    || method.includes("ILLICO CASH")
+    || method.includes("ILLICO");
 }
 
 function computeCashOpeningBalance(

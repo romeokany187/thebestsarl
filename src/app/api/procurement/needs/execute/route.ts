@@ -32,8 +32,8 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Utilisateur introuvable." }, { status: 404 });
   }
 
-  if (access.role !== "ADMIN" && me.jobTitle !== "CAISSIER") {
-    return NextResponse.json({ error: "Exécution réservée au caissier ou à l'administrateur." }, { status: 403 });
+  if (access.role !== "ADMIN" && access.role !== "ACCOUNTANT" && me.jobTitle !== "CAISSIER" && me.jobTitle !== "COMPTABLE") {
+    return NextResponse.json({ error: "Exécution réservée à l'administrateur, au comptable ou au caissier autorisé." }, { status: 403 });
   }
 
   const body = await request.json();
@@ -192,7 +192,7 @@ export async function POST(request: NextRequest) {
       `Validation DG: ${need.reviewedBy?.name ?? "-"} (${need.approvedAt ? new Date(need.approvedAt).toLocaleString("fr-FR") : "-"})`,
       `Commentaire DG: ${need.reviewComment?.trim() || "-"}`,
       `Exécution caisse: ${now.toLocaleString("fr-FR")}`,
-      `Caissier: ${me.name}`,
+      `Agent finance: ${me.name}`,
       `Référence caisse: ${parsed.data.referenceDoc}`,
       `Écriture sortie caisse: ${updated.cashOperationId}`,
       parsed.data.executionComment?.trim() ? `Commentaire caisse: ${parsed.data.executionComment.trim()}` : null,

@@ -17,8 +17,8 @@ export async function POST(request: NextRequest) {
   const access = await requireApiModuleAccess("payments", ["ADMIN", "DIRECTEUR_GENERAL", "MANAGER", "ACCOUNTANT", "EMPLOYEE"]);
   if (access.error) return access.error;
 
-  if (access.role !== "ADMIN" && access.session.user.jobTitle !== "CAISSIER") {
-    return NextResponse.json({ error: "Seuls l'administrateur et le caissier sont autorisés à enregistrer des conversions de caisse." }, { status: 403 });
+  if (access.role !== "ADMIN" && access.role !== "ACCOUNTANT" && access.session.user.jobTitle !== "CAISSIER" && access.session.user.jobTitle !== "COMPTABLE") {
+    return NextResponse.json({ error: "Seuls l'administrateur, le comptable et le caissier sont autorisés à enregistrer des conversions de caisse." }, { status: 403 });
   }
 
   const body = await request.json();

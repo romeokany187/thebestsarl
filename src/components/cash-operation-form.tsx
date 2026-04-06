@@ -219,7 +219,7 @@ export function CashOperationForm() {
     <section className="mb-6 rounded-2xl border border-black/10 bg-white p-4 dark:border-white/10 dark:bg-zinc-900">
       <h2 className="mb-3 text-sm font-semibold">Journal de caisse - Nouvelle opération</h2>
       <p className="mb-3 text-xs text-black/60 dark:text-white/60">
-        Au tout premier démarrage, saisissez manuellement les soldes d'ouverture avec la catégorie <strong>Solde d'ouverture manuel</strong>. Ensuite, le report à nouveau des mois suivants se calcule automatiquement.
+        Au tout premier démarrage, saisissez manuellement les soldes d'ouverture avec la catégorie <strong>Solde d'ouverture manuel</strong>, aussi bien pour la caisse physique que pour les comptes virtuels (Airtel, Orange, M-Pesa, Equity, Rowbank, IllicoCash). Ensuite, le report à nouveau des mois suivants se calcule automatiquement.
       </p>
       <form onSubmit={onSubmit} className="grid gap-3 lg:grid-cols-4 lg:items-end">
         <div>
@@ -244,7 +244,6 @@ export function CashOperationForm() {
               setCategory(nextCategory);
               if (nextCategory === "OPENING_BALANCE") {
                 setDirection("INFLOW");
-                setMethod("CASH");
               }
             }}
             className="w-full rounded-md border border-black/15 bg-white px-3 py-2 text-sm dark:border-white/15 dark:bg-zinc-900"
@@ -292,6 +291,8 @@ export function CashOperationForm() {
             <option value="ORANGE_MONEY">Orange Money</option>
             <option value="MPESA">M-Pesa</option>
             <option value="EQUITY">Equity</option>
+            <option value="ROWBANK">Rowbank</option>
+            <option value="ILLICOCASH">IllicoCash</option>
           </select>
         </div>
 

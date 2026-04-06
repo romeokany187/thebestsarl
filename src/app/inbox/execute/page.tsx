@@ -11,16 +11,16 @@ export default async function InboxExecutePage() {
   const { role, session } = await requirePageModuleAccess("profile", ["ADMIN", "DIRECTEUR_GENERAL", "MANAGER", "EMPLOYEE", "ACCOUNTANT"]);
   const currentJobTitle = session.user.jobTitle ?? "AGENT_TERRAIN";
 
-  if (!canAccessExecutionPage(currentJobTitle)) {
+  if (!canAccessExecutionPage(currentJobTitle, role)) {
     redirect("/inbox");
   }
 
-  const { paymentOrders, needs } = await getExecutionWorkflowData(currentJobTitle);
+  const { paymentOrders, needs } = await getExecutionWorkflowData(currentJobTitle, role);
 
   return (
     <AppShell
       role={role}
-      accessNote="Route dédiée aux OP / EDB à exécuter pour le caissier."
+      accessNote="Route dédiée aux OP / EDB à exécuter pour l’admin, le comptable et le caissier autorisés."
     >
       <section className="mb-6 space-y-3">
         <div className="flex flex-wrap items-center gap-2 text-xs font-semibold">
@@ -33,7 +33,7 @@ export default async function InboxExecutePage() {
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">OP & EDB à exécuter</h1>
           <p className="text-sm text-black/60 dark:text-white/60">
-            Espace réservé au caissier pour les exécutions. Un clic sur la notification ouvre directement le bon dossier dans cette section.
+            Espace réservé aux profils autorisés pour les exécutions. Un clic sur la notification ouvre directement le bon dossier dans cette section.
           </p>
         </div>
       </section>

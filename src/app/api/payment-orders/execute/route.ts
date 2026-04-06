@@ -32,9 +32,9 @@ export async function PATCH(request: NextRequest) {
     return NextResponse.json({ error: "Utilisateur introuvable." }, { status: 404 });
   }
 
-  if (access.role !== "ADMIN" && me.jobTitle !== "CAISSIER") {
+  if (access.role !== "ADMIN" && access.role !== "ACCOUNTANT" && me.jobTitle !== "CAISSIER" && me.jobTitle !== "COMPTABLE") {
     return NextResponse.json(
-      { error: "Exécution d'ordre de paiement réservée au caissier ou à l'administrateur." },
+      { error: "Exécution d'ordre de paiement réservée à l'administrateur, au comptable ou au caissier autorisé." },
       { status: 403 },
     );
   }
@@ -196,7 +196,7 @@ export async function PATCH(request: NextRequest) {
       `Validation Admin: ${paymentOrder.approvedBy?.name ?? "-"} (${paymentOrder.approvedAt ? new Date(paymentOrder.approvedAt).toLocaleString("fr-FR") : "-"})`,
       `Commentaire Admin: ${paymentOrder.reviewComment?.trim() || "-"}`,
       `Exécution caisse: ${now.toLocaleString("fr-FR")}`,
-      `Caissier: ${me.name}`,
+      `Agent finance: ${me.name}`,
       `Référence caisse: ${parsed.data.referenceDoc}`,
       `Écriture sortie caisse: ${updated.cashOperationId}`,
       parsed.data.executionComment?.trim() ? `Commentaire caisse: ${parsed.data.executionComment.trim()}` : null,

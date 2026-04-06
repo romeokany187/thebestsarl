@@ -2,8 +2,10 @@ import { PaymentStatus } from "@prisma/client";
 import { AppShell } from "@/components/app-shell";
 import { CashBilletageWorkspace } from "@/components/cash-billetage-workspace";
 import { CashOperationForm } from "@/components/cash-operation-form";
+import { CashOperationRowActions } from "@/components/cash-operation-row-actions";
 import { KpiCard } from "@/components/kpi-card";
 import { PaymentEntryForm } from "@/components/payment-entry-form";
+import { PaymentRowAdminActions } from "@/components/payment-row-admin-actions";
 import { PaymentsWritingWorkspace } from "@/components/payments-writing-workspace";
 import { invoiceNumberFromChronology } from "@/lib/invoice";
 import { requirePageModuleAccess } from "@/lib/rbac";
@@ -32,6 +34,7 @@ type TicketPaymentRow = {
 };
 
 type CashOperationRow = {
+  id: string;
   occurredAt: Date;
   description: string;
   reference?: string | null;
@@ -176,13 +179,15 @@ function normalizePaymentAmountForTicket(payment: {
   return ticketCurrency === "USD" ? normalizeCashAmountUsd(payment) : normalizeCashAmountCdf(payment);
 }
 
-type VirtualChannel = "AIRTEL_MONEY" | "ORANGE_MONEY" | "MPESA" | "EQUITY";
+type VirtualChannel = "AIRTEL_MONEY" | "ORANGE_MONEY" | "MPESA" | "EQUITY" | "ROWBANK" | "ILLICOCASH";
 
 const virtualChannels: Array<{ key: VirtualChannel; label: string }> = [
   { key: "AIRTEL_MONEY", label: "Airtel Money" },
   { key: "ORANGE_MONEY", label: "Orange Money" },
   { key: "MPESA", label: "M-Pesa" },
   { key: "EQUITY", label: "Equity" },
+  { key: "ROWBANK", label: "Rowbank" },
+  { key: "ILLICOCASH", label: "IllicoCash" },
 ];
 
 function detectVirtualChannel(methodRaw: string | null | undefined): VirtualChannel | null {
@@ -192,6 +197,8 @@ function detectVirtualChannel(methodRaw: string | null | undefined): VirtualChan
   if (method.includes("ORANGE")) return "ORANGE_MONEY";
   if (method.includes("M-PESA") || method.includes("MPESA") || method.includes("M PESA")) return "MPESA";
   if (method.includes("EQUITY")) return "EQUITY";
+  if (method.includes("RAWBANK") || method.includes("ROWBANK") || method.includes("ROW BANK")) return "ROWBANK";
+  if (method.includes("ILLICOCASH") || method.includes("ILLICO CASH") || method.includes("ILLICO")) return "ILLICOCASH";
   return null;
 }
 
@@ -210,6 +217,8 @@ function buildEmptyOpeningBuckets(): Record<BalanceBucket, BalanceSnapshot> {
     ORANGE_MONEY: { usd: 0, cdf: 0, initializedUsd: false, initializedCdf: false },
     MPESA: { usd: 0, cdf: 0, initializedUsd: false, initializedCdf: false },
     EQUITY: { usd: 0, cdf: 0, initializedUsd: false, initializedCdf: false },
+    ROWBANK: { usd: 0, cdf: 0, initializedUsd: false, initializedCdf: false },
+    ILLICOCASH: { usd: 0, cdf: 0, initializedUsd: false, initializedCdf: false },
   };
 }
 
@@ -289,7 +298,8 @@ export default async function PaymentsPage({
   const isCashier = session.user.jobTitle === "CAISSIER";
   const isComptable = role === "ACCOUNTANT" || session.user.jobTitle === "COMPTABLE";
   const isAdmin = role === "ADMIN";
-  const canWrite = isCashier || isAdmin;
+  const canWrite = isCashier || isAdmin || isComptable;
+  const canManageLedger = isAdmin || isComptable;
   const resolvedSearchParams = (await searchParams) ?? {};
   const range = dateRangeFromParams(resolvedSearchParams);
   const cashRange = monthRangeFromValue(resolvedSearchParams.cashMonth);
@@ -314,10 +324,8 @@ export default async function PaymentsPage({
   }).toString();
 
   const accessNote = canWrite
-    ? "Caisse et paiements: encaissements, écritures de caisse, conversions et exécutions financières autorisés."
-    : isComptable
-      ? "Comptabilité: consultation des paiements, journaux et comptes virtuels en lecture seule."
-      : "Module financier réservé aux profils autorisés."
+    ? "Admin, comptable et caissier: encaissements, écritures de caisse, conversions et exécutions financières autorisés selon le profil."
+    : "Module financier réservé aux profils autorisés."
 
   const paymentsData = await Promise.all([
     prisma.airline.findMany({
@@ -717,8 +725,8 @@ export default async function PaymentsPage({
       <section className="mb-6">
         <h1 className="text-2xl font-semibold tracking-tight">Paiements</h1>
         <p className="text-sm text-black/60 dark:text-white/60">
-          {role === "ADMIN"
-            ? "Pilotage financier complet: encaissements, écritures de caisse, conversions et suivi détaillé."
+          {role === "ADMIN" || isComptable
+            ? "Pilotage financier complet: encaissements, écritures de caisse, conversions, exécutions et corrections autorisées."
             : "Pilotage financier des billets vendus et des paiements reçus (USD / CDF)."}
         </p>
       </section>
@@ -817,6 +825,7 @@ export default async function PaymentsPage({
                       <th className="px-4 py-3 text-left font-semibold">Méthode</th>
                       <th className="px-4 py-3 text-left font-semibold">Référence</th>
                       <th className="px-4 py-3 text-left font-semibold">Statut billet</th>
+                      {canManageLedger ? <th className="px-4 py-3 text-left font-semibold">Actions</th> : null}
                     </tr>
                   </thead>
                   <tbody>
@@ -829,11 +838,23 @@ export default async function PaymentsPage({
                         <td className="px-4 py-3">{payment.method}</td>
                         <td className="px-4 py-3">{payment.reference ?? "-"}</td>
                         <td className="px-4 py-3">{payment.ticket.paymentStatus}</td>
+                        {canManageLedger ? (
+                          <td className="px-4 py-3">
+                            <PaymentRowAdminActions
+                              paymentId={payment.id}
+                              amount={payment.amount}
+                              currency={normalizeMoneyCurrency(payment.currency ?? payment.ticket.currency)}
+                              method={payment.method ?? "CASH"}
+                              reference={payment.reference ?? null}
+                              paidAt={new Date(payment.paidAt).toISOString()}
+                            />
+                          </td>
+                        ) : null}
                       </tr>
                     ))}
                     {payments.length === 0 ? (
                       <tr>
-                        <td colSpan={7} className="px-4 py-8 text-center text-sm text-black/55 dark:text-white/55">
+                        <td colSpan={canManageLedger ? 8 : 7} className="px-4 py-8 text-center text-sm text-black/55 dark:text-white/55">
                           Aucun paiement trouvé pour ce filtre.
                         </td>
                       </tr>
@@ -962,6 +983,61 @@ export default async function PaymentsPage({
                 </table>
               </div>
             </section>
+
+            {canManageLedger ? (
+              <section className="overflow-hidden rounded-2xl border border-black/10 bg-white shadow-sm dark:border-white/10 dark:bg-zinc-900">
+                <div className="border-b border-black/10 px-4 py-3 dark:border-white/10">
+                  <h2 className="text-sm font-semibold">Modification / suppression des écritures de caisse</h2>
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="min-w-full text-sm">
+                    <thead className="bg-black/5 dark:bg-white/10">
+                      <tr>
+                        <th className="px-4 py-3 text-left font-semibold">Date</th>
+                        <th className="px-4 py-3 text-left font-semibold">Sens</th>
+                        <th className="px-4 py-3 text-left font-semibold">Catégorie</th>
+                        <th className="px-4 py-3 text-left font-semibold">Montant</th>
+                        <th className="px-4 py-3 text-left font-semibold">Méthode</th>
+                        <th className="px-4 py-3 text-left font-semibold">Référence</th>
+                        <th className="px-4 py-3 text-left font-semibold">Libellé</th>
+                        <th className="px-4 py-3 text-left font-semibold">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {cashOperations.map((operation) => (
+                        <tr key={operation.id} className="border-t border-black/5 dark:border-white/10">
+                          <td className="px-4 py-3">{new Date(operation.occurredAt).toLocaleString("fr-FR")}</td>
+                          <td className="px-4 py-3">{operation.direction === "INFLOW" ? "Entrée" : "Sortie"}</td>
+                          <td className="px-4 py-3">{operation.category ?? "-"}</td>
+                          <td className="px-4 py-3">{operation.amount.toFixed(2)} {normalizeMoneyCurrency(operation.currency)}</td>
+                          <td className="px-4 py-3">{operation.method ?? "-"}</td>
+                          <td className="px-4 py-3">{operation.reference ?? "-"}</td>
+                          <td className="px-4 py-3">{operation.description}</td>
+                          <td className="px-4 py-3">
+                            <CashOperationRowActions
+                              cashOperationId={operation.id}
+                              amount={operation.amount}
+                              currency={normalizeMoneyCurrency(operation.currency)}
+                              method={operation.method ?? "CASH"}
+                              reference={operation.reference ?? null}
+                              description={operation.description}
+                              occurredAt={new Date(operation.occurredAt).toISOString()}
+                            />
+                          </td>
+                        </tr>
+                      ))}
+                      {cashOperations.length === 0 ? (
+                        <tr>
+                          <td colSpan={8} className="px-4 py-8 text-center text-sm text-black/55 dark:text-white/55">
+                            Aucune écriture de caisse à corriger sur cette période.
+                          </td>
+                        </tr>
+                      ) : null}
+                    </tbody>
+                  </table>
+                </div>
+              </section>
+            ) : null}
           </div>
         )}
         virtualWorkspace={(
@@ -969,7 +1045,7 @@ export default async function PaymentsPage({
             <section className="rounded-2xl border border-black/10 bg-white p-4 dark:border-white/10 dark:bg-zinc-900">
               <h2 className="text-sm font-semibold">Comptes virtuels</h2>
               <p className="mt-2 text-xs text-black/60 dark:text-white/60">
-                Conformément à la feuille VIRTUEL, suivi des canaux Airtel Money, Orange Money, M-Pesa et Equity avec soldes par devise.
+                Conformément à la feuille VIRTUEL, suivi des canaux Airtel Money, Orange Money, M-Pesa, Equity, Rowbank et IllicoCash avec soldes par devise.
               </p>
             </section>
 
