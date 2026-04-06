@@ -2,6 +2,7 @@ import { AppShell } from "@/components/app-shell";
 import { prisma } from "@/lib/prisma";
 import { requirePageModuleAccess } from "@/lib/rbac";
 import { invoiceNumberFromChronology } from "@/lib/invoice";
+import { getTicketTotalAmount } from "@/lib/ticket-pricing";
 
 export const dynamic = "force-dynamic";
 
@@ -118,9 +119,10 @@ export default async function FacturesPage({
       sellerTeamName: ticket.seller?.team?.name ?? null,
       sequence,
     });
+    const billedAmount = getTicketTotalAmount(ticket);
     const paidAmount = ticket.payments.reduce((sum, payment) => sum + payment.amount, 0);
-    const balance = Math.max(0, ticket.amount - paidAmount);
-    const status = statusFromAmounts(ticket.amount, paidAmount);
+    const balance = Math.max(0, billedAmount - paidAmount);
+    const status = statusFromAmounts(billedAmount, paidAmount);
     const sellerName = ticket.seller?.name ?? ticket.sellerName ?? "-";
     return {
       ticketId: ticket.id,
@@ -131,7 +133,7 @@ export default async function FacturesPage({
       airlineCode: ticket.airline.code,
       airlineName: ticket.airline.name,
       sellerName,
-      amount: ticket.amount,
+      amount: billedAmount,
       paidAmount,
       balance,
       status,
@@ -152,7 +154,7 @@ export default async function FacturesPage({
   return (
     <AppShell
       role={role}
-      accessNote="Factures automatiques: chaque billet encodé génère sa facture PDF immédiatement."
+      accessNote="Factures et itinérances: chaque billet encodé peut générer une facture et une fiche d’itinérance téléchargeables."
     >
       <section className="mb-6">
         <h1 className="text-2xl font-semibold tracking-tight">Factures</h1>
@@ -234,18 +236,16 @@ export default async function FacturesPage({
                   <td className="px-4 py-3">
                     <div className="flex flex-wrap items-center gap-2">
                       <a
-                        href={`/api/invoices/${invoice.ticketId}/pdf`}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="inline-flex rounded-md border border-black/20 px-2.5 py-1 text-xs font-semibold hover:bg-black/5 dark:border-white/20 dark:hover:bg-white/10"
-                      >
-                        Lire PDF
-                      </a>
-                      <a
                         href={`/api/invoices/${invoice.ticketId}/pdf?download=1`}
                         className="inline-flex rounded-md border border-black/20 px-2.5 py-1 text-xs font-semibold hover:bg-black/5 dark:border-white/20 dark:hover:bg-white/10"
                       >
-                        Télécharger
+                        Télécharger facture
+                      </a>
+                      <a
+                        href={`/api/tickets/${invoice.ticketId}/itinerary?download=1`}
+                        className="inline-flex rounded-md border border-sky-300 px-2.5 py-1 text-xs font-semibold text-sky-700 hover:bg-sky-50 dark:border-sky-700/60 dark:text-sky-300 dark:hover:bg-sky-950/40"
+                      >
+                        Télécharger itinérance
                       </a>
                     </div>
                   </td>

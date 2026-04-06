@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { defaultTravelMessage, extractTicketItinerary, getPlainTicketNotes, mergeTicketNotesWithItinerary, type TicketItineraryData } from "@/lib/ticket-itinerary";
 
 type UserOption = { id: string; name: string };
 type AirlineOption = { id: string; name: string; code: string };
@@ -45,6 +46,16 @@ type FormState = {
   notes: string;
 };
 
+type ItineraryFormState = {
+  departureAirport: string;
+  arrivalAirport: string;
+  departureAt: string;
+  arrivalAt: string;
+  layoverHours: string;
+  checkInAt: string;
+  travelMessage: string;
+};
+
 const EMPTY_FORM: FormState = {
   ticketNumber: "",
   customerName: "",
@@ -67,6 +78,27 @@ function todayDateInputValue() {
   return new Date().toISOString().slice(0, 10);
 }
 
+function toDateTimeLocalValue(value?: string | null) {
+  if (!value) return "";
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return "";
+  const offsetMs = parsed.getTimezoneOffset() * 60000;
+  return new Date(parsed.getTime() - offsetMs).toISOString().slice(0, 16);
+}
+
+function buildItineraryForm(ticket?: Pick<EditableTicket, "customerName" | "notes"> | null): ItineraryFormState {
+  const itinerary = extractTicketItinerary(ticket?.notes ?? null);
+  return {
+    departureAirport: itinerary?.departureAirport ?? "",
+    arrivalAirport: itinerary?.arrivalAirport ?? "",
+    departureAt: toDateTimeLocalValue(itinerary?.departureAt),
+    arrivalAt: toDateTimeLocalValue(itinerary?.arrivalAt),
+    layoverHours: itinerary?.layoverHours != null ? String(itinerary.layoverHours) : "",
+    checkInAt: toDateTimeLocalValue(itinerary?.checkInAt),
+    travelMessage: itinerary?.travelMessage ?? defaultTravelMessage(ticket?.customerName),
+  };
+}
+
 export function TicketForm({
   users,
   airlines,
@@ -82,8 +114,26 @@ export function TicketForm({
   const [statusType, setStatusType] = useState<"idle" | "success" | "error" | "loading">("idle");
   const [editTicketId, setEditTicketId] = useState<string | null>(null);
   const [form, setForm] = useState<FormState>({ ...EMPTY_FORM, travelDate: todayDateInputValue() });
+  const [storedItinerary, setStoredItinerary] = useState<TicketItineraryData | null>(null);
+  const [itineraryNotesBase, setItineraryNotesBase] = useState<string>("");
+  const [itineraryTicketId, setItineraryTicketId] = useState<string | null>(null);
+  const [itineraryTicketLabel, setItineraryTicketLabel] = useState<string>("");
+  const [itineraryForm, setItineraryForm] = useState<ItineraryFormState>(buildItineraryForm());
+  const [isItineraryOpen, setIsItineraryOpen] = useState(false);
+  const [isSavingItinerary, setIsSavingItinerary] = useState(false);
 
   useEffect(() => {
+    function openItineraryModal(ticket: EditableTicket) {
+      setItineraryTicketId(ticket.id);
+      setItineraryTicketLabel(`${ticket.ticketNumber} • ${ticket.customerName}`);
+      setItineraryNotesBase(getPlainTicketNotes(ticket.notes ?? ""));
+      setStoredItinerary(extractTicketItinerary(ticket.notes ?? null));
+      setItineraryForm(buildItineraryForm(ticket));
+      setIsItineraryOpen(true);
+      setStatusType("success");
+      setStatus("Renseignez ou modifiez maintenant l’itinérance du client.");
+    }
+
     function handleEdit(event: Event) {
       const customEvent = event as CustomEvent<EditableTicket>;
       const ticket = customEvent.detail;
@@ -92,6 +142,8 @@ export function TicketForm({
       }
 
       setEditTicketId(ticket.id);
+      setStoredItinerary(extractTicketItinerary(ticket.notes ?? null));
+      setItineraryNotesBase(getPlainTicketNotes(ticket.notes ?? ""));
       setForm({
         ticketNumber: ticket.ticketNumber,
         customerName: ticket.customerName,
@@ -107,7 +159,7 @@ export function TicketForm({
         paymentStatus: ticket.paymentStatus,
         payerName: ticket.payerName ?? "",
         agencyMarkupAmount: String(ticket.agencyMarkupAmount ?? 0),
-        notes: ticket.notes ?? "",
+        notes: getPlainTicketNotes(ticket.notes ?? ""),
       });
 
       setStatusType("idle");
@@ -115,8 +167,22 @@ export function TicketForm({
       window.scrollTo({ top: 0, behavior: "smooth" });
     }
 
+    function handleItinerary(event: Event) {
+      const customEvent = event as CustomEvent<EditableTicket>;
+      const ticket = customEvent.detail;
+      if (!ticket) {
+        return;
+      }
+      openItineraryModal(ticket);
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    }
+
     window.addEventListener("ticket:edit", handleEdit);
-    return () => window.removeEventListener("ticket:edit", handleEdit);
+    window.addEventListener("ticket:itinerary", handleItinerary);
+    return () => {
+      window.removeEventListener("ticket:edit", handleEdit);
+      window.removeEventListener("ticket:itinerary", handleItinerary);
+    };
   }, []);
 
   const selectedAirline = useMemo(
@@ -174,6 +240,51 @@ export function TicketForm({
   function resetForm() {
     setForm({ ...EMPTY_FORM, travelDate: todayDateInputValue() });
     setEditTicketId(null);
+    setStoredItinerary(null);
+    setItineraryNotesBase("");
+  }
+
+  function updateItineraryField<K extends keyof ItineraryFormState>(key: K, value: ItineraryFormState[K]) {
+    setItineraryForm((prev) => ({ ...prev, [key]: value }));
+  }
+
+  async function saveItinerary() {
+    if (!itineraryTicketId) {
+      return;
+    }
+
+    setIsSavingItinerary(true);
+    const itineraryPayload: TicketItineraryData = {
+      departureAirport: itineraryForm.departureAirport.trim() || undefined,
+      arrivalAirport: itineraryForm.arrivalAirport.trim() || undefined,
+      departureAt: itineraryForm.departureAt ? new Date(itineraryForm.departureAt).toISOString() : undefined,
+      arrivalAt: itineraryForm.arrivalAt ? new Date(itineraryForm.arrivalAt).toISOString() : undefined,
+      layoverHours: itineraryForm.layoverHours.trim() ? Number(itineraryForm.layoverHours) : undefined,
+      checkInAt: itineraryForm.checkInAt ? new Date(itineraryForm.checkInAt).toISOString() : undefined,
+      travelMessage: itineraryForm.travelMessage.trim() || undefined,
+    };
+
+    const mergedNotes = mergeTicketNotesWithItinerary(itineraryNotesBase, itineraryPayload);
+    const response = await fetch(`/api/tickets/${itineraryTicketId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ notes: mergedNotes }),
+    });
+
+    if (!response.ok) {
+      const errorPayload = await response.json().catch(() => null);
+      setStatusType("error");
+      setStatus(errorPayload?.error ?? "Erreur lors de l'enregistrement de l'itinérance.");
+      setIsSavingItinerary(false);
+      return;
+    }
+
+    setStoredItinerary(itineraryPayload);
+    setIsSavingItinerary(false);
+    setIsItineraryOpen(false);
+    setStatusType("success");
+    setStatus("Itinérance enregistrée avec succès.");
+    window.location.reload();
   }
 
   async function onSubmit(event: React.FormEvent<HTMLFormElement>) {
@@ -185,6 +296,7 @@ export function TicketForm({
     const baseFareAmount = form.baseFareAmount.trim() ? Number(form.baseFareAmount) : undefined;
     const agencyMarkupAmount = form.agencyMarkupAmount.trim() ? Number(form.agencyMarkupAmount) : 0;
 
+    const mergedNotes = mergeTicketNotesWithItinerary(form.notes || undefined, storedItinerary);
     const payload = {
       ticketNumber: form.ticketNumber,
       customerName: form.customerName,
@@ -201,7 +313,7 @@ export function TicketForm({
       payerName: form.payerName,
       agencyMarkupPercent: 0,
       agencyMarkupAmount,
-      notes: form.notes || undefined,
+      ...(mergedNotes ? { notes: mergedNotes } : {}),
     };
 
     const response = await fetch(editTicketId ? `/api/tickets/${editTicketId}` : "/api/tickets", {
@@ -211,7 +323,24 @@ export function TicketForm({
     });
 
     if (response.ok) {
+      const result = await response.json().catch(() => null);
       setStatusType("success");
+
+      if (!editTicketId && result?.data?.id) {
+        resetForm();
+        setStatus("Billet enregistré avec succès. Renseignez maintenant l'itinérance du client.");
+        setItineraryTicketId(result.data.id);
+        setItineraryTicketLabel(`${result.data.ticketNumber ?? form.ticketNumber} • ${result.data.customerName ?? form.customerName}`);
+        setItineraryNotesBase(getPlainTicketNotes(result?.data?.notes ?? form.notes));
+        setStoredItinerary(extractTicketItinerary(result?.data?.notes ?? null));
+        setItineraryForm(buildItineraryForm({
+          customerName: result.data.customerName ?? form.customerName,
+          notes: result?.data?.notes ?? null,
+        }));
+        setIsItineraryOpen(true);
+        return;
+      }
+
       setStatus(editTicketId ? "Billet modifié." : "Vente enregistrée.");
       resetForm();
       window.location.reload();
@@ -468,6 +597,108 @@ export function TicketForm({
         >
           {status}
         </p>
+      ) : null}
+
+      {isItineraryOpen ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
+          <div className="w-full max-w-2xl rounded-2xl border border-black/10 bg-white p-4 shadow-2xl dark:border-white/10 dark:bg-zinc-900">
+            <div className="mb-4 flex items-start justify-between gap-3">
+              <div>
+                <h3 className="text-lg font-semibold">Renseigner l&apos;itinérance</h3>
+                <p className="text-xs text-black/60 dark:text-white/60">Billet {itineraryTicketLabel}</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setIsItineraryOpen(false);
+                  window.location.reload();
+                }}
+                className="rounded-md border border-black/15 px-2 py-1 text-xs hover:bg-black/5 dark:border-white/20 dark:hover:bg-white/10"
+              >
+                Plus tard
+              </button>
+            </div>
+
+            <div className="grid gap-3 sm:grid-cols-2">
+              <input
+                value={itineraryForm.departureAirport}
+                onChange={(event) => updateItineraryField("departureAirport", event.target.value)}
+                placeholder="Aéroport de départ"
+                className="rounded-md border px-3 py-2"
+              />
+              <input
+                value={itineraryForm.arrivalAirport}
+                onChange={(event) => updateItineraryField("arrivalAirport", event.target.value)}
+                placeholder="Aéroport d'arrivée"
+                className="rounded-md border px-3 py-2"
+              />
+              <div>
+                <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-black/60 dark:text-white/60">Départ (date & heure)</label>
+                <input
+                  type="datetime-local"
+                  value={itineraryForm.departureAt}
+                  onChange={(event) => updateItineraryField("departureAt", event.target.value)}
+                  className="w-full rounded-md border px-3 py-2"
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-black/60 dark:text-white/60">Arrivée (date & heure)</label>
+                <input
+                  type="datetime-local"
+                  value={itineraryForm.arrivalAt}
+                  onChange={(event) => updateItineraryField("arrivalAt", event.target.value)}
+                  className="w-full rounded-md border px-3 py-2"
+                />
+              </div>
+              <input
+                type="number"
+                step="0.5"
+                min="0"
+                value={itineraryForm.layoverHours}
+                onChange={(event) => updateItineraryField("layoverHours", event.target.value)}
+                placeholder="Heures d'escale"
+                className="rounded-md border px-3 py-2"
+              />
+              <div>
+                <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-black/60 dark:text-white/60">Heure conseillée de check-in</label>
+                <input
+                  type="datetime-local"
+                  value={itineraryForm.checkInAt}
+                  onChange={(event) => updateItineraryField("checkInAt", event.target.value)}
+                  className="w-full rounded-md border px-3 py-2"
+                />
+              </div>
+            </div>
+
+            <textarea
+              value={itineraryForm.travelMessage}
+              onChange={(event) => updateItineraryField("travelMessage", event.target.value)}
+              placeholder="Message de bon voyage"
+              className="mt-3 min-h-28 w-full rounded-md border px-3 py-2"
+            />
+
+            <div className="mt-4 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setIsItineraryOpen(false);
+                  window.location.reload();
+                }}
+                className="rounded-md border border-black/15 px-3 py-2 text-sm hover:bg-black/5 dark:border-white/20 dark:hover:bg-white/10"
+              >
+                Ignorer pour l&apos;instant
+              </button>
+              <button
+                type="button"
+                onClick={saveItinerary}
+                disabled={isSavingItinerary}
+                className="rounded-md bg-black px-3 py-2 text-sm text-white disabled:opacity-60 dark:bg-white dark:text-black"
+              >
+                {isSavingItinerary ? "Enregistrement..." : "Enregistrer l'itinérance"}
+              </button>
+            </div>
+          </div>
+        </div>
       ) : null}
     </form>
   );

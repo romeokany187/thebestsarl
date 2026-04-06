@@ -54,15 +54,31 @@ export function TicketRowActions({ ticket }: Props) {
     setStatus("Billet chargé dans le formulaire.");
   }
 
+  function editItinerary() {
+    window.dispatchEvent(
+      new CustomEvent("ticket:itinerary", {
+        detail: ticket,
+      }),
+    );
+    setStatus("Fenêtre d’itinérance ouverte.");
+  }
+
   return (
     <div className="space-y-1">
-      <div className="flex gap-2">
+      <div className="flex flex-wrap gap-2">
         <button
           type="button"
           onClick={editTicket}
           className="rounded-md border border-black/15 px-2 py-1 text-xs hover:bg-black/5 dark:border-white/20 dark:hover:bg-white/10"
         >
           Modifier
+        </button>
+        <button
+          type="button"
+          onClick={editItinerary}
+          className="rounded-md border border-sky-300 px-2 py-1 text-xs text-sky-700 hover:bg-sky-50 dark:border-sky-700/60 dark:text-sky-300 dark:hover:bg-sky-950/40"
+        >
+          Itinérance
         </button>
         <button
           type="button"
