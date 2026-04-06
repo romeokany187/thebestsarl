@@ -153,7 +153,6 @@ export async function AppShell({
       module: link.module,
     });
   });
-  const navigationLinks = visibleLinks.filter((link) => link.href === "/inbox");
   const roleLabel = role ? `Rôle ${displayRoleLabel(role)}` : null;
 
   return (
@@ -161,7 +160,7 @@ export async function AppShell({
       <div className="mx-auto flex min-h-screen max-w-400">
         <aside className="sticky top-0 hidden h-screen w-72 shrink-0 overflow-y-auto border-r border-black/10 bg-white/70 p-5 backdrop-blur md:block dark:border-white/10 dark:bg-zinc-950/70">
           <div className="mb-6">
-            <Link href="/inbox" className="block rounded-lg p-1 transition hover:bg-black/5 dark:hover:bg-white/10">
+            <Link href="/" className="block rounded-lg p-1 transition hover:bg-black/5 dark:hover:bg-white/10">
               <p className="text-base font-semibold tracking-tight">THEBEST SARL</p>
               <p className="text-xs text-black/55 dark:text-white/55">Travel Agency Workspace</p>
             </Link>
@@ -174,7 +173,7 @@ export async function AppShell({
           ) : null}
 
           <nav className="space-y-1">
-            {navigationLinks.map((link) => (
+            {visibleLinks.map((link) => (
               <Link
                 key={link.href}
                 href={link.href}
@@ -194,7 +193,7 @@ export async function AppShell({
         <div className="flex min-w-0 flex-1 flex-col">
           <header className="sticky top-0 z-40 border-b border-black/10 bg-white/75 px-4 py-4 backdrop-blur sm:px-6 lg:px-8 dark:border-white/10 dark:bg-zinc-950/75">
             <div className="flex flex-wrap items-center justify-between gap-3">
-              <Link href="/inbox" className="rounded-lg p-1 transition hover:bg-black/5 dark:hover:bg-white/10">
+              <Link href="/" className="rounded-lg p-1 transition hover:bg-black/5 dark:hover:bg-white/10">
                 <p className="text-sm font-semibold tracking-tight">THEBEST SARL</p>
                 <p className="text-xs text-black/60 dark:text-white/60">Gestion de projet et opérations</p>
               </Link>
@@ -218,7 +217,7 @@ export async function AppShell({
             </div>
 
             <nav className="mt-4 flex gap-2 overflow-x-auto pb-1 md:hidden">
-              {navigationLinks.map((link) => (
+              {visibleLinks.map((link) => (
                 <Link
                   key={link.href}
                   href={link.href}
