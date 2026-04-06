@@ -5,6 +5,7 @@ import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { prisma } from "@/lib/prisma";
 import { requireApiModuleAccess } from "@/lib/rbac";
+import { getTicketTotalAmount } from "@/lib/ticket-pricing";
 
 type SearchParams = {
   startDate?: string;
@@ -415,8 +416,16 @@ export async function GET(request: NextRequest) {
       soldAt: true,
       amount: true,
       commissionAmount: true,
+      commissionRateUsed: true,
+      agencyMarkupAmount: true,
+      commissionModeApplied: true,
+      airline: { select: { code: true } },
     },
   });
+
+  const ticketCommission = (ticket: { amount: number; commissionAmount?: number | null; commissionRateUsed?: number | null }) => (
+    ticket.commissionAmount ?? ticket.amount * ((ticket.commissionRateUsed ?? 0) / 100)
+  );
 
   // Common aggregates
   const byAgency = new Map<string, { count: number; amount: number }>();
@@ -432,6 +441,8 @@ export async function GET(request: NextRequest) {
     const weekKey = weekLabel(weekStart, weekEndExclusive);
     const airlineCode = ticket.airline.code.toUpperCase();
     const agencyKey = ticket.seller?.team?.name ?? "Sans agence";
+    const effectiveCommission = ticketCommission(ticket);
+    const billedAmount = getTicketTotalAmount(ticket, effectiveCommission);
 
     // Group by date -> airline
     if (!byDateAirline.has(dateStr)) {
@@ -444,8 +455,8 @@ export async function GET(request: NextRequest) {
     }
     const row = dateMap.get(airlineCode)!;
     row.count += 1;
-    row.amount += ticket.amount;
-    row.commission += ticket.commissionAmount ?? 0;
+    row.amount += billedAmount;
+    row.commission += effectiveCommission;
 
     if (!byWeekAirline.has(weekKey)) {
       byWeekAirline.set(weekKey, new Map());
@@ -456,8 +467,8 @@ export async function GET(request: NextRequest) {
     }
     const weekRow = weekMap.get(airlineCode)!;
     weekRow.count += 1;
-    weekRow.amount += ticket.amount;
-    weekRow.commission += ticket.commissionAmount ?? 0;
+    weekRow.amount += billedAmount;
+    weekRow.commission += effectiveCommission;
 
     // Airline totals
     if (!airlineTotals.has(airlineCode)) {
@@ -465,8 +476,8 @@ export async function GET(request: NextRequest) {
     }
     const airlineTotal = airlineTotals.get(airlineCode)!;
     airlineTotal.count += 1;
-    airlineTotal.amount += ticket.amount;
-    airlineTotal.commission += ticket.commissionAmount ?? 0;
+    airlineTotal.amount += billedAmount;
+    airlineTotal.commission += effectiveCommission;
 
     // Agency totals
     if (!byAgency.has(agencyKey)) {
@@ -474,15 +485,15 @@ export async function GET(request: NextRequest) {
     }
     const agencyData = byAgency.get(agencyKey)!;
     agencyData.count += 1;
-    agencyData.amount += ticket.amount;
+    agencyData.amount += billedAmount;
   }
 
   const totalCount = tickets.length;
-  const totalAmount = tickets.reduce((sum, t) => sum + t.amount, 0);
-  const totalCommission = tickets.reduce((sum, t) => sum + (t.commissionAmount ?? 0), 0);
+  const totalAmount = tickets.reduce((sum, ticket) => sum + getTicketTotalAmount(ticket, ticketCommission(ticket)), 0);
+  const totalCommission = tickets.reduce((sum, ticket) => sum + ticketCommission(ticket), 0);
   const previousCount = previousTickets.length;
-  const previousAmount = previousTickets.reduce((sum, t) => sum + t.amount, 0);
-  const previousCommission = previousTickets.reduce((sum, t) => sum + (t.commissionAmount ?? 0), 0);
+  const previousAmount = previousTickets.reduce((sum, ticket) => sum + getTicketTotalAmount(ticket), 0);
+  const previousCommission = previousTickets.reduce((sum, ticket) => sum + (ticket.commissionAmount ?? 0), 0);
   const paymentPaid = tickets.filter((ticket) => ticket.paymentStatus === "PAID").length;
   const paymentPartial = tickets.filter((ticket) => ticket.paymentStatus === "PARTIAL").length;
   const paymentUnpaid = tickets.filter((ticket) => ticket.paymentStatus === "UNPAID").length;
@@ -490,8 +501,8 @@ export async function GET(request: NextRequest) {
   const currentDailyMap = tickets.reduce((map, ticket) => {
     const day = new Date(ticket.soldAt).toISOString().slice(0, 10);
     const existing = map.get(day) ?? { sales: 0, commissions: 0 };
-    existing.sales += ticket.amount;
-    existing.commissions += ticket.commissionAmount ?? 0;
+    existing.sales += getTicketTotalAmount(ticket, ticketCommission(ticket));
+    existing.commissions += ticketCommission(ticket);
     map.set(day, existing);
     return map;
   }, new Map<string, { sales: number; commissions: number }>());
@@ -499,7 +510,7 @@ export async function GET(request: NextRequest) {
   const comparisonDailyMap = previousTickets.reduce((map, ticket) => {
     const day = new Date(ticket.soldAt).toISOString().slice(0, 10);
     const existing = map.get(day) ?? { sales: 0, commissions: 0 };
-    existing.sales += ticket.amount;
+    existing.sales += getTicketTotalAmount(ticket);
     existing.commissions += ticket.commissionAmount ?? 0;
     map.set(day, existing);
     return map;
@@ -969,7 +980,7 @@ export async function GET(request: NextRequest) {
         ticket.customerName,
         ticket.ticketNumber,
         ticket.route,
-        fmtNumber(ticket.amount),
+        fmtNumber(getTicketTotalAmount(ticket, ticketCommission(ticket))),
         ticket.saleNature,
         ticket.payerName ?? "-",
         normalizeStatus(ticket.paymentStatus),

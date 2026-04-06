@@ -4,6 +4,7 @@ import { requirePageModuleAccess } from "@/lib/rbac";
 import { prisma } from "@/lib/prisma";
 import { ensureAirlineCatalog } from "@/lib/airline-catalog";
 import { computeCaaCommissionMap } from "@/lib/caa-commission";
+import { getTicketTotalAmount } from "@/lib/ticket-pricing";
 
 export const dynamic = "force-dynamic";
 
@@ -344,6 +345,14 @@ export default async function TicketsPage({
     return ticket.commissionAmount ?? ticket.amount * (ticket.commissionRateUsed / 100);
   };
 
+  const monitorCurrentTotalOf = (ticket: { amount: number; commissionAmount: number | null; commissionRateUsed: number; agencyMarkupAmount?: number | null; airline: { code: string }; id: string }) => (
+    getTicketTotalAmount(ticket, monitorCurrentCommissionOf(ticket))
+  );
+
+  const comparisonTotalOf = (ticket: { amount: number; commissionAmount: number | null; commissionRateUsed: number; agencyMarkupAmount?: number | null; airline: { code: string }; id: string }) => (
+    getTicketTotalAmount(ticket, comparisonCommissionOf(ticket))
+  );
+
   const caaTicketsInPeriod = caaAirline
     ? monitorCurrentTickets.filter((ticket) => ticket.airlineId === caaAirline.id)
     : [];
@@ -360,10 +369,10 @@ export default async function TicketsPage({
         : Math.max(0, caaTargetAmount - caaRemainder)
     : 0;
 
-  const monitorCurrentTotalSales = monitorCurrentTickets.reduce((sum, ticket) => sum + ticket.amount, 0);
+  const monitorCurrentTotalSales = monitorCurrentTickets.reduce((sum, ticket) => sum + monitorCurrentTotalOf(ticket), 0);
   const monitorCurrentTotalCommissions = monitorCurrentTickets.reduce((sum, ticket) => sum + monitorCurrentCommissionOf(ticket), 0);
   const monitorCurrentTotalTickets = monitorCurrentTickets.length;
-  const comparisonTotalSales = comparisonTickets.reduce((sum, ticket) => sum + ticket.amount, 0);
+  const comparisonTotalSales = comparisonTickets.reduce((sum, ticket) => sum + comparisonTotalOf(ticket), 0);
   const comparisonTotalCommissions = comparisonTickets.reduce((sum, ticket) => sum + comparisonCommissionOf(ticket), 0);
   const comparisonTotalTickets = comparisonTickets.length;
 
@@ -379,7 +388,7 @@ export default async function TicketsPage({
         commissions: 0,
       };
       existing.tickets += 1;
-      existing.sales += ticket.amount;
+      existing.sales += monitorCurrentTotalOf(ticket);
       existing.commissions += commission;
       map.set(key, existing);
       return map;
@@ -395,7 +404,7 @@ export default async function TicketsPage({
       commissions: 0,
       tickets: 0,
     };
-    existing.sales += ticket.amount;
+    existing.sales += monitorCurrentTotalOf(ticket);
     existing.commissions += commission;
     existing.tickets += 1;
     map.set(key, existing);
@@ -411,7 +420,7 @@ export default async function TicketsPage({
       commissions: 0,
       tickets: 0,
     };
-    existing.sales += ticket.amount;
+    existing.sales += comparisonTotalOf(ticket);
     existing.commissions += commission;
     existing.tickets += 1;
     map.set(key, existing);
@@ -511,7 +520,7 @@ export default async function TicketsPage({
       const existing = map.get(key) ?? { agency: key, tickets: 0, sales: 0, commissions: 0 };
       const commission = monitorCurrentCommissionOf(ticket);
       existing.tickets += 1;
-      existing.sales += ticket.amount;
+      existing.sales += monitorCurrentTotalOf(ticket);
       existing.commissions += commission;
       map.set(key, existing);
       return map;
@@ -535,7 +544,7 @@ export default async function TicketsPage({
         commissions: 0,
       };
       existing.tickets += 1;
-      existing.sales += ticket.amount;
+      existing.sales += comparisonTotalOf(ticket);
       existing.commissions += commission;
       map.set(key, existing);
       return map;
@@ -548,7 +557,7 @@ export default async function TicketsPage({
       const existing = map.get(key) ?? { agency: key, tickets: 0, sales: 0, commissions: 0 };
       const commission = comparisonCommissionOf(ticket);
       existing.tickets += 1;
-      existing.sales += ticket.amount;
+      existing.sales += comparisonTotalOf(ticket);
       existing.commissions += commission;
       map.set(key, existing);
       return map;

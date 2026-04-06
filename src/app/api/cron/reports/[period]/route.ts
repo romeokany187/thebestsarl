@@ -4,6 +4,7 @@ import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
 import { prisma } from "@/lib/prisma";
 import { isMailConfigured, sendMailBatch } from "@/lib/mail";
 import { computeCaaCommissionMap } from "@/lib/caa-commission";
+import { getTicketTotalAmount } from "@/lib/ticket-pricing";
 
 type Frequency = "daily" | "weekly" | "monthly";
 type Params = { params: Promise<{ period: string }> };
@@ -375,10 +376,15 @@ export async function GET(request: NextRequest, { params }: Params) {
         amount: true,
         commissionAmount: true,
         commissionRateUsed: true,
+        agencyMarkupAmount: true,
+        commissionModeApplied: true,
         paymentStatus: true,
         sellerName: true,
         seller: {
           select: { name: true },
+        },
+        airline: {
+          select: { code: true },
         },
       },
     }),
@@ -466,7 +472,7 @@ export async function GET(request: NextRequest, { params }: Params) {
     offsiteSigns: attendanceRows.filter((row) => row.locationStatus === PresenceLocationStatus.OFFSITE).length,
   };
 
-  const totalSalesAmount = tickets.reduce((sum, ticket) => sum + ticket.amount, 0);
+  const totalSalesAmount = tickets.reduce((sum, ticket) => sum + getTicketTotalAmount(ticket, ticketCommission(ticket)), 0);
   const totalCommission = tickets.reduce((sum, ticket) => sum + ticketCommission(ticket), 0);
 
   const paidCount = tickets.filter((ticket) => ticket.paymentStatus === PaymentStatus.PAID).length;
@@ -475,20 +481,20 @@ export async function GET(request: NextRequest, { params }: Params) {
 
   const paidAmount = tickets
     .filter((ticket) => ticket.paymentStatus === PaymentStatus.PAID)
-    .reduce((sum, ticket) => sum + ticket.amount, 0);
+    .reduce((sum, ticket) => sum + getTicketTotalAmount(ticket, ticketCommission(ticket)), 0);
   const partialAmount = tickets
     .filter((ticket) => ticket.paymentStatus === PaymentStatus.PARTIAL)
-    .reduce((sum, ticket) => sum + ticket.amount, 0);
+    .reduce((sum, ticket) => sum + getTicketTotalAmount(ticket, ticketCommission(ticket)), 0);
   const unpaidAmount = tickets
     .filter((ticket) => ticket.paymentStatus === PaymentStatus.UNPAID)
-    .reduce((sum, ticket) => sum + ticket.amount, 0);
+    .reduce((sum, ticket) => sum + getTicketTotalAmount(ticket, ticketCommission(ticket)), 0);
 
   const sellerAggregation = new Map<string, { tickets: number; amount: number }>();
   tickets.forEach((ticket) => {
     const sellerName = ticket.sellerName ?? ticket.seller?.name ?? "Inconnu";
     const existing = sellerAggregation.get(sellerName) ?? { tickets: 0, amount: 0 };
     existing.tickets += 1;
-    existing.amount += ticket.amount;
+    existing.amount += getTicketTotalAmount(ticket, ticketCommission(ticket));
     sellerAggregation.set(sellerName, existing);
   });
 

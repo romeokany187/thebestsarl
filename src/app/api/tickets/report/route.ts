@@ -6,6 +6,7 @@ import path from "node:path";
 import { prisma } from "@/lib/prisma";
 import { requireApiModuleAccess } from "@/lib/rbac";
 import { computeCaaCommissionMap } from "@/lib/caa-commission";
+import { getTicketTotalAmount } from "@/lib/ticket-pricing";
 
 type ReportMode = "date" | "month" | "year" | "semester";
 
@@ -341,7 +342,7 @@ export async function GET(request: NextRequest) {
         ticket.airline.code,
         ticket.ticketNumber.slice(0, 10),
         ticket.route.slice(0, 16),
-        ticket.amount.toFixed(0),
+        getTicketTotalAmount(ticket, ticketCommission(ticket)).toFixed(0),
         (ticket.baseFareAmount ?? ticket.commissionBaseAmount).toFixed(0),
         commission.toFixed(0),
         ticket.saleNature,
@@ -362,7 +363,7 @@ export async function GET(request: NextRequest) {
       y -= 13;
     });
 
-    const totalSales = tickets.reduce((sum, ticket) => sum + ticket.amount, 0);
+    const totalSales = tickets.reduce((sum, ticket) => sum + getTicketTotalAmount(ticket, ticketCommission(ticket)), 0);
     const totalCommissions = tickets.reduce((sum, ticket) => sum + ticketCommission(ticket), 0);
 
     if (y < 90) {
@@ -452,11 +453,11 @@ export async function GET(request: NextRequest) {
         const columnKey = resolveColumnKey(ticket.airline.code);
 
         row.tickets += 1;
-        row.total += ticket.amount;
+        row.total += getTicketTotalAmount(ticket, ticketCommission(ticket));
         row.commission += commission;
 
         if (columnKey) {
-          row.amountByAirline[columnKey] = (row.amountByAirline[columnKey] ?? 0) + ticket.amount;
+          row.amountByAirline[columnKey] = (row.amountByAirline[columnKey] ?? 0) + getTicketTotalAmount(ticket, ticketCommission(ticket));
         }
       });
 
@@ -601,7 +602,7 @@ export async function GET(request: NextRequest) {
           commissions: 0,
         };
         existing.tickets += 1;
-        existing.sales += ticket.amount;
+        existing.sales += getTicketTotalAmount(ticket, ticketCommission(ticket));
         existing.commissions += commission;
         map.set(key, existing);
         return map;

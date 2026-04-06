@@ -6,6 +6,7 @@ import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { prisma } from "@/lib/prisma";
 import { requireApiModuleAccess } from "@/lib/rbac";
+import { getTicketTotalAmount } from "@/lib/ticket-pricing";
 
 type ReportMode = "date" | "month" | "year";
 type ReportType = "payments" | "cash-journal" | "cash-summary";
@@ -335,7 +336,10 @@ export async function GET(request: NextRequest) {
         soldAt: { gte: range.start, lt: range.end },
         ...(airlineId ? { airlineId } : {}),
       },
-      include: { payments: true },
+      include: {
+        payments: true,
+        airline: { select: { code: true } },
+      },
       orderBy: { soldAt: "asc" },
       take: 4000,
     }),
@@ -420,10 +424,11 @@ export async function GET(request: NextRequest) {
       ) => sum + normalizeAmountUsd(payment),
       0,
     );
-    const amountUsd = normalizeAmountUsd({ amount: ticket.amount, currency: ticket.currency });
+    const totalTicketAmount = getTicketTotalAmount(ticket);
+    const amountUsd = normalizeAmountUsd({ amount: totalTicketAmount, currency: ticket.currency });
     const computedStatus = paidAmount <= 0
       ? "UNPAID"
-      : paidAmount + 0.0001 >= ticket.amount
+      : paidAmount + 0.0001 >= totalTicketAmount
         ? "PAID"
         : "PARTIAL";
 
@@ -432,6 +437,7 @@ export async function GET(request: NextRequest) {
       paidAmount,
       paidAmountUsd,
       amountUsd,
+      totalTicketAmount,
       computedStatus,
     };
   });

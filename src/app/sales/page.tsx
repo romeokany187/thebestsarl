@@ -9,6 +9,7 @@ import { buildAirlineDepositAccountSummaries } from "@/lib/airline-deposit";
 import { computeCaaCommissionMap } from "@/lib/caa-commission";
 import { canImportTicketWorkbook, canManageTicketRecord, canSellTickets } from "@/lib/assignment";
 import { listTicketWorkbookImportHistory } from "@/lib/ticket-excel-import";
+import { getTicketBaseCommissionAmount, getTicketTotalAmount } from "@/lib/ticket-pricing";
 
 export const dynamic = "force-dynamic";
 
@@ -267,10 +268,10 @@ export default async function SalesPage({
                 <th className="px-3 py-2 text-left">Compagnie</th>
                 <th className="px-3 py-2 text-left">Code billet (PNR)</th>
                 <th className="px-3 py-2 text-left">Itinéraire</th>
-                <th className="px-3 py-2 text-left">Prix</th>
+                <th className="px-3 py-2 text-left">Prix billet</th>
                 <th className="px-3 py-2 text-left">BaseFare</th>
                 <th className="px-3 py-2 text-left">Commission</th>
-                <th className="px-3 py-2 text-left">Net après déduction</th>
+                <th className="px-3 py-2 text-left">Montant total</th>
                 <th className="px-3 py-2 text-left">Nature vente</th>
                 <th className="px-3 py-2 text-left">Statut</th>
                 <th className="px-3 py-2 text-left">Payant</th>
@@ -281,8 +282,8 @@ export default async function SalesPage({
               {tickets.map((ticket) => {
                 const commissionAmount = commissionOf(ticket);
                 const agencyMarkupAmount = ticket.agencyMarkupAmount ?? 0;
-                const companyCommissionAmount = Math.max(0, commissionAmount - agencyMarkupAmount);
-                const netAfterCommission = ticket.amount + agencyMarkupAmount;
+                const companyCommissionAmount = getTicketBaseCommissionAmount(ticket, commissionAmount);
+                const totalTicketAmount = getTicketTotalAmount(ticket, commissionAmount);
 
                 return (
                   <tr key={ticket.id} className="border-t border-black/5 dark:border-white/10">
@@ -301,7 +302,7 @@ export default async function SalesPage({
                         {ticket.commissionCalculationStatus === "ESTIMATED" ? "(estimée)" : "(définitive)"}
                       </span>
                     </td>
-                    <td className="px-3 py-2">{netAfterCommission.toFixed(2)} {ticket.currency}</td>
+                    <td className="px-3 py-2">{totalTicketAmount.toFixed(2)} {ticket.currency}</td>
                     <td className="px-3 py-2">{saleNatureLabel(ticket.saleNature)}</td>
                     <td className="px-3 py-2">{paymentLabel(ticket.paymentStatus)}</td>
                     <td className="px-3 py-2">{ticket.payerName ?? "-"}</td>

@@ -8,6 +8,7 @@ import { PaymentsWritingWorkspace } from "@/components/payments-writing-workspac
 import { invoiceNumberFromChronology } from "@/lib/invoice";
 import { requirePageModuleAccess } from "@/lib/rbac";
 import { prisma } from "@/lib/prisma";
+import { getTicketTotalAmount } from "@/lib/ticket-pricing";
 
 type AirlineRow = { id: string; code: string; name: string };
 type TicketPaymentRow = {
@@ -51,6 +52,9 @@ type TicketSaleRow = {
   ticketNumber: string;
   customerName: string;
   amount: number;
+  commissionAmount?: number | null;
+  commissionRateUsed?: number | null;
+  agencyMarkupAmount?: number | null;
   currency?: string | null;
   paymentStatus: PaymentStatus;
   seller?: { team?: { name?: string | null } | null } | null;
@@ -456,10 +460,11 @@ export default async function PaymentsPage({
       ) => sum + normalizeCashAmountUsd(payment),
       0,
     );
-    const amountUsd = normalizeCashAmountUsd({ amount: ticket.amount, currency: ticket.currency });
+    const totalTicketAmount = getTicketTotalAmount(ticket);
+    const amountUsd = normalizeCashAmountUsd({ amount: totalTicketAmount, currency: ticket.currency });
     const computedStatus = paidAmount <= 0
       ? PaymentStatus.UNPAID
-      : paidAmount + 0.0001 >= ticket.amount
+      : paidAmount + 0.0001 >= totalTicketAmount
         ? PaymentStatus.PAID
         : PaymentStatus.PARTIAL;
 
@@ -474,6 +479,7 @@ export default async function PaymentsPage({
       paidAmount,
       paidAmountUsd,
       amountUsd,
+      totalTicketAmount,
       computedStatus,
       invoiceNumber,
     };
@@ -695,7 +701,7 @@ export default async function PaymentsPage({
       id: ticket.id,
       ticketNumber: ticket.ticketNumber,
       customerName: ticket.customerName,
-      amount: ticket.amount,
+      amount: ticket.totalTicketAmount,
       paidAmount: ticket.paidAmount,
       paymentStatus: ticket.computedStatus,
       currency: ticket.currency ?? "USD",
