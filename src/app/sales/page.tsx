@@ -9,7 +9,7 @@ import { buildAirlineDepositAccountSummaries } from "@/lib/airline-deposit";
 import { computeCaaCommissionMap } from "@/lib/caa-commission";
 import { canImportTicketWorkbook, canManageTicketRecord, canSellTickets } from "@/lib/assignment";
 import { listTicketWorkbookImportHistory } from "@/lib/ticket-excel-import";
-import { getTicketBaseCommissionAmount, getTicketCommissionAmount, getTicketTotalAmount } from "@/lib/ticket-pricing";
+import { getTicketCommissionAmount, getTicketTotalAmount } from "@/lib/ticket-pricing";
 
 export const dynamic = "force-dynamic";
 
@@ -35,12 +35,6 @@ function rangeFromSearch(params: SearchParams) {
     startRaw,
     endRaw,
   };
-}
-
-function paymentLabel(status: string) {
-  if (status === "PAID") return "Payé";
-  if (status === "UNPAID") return "Non payé";
-  return "Partiel";
 }
 
 function saleNatureLabel(value: string) {
@@ -273,7 +267,6 @@ export default async function SalesPage({
                 <th className="px-3 py-2 text-left">Commission</th>
                 <th className="px-3 py-2 text-left">Montant total</th>
                 <th className="px-3 py-2 text-left">Nature vente</th>
-                <th className="px-3 py-2 text-left">Statut</th>
                 <th className="px-3 py-2 text-left">Payant</th>
                 {canManageTickets ? <th className="px-3 py-2 text-left">Actions</th> : null}
               </tr>
@@ -281,8 +274,6 @@ export default async function SalesPage({
             <tbody>
               {tickets.map((ticket) => {
                 const commissionAmount = commissionOf(ticket);
-                const agencyMarkupAmount = ticket.agencyMarkupAmount ?? 0;
-                const companyCommissionAmount = getTicketBaseCommissionAmount(ticket, commissionAmount);
                 const totalTicketAmount = getTicketTotalAmount(ticket, commissionAmount);
 
                 return (
@@ -293,18 +284,9 @@ export default async function SalesPage({
                     <td className="px-3 py-2">{ticket.route}</td>
                     <td className="px-3 py-2">{ticket.amount.toFixed(2)} {ticket.currency}</td>
                     <td className="px-3 py-2">{(ticket.baseFareAmount ?? ticket.commissionBaseAmount).toFixed(2)} {ticket.currency}</td>
-                    <td className="px-3 py-2">
-                      <span className="font-medium">Total: {commissionAmount.toFixed(2)} {ticket.currency}</span>
-                      <span className="ml-1 text-xs text-black/60 dark:text-white/60">
-                        (Compagnie: {companyCommissionAmount.toFixed(2)} • Majoration: {agencyMarkupAmount.toFixed(2)})
-                      </span>
-                      <span className="ml-1 text-xs text-black/60 dark:text-white/60">
-                        {ticket.commissionCalculationStatus === "ESTIMATED" ? "(estimée)" : "(définitive)"}
-                      </span>
-                    </td>
+                    <td className="px-3 py-2 font-medium">{commissionAmount.toFixed(2)} {ticket.currency}</td>
                     <td className="px-3 py-2">{totalTicketAmount.toFixed(2)} {ticket.currency}</td>
                     <td className="px-3 py-2">{saleNatureLabel(ticket.saleNature)}</td>
-                    <td className="px-3 py-2">{paymentLabel(ticket.paymentStatus)}</td>
                     <td className="px-3 py-2">{ticket.payerName ?? "-"}</td>
                     {canManageTickets ? (
                       <td className="px-3 py-2">
@@ -327,6 +309,7 @@ export default async function SalesPage({
                             paymentStatus: ticket.paymentStatus,
                             payerName: ticket.payerName,
                             notes: ticket.notes,
+                            suppressItineraryAction: true,
                           }}
                         />
                       </td>

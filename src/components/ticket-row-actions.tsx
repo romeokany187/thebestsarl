@@ -21,6 +21,7 @@ type Props = {
     paymentStatus: "PAID" | "UNPAID" | "PARTIAL";
     payerName: string | null;
     notes: string | null;
+    suppressItineraryAction?: boolean;
   };
 };
 
@@ -73,13 +74,15 @@ export function TicketRowActions({ ticket }: Props) {
         >
           Modifier
         </button>
-        <button
-          type="button"
-          onClick={editItinerary}
-          className="rounded-md border border-sky-300 px-2 py-1 text-xs text-sky-700 hover:bg-sky-50 dark:border-sky-700/60 dark:text-sky-300 dark:hover:bg-sky-950/40"
-        >
-          Itinérance
-        </button>
+        {!ticket.suppressItineraryAction ? (
+          <button
+            type="button"
+            onClick={editItinerary}
+            className="rounded-md border border-sky-300 px-2 py-1 text-xs text-sky-700 hover:bg-sky-50 dark:border-sky-700/60 dark:text-sky-300 dark:hover:bg-sky-950/40"
+          >
+            Itinérance
+          </button>
+        ) : null}
         <button
           type="button"
           onClick={deleteTicket}
