@@ -16,6 +16,10 @@ function clamp(value: number, min: number, max: number) {
   return Math.max(min, Math.min(max, value));
 }
 
+function normalizeTicketDate(value: Date) {
+  return new Date(Date.UTC(value.getUTCFullYear(), value.getUTCMonth(), value.getUTCDate(), 0, 0, 0, 0));
+}
+
 export async function GET() {
   const access = await requireApiModuleAccess("tickets", ["DIRECTEUR_GENERAL"]);
   if (access.error) {
@@ -87,7 +91,13 @@ export async function POST(request: NextRequest) {
 
     const isAfterDepositMode = rule?.commissionMode === CommissionMode.AFTER_DEPOSIT;
     const todayRaw = new Date().toISOString().slice(0, 10);
-    const enforcedTravelDate = new Date(`${todayRaw}T00:00:00.000Z`);
+    const todayDate = new Date(`${todayRaw}T00:00:00.000Z`);
+    const enforcedTravelDate = access.role === "ADMIN"
+      ? normalizeTicketDate(parsed.data.travelDate)
+      : todayDate;
+    const enforcedSoldAt = access.role === "ADMIN"
+      ? normalizeTicketDate(parsed.data.soldAt ?? parsed.data.travelDate)
+      : todayDate;
     const consumedBeforeForAfterDeposit = isAfterDepositMode
       ? (
         await prisma.ticketSale.aggregate({
@@ -168,6 +178,7 @@ export async function POST(request: NextRequest) {
         data: {
           ...parsed.data,
           travelDate: enforcedTravelDate,
+          soldAt: enforcedSoldAt,
           currency: "USD",
           baseFareAmount,
           agencyMarkupPercent: 0,

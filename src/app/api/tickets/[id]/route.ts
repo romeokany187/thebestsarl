@@ -15,6 +15,10 @@ function clamp(value: number, min: number, max: number) {
   return Math.max(min, Math.min(max, value));
 }
 
+function normalizeTicketDate(value: Date) {
+  return new Date(Date.UTC(value.getUTCFullYear(), value.getUTCMonth(), value.getUTCDate(), 0, 0, 0, 0));
+}
+
 export async function PATCH(request: NextRequest, { params }: Params) {
   const access = await requireApiModuleAccess("sales", ["ADMIN", "DIRECTEUR_GENERAL", "MANAGER", "EMPLOYEE", "ACCOUNTANT"]);
   if (access.error) {
@@ -54,6 +58,17 @@ export async function PATCH(request: NextRequest, { params }: Params) {
 
     const nextAirlineId = parsed.data.airlineId ?? existing.airlineId;
     const nextSellerId = parsed.data.sellerId ?? existing.sellerId;
+    const normalizedTravelDate = parsed.data.travelDate
+      ? normalizeTicketDate(parsed.data.travelDate)
+      : existing.travelDate;
+    const normalizedSoldAt = access.role === "ADMIN" && parsed.data.soldAt
+      ? normalizeTicketDate(parsed.data.soldAt)
+      : existing.soldAt;
+    const normalizedPatchData = {
+      ...parsed.data,
+      ...(parsed.data.travelDate ? { travelDate: normalizedTravelDate } : {}),
+      ...(access.role === "ADMIN" && parsed.data.soldAt ? { soldAt: normalizedSoldAt } : {}),
+    };
 
     const targetAirline = await prisma.airline.findUnique({
       where: { id: nextAirlineId },
@@ -129,7 +144,7 @@ export async function PATCH(request: NextRequest, { params }: Params) {
       const updatedWithoutRule = await prisma.ticketSale.update({
         where: { id },
         data: {
-          ...parsed.data,
+          ...normalizedPatchData,
           currency: "USD",
           airlineId: nextTicket.airlineId,
           sellerId: nextTicket.sellerId,
@@ -253,7 +268,7 @@ export async function PATCH(request: NextRequest, { params }: Params) {
       const saved = await tx.ticketSale.update({
         where: { id },
         data: {
-          ...parsed.data,
+          ...normalizedPatchData,
           currency: "USD",
           airlineId: nextTicket.airlineId,
           sellerId: nextTicket.sellerId,

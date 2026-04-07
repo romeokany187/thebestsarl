@@ -104,11 +104,13 @@ export function TicketForm({
   airlines,
   teams,
   depositAccounts = [],
+  allowAdminEncodingDate = false,
 }: {
   users: UserOption[];
   airlines: AirlineOption[];
   teams: TeamOption[];
   depositAccounts?: DepositAccountOption[];
+  allowAdminEncodingDate?: boolean;
 }) {
   const [status, setStatus] = useState<string>("");
   const [statusType, setStatusType] = useState<"idle" | "success" | "error" | "loading">("idle");
@@ -303,6 +305,7 @@ export function TicketForm({
       route: form.route,
       travelClass: form.travelClass,
       travelDate: form.travelDate,
+      ...(allowAdminEncodingDate ? { soldAt: form.travelDate } : {}),
       amount,
       ...(baseFareAmount !== undefined ? { baseFareAmount } : {}),
       currency: form.currency,
@@ -412,9 +415,25 @@ export function TicketForm({
       </div>
 
       <div className="grid gap-3 sm:grid-cols-2">
-        <div className="rounded-md border px-3 py-2 text-sm">
-          Date du jour (encodage): <span className="font-semibold">{form.travelDate}</span>
-        </div>
+        {allowAdminEncodingDate ? (
+          <div>
+            <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-black/60 dark:text-white/60">
+              Date d'encodage (admin)
+            </label>
+            <input
+              type="date"
+              name="travelDate"
+              required
+              value={form.travelDate}
+              onChange={(event) => updateField("travelDate", event.target.value)}
+              className="w-full rounded-md border px-3 py-2"
+            />
+          </div>
+        ) : (
+          <div className="rounded-md border px-3 py-2 text-sm">
+            Date d'encodage : <span className="font-semibold">{form.travelDate}</span>
+          </div>
+        )}
         <select
           name="saleNature"
           value={form.saleNature}
@@ -547,6 +566,11 @@ export function TicketForm({
       <p className="text-xs text-black/60 dark:text-white/60">
         Le champ payant est auto-rempli: Client, Agent de l&apos;agence ou Équipe (Lubumbashi/Partenaires selon les équipes disponibles).
       </p>
+      {allowAdminEncodingDate ? (
+        <p className="text-xs text-black/60 dark:text-white/60">
+          Admin uniquement: vous pouvez ajuster la date d&apos;encodage du billet pour la conformité des données.
+        </p>
+      ) : null}
 
       {isAirCongo ? (
         <p className="text-xs text-black/60 dark:text-white/60">

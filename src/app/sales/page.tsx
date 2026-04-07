@@ -238,6 +238,7 @@ export default async function SalesPage({
                 airlineCodes: account.airlineCodes,
                 balance: account.balance,
               }))}
+              allowAdminEncodingDate={role === "ADMIN"}
             />
             {canImportTickets ? (
               <TicketImportForm
