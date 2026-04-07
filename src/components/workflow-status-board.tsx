@@ -213,7 +213,9 @@ export function WorkflowStatusBoard({
       <section id="payment-orders" className="scroll-mt-24 rounded-2xl border border-black/10 bg-white p-4 shadow-sm dark:border-white/10 dark:bg-zinc-900">
         <div className="mb-3 flex items-center justify-between gap-2">
           <h3 className="text-base font-semibold">{paymentTitle(mode)}</h3>
-          <Link href="/payments" className="text-xs font-semibold text-black/60 dark:text-white/60">Ouvrir Paiements</Link>
+          <span className="text-xs font-semibold text-black/60 dark:text-white/60">
+            {mode === "validate" ? "Approbation ici" : mode === "execute" ? "Exécution ici" : "Suivi ici"}
+          </span>
         </div>
 
         {mode === "history" ? (
@@ -239,7 +241,9 @@ export function WorkflowStatusBoard({
       <section id="needs" className="scroll-mt-24 rounded-2xl border border-black/10 bg-white p-4 shadow-sm dark:border-white/10 dark:bg-zinc-900">
         <div className="mb-3 flex items-center justify-between gap-2">
           <h3 className="text-base font-semibold">{needTitle(mode)}</h3>
-          <Link href="/approvisionnement" className="text-xs font-semibold text-black/60 dark:text-white/60">Ouvrir Approvisionnement</Link>
+          <span className="text-xs font-semibold text-black/60 dark:text-white/60">
+            {mode === "validate" ? "Décision ici" : mode === "execute" ? "Exécution ici" : "Suivi ici"}
+          </span>
         </div>
 
         {mode === "history" ? (
