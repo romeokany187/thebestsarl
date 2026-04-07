@@ -42,54 +42,11 @@ function formatActionLabel(value: string) {
     .join(" ");
 }
 
-function actionTone(value: string) {
-  if (value.includes("FORBIDDEN") || value.includes("REJECT")) {
-    return "border-red-300 bg-red-50 text-red-700 dark:border-red-700/50 dark:bg-red-950/30 dark:text-red-300";
-  }
+function extractIpAddress(payload: unknown) {
+  if (!payload || typeof payload !== "object") return "Non disponible";
 
-  if (value.includes("VISIT") || value.includes("ACCESS")) {
-    return "border-sky-300 bg-sky-50 text-sky-700 dark:border-sky-700/50 dark:bg-sky-950/30 dark:text-sky-300";
-  }
-
-  if (value.includes("EXECUTED") || value.includes("APPROVED") || value.includes("CREATE") || value.includes("CREDIT")) {
-    return "border-emerald-300 bg-emerald-50 text-emerald-700 dark:border-emerald-700/50 dark:bg-emerald-950/30 dark:text-emerald-300";
-  }
-
-  return "border-amber-300 bg-amber-50 text-amber-700 dark:border-amber-700/50 dark:bg-amber-950/30 dark:text-amber-300";
-}
-
-function summarizePayload(payload: unknown) {
-  if (!payload || typeof payload !== "object") return "Aucun détail complémentaire.";
-
-  const record = payload as {
-    summary?: string | null;
-    details?: {
-      module?: string | null;
-      role?: string | null;
-      jobTitle?: string | null;
-      allowedRoles?: string[];
-      fileName?: string | null;
-      summary?: { period?: string | null };
-    } | null;
-    request?: { referer?: string | null; pathHint?: string | null; host?: string | null; ipAddress?: string | null } | null;
-  };
-
-  if (typeof record.summary === "string" && record.summary.trim()) {
-    return record.summary.trim();
-  }
-
-  const chips: string[] = [];
-
-  if (record.details?.module) chips.push(`module ${record.details.module}`);
-  if (record.details?.role) chips.push(`rôle ${record.details.role}`);
-  if (record.details?.jobTitle) chips.push(`fonction ${record.details.jobTitle}`);
-  if (record.details?.fileName) chips.push(`fichier ${record.details.fileName}`);
-  if (record.details?.summary?.period) chips.push(`période ${record.details.summary.period}`);
-  if (record.request?.pathHint) chips.push(`route ${record.request.pathHint}`);
-  if (record.request?.referer) chips.push(`source ${record.request.referer}`);
-  if (record.request?.host) chips.push(`host ${record.request.host}`);
-
-  return chips.length > 0 ? chips.slice(0, 3).join(" • ") : "Action authentifiée enregistrée.";
+  const ipAddress = (payload as { request?: { ipAddress?: string | null } | null }).request?.ipAddress;
+  return typeof ipAddress === "string" && ipAddress.trim() ? ipAddress.trim() : "Non disponible";
 }
 
 export default async function AdminLogsPage({
@@ -141,16 +98,13 @@ export default async function AdminLogsPage({
 
   const where = { AND: filters };
 
-  const [logs, actions, totalInRange, forbiddenCount, decisionCount, importCount, activeUsers] = await Promise.all([
+  const [logs, actions] = await Promise.all([
     prisma.auditLog.findMany({
       where,
       include: {
         actor: {
           select: {
             name: true,
-            email: true,
-            role: true,
-            jobTitle: true,
           },
         },
       },
@@ -163,30 +117,19 @@ export default async function AdminLogsPage({
       orderBy: { action: "asc" },
       take: 100,
     }),
-    prisma.auditLog.count({ where: { createdAt: { gte: rangeStart } } }),
-    prisma.auditLog.count({ where: { createdAt: { gte: rangeStart }, action: { contains: "REJECT" } } }),
-    prisma.auditLog.count({ where: { createdAt: { gte: rangeStart }, action: { in: ["PAYMENT_ORDER_APPROVED", "PAYMENT_ORDER_REJECTED", "NEED_REQUEST_APPROVED", "NEED_REQUEST_REJECTED", "REPORT_APPROVED", "REPORT_REJECTED"] } } }),
-    prisma.auditLog.count({ where: { createdAt: { gte: rangeStart }, action: { in: ["TICKET_IMPORT_EXECUTED", "ARCHIVE_DOCUMENT_UPLOADED"] } } }),
-    prisma.auditLog.findMany({
-      where: { createdAt: { gte: rangeStart } },
-      distinct: ["actorId"],
-      select: { actorId: true },
-    }).then((rows) => rows.length),
   ]);
-
-  const lastLogAt = logs[0]?.createdAt ? new Date(logs[0].createdAt).toLocaleString("fr-FR") : "-";
 
   return (
     <AppShell
       role={role}
-      accessNote="Journal centralisé des actions des utilisateurs: accès pages, appels API protégés et opérations critiques historisés."
+      accessNote="Journal compact des actions métiers des utilisateurs."
     >
-      <section className="mb-6 space-y-2">
+      <section className="mb-4 space-y-2">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <h1 className="text-2xl font-semibold tracking-tight">Logs activités utilisateurs</h1>
             <p className="text-sm text-black/60 dark:text-white/60">
-              Vue de supervision inspirée des runtime logs: toutes les actions authentifiées importantes sont centralisées ici.
+              Vue compacte, ligne par ligne, comme un terminal.
             </p>
           </div>
           <Link
@@ -198,20 +141,13 @@ export default async function AdminLogsPage({
         </div>
       </section>
 
-      <section className="mb-6 rounded-2xl border border-black/10 bg-white p-4 shadow-sm dark:border-white/10 dark:bg-zinc-900">
-        <form method="GET" className="grid gap-3 xl:grid-cols-4">
+      <section className="mb-4 rounded-xl border border-black/10 bg-white p-3 dark:border-white/10 dark:bg-zinc-900">
+        <form method="GET" className="grid gap-2 lg:grid-cols-[1.2fr_1fr_1fr_auto]">
           <input
             type="text"
             name="q"
             defaultValue={q}
-            placeholder="Rechercher action, utilisateur, entité..."
-            className="rounded-md border border-black/15 bg-white px-3 py-2 text-sm dark:border-white/15 dark:bg-zinc-900"
-          />
-          <input
-            type="text"
-            name="user"
-            defaultValue={user}
-            placeholder="Filtrer par utilisateur / email"
+            placeholder="Rechercher action ou nom"
             className="rounded-md border border-black/15 bg-white px-3 py-2 text-sm dark:border-white/15 dark:bg-zinc-900"
           />
           <select
@@ -224,95 +160,46 @@ export default async function AdminLogsPage({
               <option key={item.action} value={item.action}>{item.action}</option>
             ))}
           </select>
-          <div className="flex gap-2">
-            <select
-              name="period"
-              defaultValue={period}
-              className="w-full rounded-md border border-black/15 bg-white px-3 py-2 text-sm dark:border-white/15 dark:bg-zinc-900"
-            >
-              <option value="1h">Dernière heure</option>
-              <option value="24h">Dernières 24h</option>
-              <option value="7d">7 derniers jours</option>
-              <option value="30d">30 derniers jours</option>
-            </select>
-            <button type="submit" className="rounded-md bg-black px-4 py-2 text-sm font-semibold text-white dark:bg-white dark:text-black">
-              Filtrer
-            </button>
-          </div>
+          <select
+            name="period"
+            defaultValue={period}
+            className="rounded-md border border-black/15 bg-white px-3 py-2 text-sm dark:border-white/15 dark:bg-zinc-900"
+          >
+            <option value="1h">Dernière heure</option>
+            <option value="24h">Dernières 24h</option>
+            <option value="7d">7 derniers jours</option>
+            <option value="30d">30 derniers jours</option>
+          </select>
+          <button type="submit" className="rounded-md bg-black px-4 py-2 text-sm font-semibold text-white dark:bg-white dark:text-black">
+            Filtrer
+          </button>
         </form>
       </section>
 
-      <div className="mb-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <div className="rounded-2xl border border-black/10 bg-white p-4 shadow-sm dark:border-white/10 dark:bg-zinc-900">
-          <p className="text-xs uppercase tracking-wide text-black/55 dark:text-white/55">Volume des logs</p>
-          <p className="mt-2 text-2xl font-semibold">{totalInRange}</p>
-        </div>
-        <div className="rounded-2xl border border-black/10 bg-white p-4 shadow-sm dark:border-white/10 dark:bg-zinc-900">
-          <p className="text-xs uppercase tracking-wide text-black/55 dark:text-white/55">Utilisateurs actifs</p>
-          <p className="mt-2 text-2xl font-semibold">{activeUsers}</p>
-        </div>
-        <div className="rounded-2xl border border-black/10 bg-white p-4 shadow-sm dark:border-white/10 dark:bg-zinc-900">
-          <p className="text-xs uppercase tracking-wide text-black/55 dark:text-white/55">Décisions validées</p>
-          <p className="mt-2 text-2xl font-semibold">{decisionCount}</p>
-        </div>
-        <div className="rounded-2xl border border-black/10 bg-white p-4 shadow-sm dark:border-white/10 dark:bg-zinc-900">
-          <p className="text-xs uppercase tracking-wide text-black/55 dark:text-white/55">Rejets & imports</p>
-          <p className="mt-2 text-2xl font-semibold">{forbiddenCount}</p>
-          <p className="mt-1 text-xs text-black/55 dark:text-white/55">Imports / archivages: {importCount}</p>
-        </div>
-      </div>
-
-      <section className="rounded-2xl border border-black/10 bg-white shadow-sm dark:border-white/10 dark:bg-zinc-900">
-        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-black/10 px-4 py-3 dark:border-white/10">
-          <div>
-            <h2 className="text-base font-semibold">Journal des événements</h2>
-            <p className="text-xs text-black/55 dark:text-white/55">Dernière entrée visible: {lastLogAt}</p>
+      <section className="overflow-hidden rounded-xl border border-black/10 bg-[#050816] text-white dark:border-white/10">
+        <div className="border-b border-white/10 px-3 py-2 font-mono text-[11px] uppercase tracking-wide text-white/60">
+          <div className="grid gap-3 md:grid-cols-[180px_1.2fr_180px_1fr]">
+            <span>Date & heure</span>
+            <span>Action</span>
+            <span>Adresse IP</span>
+            <span>Nom</span>
           </div>
-          <span className="rounded-full border border-black/15 px-3 py-1 text-[11px] font-semibold dark:border-white/20">
-            {logs.length} entrée(s) affichée(s)
-          </span>
         </div>
 
-        <div className="max-h-[70vh] overflow-y-auto px-4 py-3">
+        <div className="max-h-[72vh] overflow-y-auto font-mono text-xs">
           {logs.length === 0 ? (
-            <p className="py-8 text-center text-sm text-black/55 dark:text-white/55">
-              Aucun log trouvé pour ces filtres.
-            </p>
+            <p className="px-3 py-6 text-white/60">Aucun log trouvé pour ces filtres.</p>
           ) : (
-            <div className="space-y-2 font-mono text-xs">
-              {logs.map((log) => (
-                <article key={log.id} className="rounded-xl border border-black/10 px-3 py-3 dark:border-white/10">
-                  <div className="flex flex-wrap items-start justify-between gap-3">
-                    <div className="min-w-0 flex-1">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <span className="text-black/55 dark:text-white/55">{new Date(log.createdAt).toLocaleString("fr-FR")}</span>
-                        <span className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold ${actionTone(log.action)}`}>
-                          {formatActionLabel(log.action)}
-                        </span>
-                        <span className="rounded-full border border-black/10 px-2 py-0.5 text-[10px] dark:border-white/10">
-                          {log.entityType}:{log.entityId}
-                        </span>
-                      </div>
-
-                      <p className="mt-2 text-sm font-semibold not-italic">
-                        {log.actor.name} <span className="font-normal text-black/60 dark:text-white/60">({log.actor.email})</span>
-                      </p>
-                      <p className="mt-1 not-italic text-black/70 dark:text-white/70">
-                        {log.actor.role} • {log.actor.jobTitle}
-                      </p>
-                      <p className="mt-1 not-italic text-black/65 dark:text-white/65">
-                        {summarizePayload(log.payload)}
-                      </p>
-                      <p className="mt-1 not-italic text-black/50 dark:text-white/50">
-                        IP: {typeof (log.payload as { request?: { ipAddress?: string | null } } | null)?.request?.ipAddress === "string"
-                          ? (log.payload as { request?: { ipAddress?: string | null } }).request?.ipAddress
-                          : "Non disponible"}
-                      </p>
-                    </div>
-                  </div>
-                </article>
-              ))}
-            </div>
+            logs.map((log) => (
+              <div key={log.id} className="border-b border-white/5 px-3 py-2 last:border-b-0">
+                <div className="grid gap-3 md:grid-cols-[180px_1.2fr_180px_1fr] md:items-center">
+                  <span className="text-white/70">{new Date(log.createdAt).toLocaleString("fr-FR")}</span>
+                  <span className="truncate">{formatActionLabel(log.action)}</span>
+                  <span className="text-white/70">{extractIpAddress(log.payload)}</span>
+                  <span className="truncate">{log.actor.name ?? "Utilisateur inconnu"}</span>
+                </div>
+              </div>
+            ))
           )}
         </div>
       </section>
