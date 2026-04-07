@@ -5,8 +5,10 @@ import { CashOperationForm } from "@/components/cash-operation-form";
 import { CashOperationRowActions } from "@/components/cash-operation-row-actions";
 import { KpiCard } from "@/components/kpi-card";
 import { PaymentEntryForm } from "@/components/payment-entry-form";
+import { PaymentOrderCashExecutionActions } from "@/components/payment-order-cash-execution-actions";
 import { PaymentRowAdminActions } from "@/components/payment-row-admin-actions";
 import { PaymentsWritingWorkspace } from "@/components/payments-writing-workspace";
+import { ProcurementCashExecutionActions } from "@/components/procurement-cash-execution-actions";
 import { invoiceNumberFromChronology } from "@/lib/invoice";
 import { requirePageModuleAccess } from "@/lib/rbac";
 import { prisma } from "@/lib/prisma";
@@ -792,22 +794,80 @@ export default async function PaymentsPage({
       </section>
 
       <PaymentsWritingWorkspace
-        executionLinks={canWrite ? (
-          <>
-            <a
-              href="/inbox/execute#payment-orders"
-              className="rounded-md border border-amber-300 bg-amber-50 px-3 py-1.5 text-xs font-semibold text-amber-800 hover:bg-amber-100 dark:border-amber-700/50 dark:bg-amber-950/30 dark:text-amber-200 dark:hover:bg-amber-950/50"
-            >
-              OP à exécuter ({paymentOrdersExecutionCount})
-            </a>
-            <a
-              href="/inbox/execute#needs"
-              className="rounded-md border border-violet-300 bg-violet-50 px-3 py-1.5 text-xs font-semibold text-violet-800 hover:bg-violet-100 dark:border-violet-700/50 dark:bg-violet-950/30 dark:text-violet-200 dark:hover:bg-violet-950/50"
-            >
-              EDB à exécuter ({needsExecutionCount})
-            </a>
-          </>
-        ) : null}
+        paymentOrdersWorkspace={canWrite ? (
+          <section className="space-y-4 rounded-2xl border border-black/10 bg-white p-4 dark:border-white/10 dark:bg-zinc-900">
+            <div>
+              <h2 className="text-sm font-semibold">OP à exécuter</h2>
+              <p className="mt-1 text-xs text-black/60 dark:text-white/60">
+                L&apos;exécution et le suivi des ordres de paiement se font ici dans <span className="font-semibold">Paiements</span>.
+              </p>
+            </div>
+
+            {paymentOrdersReadyForExecution.length === 0 ? (
+              <p className="rounded-xl border border-dashed border-black/20 px-4 py-5 text-xs text-black/60 dark:border-white/20 dark:text-white/60">
+                Aucun OP en attente d&apos;exécution.
+              </p>
+            ) : (
+              <div className="grid gap-3 lg:grid-cols-2">
+                {paymentOrdersReadyForExecution.map((order) => (
+                  <article key={order.id} className="rounded-xl border border-black/10 bg-black/[0.02] p-3 dark:border-white/10 dark:bg-white/[0.03]">
+                    <div className="flex flex-wrap items-start justify-between gap-2">
+                      <div>
+                        <p className="font-semibold">{order.code ?? `OP-${order.id.slice(0, 8).toUpperCase()}`}</p>
+                        <p className="text-xs text-black/60 dark:text-white/60">{order.beneficiary}</p>
+                      </div>
+                      <span className="rounded-full border border-amber-300 bg-amber-50 px-2 py-0.5 text-[10px] font-semibold text-amber-700 dark:border-amber-700/50 dark:bg-amber-950/30 dark:text-amber-300">
+                        À exécuter
+                      </span>
+                    </div>
+                    <p className="mt-2 text-xs text-black/70 dark:text-white/70">
+                      Montant: {order.amount.toFixed(2)} {normalizeMoneyCurrency(order.currency)} • Approuvé le {order.approvedAt ? new Date(order.approvedAt).toLocaleString("fr-FR") : "-"}
+                    </p>
+                    <PaymentOrderCashExecutionActions paymentOrderId={order.id} />
+                  </article>
+                ))}
+              </div>
+            )}
+          </section>
+        ) : undefined}
+        paymentOrdersLabel={`OP à exécuter (${paymentOrdersExecutionCount})`}
+        needsWorkspace={canWrite ? (
+          <section className="space-y-4 rounded-2xl border border-black/10 bg-white p-4 dark:border-white/10 dark:bg-zinc-900">
+            <div>
+              <h2 className="text-sm font-semibold">EDB à exécuter</h2>
+              <p className="mt-1 text-xs text-black/60 dark:text-white/60">
+                L&apos;exécution et le suivi des états de besoin se font ici dans <span className="font-semibold">Paiements</span>.
+              </p>
+            </div>
+
+            {needsReadyForExecution.length === 0 ? (
+              <p className="rounded-xl border border-dashed border-black/20 px-4 py-5 text-xs text-black/60 dark:border-white/20 dark:text-white/60">
+                Aucun EDB en attente d&apos;exécution.
+              </p>
+            ) : (
+              <div className="grid gap-3 lg:grid-cols-2">
+                {needsReadyForExecution.map((need) => (
+                  <article key={need.id} className="rounded-xl border border-black/10 bg-black/[0.02] p-3 dark:border-white/10 dark:bg-white/[0.03]">
+                    <div className="flex flex-wrap items-start justify-between gap-2">
+                      <div>
+                        <p className="font-semibold">{need.code ?? `EDB-${need.id.slice(0, 8).toUpperCase()}`}</p>
+                        <p className="text-xs text-black/60 dark:text-white/60">{need.title}</p>
+                      </div>
+                      <span className="rounded-full border border-violet-300 bg-violet-50 px-2 py-0.5 text-[10px] font-semibold text-violet-700 dark:border-violet-700/50 dark:bg-violet-950/30 dark:text-violet-300">
+                        À exécuter
+                      </span>
+                    </div>
+                    <p className="mt-2 text-xs text-black/70 dark:text-white/70">
+                      Montant estimé: {typeof need.estimatedAmount === "number" ? `${need.estimatedAmount.toFixed(2)} ${normalizeMoneyCurrency(need.currency)}` : "-"} • Approuvé le {need.approvedAt ? new Date(need.approvedAt).toLocaleString("fr-FR") : "-"}
+                    </p>
+                    <ProcurementCashExecutionActions needRequestId={need.id} />
+                  </article>
+                ))}
+              </div>
+            )}
+          </section>
+        ) : undefined}
+        needsLabel={`EDB à exécuter (${needsExecutionCount})`}
         closedSummary={(
           <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
             <KpiCard label="Total encaissé" value={`${grossInflows.toFixed(2)} USD`} hint={`Billets ${ticketPaymentInflowsUsd.toFixed(2)} + autres ${otherInflows.toFixed(2)}`} />

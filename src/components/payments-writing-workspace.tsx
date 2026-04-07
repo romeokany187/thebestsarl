@@ -2,21 +2,27 @@
 
 import { useState } from "react";
 
-type WritingMode = "none" | "tickets" | "cash" | "virtual" | "billetage";
+type WritingMode = "none" | "tickets" | "cash" | "virtual" | "billetage" | "payment-orders" | "needs";
 
 export function PaymentsWritingWorkspace({
   ticketWorkspace,
   cashWorkspace,
   virtualWorkspace,
   billetageWorkspace,
-  executionLinks,
+  paymentOrdersWorkspace,
+  paymentOrdersLabel,
+  needsWorkspace,
+  needsLabel,
   closedSummary,
 }: {
   ticketWorkspace?: React.ReactNode;
   cashWorkspace?: React.ReactNode;
   virtualWorkspace?: React.ReactNode;
   billetageWorkspace?: React.ReactNode;
-  executionLinks?: React.ReactNode;
+  paymentOrdersWorkspace?: React.ReactNode;
+  paymentOrdersLabel?: string;
+  needsWorkspace?: React.ReactNode;
+  needsLabel?: string;
   closedSummary?: React.ReactNode;
 }) {
   const [mode, setMode] = useState<WritingMode>("none");
@@ -95,10 +101,31 @@ export function PaymentsWritingWorkspace({
               Billetage caisse
             </button>
           ) : null}
-          {executionLinks ? (
-            <div className="flex flex-wrap gap-2 border-l border-black/10 pl-2 dark:border-white/10">
-              {executionLinks}
-            </div>
+          {paymentOrdersWorkspace ? (
+            <button
+              type="button"
+              onClick={() => setMode("payment-orders")}
+              className={`rounded-md px-3 py-1.5 text-xs font-semibold transition ${
+                mode === "payment-orders"
+                  ? "border border-amber-500 bg-amber-50 text-amber-700 dark:border-amber-600 dark:bg-amber-950/40 dark:text-amber-300"
+                  : "border border-black/20 hover:bg-black/5 dark:border-white/20 dark:hover:bg-white/10"
+              }`}
+            >
+              {paymentOrdersLabel ?? "OP à exécuter"}
+            </button>
+          ) : null}
+          {needsWorkspace ? (
+            <button
+              type="button"
+              onClick={() => setMode("needs")}
+              className={`rounded-md px-3 py-1.5 text-xs font-semibold transition ${
+                mode === "needs"
+                  ? "border border-violet-500 bg-violet-50 text-violet-700 dark:border-violet-600 dark:bg-violet-950/40 dark:text-violet-300"
+                  : "border border-black/20 hover:bg-black/5 dark:border-white/20 dark:hover:bg-white/10"
+              }`}
+            >
+              {needsLabel ?? "EDB à exécuter"}
+            </button>
           ) : null}
         </div>
 
@@ -107,6 +134,8 @@ export function PaymentsWritingWorkspace({
           {mode === "cash" ? cashWorkspace : null}
           {mode === "virtual" ? virtualWorkspace : null}
           {mode === "billetage" ? billetageWorkspace : null}
+          {mode === "payment-orders" ? paymentOrdersWorkspace : null}
+          {mode === "needs" ? needsWorkspace : null}
           {mode === "none" ? (
             <p className="rounded-xl border border-dashed border-black/20 px-4 py-5 text-xs text-black/60 dark:border-white/20 dark:text-white/60">
               Aucun espace ouvert. Cliquez sur une action pour commencer.
