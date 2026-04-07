@@ -11,6 +11,7 @@ export default async function DepositPage() {
 
   const accounts = await buildAirlineDepositAccountSummaries(
     prisma as unknown as { airlineDepositMovement: { findMany: (args: unknown) => Promise<any[]> } },
+    80,
   );
 
   return (

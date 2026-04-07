@@ -34,10 +34,15 @@ export function AirlineDepositAccountManager({
   });
   const [status, setStatus] = useState("");
   const [statusType, setStatusType] = useState<"idle" | "success" | "error" | "loading">("idle");
+  const [detailAccountKey, setDetailAccountKey] = useState<string | null>(null);
 
   const selectedAccount = useMemo(
     () => accounts.find((account) => account.key === form.accountKey) ?? null,
     [accounts, form.accountKey],
+  );
+  const detailAccount = useMemo(
+    () => accounts.find((account) => account.key === detailAccountKey) ?? null,
+    [accounts, detailAccountKey],
   );
 
   function updateField<K extends keyof FormState>(key: K, value: FormState[K]) {
@@ -174,42 +179,121 @@ export function AirlineDepositAccountManager({
             </div>
 
             <div className="mb-3 grid gap-2 text-xs sm:grid-cols-2">
-              <div className="rounded-md bg-black/5 px-2 py-1 dark:bg-white/10">
+              <div className="rounded-md bg-emerald-50 px-2 py-1 dark:bg-emerald-950/20">
                 Total crédité: <span className="font-semibold">{formatUsd(account.totalCredits)}</span>
               </div>
-              <div className="rounded-md bg-black/5 px-2 py-1 dark:bg-white/10">
+              <div className="rounded-md bg-amber-50 px-2 py-1 dark:bg-amber-950/20">
                 Total débité: <span className="font-semibold">{formatUsd(account.totalDebits)}</span>
               </div>
             </div>
 
-            <div className="space-y-2 text-xs">
-              {account.recentMovements.length === 0 ? (
-                <p className="text-black/60 dark:text-white/60">Aucun mouvement pour l&apos;instant.</p>
-              ) : (
-                account.recentMovements.map((movement) => (
-                  <div key={movement.id} className="rounded-md border border-black/10 px-2 py-2 dark:border-white/10">
-                    <div className="flex items-center justify-between gap-2">
-                      <span className={`rounded-full px-2 py-0.5 font-semibold ${
-                        movement.movementType === "CREDIT"
-                          ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300"
-                          : "bg-amber-100 text-amber-700 dark:bg-amber-950/50 dark:text-amber-300"
-                      }`}>
-                        {movement.movementType === "CREDIT" ? "Crédit" : "Débit"}
-                      </span>
-                      <span className="font-semibold">{formatUsd(movement.amount)}</span>
-                    </div>
-                    <p className="mt-1 font-medium">{movement.reference}</p>
-                    <p className="text-black/70 dark:text-white/70">{movement.description}</p>
-                    <p className="text-black/50 dark:text-white/50">
-                      {new Date(movement.createdAt).toLocaleString("fr-FR")} • {movement.airlineCode ?? "Compte"}{movement.ticketNumber ? ` • Billet ${movement.ticketNumber}` : ""}{movement.createdByName ? ` • par ${movement.createdByName}` : ""}
-                    </p>
-                  </div>
-                ))
-              )}
+            <div className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-dashed border-black/10 px-3 py-2 dark:border-white/10">
+              <p className="text-xs text-black/60 dark:text-white/60">
+                Les mouvements détaillés sont masqués sur la carte pour garder la page lisible.
+              </p>
+              <button
+                type="button"
+                onClick={() => setDetailAccountKey(account.key)}
+                className="rounded-md border border-black/20 px-3 py-1.5 text-xs font-semibold hover:bg-black/5 dark:border-white/20 dark:hover:bg-white/10"
+              >
+                Détail
+              </button>
             </div>
           </article>
         ))}
       </div>
+
+      {detailAccount ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" role="dialog" aria-modal="true">
+          <button
+            type="button"
+            aria-label="Fermer les détails"
+            className="absolute inset-0 cursor-default"
+            onClick={() => setDetailAccountKey(null)}
+          />
+          <div className="relative z-10 max-h-[85vh] w-full max-w-5xl overflow-hidden rounded-2xl border border-black/10 bg-white shadow-2xl dark:border-white/10 dark:bg-zinc-900">
+            <div className="flex items-start justify-between gap-3 border-b border-black/10 px-4 py-3 dark:border-white/10">
+              <div>
+                <h3 className="text-base font-semibold">Détails — {detailAccount.label}</h3>
+                <p className="text-xs text-black/60 dark:text-white/60">
+                  {detailAccount.airlineNames.join(", ")} • Solde actuel {formatUsd(detailAccount.balance)}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setDetailAccountKey(null)}
+                className="rounded-md border border-black/20 px-3 py-1.5 text-xs font-semibold hover:bg-black/5 dark:border-white/20 dark:hover:bg-white/10"
+              >
+                Fermer
+              </button>
+            </div>
+
+            <div className="max-h-[calc(85vh-72px)] overflow-y-auto p-4">
+              <div className="grid gap-4 lg:grid-cols-2">
+                <section className="rounded-xl border border-emerald-200 bg-emerald-50/50 p-3 dark:border-emerald-800/40 dark:bg-emerald-950/20">
+                  <div className="mb-3 flex items-center justify-between gap-2">
+                    <h4 className="text-sm font-semibold text-emerald-800 dark:text-emerald-200">Crédits</h4>
+                    <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[11px] font-semibold text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300">
+                      {detailAccount.recentMovements.filter((movement) => movement.movementType === "CREDIT").length}
+                    </span>
+                  </div>
+                  <div className="space-y-2 text-xs">
+                    {detailAccount.recentMovements.filter((movement) => movement.movementType === "CREDIT").length === 0 ? (
+                      <p className="text-black/60 dark:text-white/60">Aucun crédit récent.</p>
+                    ) : (
+                      detailAccount.recentMovements
+                        .filter((movement) => movement.movementType === "CREDIT")
+                        .map((movement) => (
+                          <div key={movement.id} className="rounded-md border border-emerald-200 bg-white px-3 py-2 dark:border-emerald-800/40 dark:bg-zinc-950/40">
+                            <div className="flex items-center justify-between gap-2">
+                              <span className="rounded-full bg-emerald-100 px-2 py-0.5 font-semibold text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300">Crédit</span>
+                              <span className="font-semibold">{formatUsd(movement.amount)}</span>
+                            </div>
+                            <p className="mt-1 font-medium">{movement.reference}</p>
+                            <p className="text-black/70 dark:text-white/70">{movement.description}</p>
+                            <p className="text-black/50 dark:text-white/50">
+                              {new Date(movement.createdAt).toLocaleString("fr-FR")} • {movement.airlineCode ?? "Compte"}{movement.createdByName ? ` • par ${movement.createdByName}` : ""}
+                            </p>
+                          </div>
+                        ))
+                    )}
+                  </div>
+                </section>
+
+                <section className="rounded-xl border border-amber-200 bg-amber-50/50 p-3 dark:border-amber-800/40 dark:bg-amber-950/20">
+                  <div className="mb-3 flex items-center justify-between gap-2">
+                    <h4 className="text-sm font-semibold text-amber-800 dark:text-amber-200">Débits</h4>
+                    <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-semibold text-amber-700 dark:bg-amber-950/50 dark:text-amber-300">
+                      {detailAccount.recentMovements.filter((movement) => movement.movementType === "DEBIT").length}
+                    </span>
+                  </div>
+                  <div className="space-y-2 text-xs">
+                    {detailAccount.recentMovements.filter((movement) => movement.movementType === "DEBIT").length === 0 ? (
+                      <p className="text-black/60 dark:text-white/60">Aucun débit récent.</p>
+                    ) : (
+                      detailAccount.recentMovements
+                        .filter((movement) => movement.movementType === "DEBIT")
+                        .map((movement) => (
+                          <div key={movement.id} className="rounded-md border border-amber-200 bg-white px-3 py-2 dark:border-amber-800/40 dark:bg-zinc-950/40">
+                            <div className="flex items-center justify-between gap-2">
+                              <span className="rounded-full bg-amber-100 px-2 py-0.5 font-semibold text-amber-700 dark:bg-amber-950/50 dark:text-amber-300">Débit</span>
+                              <span className="font-semibold">{formatUsd(movement.amount)}</span>
+                            </div>
+                            <p className="mt-1 font-medium">{movement.reference}</p>
+                            <p className="text-black/70 dark:text-white/70">{movement.description}</p>
+                            <p className="text-black/50 dark:text-white/50">
+                              {new Date(movement.createdAt).toLocaleString("fr-FR")} • {movement.airlineCode ?? "Compte"}{movement.ticketNumber ? ` • Billet ${movement.ticketNumber}` : ""}{movement.createdByName ? ` • par ${movement.createdByName}` : ""}
+                            </p>
+                          </div>
+                        ))
+                    )}
+                  </div>
+                </section>
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </section>
   );
 }
