@@ -164,8 +164,7 @@ export function PaymentEntryForm({ tickets }: { tickets: TicketOption[] }) {
             <option value="ORANGE_MONEY">Orange Money</option>
             <option value="MPESA">M-Pesa</option>
             <option value="EQUITY">Equity</option>
-            <option value="ROWBANK">Rowbank</option>
-            <option value="ILLICOCASH">IllicoCash</option>
+            <option value="RAWBANK_ILLICOCASH">Rawbank & Illicocash</option>
           </select>
         </div>
 

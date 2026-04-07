@@ -181,15 +181,14 @@ function normalizePaymentAmountForTicket(payment: {
   return ticketCurrency === "USD" ? normalizeCashAmountUsd(payment) : normalizeCashAmountCdf(payment);
 }
 
-type VirtualChannel = "AIRTEL_MONEY" | "ORANGE_MONEY" | "MPESA" | "EQUITY" | "ROWBANK" | "ILLICOCASH";
+type VirtualChannel = "AIRTEL_MONEY" | "ORANGE_MONEY" | "MPESA" | "EQUITY" | "RAWBANK_ILLICOCASH";
 
 const virtualChannels: Array<{ key: VirtualChannel; label: string }> = [
   { key: "AIRTEL_MONEY", label: "Airtel Money" },
   { key: "ORANGE_MONEY", label: "Orange Money" },
   { key: "MPESA", label: "M-Pesa" },
   { key: "EQUITY", label: "Equity" },
-  { key: "ROWBANK", label: "Rowbank" },
-  { key: "ILLICOCASH", label: "IllicoCash" },
+  { key: "RAWBANK_ILLICOCASH", label: "Rawbank & Illicocash" },
 ];
 
 function detectVirtualChannel(methodRaw: string | null | undefined): VirtualChannel | null {
@@ -199,8 +198,14 @@ function detectVirtualChannel(methodRaw: string | null | undefined): VirtualChan
   if (method.includes("ORANGE")) return "ORANGE_MONEY";
   if (method.includes("M-PESA") || method.includes("MPESA") || method.includes("M PESA")) return "MPESA";
   if (method.includes("EQUITY")) return "EQUITY";
-  if (method.includes("RAWBANK") || method.includes("ROWBANK") || method.includes("ROW BANK")) return "ROWBANK";
-  if (method.includes("ILLICOCASH") || method.includes("ILLICO CASH") || method.includes("ILLICO")) return "ILLICOCASH";
+  if (
+    method.includes("RAWBANK")
+    || method.includes("ROWBANK")
+    || method.includes("ROW BANK")
+    || method.includes("ILLICOCASH")
+    || method.includes("ILLICO CASH")
+    || method.includes("ILLICO")
+  ) return "RAWBANK_ILLICOCASH";
   return null;
 }
 
@@ -219,8 +224,7 @@ function buildEmptyOpeningBuckets(): Record<BalanceBucket, BalanceSnapshot> {
     ORANGE_MONEY: { usd: 0, cdf: 0, initializedUsd: false, initializedCdf: false },
     MPESA: { usd: 0, cdf: 0, initializedUsd: false, initializedCdf: false },
     EQUITY: { usd: 0, cdf: 0, initializedUsd: false, initializedCdf: false },
-    ROWBANK: { usd: 0, cdf: 0, initializedUsd: false, initializedCdf: false },
-    ILLICOCASH: { usd: 0, cdf: 0, initializedUsd: false, initializedCdf: false },
+    RAWBANK_ILLICOCASH: { usd: 0, cdf: 0, initializedUsd: false, initializedCdf: false },
   };
 }
 
@@ -1089,7 +1093,7 @@ export default async function PaymentsPage({
             <section className="rounded-2xl border border-black/10 bg-white p-4 dark:border-white/10 dark:bg-zinc-900">
               <h2 className="text-sm font-semibold">Comptes virtuels</h2>
               <p className="mt-2 text-xs text-black/60 dark:text-white/60">
-                Conformément à la feuille VIRTUEL, suivi des canaux Airtel Money, Orange Money, M-Pesa, Equity, Rowbank et IllicoCash avec soldes par devise.
+                Conformément à la feuille VIRTUEL, suivi des canaux Airtel Money, Orange Money, M-Pesa, Equity, et Rawbank & Illicocash avec soldes par devise.
               </p>
             </section>
 

@@ -10,7 +10,7 @@ import { getTicketTotalAmount } from "@/lib/ticket-pricing";
 
 type ReportMode = "date" | "month" | "year";
 type ReportType = "payments" | "cash-journal" | "cash-summary";
-type VirtualChannel = "AIRTEL_MONEY" | "ORANGE_MONEY" | "MPESA" | "EQUITY" | "ROWBANK" | "ILLICOCASH";
+type VirtualChannel = "AIRTEL_MONEY" | "ORANGE_MONEY" | "MPESA" | "EQUITY" | "RAWBANK_ILLICOCASH";
 
 const paymentClient = (prisma as unknown as { payment: any }).payment;
 const paymentOrderClient = (prisma as unknown as { paymentOrder: any }).paymentOrder;
@@ -20,8 +20,7 @@ const virtualChannels: Array<{ key: VirtualChannel; label: string }> = [
   { key: "ORANGE_MONEY", label: "Orange Money" },
   { key: "MPESA", label: "M-Pesa" },
   { key: "EQUITY", label: "Equity" },
-  { key: "ROWBANK", label: "Rowbank" },
-  { key: "ILLICOCASH", label: "IllicoCash" },
+  { key: "RAWBANK_ILLICOCASH", label: "Rawbank & Illicocash" },
 ];
 
 function parseYear(value: string | null) {
@@ -147,8 +146,14 @@ function detectVirtualChannel(methodRaw: string | null | undefined): VirtualChan
   if (method.includes("ORANGE")) return "ORANGE_MONEY";
   if (method.includes("M-PESA") || method.includes("MPESA") || method.includes("M PESA")) return "MPESA";
   if (method.includes("EQUITY")) return "EQUITY";
-  if (method.includes("RAWBANK") || method.includes("ROWBANK") || method.includes("ROW BANK")) return "ROWBANK";
-  if (method.includes("ILLICOCASH") || method.includes("ILLICO CASH") || method.includes("ILLICO")) return "ILLICOCASH";
+  if (
+    method.includes("RAWBANK")
+    || method.includes("ROWBANK")
+    || method.includes("ROW BANK")
+    || method.includes("ILLICOCASH")
+    || method.includes("ILLICO CASH")
+    || method.includes("ILLICO")
+  ) return "RAWBANK_ILLICOCASH";
   return null;
 }
 
@@ -167,8 +172,7 @@ function buildEmptyOpeningBuckets(): Record<BalanceBucket, BalanceSnapshot> {
     ORANGE_MONEY: { usd: 0, cdf: 0, initializedUsd: false, initializedCdf: false },
     MPESA: { usd: 0, cdf: 0, initializedUsd: false, initializedCdf: false },
     EQUITY: { usd: 0, cdf: 0, initializedUsd: false, initializedCdf: false },
-    ROWBANK: { usd: 0, cdf: 0, initializedUsd: false, initializedCdf: false },
-    ILLICOCASH: { usd: 0, cdf: 0, initializedUsd: false, initializedCdf: false },
+    RAWBANK_ILLICOCASH: { usd: 0, cdf: 0, initializedUsd: false, initializedCdf: false },
   };
 }
 
