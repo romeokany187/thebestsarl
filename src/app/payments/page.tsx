@@ -299,6 +299,37 @@ function computeOpeningBuckets(
   return buckets;
 }
 
+function applyOpeningFallbackFromCurrentPeriod(
+  baseBuckets: Record<BalanceBucket, BalanceSnapshot>,
+  cashOperations: Array<{ amount: number; currency?: string | null; method?: string | null; category?: string | null; occurredAt?: Date | string | null }>,
+): Record<BalanceBucket, BalanceSnapshot> {
+  const buckets = Object.fromEntries(
+    Object.entries(baseBuckets).map(([key, value]) => [key, { ...value }]),
+  ) as Record<BalanceBucket, BalanceSnapshot>;
+
+  const openingOperations = cashOperations
+    .filter((operation) => operation.category === "OPENING_BALANCE")
+    .sort((a, b) => new Date(a.occurredAt ?? new Date(0)).getTime() - new Date(b.occurredAt ?? new Date(0)).getTime());
+
+  for (const operation of openingOperations) {
+    const bucket = bucketFromMethod(operation.method);
+    const snapshot = buckets[bucket];
+    const currency = normalizeMoneyCurrency(operation.currency);
+
+    if (currency === "USD" && !snapshot.initializedUsd) {
+      snapshot.usd = operation.amount;
+      snapshot.initializedUsd = true;
+    }
+
+    if (currency === "CDF" && !snapshot.initializedCdf) {
+      snapshot.cdf = operation.amount;
+      snapshot.initializedCdf = true;
+    }
+  }
+
+  return buckets;
+}
+
 function bucketUsdEquivalent(snapshot: Pick<BalanceSnapshot, "usd" | "cdf">, fxRateUsdToCdf = 2800) {
   return snapshot.usd + (snapshot.cdf / fxRateUsdToCdf);
 }
@@ -560,13 +591,16 @@ export default async function PaymentsPage({
   const partialCoverageRate = partialBilled > 0 ? (partialCollected / partialBilled) * 100 : 0;
 
   const openingBuckets = computeOpeningBuckets(ticketPaymentsBeforeStart, cashOperationsBeforeStart);
+  const displayOpeningBuckets = applyOpeningFallbackFromCurrentPeriod(openingBuckets, cashOperations);
+  const cashOperationsWithoutOpeningBalance = cashOperations.filter((operation) => operation.category !== "OPENING_BALANCE");
   const hasInitialOpeningRecorded = [...cashOperationsBeforeStart, ...cashOperations].some((operation) => operation.category === "OPENING_BALANCE");
-  const openingBalance = (Object.values(openingBuckets) as Array<BalanceSnapshot>).reduce(
+  const hasOpeningInsideSelectedRange = cashOperations.some((operation) => operation.category === "OPENING_BALANCE");
+  const openingBalance = (Object.values(displayOpeningBuckets) as Array<BalanceSnapshot>).reduce(
     (sum, snapshot) => sum + bucketUsdEquivalent(snapshot),
     0,
   );
-  const openingUsd = openingBuckets.CASH.usd;
-  const openingCdf = openingBuckets.CASH.cdf;
+  const openingUsd = displayOpeningBuckets.CASH.usd;
+  const openingCdf = displayOpeningBuckets.CASH.cdf;
 
   const ticketPaymentInflowsUsd = cashPayments.reduce(
     (
@@ -582,13 +616,13 @@ export default async function PaymentsPage({
     .filter((payment: { currency?: string | null; ticket?: { currency?: string | null } }) => normalizeMoneyCurrency(payment.currency ?? payment.ticket?.currency) === "CDF")
     .reduce((sum: number, payment: { amount: number }) => sum + payment.amount, 0);
 
-  const otherInflows = cashOperations
+  const otherInflows = cashOperationsWithoutOpeningBalance
     .filter((operation: { direction: string }) => operation.direction === "INFLOW")
     .reduce(
       (sum: number, operation: { amount: number; currency?: string | null; amountUsd?: number | null; fxRateToUsd?: number | null; fxRateUsdToCdf?: number | null }) => sum + normalizeCashAmountUsd(operation),
       0,
     );
-  const cashOutflows = cashOperations
+  const cashOutflows = cashOperationsWithoutOpeningBalance
     .filter((operation: { direction: string }) => operation.direction === "OUTFLOW")
     .reduce(
       (sum: number, operation: { amount: number; currency?: string | null; amountUsd?: number | null; fxRateToUsd?: number | null; fxRateUsdToCdf?: number | null }) => sum + normalizeCashAmountUsd(operation),
@@ -610,16 +644,16 @@ export default async function PaymentsPage({
 
   const accountingConsistency = Math.abs((openingBalance + grossInflows - cashOutflows) - closingBalance) <= 0.0001;
 
-  const cashInflowUsd = cashOperations
+  const cashInflowUsd = cashOperationsWithoutOpeningBalance
     .filter((operation: { direction: string; currency?: string | null }) => operation.direction === "INFLOW" && normalizeMoneyCurrency(operation.currency) === "USD")
     .reduce((sum: number, operation: { amount: number }) => sum + operation.amount, 0);
-  const cashOutflowUsd = cashOperations
+  const cashOutflowUsd = cashOperationsWithoutOpeningBalance
     .filter((operation: { direction: string; currency?: string | null }) => operation.direction === "OUTFLOW" && normalizeMoneyCurrency(operation.currency) === "USD")
     .reduce((sum: number, operation: { amount: number }) => sum + operation.amount, 0);
-  const cashInflowCdf = cashOperations
+  const cashInflowCdf = cashOperationsWithoutOpeningBalance
     .filter((operation: { direction: string; currency?: string | null }) => operation.direction === "INFLOW" && normalizeMoneyCurrency(operation.currency) === "CDF")
     .reduce((sum: number, operation: { amount: number }) => sum + operation.amount, 0);
-  const cashOutflowCdf = cashOperations
+  const cashOutflowCdf = cashOperationsWithoutOpeningBalance
     .filter((operation: { direction: string; currency?: string | null }) => operation.direction === "OUTFLOW" && normalizeMoneyCurrency(operation.currency) === "CDF")
     .reduce((sum: number, operation: { amount: number }) => sum + operation.amount, 0);
 
@@ -646,7 +680,7 @@ export default async function PaymentsPage({
         paymentPaidAt: new Date(payment.paidAt).toISOString(),
       };
     }),
-    ...cashOperations.map((operation) => {
+    ...cashOperationsWithoutOpeningBalance.map((operation) => {
       const currency = (operation.currency ?? "USD").toUpperCase();
       const isInflow = operation.direction === "INFLOW";
       return {
@@ -685,8 +719,8 @@ export default async function PaymentsPage({
     virtualChannels.map(({ key }) => [
       key,
       {
-        openingUsd: openingBuckets[key].usd,
-        openingCdf: openingBuckets[key].cdf,
+        openingUsd: displayOpeningBuckets[key].usd,
+        openingCdf: displayOpeningBuckets[key].cdf,
         inUsd: 0,
         outUsd: 0,
         inCdf: 0,
@@ -713,7 +747,7 @@ export default async function PaymentsPage({
     }
   }
 
-  for (const operation of cashOperations as Array<{ direction: string; amount: number; method?: string | null; currency?: string | null }>) {
+  for (const operation of cashOperationsWithoutOpeningBalance as Array<{ direction: string; amount: number; method?: string | null; currency?: string | null }>) {
     const channel = detectVirtualChannel(operation.method);
     if (!channel) continue;
     const currency = (operation.currency ?? "USD").toUpperCase();
@@ -1094,7 +1128,11 @@ export default async function PaymentsPage({
                     <tr className="border-t border-black/5 bg-black/2 dark:border-white/10 dark:bg-white/3">
                       <td className="px-4 py-3 font-semibold">{cashRange.startRaw}</td>
                       <td className="px-4 py-3 font-semibold">Report à nouveau / solde d&apos;ouverture</td>
-                      <td className="px-4 py-3 text-black/60 dark:text-white/60">Solde reporté automatiquement depuis la veille / période précédente</td>
+                      <td className="px-4 py-3 text-black/60 dark:text-white/60">
+                        {hasOpeningInsideSelectedRange
+                          ? "Ouverture de caisse utilisée comme report à nouveau initial"
+                          : "Solde reporté automatiquement depuis la veille / période précédente"}
+                      </td>
                       <td className="px-4 py-3">-</td>
                       <td className="px-4 py-3">-</td>
                       <td className="px-4 py-3 font-semibold">{openingUsd.toFixed(2)} USD</td>
