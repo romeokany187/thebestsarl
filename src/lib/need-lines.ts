@@ -67,69 +67,127 @@ export function serializeNeedQuote(quote: NeedDetailsQuote) {
   return JSON.stringify(quote);
 }
 
+function sanitizeQuoteJsonCandidate(value: string) {
+  let result = "";
+  let inString = false;
+  let escaped = false;
+
+  for (const char of value) {
+    if (escaped) {
+      result += char;
+      escaped = false;
+      continue;
+    }
+
+    if (char === "\\") {
+      result += char;
+      escaped = true;
+      continue;
+    }
+
+    if (char === '"') {
+      inString = !inString;
+      result += char;
+      continue;
+    }
+
+    if (inString && (char === "\n" || char === "\r")) {
+      result += "\\n";
+      continue;
+    }
+
+    result += char;
+  }
+
+  return result;
+}
+
+function parseQuotePayload(details: string) {
+  const candidates = [details.trim()];
+  const firstBrace = details.indexOf("{");
+  const lastBrace = details.lastIndexOf("}");
+
+  if (firstBrace >= 0 && lastBrace > firstBrace) {
+    candidates.push(details.slice(firstBrace, lastBrace + 1).trim());
+  }
+
+  for (const candidate of candidates) {
+    if (!candidate) continue;
+
+    try {
+      const parsed = JSON.parse(sanitizeQuoteJsonCandidate(candidate)) as {
+        format?: string;
+        urgencyLevel?: string;
+        beneficiaryTeam?: string;
+        beneficiaryPersonId?: string;
+        beneficiaryPersonName?: string;
+        items?: Array<{
+          designation?: string;
+          description?: string;
+          quantity?: number;
+          unitPrice?: number;
+          lineTotal?: number;
+        }>;
+        totalGeneral?: number;
+      };
+
+      if (parsed?.format === "QUOTE_V1" && Array.isArray(parsed.items)) {
+        return parsed;
+      }
+    } catch {
+      continue;
+    }
+  }
+
+  return null;
+}
+
 export function parseNeedQuote(details: string | null | undefined): NeedDetailsQuote | null {
   if (!details) return null;
 
-  try {
-    const payload = JSON.parse(details) as {
-      format?: string;
-      urgencyLevel?: string;
-      beneficiaryTeam?: string;
-      beneficiaryPersonId?: string;
-      beneficiaryPersonName?: string;
-      items?: Array<{
-        designation?: string;
-        description?: string;
-        quantity?: number;
-        unitPrice?: number;
-        lineTotal?: number;
-      }>;
-      totalGeneral?: number;
-    };
-
-    if (payload.format !== "QUOTE_V1" || !Array.isArray(payload.items)) {
-      return null;
-    }
-
-    const items: NeedLine[] = payload.items
-      .map((item) => {
-        const designation = (item.designation ?? "").trim();
-        const description = (item.description ?? "").trim();
-        const quantity = Number(item.quantity ?? 0);
-        const unitPrice = Number(item.unitPrice ?? 0);
-        const lineTotal = Number(item.lineTotal ?? quantity * unitPrice);
-
-        return {
-          designation,
-          description,
-          quantity,
-          unitPrice,
-          lineTotal: round2(lineTotal),
-        };
-      })
-      .filter((item) => item.designation.length > 0 && item.quantity > 0 && item.unitPrice >= 0);
-
-    return {
-      format: "QUOTE_V1",
-      items,
-      totalGeneral: round2(Number(payload.totalGeneral ?? items.reduce((sum, item) => sum + item.lineTotal, 0))),
-      urgencyLevel:
-        payload.urgencyLevel === "CRITIQUE"
-        || payload.urgencyLevel === "ELEVEE"
-        || payload.urgencyLevel === "NORMALE"
-        || payload.urgencyLevel === "FAIBLE"
-          ? payload.urgencyLevel
-          : undefined,
-      beneficiaryTeam:
-        payload.beneficiaryTeam === "KINSHASA"
-        || payload.beneficiaryTeam === "LUBUMBASHI"
-        || payload.beneficiaryTeam === "MBUJIMAYI"
-          ? payload.beneficiaryTeam
-          : undefined,
-      beneficiaryPersonId: typeof payload.beneficiaryPersonId === "string" ? payload.beneficiaryPersonId : undefined,
-      beneficiaryPersonName: typeof payload.beneficiaryPersonName === "string" ? payload.beneficiaryPersonName : undefined,
-    };
-  } catch {
+  const payload = parseQuotePayload(details);
+  if (!payload) {
     return null;
   }
+
+  const rawItems = Array.isArray(payload.items) ? payload.items : [];
+
+  const items: NeedLine[] = rawItems
+    .map((item) => {
+      const designation = (item.designation ?? "").trim();
+      const description = (item.description ?? "").trim();
+      const quantity = Number(item.quantity ?? 0);
+      const unitPrice = Number(item.unitPrice ?? 0);
+      const lineTotal = Number(item.lineTotal ?? quantity * unitPrice);
+
+      return {
+        designation,
+        description,
+        quantity,
+        unitPrice,
+        lineTotal: round2(lineTotal),
+      };
+    })
+    .filter((item) => item.designation.length > 0 && item.quantity > 0 && item.unitPrice >= 0);
+
+  return {
+    format: "QUOTE_V1",
+    items,
+    totalGeneral: round2(Number(payload.totalGeneral ?? items.reduce((sum, item) => sum + item.lineTotal, 0))),
+    urgencyLevel:
+      payload.urgencyLevel === "CRITIQUE"
+      || payload.urgencyLevel === "ELEVEE"
+      || payload.urgencyLevel === "NORMALE"
+      || payload.urgencyLevel === "FAIBLE"
+        ? payload.urgencyLevel
+        : undefined,
+    beneficiaryTeam:
+      payload.beneficiaryTeam === "KINSHASA"
+      || payload.beneficiaryTeam === "LUBUMBASHI"
+      || payload.beneficiaryTeam === "MBUJIMAYI"
+        ? payload.beneficiaryTeam
+        : undefined,
+    beneficiaryPersonId: typeof payload.beneficiaryPersonId === "string" ? payload.beneficiaryPersonId : undefined,
+    beneficiaryPersonName: typeof payload.beneficiaryPersonName === "string" ? payload.beneficiaryPersonName : undefined,
+  };
 }

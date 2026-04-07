@@ -1,6 +1,7 @@
 "use client";
 
 import { FormEvent, useMemo, useState } from "react";
+import { parseNeedQuote } from "@/lib/need-lines";
 
 type NeedStatus = "DRAFT" | "SUBMITTED" | "APPROVED" | "REJECTED";
 type MovementType = "IN" | "OUT";
@@ -79,41 +80,24 @@ function parseNeedMeta(details: string) {
     items: Array<{ designation: string; description: string; quantity: number; unitPrice: number }>;
   };
 
-  try {
-    const parsed = JSON.parse(details) as {
-      urgencyLevel?: string;
-      beneficiaryTeam?: string;
-      beneficiaryPersonId?: string;
-      beneficiaryPersonName?: string;
-      items?: Array<{ designation?: string; description?: string; quantity?: number; unitPrice?: number }>;
-    };
-    const urgencyLevel = parsed.urgencyLevel;
-    const beneficiaryTeam = parsed.beneficiaryTeam;
-    const meta: NeedMeta = {
-      urgencyLevel:
-        urgencyLevel === "CRITIQUE" || urgencyLevel === "ELEVEE" || urgencyLevel === "NORMALE" || urgencyLevel === "FAIBLE"
-          ? urgencyLevel
-          : null,
-      beneficiaryTeam:
-        beneficiaryTeam === "KINSHASA" || beneficiaryTeam === "LUBUMBASHI" || beneficiaryTeam === "MBUJIMAYI"
-          ? beneficiaryTeam
-          : null,
-      beneficiaryPersonId: typeof parsed.beneficiaryPersonId === "string" ? parsed.beneficiaryPersonId : null,
-      beneficiaryPersonName: typeof parsed.beneficiaryPersonName === "string" ? parsed.beneficiaryPersonName : null,
-      items: Array.isArray(parsed.items)
-        ? parsed.items.map((item) => ({
-          designation: String(item.designation ?? ""),
-          description: String(item.description ?? ""),
-          quantity: Number(item.quantity ?? 1),
-          unitPrice: Number(item.unitPrice ?? 0),
-        }))
-        : [],
-    };
-    return meta;
-  } catch {
+  const parsed = parseNeedQuote(details);
+  if (!parsed) {
     const meta: NeedMeta = { urgencyLevel: null, beneficiaryTeam: null, beneficiaryPersonId: null, beneficiaryPersonName: null, items: [] };
     return meta;
   }
+
+  return {
+    urgencyLevel: parsed.urgencyLevel ?? null,
+    beneficiaryTeam: parsed.beneficiaryTeam ?? null,
+    beneficiaryPersonId: parsed.beneficiaryPersonId ?? null,
+    beneficiaryPersonName: parsed.beneficiaryPersonName ?? null,
+    items: parsed.items.map((item) => ({
+      designation: item.designation,
+      description: item.description,
+      quantity: item.quantity,
+      unitPrice: item.unitPrice,
+    })),
+  };
 }
 
 function statusLabel(status: NeedStatus) {
