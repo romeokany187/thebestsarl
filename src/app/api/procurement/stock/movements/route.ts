@@ -77,18 +77,7 @@ export async function POST(request: NextRequest) {
       });
 
       if (!item) {
-        if (parsed.data.movementType === "OUT") {
-          throw new Error("Impossible de sortir un produit absent de la fiche stock.");
-        }
-
-        item = await tx.stockItem.create({
-          data: {
-            name: parsed.data.itemName,
-            category: parsed.data.category,
-            unit: parsed.data.unit,
-            currentQuantity: 0,
-          },
-        });
+        throw new Error("Article absent de la fiche stock. Ajoutez-le d'abord dans la liste des articles.");
       }
 
       const delta = parsed.data.movementType === "IN" ? parsed.data.quantity : -parsed.data.quantity;

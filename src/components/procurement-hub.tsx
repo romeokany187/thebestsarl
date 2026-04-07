@@ -392,9 +392,6 @@ export function ProcurementHub({
 
     const form = event.currentTarget;
     const formData = new FormData(form);
-    const reorderLevelRaw = String(formData.get("reorderLevel") ?? "").trim();
-    const referenceDocRaw = String(formData.get("referenceDoc") ?? "").trim();
-    const justificationRaw = String(formData.get("justification") ?? "").trim();
 
     setStockCatalogStatus("Ajout de l'article à la fiche stock...");
 
@@ -405,10 +402,6 @@ export function ProcurementHub({
         itemName: String(formData.get("itemName") ?? ""),
         category: String(formData.get("category") ?? ""),
         unit: String(formData.get("unit") ?? ""),
-        initialQuantity: Number(formData.get("initialQuantity") ?? 0),
-        reorderLevel: reorderLevelRaw ? Number(reorderLevelRaw) : undefined,
-        referenceDoc: referenceDocRaw || undefined,
-        justification: justificationRaw || undefined,
       }),
     });
 
@@ -809,24 +802,16 @@ export function ProcurementHub({
                 <div className="rounded-lg border border-black/10 p-3 dark:border-white/10">
                   <h3 className="text-sm font-semibold">Ajouter un article à la fiche</h3>
                   <p className="mt-1 text-[11px] text-black/60 dark:text-white/60">
-                    Permet d&apos;enregistrer un nouveau produit même s&apos;il ne vient d&apos;aucun état de besoin.
+                    Ajoutez d&apos;abord l&apos;article ici, puis utilisez ensuite la fiche stock dynamique pour les ajouts et retraits de quantité.
                   </p>
                   <form onSubmit={submitStockItem} className="mt-3 grid gap-2">
-                    <div className="grid gap-2 sm:grid-cols-2">
+                    <div className="grid gap-2 sm:grid-cols-3">
                       <input name="itemName" required placeholder="Produit / Article" className="rounded-md border px-2.5 py-2 text-sm" />
                       <input name="category" required placeholder="Catégorie" className="rounded-md border px-2.5 py-2 text-sm" />
-                    </div>
-                    <div className="grid gap-2 sm:grid-cols-3">
                       <input name="unit" required placeholder="Unité" className="rounded-md border px-2.5 py-2 text-sm" />
-                      <input name="initialQuantity" type="number" min="0" step="0.01" placeholder="Stock initial" className="rounded-md border px-2.5 py-2 text-sm" />
-                      <input name="reorderLevel" type="number" min="0" step="0.01" placeholder="Seuil d'alerte" className="rounded-md border px-2.5 py-2 text-sm" />
-                    </div>
-                    <div className="grid gap-2 sm:grid-cols-2">
-                      <input name="referenceDoc" placeholder="Référence (optionnel)" className="rounded-md border px-2.5 py-2 text-sm" />
-                      <input name="justification" placeholder="Motif (optionnel)" className="rounded-md border px-2.5 py-2 text-sm" />
                     </div>
                     <button className="rounded-md bg-black px-3 py-2 text-sm font-semibold text-white dark:bg-white dark:text-black">
-                      Ajouter à la fiche stock
+                      Ajouter l'article
                     </button>
                   </form>
                   {stockCatalogStatus ? <p className="mt-2 text-xs text-black/60 dark:text-white/60">{stockCatalogStatus}</p> : null}

@@ -64,51 +64,29 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Cet article existe déjà dans la fiche stock." }, { status: 409 });
     }
 
-    const initialQuantity = parsed.data.initialQuantity ?? 0;
-
-    const created = await prisma.$transaction(async (tx) => {
-      const item = await tx.stockItem.create({
-        data: {
-          name: parsed.data.itemName,
-          category: parsed.data.category,
-          unit: parsed.data.unit,
-          currentQuantity: initialQuantity,
-          reorderLevel: parsed.data.reorderLevel,
-        },
-      });
-
-      const movement = initialQuantity > 0
-        ? await tx.stockMovement.create({
-            data: {
-              stockItemId: item.id,
-              movementType: "IN",
-              quantity: initialQuantity,
-              justification: parsed.data.justification?.trim() || "Ajout initial à la fiche stock.",
-              referenceDoc: parsed.data.referenceDoc?.trim() || `STOCK-INIT-${Date.now()}`,
-              performedById: access.session.user.id,
-            },
-          })
-        : null;
-
-      return { item, movement };
+    const item = await prisma.stockItem.create({
+      data: {
+        name: parsed.data.itemName,
+        category: parsed.data.category,
+        unit: parsed.data.unit,
+        currentQuantity: 0,
+      },
     });
 
     await writeActivityLog({
       actorId: access.session.user.id,
       action: "STOCK_ITEM_CREATED",
       entityType: "STOCK_ITEM",
-      entityId: created.item.id,
-      summary: `Article ajouté à la fiche stock: ${created.item.name}${initialQuantity > 0 ? ` (${initialQuantity} ${created.item.unit})` : ""}.`,
+      entityId: item.id,
+      summary: `Article ajouté à la fiche stock: ${item.name}.`,
       payload: {
-        name: created.item.name,
-        category: created.item.category,
-        unit: created.item.unit,
-        initialQuantity,
-        reorderLevel: created.item.reorderLevel,
+        name: item.name,
+        category: item.category,
+        unit: item.unit,
       },
     });
 
-    return NextResponse.json({ data: created }, { status: 201 });
+    return NextResponse.json({ data: item }, { status: 201 });
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : "Erreur lors de l'ajout de l'article.";
     return NextResponse.json({ error: message }, { status: 400 });
