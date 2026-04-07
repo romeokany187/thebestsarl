@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { requireApiModuleAccess } from "@/lib/rbac";
 import { needRequestSchema, needRequestUpdateSchema } from "@/lib/validators";
 import { quoteFromItems, serializeNeedQuote } from "@/lib/need-lines";
+import { writeActivityLog } from "@/lib/activity-log";
 
 function normalizeMoneyCurrency(value: string | null | undefined): "USD" | "CDF" {
   const normalized = (value ?? "CDF").trim().toUpperCase();
@@ -132,6 +133,21 @@ export async function POST(request: NextRequest) {
     });
   }
 
+  await writeActivityLog({
+    actorId: access.session.user.id,
+    action: "NEED_REQUEST_CREATED",
+    entityType: "NEED_REQUEST",
+    entityId: need.id,
+    summary: `EDB ${need.code ?? need.id} émis: ${need.title} (${Number(need.estimatedAmount ?? 0).toFixed(2)} ${need.currency}).`,
+    payload: {
+      code: need.code,
+      title: need.title,
+      category: need.category,
+      estimatedAmount: need.estimatedAmount,
+      currency: need.currency,
+    } as Prisma.InputJsonValue,
+  });
+
   return NextResponse.json({ data: need }, { status: 201 });
 }
 
@@ -235,6 +251,21 @@ export async function PATCH(request: NextRequest) {
       estimatedAmount: quote.totalGeneral,
       currency: requestCurrency,
     },
+  });
+
+  await writeActivityLog({
+    actorId: access.session.user.id,
+    action: "NEED_REQUEST_UPDATED",
+    entityType: "NEED_REQUEST",
+    entityId: updated.id,
+    summary: `EDB ${updated.code ?? updated.id} modifié: ${updated.title}.`,
+    payload: {
+      code: updated.code,
+      title: updated.title,
+      category: updated.category,
+      estimatedAmount: updated.estimatedAmount,
+      currency: updated.currency,
+    } as Prisma.InputJsonValue,
   });
 
   return NextResponse.json({ data: updated });

@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { requireApiModuleAccess } from "@/lib/rbac";
 import { cashOperationCreateSchema } from "@/lib/validators";
 import { isMailConfigured, sendMailBatch } from "@/lib/mail";
+import { writeActivityLog } from "@/lib/activity-log";
 
 const cashOperationClient = (prisma as unknown as { cashOperation: any }).cashOperation;
 const DEFAULT_SINGLE_OUTFLOW_ALERT_LIMIT_USD = 1000;
@@ -410,6 +411,23 @@ export async function POST(request: NextRequest) {
     }
   }
 
+  await writeActivityLog({
+    actorId: access.session.user.id,
+    action: "CASH_OPERATION_RECORDED",
+    entityType: "CASH_OPERATION",
+    entityId: operation.id,
+    summary: `${operation.direction === "INFLOW" ? "Entrée" : "Sortie"} caisse enregistrée: ${operation.amount.toFixed(2)} ${operation.currency} (${operation.description}).`,
+    payload: {
+      direction: operation.direction,
+      category: operation.category,
+      amount: operation.amount,
+      currency: operation.currency,
+      method: operation.method,
+      reference: operation.reference,
+      description: operation.description,
+    },
+  });
+
   return NextResponse.json({ data: operation, thresholdAlert: thresholdAlertMessage }, { status: 201 });
 }
 
@@ -533,6 +551,23 @@ export async function PATCH(request: NextRequest) {
       },
     });
 
+    await writeActivityLog({
+      actorId: access.session.user.id,
+      action: "CASH_OPERATION_UPDATED",
+      entityType: "CASH_OPERATION",
+      entityId: updated.id,
+      summary: `Écriture de caisse modifiée: ${updated.amount.toFixed(2)} ${updated.currency} (${updated.description}).`,
+      payload: {
+        direction: updated.direction,
+        category: updated.category,
+        amount: updated.amount,
+        currency: updated.currency,
+        method: updated.method,
+        reference: updated.reference,
+        description: updated.description,
+      },
+    });
+
     return NextResponse.json({ data: updated }, { status: 200 });
   } catch {
     return NextResponse.json({ error: "Erreur serveur lors de la modification de l'écriture de caisse." }, { status: 500 });
@@ -553,7 +588,43 @@ export async function DELETE(request: NextRequest) {
   }
 
   try {
+    const existing = await cashOperationClient.findUnique({
+      where: { id: cashOperationId },
+      select: {
+        id: true,
+        direction: true,
+        category: true,
+        amount: true,
+        currency: true,
+        method: true,
+        reference: true,
+        description: true,
+      },
+    });
+
+    if (!existing) {
+      return NextResponse.json({ error: "Écriture de caisse introuvable." }, { status: 404 });
+    }
+
     await cashOperationClient.delete({ where: { id: cashOperationId } });
+
+    await writeActivityLog({
+      actorId: access.session.user.id,
+      action: "CASH_OPERATION_DELETED",
+      entityType: "CASH_OPERATION",
+      entityId: existing.id,
+      summary: `Écriture de caisse supprimée: ${existing.amount.toFixed(2)} ${existing.currency} (${existing.description}).`,
+      payload: {
+        direction: existing.direction,
+        category: existing.category,
+        amount: existing.amount,
+        currency: existing.currency,
+        method: existing.method,
+        reference: existing.reference,
+        description: existing.description,
+      },
+    });
+
     return NextResponse.json({ success: true }, { status: 200 });
   } catch {
     return NextResponse.json({ error: "Erreur serveur lors de la suppression de l'écriture de caisse." }, { status: 500 });

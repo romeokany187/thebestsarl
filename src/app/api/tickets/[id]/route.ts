@@ -7,6 +7,7 @@ import { computeCommissionAmount, pickCommissionRule } from "@/lib/commission";
 import { getAirlineDepositAccountByAirlineCode, recordAirlineDepositMovement } from "@/lib/airline-deposit";
 import { ensureAirlineCatalog } from "@/lib/airline-catalog";
 import { canManageTicketRecord } from "@/lib/assignment";
+import { writeActivityLog } from "@/lib/activity-log";
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -140,6 +141,20 @@ export async function PATCH(request: NextRequest, { params }: Params) {
           commissionAmount: fallbackCommissionAmount,
           commissionModeApplied: CommissionMode.IMMEDIATE,
         },
+      });
+
+      await writeActivityLog({
+        actorId: access.session.user.id,
+        action: "TICKET_UPDATED",
+        entityType: "TICKET_SALE",
+        entityId: updatedWithoutRule.id,
+        summary: `Billet ${updatedWithoutRule.ticketNumber} modifié avec commission estimée via historique.`,
+        payload: {
+          ticketNumber: updatedWithoutRule.ticketNumber,
+          airlineId: nextAirlineId,
+          amount: updatedWithoutRule.amount,
+          warning: "COMMISSION_ESTIMATED_FROM_HISTORY",
+        } as Prisma.InputJsonValue,
       });
 
       return NextResponse.json({
@@ -313,6 +328,20 @@ export async function PATCH(request: NextRequest, { params }: Params) {
       return saved;
     });
 
+    await writeActivityLog({
+      actorId: access.session.user.id,
+      action: "TICKET_UPDATED",
+      entityType: "TICKET_SALE",
+      entityId: updated.id,
+      summary: `Billet ${updated.ticketNumber} modifié sur ${targetAirline.name} (${updated.amount.toFixed(2)} USD).`,
+      payload: {
+        ticketNumber: updated.ticketNumber,
+        airlineName: targetAirline.name,
+        airlineCode: targetAirline.code,
+        amount: updated.amount,
+      } as Prisma.InputJsonValue,
+    });
+
     return NextResponse.json({ data: updated });
   } catch (error) {
     console.error("PATCH /api/tickets/[id] failed", error);
@@ -392,6 +421,19 @@ export async function DELETE(_request: NextRequest, { params }: Params) {
       }
 
       await tx.ticketSale.delete({ where: { id } });
+    });
+
+    await writeActivityLog({
+      actorId: access.session.user.id,
+      action: "TICKET_DELETED",
+      entityType: "TICKET_SALE",
+      entityId: existing.id,
+      summary: `Billet ${existing.ticketNumber} supprimé et dépôt restitué pour ${existing.airline.name}.`,
+      payload: {
+        ticketNumber: existing.ticketNumber,
+        airlineName: existing.airline.name,
+        amount: existing.amount,
+      } as Prisma.InputJsonValue,
     });
 
     return NextResponse.json({ success: true });

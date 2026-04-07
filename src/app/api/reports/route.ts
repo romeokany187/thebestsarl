@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { reportSchema } from "@/lib/validators";
 import { requireApiModuleAccess } from "@/lib/rbac";
+import { writeActivityLog } from "@/lib/activity-log";
 
 function jobTitleLabel(jobTitle: string) {
   const labels: Record<string, string> = {
@@ -119,6 +120,20 @@ export async function POST(request: NextRequest) {
       content: enrichedContent,
       status: parsed.data.status ?? "DRAFT",
       submittedAt: parsed.data.status === "SUBMITTED" ? new Date() : null,
+    },
+  });
+
+  await writeActivityLog({
+    actorId: access.session.user.id,
+    action: report.status === "SUBMITTED" ? "REPORT_SUBMITTED" : "REPORT_SAVED",
+    entityType: "WORKER_REPORT",
+    entityId: report.id,
+    summary: `Rapport ${report.status === "SUBMITTED" ? "soumis" : "enregistré"}: ${report.title}.`,
+    payload: {
+      title: report.title,
+      period: report.period,
+      status: report.status,
+      authorId: report.authorId,
     },
   });
 

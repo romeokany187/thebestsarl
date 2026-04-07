@@ -7,6 +7,7 @@ type ActivityLogInput = {
   action: string;
   entityType: string;
   entityId?: string | null;
+  summary?: string;
   payload?: Prisma.InputJsonValue;
 };
 
@@ -15,6 +16,8 @@ export async function writeActivityLog(input: ActivityLogInput) {
 
   try {
     const requestHeaders = await headers();
+    const forwardedFor = requestHeaders.get("x-forwarded-for") ?? requestHeaders.get("x-real-ip") ?? requestHeaders.get("cf-connecting-ip");
+    const ipAddress = forwardedFor?.split(",")[0]?.trim() || null;
 
     await prisma.auditLog.create({
       data: {
@@ -23,12 +26,13 @@ export async function writeActivityLog(input: ActivityLogInput) {
         entityType: input.entityType,
         entityId: input.entityId?.trim() || "GLOBAL",
         payload: {
+          summary: input.summary ?? null,
           request: {
+            ipAddress,
             referer: requestHeaders.get("referer"),
             pathHint: requestHeaders.get("next-url") ?? requestHeaders.get("x-matched-path") ?? requestHeaders.get("x-invoke-path"),
             host: requestHeaders.get("host"),
             userAgent: requestHeaders.get("user-agent"),
-            forwardedFor: requestHeaders.get("x-forwarded-for"),
           },
           details: input.payload ?? null,
         } as Prisma.InputJsonValue,

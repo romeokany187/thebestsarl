@@ -4,6 +4,7 @@ import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { requireApiModuleAccess } from "@/lib/rbac";
 import { isMailConfigured, sendMailBatch } from "@/lib/mail";
+import { writeActivityLog } from "@/lib/activity-log";
 
 const userUpdateSchema = z.object({
   jobTitle: z.nativeEnum(JobTitle).optional(),
@@ -178,6 +179,23 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
     }
   }
 
+  await writeActivityLog({
+    actorId: access.session.user.id,
+    action: "USER_ASSIGNMENT_UPDATED",
+    entityType: "USER",
+    entityId: updated.id,
+    summary: `Affectation mise à jour pour ${updated.name}.`,
+    payload: {
+      name: updated.name,
+      email: updated.email,
+      role: updated.role,
+      jobTitle: updated.jobTitle,
+      teamName: updated.team?.name ?? null,
+      changedBy: actor.name,
+      assignmentMessage,
+    },
+  });
+
   return NextResponse.json({ data: updated });
 }
 
@@ -262,6 +280,18 @@ export async function DELETE(_request: NextRequest, context: RouteContext) {
       await tx.ticketSale.updateMany({ where: { sellerId: id, sellerName: null }, data: { sellerName: existing.name } });
       await tx.ticketSale.updateMany({ where: { sellerId: id }, data: { sellerId: null } });
       await tx.user.delete({ where: { id } });
+    });
+
+    await writeActivityLog({
+      actorId: access.session.user.id,
+      action: "USER_DELETED",
+      entityType: "USER",
+      entityId: existing.id,
+      summary: `Compte utilisateur supprimé: ${existing.name}.`,
+      payload: {
+        name: existing.name,
+        role: existing.role,
+      },
     });
 
     return NextResponse.json({ success: true });

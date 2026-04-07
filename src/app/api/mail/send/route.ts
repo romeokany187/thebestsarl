@@ -3,6 +3,7 @@ import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { requireApiModuleAccess } from "@/lib/rbac";
 import { isMailConfigured, sendMailBatch } from "@/lib/mail";
+import { writeActivityLog } from "@/lib/activity-log";
 
 const sendMailSchema = z.object({
   mode: z.enum(["single", "broadcast"]),
@@ -95,6 +96,21 @@ export async function POST(request: NextRequest) {
         sentVia: "APP_MAIL",
       },
     })),
+  });
+
+  await writeActivityLog({
+    actorId: access.session.user.id,
+    action: "MAIL_SENT",
+    entityType: "MAIL",
+    entityId: recipients[0]?.id ?? "DIRECT_MESSAGE",
+    summary: `Message envoyé à ${recipients[0]?.name ?? recipients[0]?.email ?? "un utilisateur"}: ${subject}.`,
+    payload: {
+      subject,
+      recipientName: recipients[0]?.name,
+      recipientEmail: recipients[0]?.email,
+      delivered: delivery.sent.length,
+      failed: delivery.failed.length,
+    },
   });
 
   return NextResponse.json({

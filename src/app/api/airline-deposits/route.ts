@@ -7,6 +7,7 @@ import {
 } from "@/lib/airline-deposit";
 import { airlineDepositTopUpSchema } from "@/lib/validators";
 import { requireApiModuleAccess } from "@/lib/rbac";
+import { writeActivityLog } from "@/lib/activity-log";
 
 export async function GET() {
   const access = await requireApiModuleAccess("payments", ["ADMIN", "DIRECTEUR_GENERAL", "ACCOUNTANT", "EMPLOYEE"]);
@@ -47,6 +48,21 @@ export async function POST(request: NextRequest) {
       description: parsed.data.description,
       createdById: access.session.user.id,
     }));
+
+    await writeActivityLog({
+      actorId: access.session.user.id,
+      action: "AIRLINE_DEPOSIT_CREDITED",
+      entityType: "AIRLINE_DEPOSIT",
+      entityId: account.key,
+      summary: `${account.label} crédité de ${parsed.data.amount.toFixed(2)} USD (${parsed.data.reference}).`,
+      payload: {
+        accountKey: account.key,
+        accountLabel: account.label,
+        amount: parsed.data.amount,
+        reference: parsed.data.reference,
+        description: parsed.data.description,
+      },
+    });
 
     return NextResponse.json({ data: movement }, { status: 201 });
   } catch (error) {

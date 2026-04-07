@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireApiModuleAccess } from "@/lib/rbac";
 import { cashConversionSchema } from "@/lib/validators";
+import { writeActivityLog } from "@/lib/activity-log";
 
 function amountToUsd(amount: number, currency: "USD" | "CDF", fxRateUsdToCdf: number): number {
   if (currency === "USD") return amount;
@@ -166,6 +167,24 @@ export async function POST(request: NextRequest) {
       outflowId: outflow.id,
       inflowId: inflow.id,
     };
+  });
+
+  await writeActivityLog({
+    actorId: access.session.user.id,
+    action: "CASH_CONVERSION_RECORDED",
+    entityType: "CASH_OPERATION",
+    entityId: created.outflowId,
+    summary: `Conversion caisse ${created.sourceAmount.toFixed(2)} ${created.sourceCurrency} -> ${created.targetAmount.toFixed(2)} ${created.targetCurrency}.`,
+    payload: {
+      reference: created.reference,
+      sourceCurrency: created.sourceCurrency,
+      sourceAmount: created.sourceAmount,
+      targetCurrency: created.targetCurrency,
+      targetAmount: created.targetAmount,
+      fxRateUsdToCdf: created.fxRateUsdToCdf,
+      outflowId: created.outflowId,
+      inflowId: created.inflowId,
+    },
   });
 
   return NextResponse.json({ data: created }, { status: 201 });

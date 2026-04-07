@@ -6,6 +6,7 @@ import { paymentCreateSchema } from "@/lib/validators";
 import { isMailConfigured, sendMailBatch } from "@/lib/mail";
 import { invoiceNumberFromChronology } from "@/lib/invoice";
 import { getTicketTotalAmount } from "@/lib/ticket-pricing";
+import { writeActivityLog } from "@/lib/activity-log";
 
 const cashOperationClient = (prisma as unknown as { cashOperation: any }).cashOperation;
 
@@ -273,6 +274,24 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    await writeActivityLog({
+      actorId: access.session.user.id,
+      action: "PAYMENT_RECORDED",
+      entityType: "PAYMENT",
+      entityId: result.payment.id,
+      summary: `Paiement encaissé pour le billet ${result.ticket.ticketNumber}: ${result.payment.amount.toFixed(2)} ${result.payment.currency}.`,
+      payload: {
+        ticketId: result.ticket.id,
+        ticketNumber: result.ticket.ticketNumber,
+        customerName: result.ticket.customerName,
+        amount: result.payment.amount,
+        currency: result.payment.currency,
+        method: result.payment.method,
+        reference: result.payment.reference,
+        paymentStatus: result.ticket.paymentStatus,
+      } as Prisma.InputJsonValue,
+    });
+
     return NextResponse.json({ data: result }, { status: 201 });
   } catch (error) {
     if (error instanceof Error) {
@@ -423,6 +442,22 @@ export async function PATCH(request: NextRequest) {
       return payment;
     });
 
+    await writeActivityLog({
+      actorId: access.session.user.id,
+      action: "PAYMENT_UPDATED",
+      entityType: "PAYMENT",
+      entityId: updated.id,
+      summary: `Paiement du billet ${ticket.ticketNumber} modifié à ${updated.amount.toFixed(2)} ${updated.currency}.`,
+      payload: {
+        ticketId: ticket.id,
+        ticketNumber: ticket.ticketNumber,
+        amount: updated.amount,
+        currency: updated.currency,
+        method: updated.method,
+        reference: updated.reference,
+      } as Prisma.InputJsonValue,
+    });
+
     return NextResponse.json({ data: updated }, { status: 200 });
   } catch {
     return NextResponse.json({ error: "Erreur serveur lors de la modification du paiement." }, { status: 500 });
@@ -477,6 +512,21 @@ export async function DELETE(request: NextRequest) {
         where: { id: ticket.id },
         data: { paymentStatus: nextStatus },
       });
+    });
+
+    await writeActivityLog({
+      actorId: access.session.user.id,
+      action: "PAYMENT_DELETED",
+      entityType: "PAYMENT",
+      entityId: existingPayment.id,
+      summary: `Paiement supprimé du billet ${ticket.ticketNumber}: ${existingPayment.amount.toFixed(2)} ${existingPayment.currency ?? ticket.currency}.`,
+      payload: {
+        ticketId: ticket.id,
+        ticketNumber: ticket.ticketNumber,
+        amount: existingPayment.amount,
+        currency: existingPayment.currency ?? ticket.currency,
+        reference: existingPayment.reference,
+      } as Prisma.InputJsonValue,
     });
 
     return NextResponse.json({ success: true }, { status: 200 });

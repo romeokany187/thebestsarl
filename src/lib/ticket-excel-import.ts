@@ -844,6 +844,7 @@ export async function recordTicketWorkbookImportLog(input: {
       entityType: "TICKET_IMPORT",
       entityId: "GLOBAL",
       payload: {
+        summary: `${input.dryRun ? "Prévisualisation" : "Import"} Excel billets ${input.fileName ?? "sans nom"} sur ${input.rangeStart} -> ${input.rangeEnd}.`,
         actorName: input.actorName,
         fileName: input.fileName,
         periodMode: input.periodMode,
@@ -855,7 +856,7 @@ export async function recordTicketWorkbookImportLog(input: {
         dryRun: input.dryRun,
         replaceExistingPeriod: input.replaceExistingPeriod,
         mode: input.dryRun ? "PREVIEW" : "IMPORT",
-        summary: input.result.summary,
+        resultSummary: input.result.summary,
         range: input.result.range,
       } as Prisma.InputJsonValue,
     },

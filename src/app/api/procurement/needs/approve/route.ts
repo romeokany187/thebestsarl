@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireApiRoles } from "@/lib/rbac";
 import { needApprovalSchema } from "@/lib/validators";
+import { writeActivityLog } from "@/lib/activity-log";
 
 export async function POST(request: NextRequest) {
   const access = await requireApiRoles(["DIRECTEUR_GENERAL", "ADMIN"]);
@@ -146,6 +147,20 @@ export async function POST(request: NextRequest) {
       data: unique,
     });
   }
+
+  await writeActivityLog({
+    actorId: access.session.user.id,
+    action: nextStatus === "APPROVED" ? "NEED_REQUEST_APPROVED" : "NEED_REQUEST_REJECTED",
+    entityType: "NEED_REQUEST",
+    entityId: updated.id,
+    summary: `EDB ${updated.code ?? updated.id} ${nextStatus === "APPROVED" ? "approuvé" : "rejeté"}: ${updated.title}.`,
+    payload: {
+      code: updated.code,
+      title: updated.title,
+      status: updated.status,
+      reviewComment: parsed.data.reviewComment ?? null,
+    },
+  });
 
   return NextResponse.json({ data: updated });
 }

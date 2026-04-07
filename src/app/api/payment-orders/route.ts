@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireApiRoles } from "@/lib/rbac";
 import { paymentOrderCreationSchema } from "@/lib/validators";
+import { writeActivityLog } from "@/lib/activity-log";
 
 const paymentOrderClient = (prisma as unknown as { paymentOrder: any }).paymentOrder;
 
@@ -118,6 +119,22 @@ export async function POST(request: NextRequest) {
       })),
     });
   }
+
+  await writeActivityLog({
+    actorId: access.session.user.id,
+    action: "PAYMENT_ORDER_CREATED",
+    entityType: "PAYMENT_ORDER",
+    entityId: paymentOrder.id,
+    summary: `OP ${paymentOrder.code} émis pour ${paymentOrder.beneficiary} (${paymentOrder.amount.toFixed(2)} ${paymentOrder.currency}).`,
+    payload: {
+      code: paymentOrder.code,
+      beneficiary: paymentOrder.beneficiary,
+      purpose: paymentOrder.purpose,
+      assignment: paymentOrder.assignment,
+      amount: paymentOrder.amount,
+      currency: paymentOrder.currency,
+    },
+  });
 
   return NextResponse.json({
     data: paymentOrder,

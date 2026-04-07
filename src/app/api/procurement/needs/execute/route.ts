@@ -3,6 +3,7 @@ import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { requireApiRoles } from "@/lib/rbac";
 import { needExecutionSchema } from "@/lib/validators";
+import { writeActivityLog } from "@/lib/activity-log";
 
 const cashOperationClient = (prisma as unknown as { cashOperation: any }).cashOperation;
 
@@ -217,6 +218,23 @@ export async function POST(request: NextRequest) {
       })),
     });
   }
+
+  await writeActivityLog({
+    actorId: access.session.user.id,
+    action: "NEED_REQUEST_EXECUTED",
+    entityType: "NEED_REQUEST",
+    entityId: updated.id,
+    summary: `EDB ${need.code ?? updated.id} exécuté en caisse: ${need.title} (${executionAmount.toFixed(2)} ${need.currency}).`,
+    payload: {
+      code: need.code,
+      title: need.title,
+      amount: executionAmount,
+      currency: need.currency,
+      referenceDoc: parsed.data.referenceDoc,
+      cashOperationId: updated.cashOperationId,
+      executionComment: parsed.data.executionComment ?? null,
+    } as Prisma.InputJsonValue,
+  });
 
   return NextResponse.json({ data: updated });
 }

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { approvalSchema } from "@/lib/validators";
 import { requireApiModuleAccess } from "@/lib/rbac";
+import { writeActivityLog } from "@/lib/activity-log";
 
 export async function POST(request: NextRequest) {
   const access = await requireApiModuleAccess("reports", ["ADMIN", "MANAGER"]);
@@ -23,6 +24,19 @@ export async function POST(request: NextRequest) {
       reviewerComment: parsed.data.reviewerComment,
       status: parsed.data.status,
       approvedAt: parsed.data.status === "APPROVED" ? new Date() : null,
+    },
+  });
+
+  await writeActivityLog({
+    actorId: access.session.user.id,
+    action: parsed.data.status === "APPROVED" ? "REPORT_APPROVED" : "REPORT_REJECTED",
+    entityType: "WORKER_REPORT",
+    entityId: report.id,
+    summary: `Rapport ${parsed.data.status === "APPROVED" ? "approuvé" : "rejeté"}: ${report.title}.`,
+    payload: {
+      title: report.title,
+      status: report.status,
+      reviewerComment: parsed.data.reviewerComment ?? null,
     },
   });
 

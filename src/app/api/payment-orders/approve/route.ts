@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireApiRoles } from "@/lib/rbac";
 import { paymentOrderApprovalSchema } from "@/lib/validators";
+import { writeActivityLog } from "@/lib/activity-log";
 
 const paymentOrderClient = (prisma as unknown as { paymentOrder: any }).paymentOrder;
 
@@ -126,6 +127,22 @@ export async function PATCH(request: NextRequest) {
       data: unique,
     });
   }
+
+  await writeActivityLog({
+    actorId: access.session.user.id,
+    action: nextStatus === "APPROVED" ? "PAYMENT_ORDER_APPROVED" : "PAYMENT_ORDER_REJECTED",
+    entityType: "PAYMENT_ORDER",
+    entityId: updated.id,
+    summary: `OP ${paymentOrder.code ?? updated.id} ${nextStatus === "APPROVED" ? "approuvé" : "rejeté"} pour ${paymentOrder.beneficiary}.`,
+    payload: {
+      code: paymentOrder.code,
+      beneficiary: paymentOrder.beneficiary,
+      amount: paymentOrder.amount,
+      currency: paymentOrder.currency,
+      decision: nextStatus,
+      reviewComment: parsed.data.reviewComment ?? null,
+    },
+  });
 
   return NextResponse.json(updated, { status: 200 });
 }

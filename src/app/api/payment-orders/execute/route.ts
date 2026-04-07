@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireApiRoles } from "@/lib/rbac";
 import { paymentOrderExecutionSchema } from "@/lib/validators";
+import { writeActivityLog } from "@/lib/activity-log";
 
 const paymentOrderClient = (prisma as unknown as { paymentOrder: any }).paymentOrder;
 const cashOperationClient = (prisma as unknown as { cashOperation: any }).cashOperation;

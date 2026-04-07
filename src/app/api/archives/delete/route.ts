@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireApiModuleAccess } from "@/lib/rbac";
 import { canWriteArchiveFolder } from "@/lib/archive";
+import { writeActivityLog } from "@/lib/activity-log";
 
 export async function POST(request: NextRequest) {
   const access = await requireApiModuleAccess("archives", ["ADMIN", "MANAGER", "EMPLOYEE", "ACCOUNTANT"]);
@@ -20,7 +21,7 @@ export async function POST(request: NextRequest) {
 
   const existing = await prisma.archiveDocument.findUnique({
     where: { id },
-    select: { id: true, origin: true, folder: true },
+    select: { id: true, origin: true, folder: true, title: true, reference: true },
   });
 
   if (!existing || existing.origin === "SYSTEM") {
@@ -34,6 +35,18 @@ export async function POST(request: NextRequest) {
   }
 
   await prisma.archiveDocument.delete({ where: { id } });
+  await writeActivityLog({
+    actorId: access.session.user.id,
+    action: "ARCHIVE_DOCUMENT_DELETED",
+    entityType: "ARCHIVE_DOCUMENT",
+    entityId: existing.id,
+    summary: `Document archivé supprimé: ${existing.title}.`,
+    payload: {
+      reference: existing.reference,
+      folder: existing.folder,
+      title: existing.title,
+    },
+  });
   const redirectUrl = new URL(`/archives?folder=${folder}&deleted=1`, request.url);
   return NextResponse.redirect(redirectUrl, { status: 303 });
 }

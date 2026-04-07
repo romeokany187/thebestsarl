@@ -62,6 +62,7 @@ function summarizePayload(payload: unknown) {
   if (!payload || typeof payload !== "object") return "Aucun détail complémentaire.";
 
   const record = payload as {
+    summary?: string | null;
     details?: {
       module?: string | null;
       role?: string | null;
@@ -70,8 +71,12 @@ function summarizePayload(payload: unknown) {
       fileName?: string | null;
       summary?: { period?: string | null };
     } | null;
-    request?: { referer?: string | null; pathHint?: string | null; host?: string | null } | null;
+    request?: { referer?: string | null; pathHint?: string | null; host?: string | null; ipAddress?: string | null } | null;
   };
+
+  if (typeof record.summary === "string" && record.summary.trim()) {
+    return record.summary.trim();
+  }
 
   const chips: string[] = [];
 
@@ -102,6 +107,11 @@ export default async function AdminLogsPage({
 
   const filters: Array<Record<string, unknown>> = [
     { createdAt: { gte: rangeStart } },
+    {
+      action: {
+        notIn: ["PAGE_VISIT", "PAGE_FORBIDDEN", "PAGE_ROLE_ACCESS", "API_ACCESS", "API_FORBIDDEN"],
+      },
+    },
   ];
 
   if (selectedAction !== "ALL") {
@@ -131,7 +141,7 @@ export default async function AdminLogsPage({
 
   const where = { AND: filters };
 
-  const [logs, actions, totalInRange, forbiddenCount, pageVisitCount, apiAccessCount, activeUsers] = await Promise.all([
+  const [logs, actions, totalInRange, forbiddenCount, decisionCount, importCount, activeUsers] = await Promise.all([
     prisma.auditLog.findMany({
       where,
       include: {
@@ -154,9 +164,9 @@ export default async function AdminLogsPage({
       take: 100,
     }),
     prisma.auditLog.count({ where: { createdAt: { gte: rangeStart } } }),
-    prisma.auditLog.count({ where: { createdAt: { gte: rangeStart }, action: { contains: "FORBIDDEN" } } }),
-    prisma.auditLog.count({ where: { createdAt: { gte: rangeStart }, action: "PAGE_VISIT" } }),
-    prisma.auditLog.count({ where: { createdAt: { gte: rangeStart }, action: { in: ["API_ACCESS", "API_FORBIDDEN"] } } }),
+    prisma.auditLog.count({ where: { createdAt: { gte: rangeStart }, action: { contains: "REJECT" } } }),
+    prisma.auditLog.count({ where: { createdAt: { gte: rangeStart }, action: { in: ["PAYMENT_ORDER_APPROVED", "PAYMENT_ORDER_REJECTED", "NEED_REQUEST_APPROVED", "NEED_REQUEST_REJECTED", "REPORT_APPROVED", "REPORT_REJECTED"] } } }),
+    prisma.auditLog.count({ where: { createdAt: { gte: rangeStart }, action: { in: ["TICKET_IMPORT_EXECUTED", "ARCHIVE_DOCUMENT_UPLOADED"] } } }),
     prisma.auditLog.findMany({
       where: { createdAt: { gte: rangeStart } },
       distinct: ["actorId"],
@@ -242,13 +252,13 @@ export default async function AdminLogsPage({
           <p className="mt-2 text-2xl font-semibold">{activeUsers}</p>
         </div>
         <div className="rounded-2xl border border-black/10 bg-white p-4 shadow-sm dark:border-white/10 dark:bg-zinc-900">
-          <p className="text-xs uppercase tracking-wide text-black/55 dark:text-white/55">Visites pages</p>
-          <p className="mt-2 text-2xl font-semibold">{pageVisitCount}</p>
+          <p className="text-xs uppercase tracking-wide text-black/55 dark:text-white/55">Décisions validées</p>
+          <p className="mt-2 text-2xl font-semibold">{decisionCount}</p>
         </div>
         <div className="rounded-2xl border border-black/10 bg-white p-4 shadow-sm dark:border-white/10 dark:bg-zinc-900">
-          <p className="text-xs uppercase tracking-wide text-black/55 dark:text-white/55">Alertes accès refusés</p>
+          <p className="text-xs uppercase tracking-wide text-black/55 dark:text-white/55">Rejets & imports</p>
           <p className="mt-2 text-2xl font-semibold">{forbiddenCount}</p>
-          <p className="mt-1 text-xs text-black/55 dark:text-white/55">API protégées: {apiAccessCount}</p>
+          <p className="mt-1 text-xs text-black/55 dark:text-white/55">Imports / archivages: {importCount}</p>
         </div>
       </div>
 
@@ -292,6 +302,11 @@ export default async function AdminLogsPage({
                       </p>
                       <p className="mt-1 not-italic text-black/65 dark:text-white/65">
                         {summarizePayload(log.payload)}
+                      </p>
+                      <p className="mt-1 not-italic text-black/50 dark:text-white/50">
+                        IP: {typeof (log.payload as { request?: { ipAddress?: string | null } } | null)?.request?.ipAddress === "string"
+                          ? (log.payload as { request?: { ipAddress?: string | null } }).request?.ipAddress
+                          : "Non disponible"}
                       </p>
                     </div>
                   </div>

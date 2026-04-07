@@ -3,6 +3,7 @@ import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { requireApiModuleAccess } from "@/lib/rbac";
 import { isMailConfigured, sendMailBatch } from "@/lib/mail";
+import { writeActivityLog } from "@/lib/activity-log";
 
 const newsCreateSchema = z.object({
   title: z.string().min(3).max(180),
@@ -141,6 +142,20 @@ export async function POST(request: NextRequest) {
       });
     }
   }
+
+  await writeActivityLog({
+    actorId: access.session.user.id,
+    action: "NEWS_PUBLISHED",
+    entityType: "NEWS_POST",
+    entityId: created.id,
+    summary: `Nouvelle publiée: ${created.title}.`,
+    payload: {
+      title: created.title,
+      authorName: created.author.name,
+      recipients: recipients.length,
+      delivered: mailResult.delivered,
+    },
+  });
 
   return NextResponse.json({ data: created, mail: mailResult }, { status: 201 });
 }

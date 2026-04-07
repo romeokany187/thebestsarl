@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireApiModuleAccess } from "@/lib/rbac";
 import { canWriteArchiveFolder, createArchiveDocumentWithGlobalReference, parseArchiveFolder } from "@/lib/archive";
+import { writeActivityLog } from "@/lib/activity-log";
 
 const allowedMimeTypes = new Set([
   "application/pdf",
@@ -58,7 +59,7 @@ export async function POST(request: NextRequest) {
 
     const bytes = Buffer.from(await file.arrayBuffer());
 
-    await createArchiveDocumentWithGlobalReference(prisma, {
+    const created = await createArchiveDocumentWithGlobalReference(prisma, {
       folder,
       title,
       originalFileName: file.name,
@@ -67,6 +68,21 @@ export async function POST(request: NextRequest) {
       fileData: bytes,
       origin: "MANUAL",
       createdById: access.session.user.id,
+    });
+
+    await writeActivityLog({
+      actorId: access.session.user.id,
+      action: "ARCHIVE_DOCUMENT_UPLOADED",
+      entityType: "ARCHIVE_DOCUMENT",
+      entityId: created.id,
+      summary: `Document archivé: ${title} dans ${folder}.`,
+      payload: {
+        reference: created.reference,
+        folder,
+        title,
+        originalFileName: file.name,
+        fileSize: file.size,
+      },
     });
 
     const redirectUrl = new URL(`/archives?folder=${folder}&uploaded=1`, request.url);

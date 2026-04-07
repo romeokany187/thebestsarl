@@ -10,6 +10,7 @@ import { ensureAirlineCatalog } from "@/lib/airline-catalog";
 import { Prisma } from "@prisma/client";
 import { invoiceNumberFromChronology } from "@/lib/invoice";
 import { canSellTickets } from "@/lib/assignment";
+import { writeActivityLog } from "@/lib/activity-log";
 
 function clamp(value: number, min: number, max: number) {
   return Math.max(min, Math.min(max, value));
@@ -225,6 +226,23 @@ export async function POST(request: NextRequest) {
       soldAt: ticket.soldAt,
       sellerTeamName: access.session.user.teamName ?? null,
       sequence,
+    });
+
+    await writeActivityLog({
+      actorId: access.session.user.id,
+      action: "TICKET_CREATED",
+      entityType: "TICKET_SALE",
+      entityId: ticket.id,
+      summary: `Billet ${ticket.ticketNumber} encodé pour ${parsed.data.customerName} sur ${airline.name} (${parsed.data.amount.toFixed(2)} USD).`,
+      payload: {
+        ticketNumber: ticket.ticketNumber,
+        customerName: parsed.data.customerName,
+        airlineName: airline.name,
+        airlineCode: airline.code,
+        amount: parsed.data.amount,
+        currency: "USD",
+        invoiceNumber,
+      } as Prisma.InputJsonValue,
     });
 
     return NextResponse.json({
