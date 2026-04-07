@@ -255,6 +255,16 @@ export const needExecutionSchema = z.object({
   executionComment: z.string().max(500).optional(),
 });
 
+export const stockItemCreateSchema = z.object({
+  itemName: z.string().trim().min(2).max(120),
+  category: z.string().trim().min(2).max(80),
+  unit: z.string().trim().min(1).max(20),
+  initialQuantity: z.number().nonnegative().optional(),
+  reorderLevel: z.number().nonnegative().optional(),
+  referenceDoc: z.string().trim().max(180).optional(),
+  justification: z.string().trim().max(500).optional(),
+});
+
 export const stockMovementSchema = z.object({
   itemName: z.string().min(2).max(120),
   category: z.string().min(2).max(80),

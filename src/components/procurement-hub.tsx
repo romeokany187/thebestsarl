@@ -31,6 +31,7 @@ type StockItem = {
   category: string;
   unit: string;
   currentQuantity: number;
+  reorderLevel?: number | null;
   updatedAt: string;
 };
 
@@ -159,6 +160,7 @@ export function ProcurementHub({
   const [stockItems, setStockItems] = useState(initialStock);
   const [movements, setMovements] = useState(initialMovements);
   const [needStatus, setNeedStatus] = useState("");
+  const [stockCatalogStatus, setStockCatalogStatus] = useState("");
   const [stockStatus, setStockStatus] = useState("");
   const [approvalStatus, setApprovalStatus] = useState("");
   const [editingNeedId, setEditingNeedId] = useState<string | null>(null);
@@ -380,6 +382,43 @@ export function ProcurementHub({
     }
 
     setApprovalStatus("Décision enregistrée.");
+    form.reset();
+    await refreshData();
+  }
+
+  async function submitStockItem(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!canManageStock) return;
+
+    const form = event.currentTarget;
+    const formData = new FormData(form);
+    const reorderLevelRaw = String(formData.get("reorderLevel") ?? "").trim();
+    const referenceDocRaw = String(formData.get("referenceDoc") ?? "").trim();
+    const justificationRaw = String(formData.get("justification") ?? "").trim();
+
+    setStockCatalogStatus("Ajout de l'article à la fiche stock...");
+
+    const response = await fetch("/api/procurement/stock/items", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        itemName: String(formData.get("itemName") ?? ""),
+        category: String(formData.get("category") ?? ""),
+        unit: String(formData.get("unit") ?? ""),
+        initialQuantity: Number(formData.get("initialQuantity") ?? 0),
+        reorderLevel: reorderLevelRaw ? Number(reorderLevelRaw) : undefined,
+        referenceDoc: referenceDocRaw || undefined,
+        justification: justificationRaw || undefined,
+      }),
+    });
+
+    const payload = await response.json().catch(() => null);
+    if (!response.ok) {
+      setStockCatalogStatus(payload?.error?.formErrors?.[0] ?? payload?.error ?? "Erreur lors de l'ajout de l'article.");
+      return;
+    }
+
+    setStockCatalogStatus("Article ajouté à la fiche stock avec succès.");
     form.reset();
     await refreshData();
   }
@@ -766,38 +805,68 @@ export function ProcurementHub({
             </p>
 
             {canManageStock ? (
-              <form onSubmit={submitStockMovement} className="mt-3 grid gap-2">
-                <div className="grid gap-2 sm:grid-cols-2">
-                  <input name="itemName" required placeholder="Produit / Matériel" className="rounded-md border px-2.5 py-2 text-sm" />
-                  <input name="category" required placeholder="Catégorie" className="rounded-md border px-2.5 py-2 text-sm" />
+              <div className="mt-3 space-y-3">
+                <div className="rounded-lg border border-black/10 p-3 dark:border-white/10">
+                  <h3 className="text-sm font-semibold">Ajouter un article à la fiche</h3>
+                  <p className="mt-1 text-[11px] text-black/60 dark:text-white/60">
+                    Permet d&apos;enregistrer un nouveau produit même s&apos;il ne vient d&apos;aucun état de besoin.
+                  </p>
+                  <form onSubmit={submitStockItem} className="mt-3 grid gap-2">
+                    <div className="grid gap-2 sm:grid-cols-2">
+                      <input name="itemName" required placeholder="Produit / Article" className="rounded-md border px-2.5 py-2 text-sm" />
+                      <input name="category" required placeholder="Catégorie" className="rounded-md border px-2.5 py-2 text-sm" />
+                    </div>
+                    <div className="grid gap-2 sm:grid-cols-3">
+                      <input name="unit" required placeholder="Unité" className="rounded-md border px-2.5 py-2 text-sm" />
+                      <input name="initialQuantity" type="number" min="0" step="0.01" placeholder="Stock initial" className="rounded-md border px-2.5 py-2 text-sm" />
+                      <input name="reorderLevel" type="number" min="0" step="0.01" placeholder="Seuil d'alerte" className="rounded-md border px-2.5 py-2 text-sm" />
+                    </div>
+                    <div className="grid gap-2 sm:grid-cols-2">
+                      <input name="referenceDoc" placeholder="Référence (optionnel)" className="rounded-md border px-2.5 py-2 text-sm" />
+                      <input name="justification" placeholder="Motif (optionnel)" className="rounded-md border px-2.5 py-2 text-sm" />
+                    </div>
+                    <button className="rounded-md bg-black px-3 py-2 text-sm font-semibold text-white dark:bg-white dark:text-black">
+                      Ajouter à la fiche stock
+                    </button>
+                  </form>
+                  {stockCatalogStatus ? <p className="mt-2 text-xs text-black/60 dark:text-white/60">{stockCatalogStatus}</p> : null}
                 </div>
-                <div className="grid gap-2 sm:grid-cols-3">
-                  <input name="quantity" type="number" min="0.01" step="0.01" required placeholder="Quantité" className="rounded-md border px-2.5 py-2 text-sm" />
-                  <input name="unit" required placeholder="Unité" className="rounded-md border px-2.5 py-2 text-sm" />
-                  <select name="movementType" defaultValue="IN" className="rounded-md border px-2.5 py-2 text-sm">
-                    <option value="IN">Entrée</option>
-                    <option value="OUT">Sortie</option>
-                  </select>
+
+                <div className="rounded-lg border border-black/10 p-3 dark:border-white/10">
+                  <h3 className="text-sm font-semibold">Enregistrer un mouvement</h3>
+                  <form onSubmit={submitStockMovement} className="mt-3 grid gap-2">
+                    <div className="grid gap-2 sm:grid-cols-2">
+                      <input name="itemName" required placeholder="Produit / Matériel" className="rounded-md border px-2.5 py-2 text-sm" />
+                      <input name="category" required placeholder="Catégorie" className="rounded-md border px-2.5 py-2 text-sm" />
+                    </div>
+                    <div className="grid gap-2 sm:grid-cols-3">
+                      <input name="quantity" type="number" min="0.01" step="0.01" required placeholder="Quantité" className="rounded-md border px-2.5 py-2 text-sm" />
+                      <input name="unit" required placeholder="Unité" className="rounded-md border px-2.5 py-2 text-sm" />
+                      <select name="movementType" defaultValue="IN" className="rounded-md border px-2.5 py-2 text-sm">
+                        <option value="IN">Entrée</option>
+                        <option value="OUT">Sortie</option>
+                      </select>
+                    </div>
+                    <div className="grid gap-2 sm:grid-cols-2">
+                      <input name="referenceDoc" required placeholder="Référence justificatif" className="rounded-md border px-2.5 py-2 text-sm" />
+                      <select name="needRequestId" className="rounded-md border px-2.5 py-2 text-sm">
+                        <option value="">Sans EDB liée</option>
+                        {approvedNeeds.map((need) => (
+                          <option key={need.id} value={need.id}>{need.title}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <textarea name="justification" required rows={2} placeholder="Motif / justification" className="rounded-md border px-2.5 py-2 text-sm" />
+                    <button className="rounded-md bg-black px-3 py-2 text-sm font-semibold text-white dark:bg-white dark:text-black">Enregistrer mouvement</button>
+                  </form>
+                  {stockStatus ? <p className="mt-2 text-xs text-black/60 dark:text-white/60">{stockStatus}</p> : null}
                 </div>
-                <div className="grid gap-2 sm:grid-cols-2">
-                  <input name="referenceDoc" required placeholder="Référence justificatif" className="rounded-md border px-2.5 py-2 text-sm" />
-                  <select name="needRequestId" className="rounded-md border px-2.5 py-2 text-sm">
-                    <option value="">Sans EDB liée</option>
-                    {approvedNeeds.map((need) => (
-                      <option key={need.id} value={need.id}>{need.title}</option>
-                    ))}
-                  </select>
-                </div>
-                <textarea name="justification" required rows={2} placeholder="Motif / justification" className="rounded-md border px-2.5 py-2 text-sm" />
-                <button className="rounded-md bg-black px-3 py-2 text-sm font-semibold text-white dark:bg-white dark:text-black">Enregistrer mouvement</button>
-              </form>
+              </div>
             ) : (
               <p className="mt-3 rounded-md border border-dashed border-black/20 px-3 py-2 text-xs text-black/70 dark:border-white/20 dark:text-white/70">
                 Gestion de stock réservée à l&apos;Approvisionnement.
               </p>
             )}
-
-            {stockStatus ? <p className="mt-2 text-xs text-black/60 dark:text-white/60">{stockStatus}</p> : null}
           </section>
         )}
 
