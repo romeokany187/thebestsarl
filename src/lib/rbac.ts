@@ -2,6 +2,7 @@ import { getServerSession } from "next-auth";
 import { NextResponse } from "next/server";
 import { redirect } from "next/navigation";
 import { authOptions } from "@/auth";
+import { writeActivityLog } from "@/lib/activity-log";
 
 export type AppRole = "ADMIN" | "DIRECTEUR_GENERAL" | "MANAGER" | "EMPLOYEE" | "ACCOUNTANT";
 export type AppModule =
@@ -142,7 +143,33 @@ function isRoleAllowed(role: AppRole, allowedRoles: AppRole[]) {
   return false;
 }
 
-export async function requireApiRoles(allowedRoles: AppRole[]) {
+function buildAccessPayload(params: {
+  role?: AppRole | null;
+  allowedRoles: AppRole[];
+  jobTitle?: string | null;
+  teamName?: string | null;
+  module?: AppModule;
+  extra?: Record<string, unknown>;
+}) {
+  return {
+    allowedRoles: params.allowedRoles,
+    role: params.role ?? null,
+    jobTitle: params.jobTitle ?? null,
+    teamName: params.teamName ?? null,
+    module: params.module ?? null,
+    ...params.extra,
+  };
+}
+
+export async function requireApiRoles(
+  allowedRoles: AppRole[],
+  options?: {
+    action?: string;
+    entityType?: string;
+    entityId?: string;
+    payload?: Record<string, unknown>;
+  },
+) {
   const session = await getServerSession(authOptions);
 
   if (!session?.user?.id) {
@@ -156,12 +183,40 @@ export async function requireApiRoles(allowedRoles: AppRole[]) {
   const role = extractRole(session.user.role, session.user.jobTitle);
 
   if (!role || !isRoleAllowed(role, allowedRoles)) {
+    await writeActivityLog({
+      actorId: session.user.id,
+      action: "API_FORBIDDEN",
+      entityType: options?.entityType ?? "API",
+      entityId: options?.entityId ?? "PROTECTED_ROUTE",
+      payload: buildAccessPayload({
+        role,
+        allowedRoles,
+        jobTitle: session.user.jobTitle,
+        teamName: session.user.teamName,
+        extra: options?.payload,
+      }),
+    });
+
     return {
       error: NextResponse.json({ error: "Forbidden" }, { status: 403 }),
       session,
       role,
     };
   }
+
+  await writeActivityLog({
+    actorId: session.user.id,
+    action: options?.action ?? "API_ACCESS",
+    entityType: options?.entityType ?? "API",
+    entityId: options?.entityId ?? "PROTECTED_ROUTE",
+    payload: buildAccessPayload({
+      role,
+      allowedRoles,
+      jobTitle: session.user.jobTitle,
+      teamName: session.user.teamName,
+      extra: options?.payload,
+    }),
+  });
 
   return {
     error: null,
@@ -170,7 +225,16 @@ export async function requireApiRoles(allowedRoles: AppRole[]) {
   };
 }
 
-export async function requirePageRoles(allowedRoles: AppRole[]) {
+export async function requirePageRoles(
+  allowedRoles: AppRole[],
+  options?: {
+    action?: string;
+    entityType?: string;
+    entityId?: string;
+    payload?: Record<string, unknown>;
+    skipLogging?: boolean;
+  },
+) {
   const session = await getServerSession(authOptions);
 
   if (!session?.user?.id) {
@@ -180,7 +244,36 @@ export async function requirePageRoles(allowedRoles: AppRole[]) {
   const role = extractRole(session.user.role, session.user.jobTitle);
 
   if (!role || !isRoleAllowed(role, allowedRoles)) {
+    await writeActivityLog({
+      actorId: session.user.id,
+      action: "PAGE_ROLE_FORBIDDEN",
+      entityType: options?.entityType ?? "PAGE",
+      entityId: options?.entityId ?? "PROTECTED_PAGE",
+      payload: buildAccessPayload({
+        role,
+        allowedRoles,
+        jobTitle: session.user.jobTitle,
+        teamName: session.user.teamName,
+        extra: options?.payload,
+      }),
+    });
     redirect("/");
+  }
+
+  if (!options?.skipLogging) {
+    await writeActivityLog({
+      actorId: session.user.id,
+      action: options?.action ?? "PAGE_ROLE_ACCESS",
+      entityType: options?.entityType ?? "PAGE",
+      entityId: options?.entityId ?? "PROTECTED_PAGE",
+      payload: buildAccessPayload({
+        role,
+        allowedRoles,
+        jobTitle: session.user.jobTitle,
+        teamName: session.user.teamName,
+        extra: options?.payload,
+      }),
+    });
   }
 
   return {
@@ -190,7 +283,11 @@ export async function requirePageRoles(allowedRoles: AppRole[]) {
 }
 
 export async function requirePageModuleAccess(module: AppModule, allowedRoles: AppRole[] = ALL_ROLES) {
-  const access = await requirePageRoles(allowedRoles);
+  const access = await requirePageRoles(allowedRoles, {
+    skipLogging: true,
+    entityType: "PAGE",
+    entityId: module,
+  });
 
   if (!hasModuleAccess({
     role: access.role,
@@ -198,8 +295,35 @@ export async function requirePageModuleAccess(module: AppModule, allowedRoles: A
     teamName: access.session.user.teamName,
     module,
   })) {
+    await writeActivityLog({
+      actorId: access.session.user.id,
+      action: "PAGE_FORBIDDEN",
+      entityType: "PAGE",
+      entityId: module,
+      payload: buildAccessPayload({
+        role: access.role,
+        allowedRoles,
+        jobTitle: access.session.user.jobTitle,
+        teamName: access.session.user.teamName,
+        module,
+      }),
+    });
     redirect("/");
   }
+
+  await writeActivityLog({
+    actorId: access.session.user.id,
+    action: "PAGE_VISIT",
+    entityType: "PAGE",
+    entityId: module,
+    payload: buildAccessPayload({
+      role: access.role,
+      allowedRoles,
+      jobTitle: access.session.user.jobTitle,
+      teamName: access.session.user.teamName,
+      module,
+    }),
+  });
 
   return access;
 }

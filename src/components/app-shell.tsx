@@ -105,6 +105,12 @@ const links = [
     module: "audit" as AppModule,
     roles: ["ADMIN", "DIRECTEUR_GENERAL", "MANAGER", "EMPLOYEE", "ACCOUNTANT"] as AppRole[],
   },
+  {
+    href: "/admin/logs",
+    label: "Logs activités",
+    module: "admin" as AppModule,
+    roles: ["ADMIN", "DIRECTEUR_GENERAL"] as AppRole[],
+  },
   { href: "/admin", label: "Admin", module: "admin" as AppModule, roles: ["ADMIN", "DIRECTEUR_GENERAL"] as AppRole[] },
 ];
 
