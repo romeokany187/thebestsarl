@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { isCashierJobTitle } from "@/lib/assignment";
 
 export type WorkflowPaymentOrder = {
   id: string;
@@ -113,7 +114,7 @@ export function canAccessApprovalPage(role: string) {
 }
 
 export function canAccessExecutionPage(jobTitle: string, role?: string) {
-  return jobTitle === "CAISSIER" || jobTitle === "COMPTABLE" || role === "ADMIN" || role === "ACCOUNTANT";
+  return isCashierJobTitle(jobTitle) || jobTitle === "COMPTABLE" || role === "ADMIN" || role === "ACCOUNTANT";
 }
 
 export function canAccessHistoryPage(role: string, jobTitle: string) {

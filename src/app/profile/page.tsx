@@ -5,7 +5,7 @@ import { PaymentOrderCashExecutionActions } from "@/components/payment-order-cas
 import { ProcurementInboxActions } from "@/components/procurement-inbox-actions";
 import { ProcurementCashExecutionActions } from "@/components/procurement-cash-execution-actions";
 import { authOptions } from "@/auth";
-import { assignmentCapabilities, jobTitleLabel } from "@/lib/assignment";
+import { assignmentCapabilities, isCashierJobTitle, jobTitleLabel } from "@/lib/assignment";
 import { prisma } from "@/lib/prisma";
 import { requirePageModuleAccess } from "@/lib/rbac";
 import { getServerSession } from "next-auth";
@@ -19,9 +19,9 @@ export default async function ProfilePage() {
   const currentJobTitle = roleSession.user.jobTitle ?? "AGENT_TERRAIN";
   const capabilities = assignmentCapabilities(currentJobTitle);
   const canValidateNeedsFromInbox = role === "DIRECTEUR_GENERAL" || role === "ADMIN";
-  const canExecuteNeedFromInbox = role === "ADMIN" || role === "ACCOUNTANT" || currentJobTitle === "CAISSIER" || currentJobTitle === "COMPTABLE";
+  const canExecuteNeedFromInbox = role === "ADMIN" || role === "ACCOUNTANT" || isCashierJobTitle(currentJobTitle) || currentJobTitle === "COMPTABLE";
   const canApprovePaymentOrderFromInbox = role === "ADMIN";
-  const canExecutePaymentOrderFromInbox = role === "ADMIN" || role === "ACCOUNTANT" || currentJobTitle === "CAISSIER" || currentJobTitle === "COMPTABLE";
+  const canExecutePaymentOrderFromInbox = role === "ADMIN" || role === "ACCOUNTANT" || isCashierJobTitle(currentJobTitle) || currentJobTitle === "COMPTABLE";
 
   const user = session?.user?.email
     ? await prisma.user.findUnique({

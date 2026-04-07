@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { isCashierJobTitle } from "@/lib/assignment";
 import { prisma } from "@/lib/prisma";
 import { requireApiRoles } from "@/lib/rbac";
 import { paymentOrderExecutionSchema } from "@/lib/validators";
@@ -33,9 +34,9 @@ export async function PATCH(request: NextRequest) {
     return NextResponse.json({ error: "Utilisateur introuvable." }, { status: 404 });
   }
 
-  if (access.role !== "ADMIN" && access.role !== "ACCOUNTANT" && me.jobTitle !== "CAISSIER" && me.jobTitle !== "COMPTABLE") {
+  if (access.role !== "ADMIN" && access.role !== "ACCOUNTANT" && !isCashierJobTitle(me.jobTitle) && me.jobTitle !== "COMPTABLE") {
     return NextResponse.json(
-      { error: "Exécution d'ordre de paiement réservée à l'administrateur, au comptable ou au caissier autorisé." },
+      { error: "Exécution d'ordre de paiement réservée à l'administrateur, au comptable ou aux profils caisse autorisés." },
       { status: 403 },
     );
   }

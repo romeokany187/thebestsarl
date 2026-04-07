@@ -7,6 +7,8 @@ type JobTitle =
   | "COMPTABLE"
   | "AUDITEUR"
   | "CAISSIER"
+  | "CAISSE_2_SIEGE"
+  | "CAISSE_AGENCE"
   | "RELATION_PUBLIQUE"
   | "APPROVISIONNEMENT"
   | "AGENT_TERRAIN"
@@ -36,7 +38,9 @@ const jobOptions: Array<{ value: JobTitle; label: string }> = [
   { value: "COMMERCIAL", label: "Commercial" },
   { value: "COMPTABLE", label: "Comptable" },
   { value: "AUDITEUR", label: "Auditeur" },
-  { value: "CAISSIER", label: "Caissier" },
+  { value: "CAISSIER", label: "Caisse 1 Siège" },
+  { value: "CAISSE_2_SIEGE", label: "Caisse 2 Siège" },
+  { value: "CAISSE_AGENCE", label: "Caisse agence" },
   { value: "RELATION_PUBLIQUE", label: "Relation publique" },
   { value: "APPROVISIONNEMENT", label: "Chargé des approvisionnements" },
   { value: "AGENT_TERRAIN", label: "Non affecté" },

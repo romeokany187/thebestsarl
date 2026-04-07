@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { isCashierJobTitle } from "@/lib/assignment";
 import { prisma } from "@/lib/prisma";
 import { requireApiModuleAccess } from "@/lib/rbac";
 import { cashConversionSchema } from "@/lib/validators";
@@ -18,8 +19,8 @@ export async function POST(request: NextRequest) {
   const access = await requireApiModuleAccess("payments", ["ADMIN", "DIRECTEUR_GENERAL", "MANAGER", "ACCOUNTANT", "EMPLOYEE"]);
   if (access.error) return access.error;
 
-  if (access.role !== "ADMIN" && access.role !== "ACCOUNTANT" && access.session.user.jobTitle !== "CAISSIER" && access.session.user.jobTitle !== "COMPTABLE") {
-    return NextResponse.json({ error: "Seuls l'administrateur, le comptable et le caissier sont autorisés à enregistrer des conversions de caisse." }, { status: 403 });
+  if (access.role !== "ADMIN" && access.role !== "ACCOUNTANT" && !isCashierJobTitle(access.session.user.jobTitle) && access.session.user.jobTitle !== "COMPTABLE") {
+    return NextResponse.json({ error: "Seuls l'administrateur, le comptable et les profils caisse autorisés peuvent enregistrer des conversions de caisse." }, { status: 403 });
   }
 
   const body = await request.json();

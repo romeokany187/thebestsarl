@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { isCashierJobTitle } from "@/lib/assignment";
 import { prisma } from "@/lib/prisma";
 import { requireApiModuleAccess } from "@/lib/rbac";
 import { cashOperationCreateSchema } from "@/lib/validators";
@@ -34,7 +35,7 @@ function amountToCdf(amount: number, currency: string, fxRateUsdToCdf: number): 
 }
 
 function canWriteCashOperations(role: string, jobTitle: string | null | undefined) {
-  return role === "ADMIN" || role === "ACCOUNTANT" || jobTitle === "CAISSIER" || jobTitle === "COMPTABLE";
+  return role === "ADMIN" || role === "ACCOUNTANT" || isCashierJobTitle(jobTitle) || jobTitle === "COMPTABLE";
 }
 
 function canManageCashOperations(role: string, jobTitle: string | null | undefined) {
@@ -46,7 +47,7 @@ export async function POST(request: NextRequest) {
   if (access.error) return access.error;
 
   if (!canWriteCashOperations(access.role, access.session.user.jobTitle)) {
-    return NextResponse.json({ error: "Seuls l'administrateur, le comptable et le caissier sont autorisés à enregistrer les opérations de caisse." }, { status: 403 });
+    return NextResponse.json({ error: "Seuls l'administrateur, le comptable et les profils caisse autorisés peuvent enregistrer les opérations de caisse." }, { status: 403 });
   }
 
   const body = await request.json();

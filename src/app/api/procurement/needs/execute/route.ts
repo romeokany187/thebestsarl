@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { Prisma } from "@prisma/client";
+import { isCashierJobTitle } from "@/lib/assignment";
 import { prisma } from "@/lib/prisma";
 import { requireApiRoles } from "@/lib/rbac";
 import { needExecutionSchema } from "@/lib/validators";
@@ -33,8 +34,8 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Utilisateur introuvable." }, { status: 404 });
   }
 
-  if (access.role !== "ADMIN" && access.role !== "ACCOUNTANT" && me.jobTitle !== "CAISSIER" && me.jobTitle !== "COMPTABLE") {
-    return NextResponse.json({ error: "Exécution réservée à l'administrateur, au comptable ou au caissier autorisé." }, { status: 403 });
+  if (access.role !== "ADMIN" && access.role !== "ACCOUNTANT" && !isCashierJobTitle(me.jobTitle) && me.jobTitle !== "COMPTABLE") {
+    return NextResponse.json({ error: "Exécution réservée à l'administrateur, au comptable ou aux profils caisse autorisés." }, { status: 403 });
   }
 
   const body = await request.json();

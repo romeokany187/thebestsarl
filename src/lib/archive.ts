@@ -1,4 +1,5 @@
 import { ArchiveFolder, ArchiveOrigin, PrismaClient } from "@prisma/client";
+import { isCashierJobTitle } from "@/lib/assignment";
 
 type ArchiveAppRole = "ADMIN" | "DIRECTEUR_GENERAL" | "MANAGER" | "EMPLOYEE" | "ACCOUNTANT";
 type ArchiveAccessScope = "ALL" | "DIRECTION" | "FINANCE";
@@ -63,7 +64,7 @@ export function canReadArchiveFolder(role: ArchiveAppRole, jobTitle: string | nu
     return role === "ADMIN" || (jobTitle ?? "") === "DIRECTION_GENERALE";
   }
 
-  return role === "ACCOUNTANT" || (jobTitle ?? "") === "CAISSIER" || (jobTitle ?? "") === "COMPTABLE";
+  return role === "ACCOUNTANT" || isCashierJobTitle(jobTitle) || (jobTitle ?? "") === "COMPTABLE";
 }
 
 export function canWriteArchiveFolder(role: ArchiveAppRole, jobTitle: string | null | undefined, folder: ArchiveFolder) {

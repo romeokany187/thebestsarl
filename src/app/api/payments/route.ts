@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { PaymentStatus, Prisma } from "@prisma/client";
+import { isCashierJobTitle } from "@/lib/assignment";
 import { prisma } from "@/lib/prisma";
 import { requireApiModuleAccess } from "@/lib/rbac";
 import { paymentCreateSchema } from "@/lib/validators";
@@ -48,7 +49,7 @@ function amountToTicketCurrency(
 }
 
 function canWritePayments(role: string, jobTitle: string | null | undefined) {
-  return role === "ADMIN" || role === "ACCOUNTANT" || jobTitle === "CAISSIER" || jobTitle === "COMPTABLE";
+  return role === "ADMIN" || role === "ACCOUNTANT" || isCashierJobTitle(jobTitle) || jobTitle === "COMPTABLE";
 }
 
 function canManagePayments(role: string, jobTitle: string | null | undefined) {
@@ -60,7 +61,7 @@ export async function POST(request: NextRequest) {
   if (access.error) return access.error;
 
   if (!canWritePayments(access.role, access.session.user.jobTitle)) {
-    return NextResponse.json({ error: "Seuls l'administrateur, le comptable et le caissier sont autorisés à enregistrer des paiements." }, { status: 403 });
+    return NextResponse.json({ error: "Seuls l'administrateur, le comptable et les profils caisse autorisés peuvent enregistrer des paiements." }, { status: 403 });
   }
 
   try {

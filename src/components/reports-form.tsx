@@ -7,6 +7,8 @@ type JobTitle =
   | "COMPTABLE"
   | "AUDITEUR"
   | "CAISSIER"
+  | "CAISSE_2_SIEGE"
+  | "CAISSE_AGENCE"
   | "RELATION_PUBLIQUE"
   | "APPROVISIONNEMENT"
   | "AGENT_TERRAIN"
@@ -54,7 +56,25 @@ const rubricByJobTitle: Record<JobTitle, JobTemplate> = {
     ],
   },
   CAISSIER: {
-    intro: "Rapport du caissier axe sur les flux quotidiens et la maitrise des ecarts.",
+    intro: "Rapport de la caisse 1 siège axe sur les flux quotidiens et la maitrise des ecarts.",
+    sections: [
+      { title: "Etat de caisse", prompt: "Encaissements, decaissements, solde journalier et mouvements clés." },
+      { title: "Operations de caisse", prompt: "Recus emis, paiements recus, remises et validations effectuees." },
+      { title: "Incidents de caisse", prompt: "Ecarts constates, retards de reglement, anomalies operationnelles." },
+      { title: "Mesures de securisation", prompt: "Actions prises pour fiabiliser la caisse et prevenir les ecarts." },
+    ],
+  },
+  CAISSE_2_SIEGE: {
+    intro: "Rapport de la caisse 2 siège axe sur les flux quotidiens et la maitrise des ecarts.",
+    sections: [
+      { title: "Etat de caisse", prompt: "Encaissements, decaissements, solde journalier et mouvements clés." },
+      { title: "Operations de caisse", prompt: "Recus emis, paiements recus, remises et validations effectuees." },
+      { title: "Incidents de caisse", prompt: "Ecarts constates, retards de reglement, anomalies operationnelles." },
+      { title: "Mesures de securisation", prompt: "Actions prises pour fiabiliser la caisse et prevenir les ecarts." },
+    ],
+  },
+  CAISSE_AGENCE: {
+    intro: "Rapport de la caisse agence axe sur les flux quotidiens et la maitrise des ecarts.",
     sections: [
       { title: "Etat de caisse", prompt: "Encaissements, decaissements, solde journalier et mouvements clés." },
       { title: "Operations de caisse", prompt: "Recus emis, paiements recus, remises et validations effectuees." },
@@ -113,7 +133,9 @@ const titleByJobTitle: Record<JobTitle, string> = {
   COMMERCIAL: "Rapport de vente commerciale",
   COMPTABLE: "Rapport financier comptable",
   AUDITEUR: "Rapport d'audit de conformite",
-  CAISSIER: "Rapport de caisse",
+  CAISSIER: "Rapport de caisse - Caisse 1 Siège",
+  CAISSE_2_SIEGE: "Rapport de caisse - Caisse 2 Siège",
+  CAISSE_AGENCE: "Rapport de caisse - Caisse agence",
   RELATION_PUBLIQUE: "Rapport de relation publique",
   APPROVISIONNEMENT: "Rapport d'approvisionnement",
   AGENT_TERRAIN: "Rapport d'activite terrain",

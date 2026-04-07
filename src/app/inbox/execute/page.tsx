@@ -20,7 +20,7 @@ export default async function InboxExecutePage() {
   return (
     <AppShell
       role={role}
-      accessNote="Route dédiée aux OP / EDB à exécuter pour l’admin, le comptable et le caissier autorisés."
+      accessNote="Route dédiée aux OP / EDB à exécuter pour l’admin, le comptable et les profils caisse autorisés."
     >
       <section className="mb-6 space-y-3">
         <div className="flex flex-wrap items-center gap-2 text-xs font-semibold">

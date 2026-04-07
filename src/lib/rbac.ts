@@ -2,6 +2,7 @@ import { getServerSession } from "next-auth";
 import { NextResponse } from "next/server";
 import { redirect } from "next/navigation";
 import { authOptions } from "@/auth";
+import { isCashierJobTitle } from "@/lib/assignment";
 
 export type AppRole = "ADMIN" | "DIRECTEUR_GENERAL" | "MANAGER" | "EMPLOYEE" | "ACCOUNTANT";
 export type AppModule =
@@ -65,7 +66,7 @@ export function hasModuleAccess(params: {
       return true;
     }
 
-    return role === "ACCOUNTANT" || jobTitle === "CAISSIER" || jobTitle === "COMPTABLE";
+    return role === "ACCOUNTANT" || isCashierJobTitle(jobTitle) || jobTitle === "COMPTABLE";
   }
 
   if (role === "ADMIN") {

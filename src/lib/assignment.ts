@@ -3,18 +3,29 @@ export type JobTitleValue =
   | "COMPTABLE"
   | "AUDITEUR"
   | "CAISSIER"
+  | "CAISSE_2_SIEGE"
+  | "CAISSE_AGENCE"
   | "RELATION_PUBLIQUE"
   | "APPROVISIONNEMENT"
   | "AGENT_TERRAIN"
   | "DIRECTION_GENERALE"
   | "CHEF_AGENCE";
 
+export const CASH_JOB_TITLES = ["CAISSIER", "CAISSE_2_SIEGE", "CAISSE_AGENCE"] as const;
+
+export function isCashierJobTitle(jobTitle: string | null | undefined) {
+  const normalized = (jobTitle ?? "").trim().toUpperCase();
+  return CASH_JOB_TITLES.some((value) => value === normalized);
+}
+
 export function jobTitleLabel(jobTitle: string) {
   const labels: Record<string, string> = {
     COMMERCIAL: "Commercial",
     COMPTABLE: "Comptable",
     AUDITEUR: "Auditeur",
-    CAISSIER: "Caissier",
+    CAISSIER: "Caisse 1 Siège",
+    CAISSE_2_SIEGE: "Caisse 2 Siège",
+    CAISSE_AGENCE: "Caisse agence",
     RELATION_PUBLIQUE: "Relation publique",
     APPROVISIONNEMENT: "Chargé des approvisionnements",
     AGENT_TERRAIN: "Non affecté",
@@ -30,7 +41,7 @@ export function assignmentCapabilities(jobTitle: string) {
     return ["Encodage billets", "Suivi ventes", "Mise à jour de ses billets"];
   }
 
-  if (jobTitle === "CAISSIER" || jobTitle === "COMPTABLE") {
+  if (isCashierJobTitle(jobTitle) || jobTitle === "COMPTABLE") {
     return ["Encaissements", "Suivi créances", "Validation paiements"];
   }
 
@@ -66,5 +77,5 @@ export function canImportTicketWorkbook(role: string, _explicitPermission?: bool
 }
 
 export function canProcessPayments(jobTitle: string) {
-  return jobTitle === "COMPTABLE" || jobTitle === "CAISSIER";
+  return jobTitle === "COMPTABLE" || isCashierJobTitle(jobTitle);
 }

@@ -1,5 +1,6 @@
 import type { Prisma } from "@prisma/client";
 import { NextRequest, NextResponse } from "next/server";
+import { CASH_JOB_TITLES } from "@/lib/assignment";
 import { prisma } from "@/lib/prisma";
 import { requireApiRoles } from "@/lib/rbac";
 import { paymentOrderCreationSchema } from "@/lib/validators";
@@ -109,7 +110,7 @@ export async function POST(request: NextRequest) {
       where: {
         OR: [
           { role: { in: ["ADMIN", "ACCOUNTANT"] } },
-          { jobTitle: { in: ["CAISSIER", "COMPTABLE"] } },
+          { jobTitle: { in: [...CASH_JOB_TITLES, "COMPTABLE"] } },
         ],
       },
       select: { id: true },

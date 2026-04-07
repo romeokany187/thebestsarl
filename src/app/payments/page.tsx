@@ -10,6 +10,7 @@ import { PaymentRowAdminActions } from "@/components/payment-row-admin-actions";
 import { PaymentsWritingWorkspace } from "@/components/payments-writing-workspace";
 import { ProcurementCashExecutionActions } from "@/components/procurement-cash-execution-actions";
 import { invoiceNumberFromChronology } from "@/lib/invoice";
+import { isCashierJobTitle } from "@/lib/assignment";
 import { requirePageModuleAccess } from "@/lib/rbac";
 import { prisma } from "@/lib/prisma";
 import { getTicketTotalAmount } from "@/lib/ticket-pricing";
@@ -342,7 +343,7 @@ export default async function PaymentsPage({
   searchParams?: Promise<SearchParams>;
 }) {
   const { role, session } = await requirePageModuleAccess("payments", ["ADMIN", "DIRECTEUR_GENERAL", "ACCOUNTANT", "EMPLOYEE", "MANAGER"]);
-  const isCashier = session.user.jobTitle === "CAISSIER";
+  const isCashier = isCashierJobTitle(session.user.jobTitle);
   const isComptable = role === "ACCOUNTANT" || session.user.jobTitle === "COMPTABLE";
   const isAdmin = role === "ADMIN";
   const canWrite = isCashier || isAdmin || isComptable;
@@ -371,7 +372,7 @@ export default async function PaymentsPage({
   }).toString();
 
   const accessNote = canWrite
-    ? "Admin, comptable et caissier: encaissements, écritures de caisse, conversions et exécutions financières autorisés selon le profil."
+    ? "Admin, comptable et profils caisse: encaissements, écritures de caisse, conversions et exécutions financières autorisés selon le profil."
     : "Module financier réservé aux profils autorisés."
 
   const paymentsData = await Promise.all([
