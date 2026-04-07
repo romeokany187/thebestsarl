@@ -9,12 +9,14 @@ export function PaymentsWritingWorkspace({
   cashWorkspace,
   virtualWorkspace,
   billetageWorkspace,
+  executionLinks,
   closedSummary,
 }: {
   ticketWorkspace?: React.ReactNode;
   cashWorkspace?: React.ReactNode;
   virtualWorkspace?: React.ReactNode;
   billetageWorkspace?: React.ReactNode;
+  executionLinks?: React.ReactNode;
   closedSummary?: React.ReactNode;
 }) {
   const [mode, setMode] = useState<WritingMode>("none");
@@ -92,6 +94,11 @@ export function PaymentsWritingWorkspace({
             >
               Billetage caisse
             </button>
+          ) : null}
+          {executionLinks ? (
+            <div className="flex flex-wrap gap-2 border-l border-black/10 pl-2 dark:border-white/10">
+              {executionLinks}
+            </div>
           ) : null}
         </div>
 

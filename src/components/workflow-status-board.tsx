@@ -176,7 +176,7 @@ export function WorkflowStatusBoard({
         </div>
       ) : null}
 
-      <section className="rounded-2xl border border-black/10 bg-white p-4 shadow-sm dark:border-white/10 dark:bg-zinc-900">
+      <section id="payment-orders" className="scroll-mt-24 rounded-2xl border border-black/10 bg-white p-4 shadow-sm dark:border-white/10 dark:bg-zinc-900">
         <div className="mb-3 flex items-center justify-between gap-2">
           <h3 className="text-base font-semibold">{paymentTitle(mode)}</h3>
           <Link href="/payments" className="text-xs font-semibold text-black/60 dark:text-white/60">Ouvrir Paiements</Link>
@@ -202,7 +202,7 @@ export function WorkflowStatusBoard({
         )}
       </section>
 
-      <section className="rounded-2xl border border-black/10 bg-white p-4 shadow-sm dark:border-white/10 dark:bg-zinc-900">
+      <section id="needs" className="scroll-mt-24 rounded-2xl border border-black/10 bg-white p-4 shadow-sm dark:border-white/10 dark:bg-zinc-900">
         <div className="mb-3 flex items-center justify-between gap-2">
           <h3 className="text-base font-semibold">{needTitle(mode)}</h3>
           <Link href="/approvisionnement" className="text-xs font-semibold text-black/60 dark:text-white/60">Ouvrir Approvisionnement</Link>

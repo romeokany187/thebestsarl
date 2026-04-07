@@ -770,7 +770,8 @@ export default async function PaymentsPage({
   const needsReadyForExecution = needsReadyForExecutionRaw.filter(
     (need) => !(need.reviewComment ?? "").includes("EXECUTION_CAISSE:"),
   );
-  const executionItemsCount = paymentOrdersReadyForExecution.length + needsReadyForExecution.length;
+  const paymentOrdersExecutionCount = paymentOrdersReadyForExecution.length;
+  const needsExecutionCount = needsReadyForExecution.length;
 
   return (
     <AppShell
@@ -787,60 +788,29 @@ export default async function PaymentsPage({
       </section>
 
       <PaymentsWritingWorkspace
+        executionLinks={canWrite ? (
+          <>
+            <a
+              href="/inbox/execute#payment-orders"
+              className="rounded-md border border-amber-300 bg-amber-50 px-3 py-1.5 text-xs font-semibold text-amber-800 hover:bg-amber-100 dark:border-amber-700/50 dark:bg-amber-950/30 dark:text-amber-200 dark:hover:bg-amber-950/50"
+            >
+              OP à exécuter ({paymentOrdersExecutionCount})
+            </a>
+            <a
+              href="/inbox/execute#needs"
+              className="rounded-md border border-violet-300 bg-violet-50 px-3 py-1.5 text-xs font-semibold text-violet-800 hover:bg-violet-100 dark:border-violet-700/50 dark:bg-violet-950/30 dark:text-violet-200 dark:hover:bg-violet-950/50"
+            >
+              EDB à exécuter ({needsExecutionCount})
+            </a>
+          </>
+        ) : null}
         closedSummary={(
-          <div className="space-y-4">
-            {canWrite ? (
-              <section className="rounded-2xl border border-amber-300/70 bg-amber-50/80 p-4 dark:border-amber-700/60 dark:bg-amber-950/20">
-                <div className="flex flex-wrap items-start justify-between gap-3">
-                  <div>
-                    <h2 className="text-sm font-semibold">OP / EDB à exécuter</h2>
-                    <p className="mt-1 text-xs text-black/65 dark:text-white/65">
-                      {executionItemsCount > 0
-                        ? `${executionItemsCount} dossier(s) approuvé(s) sont prêts pour l'exécution financière.`
-                        : "Aucun OP ou EDB approuvé n'est actuellement en attente d'exécution."}
-                    </p>
-                  </div>
-                  <a
-                    href="/inbox/execute"
-                    className="inline-flex rounded-md border border-black/20 px-3 py-1.5 text-xs font-semibold hover:bg-black/5 dark:border-white/20 dark:hover:bg-white/10"
-                  >
-                    Ouvrir l&apos;exécution
-                  </a>
-                </div>
-                {executionItemsCount > 0 ? (
-                  <div className="mt-3 grid gap-3 md:grid-cols-2">
-                    <div>
-                      <p className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-black/55 dark:text-white/55">Ordres de paiement</p>
-                      <ul className="space-y-1 text-xs text-black/75 dark:text-white/75">
-                        {paymentOrdersReadyForExecution.slice(0, 5).map((order) => (
-                          <li key={order.id}>
-                            • {order.code ?? "OP"} - {order.beneficiary} - {order.amount.toFixed(2)} {normalizeMoneyCurrency(order.currency)}
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                    <div>
-                      <p className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-black/55 dark:text-white/55">États de besoin</p>
-                      <ul className="space-y-1 text-xs text-black/75 dark:text-white/75">
-                        {needsReadyForExecution.slice(0, 5).map((need) => (
-                          <li key={need.id}>
-                            • {need.code ?? "EDB"} - {need.title} - {Number(need.estimatedAmount ?? 0).toFixed(2)} {normalizeMoneyCurrency(need.currency)}
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                  </div>
-                ) : null}
-              </section>
-            ) : null}
-
-            <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-              <KpiCard label="Total encaissé" value={`${grossInflows.toFixed(2)} USD`} hint={`Billets ${ticketPaymentInflowsUsd.toFixed(2)} + autres ${otherInflows.toFixed(2)}`} />
-              <KpiCard label="Total dépensé" value={`${cashOutflows.toFixed(2)} USD`} />
-              <KpiCard label="Solde caisse USD" value={`${closingUsd.toFixed(2)} USD`} />
-              <KpiCard label="Total caisse CDF" value={`${closingCdf.toFixed(2)} CDF`} />
-              <KpiCard label="Niveau de risque" value={riskLevel} hint={riskHint} />
-            </div>
+          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+            <KpiCard label="Total encaissé" value={`${grossInflows.toFixed(2)} USD`} hint={`Billets ${ticketPaymentInflowsUsd.toFixed(2)} + autres ${otherInflows.toFixed(2)}`} />
+            <KpiCard label="Total dépensé" value={`${cashOutflows.toFixed(2)} USD`} />
+            <KpiCard label="Solde caisse USD" value={`${closingUsd.toFixed(2)} USD`} />
+            <KpiCard label="Total caisse CDF" value={`${closingCdf.toFixed(2)} CDF`} />
+            <KpiCard label="Niveau de risque" value={riskLevel} hint={riskHint} />
           </div>
         )}
         ticketWorkspace={(
@@ -975,27 +945,6 @@ export default async function PaymentsPage({
               <KpiCard label="Solde ouverture CDF" value={`${openingCdf.toFixed(2)} CDF`} />
               <KpiCard label="Solde clôture CDF" value={`${closingCdf.toFixed(2)} CDF`} hint={`Billets CDF ${ticketPaymentInflowCdf.toFixed(2)} + autres CDF ${cashInflowCdf.toFixed(2)} - sorties CDF ${cashOutflowCdf.toFixed(2)}`} />
             </div>
-
-            {canWrite ? (
-              <section className="rounded-2xl border border-amber-300/70 bg-amber-50/80 p-4 dark:border-amber-700/60 dark:bg-amber-950/20">
-                <div className="flex flex-wrap items-start justify-between gap-3">
-                  <div>
-                    <h2 className="text-sm font-semibold">Exécution OP / EDB</h2>
-                    <p className="mt-1 text-xs text-black/65 dark:text-white/65">
-                      {executionItemsCount > 0
-                        ? `${executionItemsCount} dossier(s) approuvé(s) sont visibles pour exécution.`
-                        : "Aucun dossier approuvé n'est en attente d'exécution pour l'instant."}
-                    </p>
-                  </div>
-                  <a
-                    href="/inbox/execute"
-                    className="inline-flex rounded-md border border-black/20 px-3 py-1.5 text-xs font-semibold hover:bg-black/5 dark:border-white/20 dark:hover:bg-white/10"
-                  >
-                    Voir les OP / EDB
-                  </a>
-                </div>
-              </section>
-            ) : null}
 
             <section className="rounded-2xl border border-black/10 bg-white p-4 dark:border-white/10 dark:bg-zinc-900">
               <div className="flex flex-wrap items-start justify-between gap-3">
