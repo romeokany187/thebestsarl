@@ -49,6 +49,21 @@ function extractIpAddress(payload: unknown) {
   return typeof ipAddress === "string" && ipAddress.trim() ? ipAddress.trim() : "Non disponible";
 }
 
+function formatActionWithDetail(action: string, payload: unknown) {
+  const base = formatActionLabel(action);
+
+  if (!payload || typeof payload !== "object") {
+    return base;
+  }
+
+  const summary = (payload as { summary?: string | null }).summary;
+  if (typeof summary === "string" && summary.trim()) {
+    return `${base} — ${summary.trim()}`;
+  }
+
+  return base;
+}
+
 export default async function AdminLogsPage({
   searchParams,
 }: {
@@ -147,7 +162,7 @@ export default async function AdminLogsPage({
             type="text"
             name="q"
             defaultValue={q}
-            placeholder="Rechercher action ou nom"
+            placeholder="Rechercher action, détail ou nom"
             className="rounded-md border border-black/15 bg-white px-3 py-2 text-sm dark:border-white/15 dark:bg-zinc-900"
           />
           <select
@@ -178,9 +193,9 @@ export default async function AdminLogsPage({
 
       <section className="overflow-hidden rounded-xl border border-black/10 bg-[#050816] text-white dark:border-white/10">
         <div className="border-b border-white/10 px-3 py-2 font-mono text-[11px] uppercase tracking-wide text-white/60">
-          <div className="grid gap-3 md:grid-cols-[180px_1.2fr_180px_1fr]">
+          <div className="grid gap-3 md:grid-cols-[180px_1.8fr_180px_1fr]">
             <span>Date & heure</span>
-            <span>Action</span>
+            <span>Action + détail</span>
             <span>Adresse IP</span>
             <span>Nom</span>
           </div>
@@ -192,9 +207,11 @@ export default async function AdminLogsPage({
           ) : (
             logs.map((log) => (
               <div key={log.id} className="border-b border-white/5 px-3 py-2 last:border-b-0">
-                <div className="grid gap-3 md:grid-cols-[180px_1.2fr_180px_1fr] md:items-center">
+                <div className="grid gap-3 md:grid-cols-[180px_1.8fr_180px_1fr] md:items-center">
                   <span className="text-white/70">{new Date(log.createdAt).toLocaleString("fr-FR")}</span>
-                  <span className="truncate">{formatActionLabel(log.action)}</span>
+                  <span className="truncate" title={formatActionWithDetail(log.action, log.payload)}>
+                    {formatActionWithDetail(log.action, log.payload)}
+                  </span>
                   <span className="text-white/70">{extractIpAddress(log.payload)}</span>
                   <span className="truncate">{log.actor.name ?? "Utilisateur inconnu"}</span>
                 </div>
