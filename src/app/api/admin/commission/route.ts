@@ -35,8 +35,6 @@ export async function POST(request: NextRequest) {
     where: {
       airlineId: airline.id,
       isActive: true,
-      routePattern: "*",
-      travelClass: null,
     },
     orderBy: { startsAt: "desc" },
   });
@@ -44,22 +42,37 @@ export async function POST(request: NextRequest) {
   const nextMode = currentRule?.commissionMode ?? CommissionMode.IMMEDIATE;
   const nextMarkup = currentRule?.markupRatePercent ?? 0;
   const nextBaseFareRatio = currentRule?.defaultBaseFareRatio ?? 0.6;
+  const now = new Date();
 
-  await prisma.commissionRule.create({
-    data: {
-      airlineId: airline.id,
-      ratePercent: parsed.data.ratePercent,
-      routePattern: "*",
-      travelClass: null,
-      commissionMode: nextMode,
-      systemRatePercent: parsed.data.ratePercent,
-      markupRatePercent: nextMarkup,
-      defaultBaseFareRatio: nextBaseFareRatio,
-      depositStockTargetAmount: currentRule?.depositStockTargetAmount ?? undefined,
-      batchCommissionAmount: currentRule?.batchCommissionAmount ?? undefined,
-      startsAt: new Date(),
-      isActive: true,
-    },
+  await prisma.$transaction(async (tx) => {
+    await tx.commissionRule.updateMany({
+      where: {
+        airlineId: airline.id,
+        isActive: true,
+      },
+      data: {
+        isActive: false,
+        endsAt: now,
+      },
+    });
+
+    await tx.commissionRule.create({
+      data: {
+        airlineId: airline.id,
+        ratePercent: parsed.data.ratePercent,
+        routePattern: "*",
+        travelClass: null,
+        commissionMode: nextMode,
+        systemRatePercent: parsed.data.ratePercent,
+        markupRatePercent: nextMarkup,
+        defaultBaseFareRatio: nextBaseFareRatio,
+        depositStockTargetAmount: currentRule?.depositStockTargetAmount ?? undefined,
+        batchCommissionAmount: currentRule?.batchCommissionAmount ?? undefined,
+        startsAt: now,
+        endsAt: null,
+        isActive: true,
+      },
+    });
   });
 
   return NextResponse.json({

@@ -33,20 +33,25 @@ function commissionAlreadyIncludesMarkup(ticket: TicketPricingInput) {
 }
 
 function shouldUseMarkupOnly(ticket: TicketPricingInput) {
-  const status = (ticket.commissionCalculationStatus ?? "").trim().toUpperCase();
   const hasRealBaseFare = typeof ticket.baseFareAmount === "number"
     ? ticket.baseFareAmount > 0
     : null;
   const hasCommissionBase = typeof ticket.commissionBaseAmount === "number"
     ? ticket.commissionBaseAmount > 0
     : null;
+  const hasStoredCommission = typeof ticket.commissionAmount === "number"
+    ? ticket.commissionAmount > 0
+    : false;
+  const hasStoredRate = typeof ticket.commissionRateUsed === "number"
+    ? ticket.commissionRateUsed > 0
+    : false;
   const mode = (ticket.commissionModeApplied ?? "").trim().toUpperCase();
 
-  if (status === "ESTIMATED") {
-    return true;
+  if (hasStoredCommission || hasStoredRate || mode === "AFTER_DEPOSIT") {
+    return false;
   }
 
-  if (hasRealBaseFare === false && hasCommissionBase === false && mode !== "AFTER_DEPOSIT") {
+  if (hasRealBaseFare === false && hasCommissionBase === false) {
     return true;
   }
 
@@ -88,8 +93,7 @@ export function getTicketBaseCommissionAmount(ticket: TicketPricingInput, overri
   return round2(Math.max(0, totalCommission - markupAmount));
 }
 
-export function getTicketTotalAmount(ticket: TicketPricingInput, overrideCommissionAmount?: number | null) {
+export function getTicketTotalAmount(ticket: TicketPricingInput, _overrideCommissionAmount?: number | null) {
   const markupAmount = getTicketMarkupAmount(ticket);
-  const baseCommissionAmount = getTicketBaseCommissionAmount(ticket, overrideCommissionAmount);
-  return round2(Math.max(0, ticket.amount) + baseCommissionAmount + markupAmount);
+  return round2(Math.max(0, ticket.amount) + markupAmount);
 }

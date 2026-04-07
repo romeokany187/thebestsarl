@@ -107,6 +107,9 @@ export async function POST(request: NextRequest) {
       )._sum.amount ?? 0
       : 0;
     const requestedAgencyMarkupAmount = parsed.data.agencyMarkupAmount ?? 0;
+    const defaultBaseFareRatio = rule?.defaultBaseFareRatio && rule.defaultBaseFareRatio > 0
+      ? clamp(rule.defaultBaseFareRatio, 0.2, 1)
+      : 1;
     let commissionBaseAmount = parsed.data.baseFareAmount ?? 0;
     let commissionCalculationStatus: CommissionCalculationStatus = CommissionCalculationStatus.FINAL;
     let baseFareAmount = parsed.data.baseFareAmount;
@@ -117,8 +120,8 @@ export async function POST(request: NextRequest) {
         commissionCalculationStatus = CommissionCalculationStatus.FINAL;
       } else {
         baseFareAmount = undefined;
-        commissionBaseAmount = 0;
-        commissionCalculationStatus = CommissionCalculationStatus.FINAL;
+        commissionBaseAmount = parsed.data.amount * defaultBaseFareRatio;
+        commissionCalculationStatus = CommissionCalculationStatus.ESTIMATED;
       }
     } else {
       commissionBaseAmount = parsed.data.amount;
@@ -163,15 +166,11 @@ export async function POST(request: NextRequest) {
             modeApplied: CommissionMode.IMMEDIATE,
           };
 
-    const commission = (isAfterDepositMode || isAirCongo || isMontGabaon || isAirFast)
-      ? baseCommission
-      : {
-        ...baseCommission,
-        amount: baseCommission.amount + agencyMarkupAmount,
-        ratePercent: commissionBaseAmount > 0
-          ? ((baseCommission.amount + agencyMarkupAmount) / commissionBaseAmount) * 100
-          : 0,
-      };
+    const commission = {
+      ...baseCommission,
+      amount: baseCommission.amount + agencyMarkupAmount,
+      ratePercent: baseCommission.ratePercent,
+    };
 
     const ticket = await prisma.$transaction(async (tx) => {
       const created = await tx.ticketSale.create({

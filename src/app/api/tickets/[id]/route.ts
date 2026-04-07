@@ -201,12 +201,15 @@ export async function PATCH(request: NextRequest, { params }: Params) {
       );
     }
 
+    const defaultBaseFareRatio = rule?.defaultBaseFareRatio && rule.defaultBaseFareRatio > 0
+      ? clamp(rule.defaultBaseFareRatio, 0.2, 1)
+      : 1;
     let commissionBaseAmount = nextTicket.baseFareAmount ?? 0;
     let commissionCalculationStatus: CommissionCalculationStatus = CommissionCalculationStatus.FINAL;
 
     if (!isAfterDepositMode && !nextTicket.baseFareAmount) {
-      commissionBaseAmount = 0;
-      commissionCalculationStatus = CommissionCalculationStatus.FINAL;
+      commissionBaseAmount = nextTicket.amount * defaultBaseFareRatio;
+      commissionCalculationStatus = CommissionCalculationStatus.ESTIMATED;
     }
 
     const commissionInputAmount = isAfterDepositMode ? nextTicket.amount : commissionBaseAmount;
@@ -254,15 +257,11 @@ export async function PATCH(request: NextRequest, { params }: Params) {
             modeApplied: CommissionMode.IMMEDIATE,
           };
 
-    const commission = (isAfterDepositMode || isAirCongo || isMontGabaon || isAirFast)
-      ? baseCommission
-      : {
-        ...baseCommission,
-        amount: baseCommission.amount + agencyMarkupAmount,
-        ratePercent: commissionBaseAmount > 0
-          ? ((baseCommission.amount + agencyMarkupAmount) / commissionBaseAmount) * 100
-          : 0,
-      };
+    const commission = {
+      ...baseCommission,
+      amount: baseCommission.amount + agencyMarkupAmount,
+      ratePercent: baseCommission.ratePercent,
+    };
 
     const updated = await prisma.$transaction(async (tx) => {
       const saved = await tx.ticketSale.update({

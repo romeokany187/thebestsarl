@@ -22,9 +22,21 @@ export async function GET() {
 }
 
 export async function POST(request: NextRequest) {
-  const access = await requireApiModuleAccess("payments", ["ADMIN", "DIRECTEUR_GENERAL", "ACCOUNTANT"]);
+  const access = await requireApiModuleAccess("payments", ["ADMIN", "DIRECTEUR_GENERAL", "ACCOUNTANT", "MANAGER", "EMPLOYEE"]);
   if (access.error) {
     return access.error;
+  }
+
+  const canCreditDeposit = access.role === "ADMIN"
+    || access.role === "DIRECTEUR_GENERAL"
+    || access.role === "ACCOUNTANT"
+    || access.session.user.jobTitle === "COMPTABLE";
+
+  if (!canCreditDeposit) {
+    return NextResponse.json(
+      { error: "Le crédit des dépôts compagnies est réservé à l'administrateur, au DG ou au comptable." },
+      { status: 403 },
+    );
   }
 
   const body = await request.json();

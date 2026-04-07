@@ -7,7 +7,7 @@ import { requirePageModuleAccess } from "@/lib/rbac";
 export const dynamic = "force-dynamic";
 
 export default async function DepositPage() {
-  const { role } = await requirePageModuleAccess("payments", ["ADMIN", "DIRECTEUR_GENERAL", "ACCOUNTANT", "EMPLOYEE"]);
+  const { role, session } = await requirePageModuleAccess("payments", ["ADMIN", "DIRECTEUR_GENERAL", "ACCOUNTANT", "EMPLOYEE"]);
 
   const accounts = await buildAirlineDepositAccountSummaries(
     prisma as unknown as { airlineDepositMovement: { findMany: (args: unknown) => Promise<any[]> } },
@@ -28,7 +28,7 @@ export default async function DepositPage() {
 
       <AirlineDepositAccountManager
         accounts={accounts}
-        canManage={role === "ADMIN" || role === "DIRECTEUR_GENERAL" || role === "ACCOUNTANT"}
+        canManage={role === "ADMIN" || role === "DIRECTEUR_GENERAL" || role === "ACCOUNTANT" || session.user.jobTitle === "COMPTABLE"}
       />
     </AppShell>
   );
