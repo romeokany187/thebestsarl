@@ -203,6 +203,7 @@ export function TicketImportForm({
   const [previewSignature, setPreviewSignature] = useState<string>("");
   const [histFilter, setHistFilter] = useState({ year: "", month: "", email: "" });
   const [histLoading, setHistLoading] = useState(false);
+  const [restoreLoading, setRestoreLoading] = useState(false);
 
   const currentSignature = useMemo(() => {
     const fileSignature = form.file
@@ -372,6 +373,38 @@ export function TicketImportForm({
     setHistLoading(false);
   }
 
+  async function restoreTodayFromAudit() {
+    const restoreDate = currentPeriodDefaults().date;
+    setRestoreLoading(true);
+    setStatusType("loading");
+    setStatus(`Restauration d'urgence des billets du ${restoreDate} depuis l'historique...`);
+
+    const response = await fetch("/api/tickets/restore-from-audit", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ date: restoreDate }),
+    });
+
+    const body = await response.json().catch(() => null);
+    if (!response.ok) {
+      setStatusType("error");
+      setStatus(body?.error ?? "Restauration impossible depuis l'historique.");
+      setRestoreLoading(false);
+      return;
+    }
+
+    const restored = Number(body?.data?.restored ?? 0);
+    const skipped = Number(body?.data?.skipped ?? 0);
+    setStatusType("success");
+    setStatus(
+      restored > 0
+        ? `${restored} billet(s) du ${restoreDate} restauré(s) depuis l'historique.${skipped > 0 ? ` ${skipped} déjà présents ou ignorés.` : ""}`
+        : (body?.data?.message ?? `Aucun billet manquant à restaurer pour le ${restoreDate}.`),
+    );
+    router.refresh();
+    setRestoreLoading(false);
+  }
+
   return (
     <form
       onSubmit={onSubmit}
@@ -527,21 +560,36 @@ export function TicketImportForm({
       ) : null}
 
       {canReplacePeriod ? (
-        <label className="flex items-start gap-2 text-sm">
-          <input
-            type="checkbox"
-            checked={form.replaceExistingPeriod}
-            onChange={(event) => update("replaceExistingPeriod", event.target.checked)}
-            className="mt-0.5"
-            disabled={form.dryRun}
-          />
-          <span>Remplacer les ventes déjà enregistrées pour la période ciblée avant réimport.</span>
-        </label>
+        <>
+          <label className="flex items-start gap-2 text-sm">
+            <input
+              type="checkbox"
+              checked={form.replaceExistingPeriod}
+              onChange={(event) => update("replaceExistingPeriod", event.target.checked)}
+              className="mt-0.5"
+              disabled={form.dryRun}
+            />
+            <span>Remplacer les ventes déjà enregistrées pour les dates détectées dans les feuilles du fichier avant réimport.</span>
+          </label>
+
+          <div className="rounded-md bg-amber-100 px-3 py-2 text-xs text-amber-700 dark:bg-amber-950/40 dark:text-amber-200">
+            Une date absente du fichier (par exemple <span className="font-semibold">07.04</span>) ne supprime plus les billets déjà encodés ce jour-là.
+          </div>
+
+          <button
+            type="button"
+            onClick={restoreTodayFromAudit}
+            disabled={statusType === "loading" || restoreLoading}
+            className="rounded-md border border-amber-500 px-4 py-2 text-sm font-semibold text-amber-700 disabled:cursor-not-allowed disabled:opacity-60 dark:border-amber-400 dark:text-amber-200"
+          >
+            {restoreLoading ? "Restauration..." : "Restaurer les billets du jour depuis l'historique"}
+          </button>
+        </>
       ) : null}
 
       <button
         type="submit"
-        disabled={statusType === "loading" || !form.file || (!form.dryRun && !previewValidated)}
+        disabled={statusType === "loading" || restoreLoading || !form.file || (!form.dryRun && !previewValidated)}
         className="rounded-md bg-black px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-60 dark:bg-white dark:text-black"
       >
         {statusType === "loading" ? "Traitement..." : form.dryRun ? "Lancer la simulation" : "Importer le fichier"}

@@ -455,6 +455,37 @@ function buildRange(options: Pick<TicketWorkbookImportOptions, "periodMode" | "y
   return finalizeRange(periodMode, start, endOfMonth, options.year);
 }
 
+function buildDetectedReplacementWindows(
+  workbook: XLSX.WorkBook,
+  sheetNames: string[],
+  range: { start: Date; end: Date; anchorYear: number },
+) {
+  const windowsByDay = new Map<string, { start: Date; end: Date }>();
+
+  for (const sheetName of sheetNames) {
+    const sheet = workbook.Sheets[sheetName];
+    if (!sheet || !sheetContainsDetailedTicketHeader(sheet)) {
+      continue;
+    }
+
+    const sheetDate = parseSheetDateFromName(sheetName, range.anchorYear);
+    if (!sheetDate) {
+      continue;
+    }
+
+    const dayStart = new Date(Date.UTC(sheetDate.getUTCFullYear(), sheetDate.getUTCMonth(), sheetDate.getUTCDate(), 0, 0, 0, 0));
+    const dayEnd = withUtcDayEnd(dayStart);
+
+    if (dayEnd < range.start || dayStart > range.end) {
+      continue;
+    }
+
+    windowsByDay.set(dayStart.toISOString().slice(0, 10), { start: dayStart, end: dayEnd });
+  }
+
+  return Array.from(windowsByDay.values()).sort((a, b) => a.start.getTime() - b.start.getTime());
+}
+
 function normalizePersonKey(value: string) {
   return value
     .trim()
@@ -918,9 +949,15 @@ export async function importTicketWorkbookFromBuffer(options: TicketWorkbookImpo
     const sheet = workbook.Sheets[name];
     return sheet ? sheetContainsDetailedTicketHeader(sheet) : false;
   });
+  const replacementWindows = buildDetectedReplacementWindows(workbook, sheetNames, range);
+  const replacementDateKeys = new Set(replacementWindows.map((window) => window.start.toISOString().slice(0, 10)));
 
   if (!sheetNames.length) {
     throw new Error("Aucune feuille exploitable détectée dans ce fichier Excel.");
+  }
+
+  if (replaceExistingPeriod && replacementWindows.length === 0) {
+    throw new Error("Aucune feuille journalière datée n'a été détectée dans ce fichier. Le remplacement ciblé a été annulé pour protéger les données existantes.");
   }
 
   const [users, teams, airlines] = await Promise.all([
@@ -1006,11 +1043,34 @@ export async function importTicketWorkbookFromBuffer(options: TicketWorkbookImpo
   const previewRows: TicketWorkbookImportPreviewRow[] = [];
   let previewTruncated = false;
 
-  if (replaceExistingPeriod && !dryRun) {
-    const existingPeriodTickets = await prisma.ticketSale.findMany({
-      where: { soldAt: { gte: range.start, lte: range.end } },
+  let existingPeriodTickets: Array<{
+    id: string;
+    soldAt: Date;
+    amount: number;
+    agencyMarkupAmount: number;
+    commissionAmount: number;
+    commissionModeApplied: CommissionMode;
+    commissionCalculationStatus: CommissionCalculationStatus;
+    commissionBaseAmount: number;
+    baseFareAmount: number | null;
+    ticketNumber: string;
+    airlineId: string;
+    airline: {
+      code: string;
+      name: string;
+    };
+  }> = [];
+
+  if (replaceExistingPeriod && replacementWindows.length > 0) {
+    existingPeriodTickets = await prisma.ticketSale.findMany({
+      where: {
+        OR: replacementWindows.map((window) => ({
+          soldAt: { gte: window.start, lte: window.end },
+        })),
+      },
       select: {
         id: true,
+        soldAt: true,
         amount: true,
         agencyMarkupAmount: true,
         commissionAmount: true,
@@ -1028,9 +1088,10 @@ export async function importTicketWorkbookFromBuffer(options: TicketWorkbookImpo
         },
       },
     });
+
     const ticketIds = existingPeriodTickets.map((ticket) => ticket.id);
 
-    if (ticketIds.length > 0) {
+    if (!dryRun && ticketIds.length > 0) {
       await prisma.$transaction(async (tx) => {
         for (const ticket of existingPeriodTickets) {
           const depositAccount = getAirlineDepositAccountByAirlineCode(ticket.airline.code);
@@ -1064,15 +1125,60 @@ export async function importTicketWorkbookFromBuffer(options: TicketWorkbookImpo
 
   const [ticketCounts, existingTickets, consumedByAirline, depositAccountSummaries] = await Promise.all([
     prisma.ticketSale.groupBy({ by: ["airlineId"], _count: { _all: true } }),
-    prisma.ticketSale.findMany({ select: { ticketNumber: true } }),
+    prisma.ticketSale.findMany({ select: { ticketNumber: true, soldAt: true } }),
     prisma.ticketSale.groupBy({ by: ["airlineId"], _sum: { amount: true } }),
     buildAirlineDepositAccountSummaries(prisma),
   ]);
 
   const ticketCountByAirlineId = new Map(ticketCounts.map((entry) => [entry.airlineId, entry._count._all]));
-  const existingTicketNumbers = new Set(existingTickets.map((ticket) => ticket.ticketNumber));
+  const existingTicketNumbers = new Set(
+    existingTickets
+      .filter((ticket) => !replacementDateKeys.has(ticket.soldAt.toISOString().slice(0, 10)))
+      .map((ticket) => ticket.ticketNumber),
+  );
   const consumedAmountByAirlineId = new Map(consumedByAirline.map((entry) => [entry.airlineId, entry._sum.amount ?? 0]));
   const depositBalanceByAccountKey = new Map(depositAccountSummaries.map((account) => [account.key, account.balance]));
+
+  if (replaceExistingPeriod && dryRun && existingPeriodTickets.length > 0) {
+    const replacedCountByAirlineId = new Map<string, number>();
+    const replacedAmountByAirlineId = new Map<string, number>();
+    const restoredDepositByAccountKey = new Map<string, number>();
+
+    for (const ticket of existingPeriodTickets) {
+      replacedCountByAirlineId.set(ticket.airlineId, (replacedCountByAirlineId.get(ticket.airlineId) ?? 0) + 1);
+      replacedAmountByAirlineId.set(ticket.airlineId, (replacedAmountByAirlineId.get(ticket.airlineId) ?? 0) + ticket.amount);
+
+      const depositAccount = getAirlineDepositAccountByAirlineCode(ticket.airline.code);
+      if (!depositAccount) {
+        continue;
+      }
+
+      const depositCreditAmount = getTicketDepositDebitAmount({
+        ...ticket,
+        airline: { code: ticket.airline.code },
+      });
+
+      if (depositCreditAmount > 0) {
+        restoredDepositByAccountKey.set(
+          depositAccount.key,
+          (restoredDepositByAccountKey.get(depositAccount.key) ?? 0) + depositCreditAmount,
+        );
+      }
+    }
+
+    replacedCountByAirlineId.forEach((count, airlineId) => {
+      ticketCountByAirlineId.set(airlineId, Math.max(0, (ticketCountByAirlineId.get(airlineId) ?? 0) - count));
+    });
+
+    replacedAmountByAirlineId.forEach((amount, airlineId) => {
+      consumedAmountByAirlineId.set(airlineId, Math.max(0, (consumedAmountByAirlineId.get(airlineId) ?? 0) - amount));
+    });
+
+    restoredDepositByAccountKey.forEach((amount, accountKey) => {
+      depositBalanceByAccountKey.set(accountKey, (depositBalanceByAccountKey.get(accountKey) ?? 0) + amount);
+    });
+  }
+
   const touchedAfterDepositRuleIds = new Set<string>();
 
   async function resolveSeller(input: { sellerEmail: string | null; sellerName: string | null }) {
