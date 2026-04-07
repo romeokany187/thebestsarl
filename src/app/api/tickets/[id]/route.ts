@@ -104,43 +104,13 @@ export async function PATCH(request: NextRequest, { params }: Params) {
     );
 
     if (!rule) {
-      const history = await prisma.ticketSale.findMany({
-        where: {
-          airlineId: nextAirlineId,
-          id: { not: existing.id },
-          commissionAmount: { gt: 0 },
-          commissionCalculationStatus: CommissionCalculationStatus.FINAL,
-        },
-        select: {
-          amount: true,
-          commissionBaseAmount: true,
-          commissionRateUsed: true,
-        },
-        orderBy: { soldAt: "desc" },
-        take: 120,
-      });
-
-      const validRates = history
-        .map((ticket) => ticket.commissionRateUsed)
-        .filter((value) => Number.isFinite(value) && value > 0);
-      const inferredRate = validRates.length > 0
-        ? validRates.reduce((sum, value) => sum + value, 0) / validRates.length
-        : null;
-
-      const validRatios = history
-        .filter((ticket) => ticket.amount > 0 && ticket.commissionBaseAmount > 0)
-        .map((ticket) => ticket.commissionBaseAmount / ticket.amount)
-        .filter((ratio) => Number.isFinite(ratio) && ratio > 0);
-      const inferredBaseFareRatio = validRatios.length > 0
-        ? clamp(validRatios.reduce((sum, value) => sum + value, 0) / validRatios.length, 0.2, 0.95)
-        : 0.6;
-
-      const fallbackBaseFareAmount = nextTicket.baseFareAmount
-        ?? nextTicket.amount * inferredBaseFareRatio;
-      const fallbackRate = inferredRate ?? (existing.commissionRateUsed > 0 ? existing.commissionRateUsed : 0);
-      const fallbackCommissionAmount = fallbackBaseFareAmount > 0
-        ? (fallbackBaseFareAmount * fallbackRate) / 100 + agencyMarkupAmount
+      const fallbackBaseFareAmount = nextTicket.baseFareAmount ?? 0;
+      const fallbackRate = fallbackBaseFareAmount > 0 && existing.commissionRateUsed > 0
+        ? existing.commissionRateUsed
         : 0;
+      const fallbackCommissionAmount = (fallbackBaseFareAmount > 0
+        ? (fallbackBaseFareAmount * fallbackRate) / 100
+        : 0) + agencyMarkupAmount;
 
       const updatedWithoutRule = await prisma.ticketSale.update({
         where: { id },
@@ -152,7 +122,7 @@ export async function PATCH(request: NextRequest, { params }: Params) {
           agencyMarkupPercent: 0,
           agencyMarkupAmount,
           commissionBaseAmount: fallbackBaseFareAmount,
-          commissionCalculationStatus: CommissionCalculationStatus.ESTIMATED,
+          commissionCalculationStatus: CommissionCalculationStatus.FINAL,
           commissionRateUsed: fallbackRate,
           commissionAmount: fallbackCommissionAmount,
           commissionModeApplied: CommissionMode.IMMEDIATE,
@@ -164,18 +134,18 @@ export async function PATCH(request: NextRequest, { params }: Params) {
         action: "TICKET_UPDATED",
         entityType: "TICKET_SALE",
         entityId: updatedWithoutRule.id,
-        summary: `Billet ${updatedWithoutRule.ticketNumber} modifié avec commission estimée via historique.`,
+        summary: `Billet ${updatedWithoutRule.ticketNumber} modifié sans règle active de commission.`,
         payload: {
           ticketNumber: updatedWithoutRule.ticketNumber,
           airlineId: nextAirlineId,
           amount: updatedWithoutRule.amount,
-          warning: "COMMISSION_ESTIMATED_FROM_HISTORY",
+          warning: "NO_ACTIVE_COMMISSION_RULE",
         } as Prisma.InputJsonValue,
       });
 
       return NextResponse.json({
         data: updatedWithoutRule,
-        warning: "Aucune règle active trouvée pour cette compagnie. Commission estimée via historique.",
+        warning: "Aucune règle active trouvée pour cette compagnie. Aucun BaseFare automatique n'a été créé.",
       });
     }
 
@@ -202,15 +172,11 @@ export async function PATCH(request: NextRequest, { params }: Params) {
       );
     }
 
-    const defaultBaseFareRatio = rule?.defaultBaseFareRatio && rule.defaultBaseFareRatio > 0
-      ? clamp(rule.defaultBaseFareRatio, 0.2, 1)
-      : 1;
     let commissionBaseAmount = nextTicket.baseFareAmount ?? 0;
-    let commissionCalculationStatus: CommissionCalculationStatus = CommissionCalculationStatus.FINAL;
+    const commissionCalculationStatus: CommissionCalculationStatus = CommissionCalculationStatus.FINAL;
 
     if (!isAfterDepositMode && !nextTicket.baseFareAmount) {
-      commissionBaseAmount = nextTicket.amount * defaultBaseFareRatio;
-      commissionCalculationStatus = CommissionCalculationStatus.ESTIMATED;
+      commissionBaseAmount = 0;
     }
 
     const commissionInputAmount = isAfterDepositMode ? nextTicket.amount : commissionBaseAmount;

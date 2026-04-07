@@ -108,9 +108,6 @@ export async function POST(request: NextRequest) {
       )._sum.amount ?? 0
       : 0;
     const requestedAgencyMarkupAmount = parsed.data.agencyMarkupAmount ?? 0;
-    const defaultBaseFareRatio = rule?.defaultBaseFareRatio && rule.defaultBaseFareRatio > 0
-      ? clamp(rule.defaultBaseFareRatio, 0.2, 1)
-      : 1;
     let commissionBaseAmount = parsed.data.baseFareAmount ?? 0;
     let commissionCalculationStatus: CommissionCalculationStatus = CommissionCalculationStatus.FINAL;
     let baseFareAmount = parsed.data.baseFareAmount;
@@ -118,15 +115,12 @@ export async function POST(request: NextRequest) {
     if (!isAfterDepositMode) {
       if (baseFareAmount && baseFareAmount > 0) {
         commissionBaseAmount = baseFareAmount;
-        commissionCalculationStatus = CommissionCalculationStatus.FINAL;
       } else {
         baseFareAmount = undefined;
-        commissionBaseAmount = parsed.data.amount * defaultBaseFareRatio;
-        commissionCalculationStatus = CommissionCalculationStatus.ESTIMATED;
+        commissionBaseAmount = 0;
       }
     } else {
       commissionBaseAmount = parsed.data.amount;
-      commissionCalculationStatus = CommissionCalculationStatus.FINAL;
     }
 
     const commissionInputAmount = isAfterDepositMode ? parsed.data.amount : commissionBaseAmount;

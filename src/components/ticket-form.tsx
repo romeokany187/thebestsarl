@@ -86,6 +86,30 @@ function toDateTimeLocalValue(value?: string | null) {
   return new Date(parsed.getTime() - offsetMs).toISOString().slice(0, 16);
 }
 
+function formatApiError(error: unknown, fallback = "Erreur de validation.") {
+  if (typeof error === "string" && error.trim()) {
+    return error;
+  }
+
+  if (error && typeof error === "object") {
+    const payload = error as {
+      formErrors?: string[];
+      fieldErrors?: Record<string, string[] | undefined>;
+    };
+
+    const messages = [
+      ...(payload.formErrors ?? []),
+      ...Object.values(payload.fieldErrors ?? {}).flatMap((value) => value ?? []),
+    ].filter((value) => typeof value === "string" && value.trim().length > 0);
+
+    if (messages.length > 0) {
+      return messages.join(" • ");
+    }
+  }
+
+  return fallback;
+}
+
 function buildItineraryForm(ticket?: Pick<EditableTicket, "customerName" | "notes"> | null): ItineraryFormState {
   const itinerary = extractTicketItinerary(ticket?.notes ?? null);
   return {
@@ -276,7 +300,7 @@ export function TicketForm({
     if (!response.ok) {
       const errorPayload = await response.json().catch(() => null);
       setStatusType("error");
-      setStatus(errorPayload?.error ?? "Erreur lors de l'enregistrement de l'itinérance.");
+      setStatus(formatApiError(errorPayload?.error, "Erreur lors de l'enregistrement de l'itinérance."));
       setIsSavingItinerary(false);
       return;
     }
@@ -352,7 +376,7 @@ export function TicketForm({
 
     const errorPayload = await response.json().catch(() => null);
     setStatusType("error");
-    setStatus(errorPayload?.error ?? "Erreur de validation.");
+    setStatus(formatApiError(errorPayload?.error, "Erreur de validation."));
   }
 
   return (

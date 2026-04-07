@@ -1318,19 +1318,12 @@ export async function importTicketWorkbookFromBuffer(options: TicketWorkbookImpo
           depositBalanceByAccountKey.set(depositAccount.key, availableDepositBalance);
         }
 
-        const defaultBaseFareRatio = activeRule?.defaultBaseFareRatio && activeRule.defaultBaseFareRatio > 0
-          ? clamp(activeRule.defaultBaseFareRatio, 0.2, 1)
-          : 1;
         const resolvedCommissionBaseAmount = commissionBaseAmount > 0
           ? commissionBaseAmount
           : afterDepositRule
             ? amount
-            : activeRule
-              ? amount * defaultBaseFareRatio
-              : 0;
-        const commissionCalculationStatus = resolvedCommissionBaseAmount > 0 && commissionBaseAmount <= 0 && !afterDepositRule
-          ? CommissionCalculationStatus.ESTIMATED
-          : CommissionCalculationStatus.FINAL;
+            : 0;
+        const commissionCalculationStatus = CommissionCalculationStatus.FINAL;
 
         let commissionAmount = activeRule ? 0 : Math.max(0, commissionAmountFromFile);
         let commissionRateUsed = commissionRateFromFile

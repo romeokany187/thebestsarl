@@ -122,10 +122,21 @@ function movementSignedAmount(movementType: AirlineDepositMovementTypeValue, amo
   return movementType === "CREDIT" ? amount : -amount;
 }
 
-export async function getAirlineDepositBalance(client: Prisma.TransactionClient, accountKey: string) {
+function startOfUtcDay(date: Date) {
+  return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate(), 0, 0, 0, 0));
+}
+
+export async function getAirlineDepositBalance(
+  client: Prisma.TransactionClient,
+  accountKey: string,
+  options?: { upTo?: Date },
+) {
   const movementClient = (client as unknown as { airlineDepositMovement: { findMany: (args?: any) => Promise<Array<{ amount: number; movementType: AirlineDepositMovementTypeValue }>> } }).airlineDepositMovement;
   const movements = await movementClient.findMany({
-    where: { accountKey: { in: accountKeysForLookup(accountKey) } },
+    where: {
+      accountKey: { in: accountKeysForLookup(accountKey) },
+      ...(options?.upTo ? { createdAt: { lte: options.upTo } } : {}),
+    },
     select: { amount: true, movementType: true },
   });
 
@@ -133,6 +144,20 @@ export async function getAirlineDepositBalance(client: Prisma.TransactionClient,
     (sum: number, movement: { amount: number; movementType: AirlineDepositMovementTypeValue }) => sum + movementSignedAmount(movement.movementType, movement.amount),
     0,
   );
+}
+
+async function getFirstAirlineDepositCreditDate(client: Prisma.TransactionClient, accountKey: string) {
+  const movementClient = (client as unknown as { airlineDepositMovement: { findFirst: (args?: any) => Promise<{ createdAt: Date } | null> } }).airlineDepositMovement;
+  const firstCredit = await movementClient.findFirst({
+    where: {
+      accountKey: { in: accountKeysForLookup(accountKey) },
+      movementType: "CREDIT",
+    },
+    orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+    select: { createdAt: true },
+  });
+
+  return firstCredit?.createdAt ?? null;
 }
 
 export async function recordAirlineDepositMovement(
@@ -159,8 +184,19 @@ export async function recordAirlineDepositMovement(
     throw new Error("INVALID_AIRLINE_DEPOSIT_AMOUNT");
   }
 
-  const balanceBefore = await getAirlineDepositBalance(client, account.key);
-  if (input.movementType === "DEBIT" && amount > balanceBefore + 0.0001) {
+  const effectiveCreatedAt = input.createdAt ?? new Date();
+  const [balanceBefore, firstCreditAt] = await Promise.all([
+    getAirlineDepositBalance(client, account.key, { upTo: effectiveCreatedAt }),
+    getFirstAirlineDepositCreditDate(client, account.key),
+  ]);
+
+  const allowHistoricalPreDepositDebit = input.movementType === "DEBIT"
+    && (
+      !firstCreditAt
+      || startOfUtcDay(effectiveCreatedAt).getTime() < startOfUtcDay(firstCreditAt).getTime()
+    );
+
+  if (!allowHistoricalPreDepositDebit && input.movementType === "DEBIT" && amount > balanceBefore + 0.0001) {
     throw new Error(`INSUFFICIENT_AIRLINE_DEPOSIT:${account.label}:${balanceBefore.toFixed(2)}:${amount.toFixed(2)}`);
   }
 
@@ -180,7 +216,7 @@ export async function recordAirlineDepositMovement(
       airlineId: input.airlineId ?? undefined,
       ticketSaleId: input.ticketSaleId ?? undefined,
       createdById: input.createdById ?? undefined,
-      createdAt: input.createdAt ?? new Date(),
+      createdAt: effectiveCreatedAt,
     },
   });
 }
