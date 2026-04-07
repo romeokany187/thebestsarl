@@ -13,7 +13,7 @@ function toLocalDateTimeInputValue(date: Date): string {
 }
 
 const categories: Array<{ value: string; label: string }> = [
-  { value: "OPENING_BALANCE", label: "Solde d'ouverture manuel" },
+  { value: "OPENING_BALANCE", label: "Report à nouveau initial (solde d'ouverture)" },
   { value: "OTHER_SALE", label: "Autres ventes" },
   { value: "COMMISSION_INCOME", label: "Commissions" },
   { value: "SERVICE_INCOME", label: "Prestations de service" },
@@ -28,7 +28,7 @@ const categories: Array<{ value: string; label: string }> = [
   { value: "OTHER_EXPENSE", label: "Autres dépenses" },
 ];
 
-export function CashOperationForm() {
+export function CashOperationForm({ hasInitialOpening = false }: { hasInitialOpening?: boolean }) {
   const router = useRouter();
   const [direction, setDirection] = useState<"INFLOW" | "OUTFLOW">("INFLOW");
   const [category, setCategory] = useState<string>("OTHER_SALE");
@@ -51,12 +51,12 @@ export function CashOperationForm() {
 
   const isOpeningBalance = category === "OPENING_BALANCE";
   const referenceLabel = isOpeningBalance
-    ? "Référence ouverture"
+    ? "Référence report initial"
     : direction === "OUTFLOW"
       ? "Référence justificative sortie"
       : "Référence justificative entrée";
   const referencePlaceholder = isOpeningBalance
-    ? "N° PV / fiche d'ouverture / pièce initiale"
+    ? "N° PV / fiche de report initial / pièce de départ"
     : direction === "OUTFLOW"
       ? "N° EDB / OP / pièce justificative"
       : "N° bon d'entrée / reçu / pièce justificative";
@@ -217,13 +217,18 @@ export function CashOperationForm() {
 
   return (
     <section className="mb-6 rounded-2xl border border-black/10 bg-white p-4 dark:border-white/10 dark:bg-zinc-900">
-      <h2 className="mb-3 text-sm font-semibold">Caisse - soldes d&apos;ouverture et nouvelles opérations</h2>
+      <h2 className="mb-3 text-sm font-semibold">Caisse - report à nouveau initial et nouvelles opérations</h2>
       <p className="mb-3 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-xs text-blue-900 dark:border-blue-800/60 dark:bg-blue-950/30 dark:text-blue-100">
-        Pour encoder un solde d&apos;ouverture, choisissez la catégorie <strong>Solde d&apos;ouverture manuel</strong>, puis sélectionnez la méthode souhaitée <strong>(Cash, Airtel Money, Orange Money, M-Pesa, Equity, Rawbank & Illicocash)</strong>.
+        Le <strong>solde d&apos;ouverture</strong> correspond au <strong>report à nouveau initial</strong>. Il ne s&apos;encode qu&apos;une seule fois au démarrage pour une caisse/canal donné, puis le dernier solde du jour devient automatiquement le report à nouveau du lendemain.
       </p>
       <p className="mb-3 text-xs text-black/60 dark:text-white/60">
-        Au tout premier démarrage, saisissez manuellement les soldes d'ouverture avec la catégorie <strong>Solde d'ouverture manuel</strong>, aussi bien pour la caisse physique que pour les comptes virtuels (Airtel, Orange, M-Pesa, Equity, Rawbank & Illicocash). Ensuite, le report à nouveau des mois suivants se calcule automatiquement.
+        Pour initialiser une caisse ou un compte virtuel, choisissez la catégorie <strong>Report à nouveau initial (solde d&apos;ouverture)</strong>, puis la méthode souhaitée <strong>(Cash, Airtel Money, Orange Money, M-Pesa, Equity, Rawbank & Illicocash)</strong>. Ensuite, n&apos;encodez plus de nouveaux soldes d&apos;ouverture: seuls les mouvements réels restent à saisir.
       </p>
+      {hasInitialOpening ? (
+        <p className="mb-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900 dark:border-amber-800/60 dark:bg-amber-950/30 dark:text-amber-100">
+          Un report à nouveau initial existe déjà. Le reste du report à nouveau est désormais automatique de jour en jour.
+        </p>
+      ) : null}
       <form onSubmit={onSubmit} className="grid gap-3 lg:grid-cols-4 lg:items-end">
         <div>
           <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-black/60 dark:text-white/60">Type</label>

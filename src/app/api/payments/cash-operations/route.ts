@@ -64,7 +64,30 @@ export async function POST(request: NextRequest) {
   }
 
   if (data.category === "OPENING_BALANCE" && data.direction !== "INFLOW") {
-    return NextResponse.json({ error: "Le solde d'ouverture manuel doit être enregistré comme une entrée de fonds." }, { status: 400 });
+    return NextResponse.json({ error: "Le report à nouveau initial (solde d'ouverture) doit être enregistré comme une entrée de fonds." }, { status: 400 });
+  }
+
+  const normalizedMethod = data.method.trim();
+
+  if (data.category === "OPENING_BALANCE") {
+    const existingOpeningForBucket = await cashOperationClient.findFirst({
+      where: {
+        category: "OPENING_BALANCE",
+        method: normalizedMethod,
+        currency,
+      },
+      select: { id: true, occurredAt: true },
+      orderBy: { occurredAt: "asc" },
+    });
+
+    if (existingOpeningForBucket) {
+      return NextResponse.json(
+        {
+          error: `Un report à nouveau initial existe déjà pour ${normalizedMethod} en ${currency}. Ensuite, le dernier solde du jour devient automatiquement le report à nouveau du lendemain.`,
+        },
+        { status: 400 },
+      );
+    }
   }
 
   const latestRateOperation = await cashOperationClient.findFirst({
@@ -104,7 +127,7 @@ export async function POST(request: NextRequest) {
 
   if (data.category !== "OPENING_BALANCE" && !initialOpeningExists) {
     return NextResponse.json(
-      { error: "Le tout premier encodage de caisse doit être un solde d'ouverture manuel. Après cela, les reports à nouveau seront automatiques." },
+      { error: "Le tout premier encodage de caisse doit être le report à nouveau initial (solde d'ouverture). Ensuite, le dernier solde du jour devient automatiquement le report à nouveau du lendemain." },
       { status: 400 },
     );
   }
@@ -240,7 +263,7 @@ export async function POST(request: NextRequest) {
           fxRateUsdToCdf,
           amountUsd: normalizedAmountUsd,
           amountCdf: normalizedAmountCdf,
-          method: data.method,
+          method: normalizedMethod,
           reference: data.reference,
           description: data.description,
           createdById: access.session.user.id,
@@ -500,12 +523,33 @@ export async function PATCH(request: NextRequest) {
       : existing.category;
 
     if (nextCategory === "OPENING_BALANCE" && nextDirection !== "INFLOW") {
-      return NextResponse.json({ error: "Le solde d'ouverture manuel doit être enregistré comme une entrée de fonds." }, { status: 400 });
+      return NextResponse.json({ error: "Le report à nouveau initial (solde d'ouverture) doit être enregistré comme une entrée de fonds." }, { status: 400 });
     }
 
     const nextMethod = typeof body?.method === "string" && body.method.trim().length >= 2
       ? body.method.trim()
       : existing.method;
+
+    if (nextCategory === "OPENING_BALANCE") {
+      const otherOpeningForBucket = await cashOperationClient.findFirst({
+        where: {
+          category: "OPENING_BALANCE",
+          method: nextMethod,
+          currency: nextCurrency,
+          id: { not: cashOperationId },
+        },
+        select: { id: true },
+      });
+
+      if (otherOpeningForBucket) {
+        return NextResponse.json(
+          {
+            error: `Un report à nouveau initial existe déjà pour ${nextMethod} en ${nextCurrency}. Le report à nouveau suivant est automatique.`,
+          },
+          { status: 400 },
+        );
+      }
+    }
     const nextReference = typeof body?.reference === "string" && body.reference.trim().length >= 2
       ? body.reference.trim()
       : existing.reference;

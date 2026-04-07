@@ -122,13 +122,20 @@ function computeCashOpeningBalance(
       })),
   ].sort((a, b) => a.at.getTime() - b.at.getTime());
 
+  let openingAppliedUsd = false;
+  let openingAppliedCdf = false;
+
   return events.reduce(
     (sum, event) => {
       if (event.category === "OPENING_BALANCE") {
         if (event.currency === "USD") {
+          if (openingAppliedUsd) return sum;
           sum.usd = event.amount;
+          openingAppliedUsd = true;
         } else {
+          if (openingAppliedCdf) return sum;
           sum.cdf = event.amount;
+          openingAppliedCdf = true;
         }
         return sum;
       }

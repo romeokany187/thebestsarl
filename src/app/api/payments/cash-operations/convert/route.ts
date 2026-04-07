@@ -56,7 +56,7 @@ export async function POST(request: NextRequest) {
 
   if (!openingExists) {
     return NextResponse.json(
-      { error: "Le tout premier encodage de caisse doit être un solde d'ouverture manuel. Ensuite les reports à nouveau seront automatiques." },
+      { error: "Le tout premier encodage de caisse doit être le report à nouveau initial (solde d'ouverture). Ensuite, le dernier solde du jour devient automatiquement le report à nouveau du lendemain." },
       { status: 400 },
     );
   }

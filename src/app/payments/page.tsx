@@ -239,6 +239,7 @@ function computeOpeningBuckets(
   cashOperations: Array<{ amount: number; currency?: string | null; method?: string | null; direction: string; category?: string | null; occurredAt?: Date | string | null }>,
 ): Record<BalanceBucket, BalanceSnapshot> {
   const buckets = buildEmptyOpeningBuckets();
+  const openingApplied = new Map<BalanceBucket, { usd: boolean; cdf: boolean }>();
   const events = [
     ...ticketPayments.map((payment) => ({
       at: new Date(payment.paidAt ?? new Date(0)),
@@ -268,14 +269,21 @@ function computeOpeningBuckets(
 
   for (const event of events) {
     const snapshot = buckets[event.bucket];
+    const flags = openingApplied.get(event.bucket) ?? { usd: false, cdf: false };
+
     if (event.category === "OPENING_BALANCE") {
       if (event.currency === "USD") {
+        if (flags.usd) continue;
         snapshot.usd = event.amount;
         snapshot.initializedUsd = true;
+        flags.usd = true;
       } else {
+        if (flags.cdf) continue;
         snapshot.cdf = event.amount;
         snapshot.initializedCdf = true;
+        flags.cdf = true;
       }
+      openingApplied.set(event.bucket, flags);
       continue;
     }
 
@@ -552,6 +560,7 @@ export default async function PaymentsPage({
   const partialCoverageRate = partialBilled > 0 ? (partialCollected / partialBilled) * 100 : 0;
 
   const openingBuckets = computeOpeningBuckets(ticketPaymentsBeforeStart, cashOperationsBeforeStart);
+  const hasInitialOpeningRecorded = [...cashOperationsBeforeStart, ...cashOperations].some((operation) => operation.category === "OPENING_BALANCE");
   const openingBalance = (Object.values(openingBuckets) as Array<BalanceSnapshot>).reduce(
     (sum, snapshot) => sum + bucketUsdEquivalent(snapshot),
     0,
@@ -1053,7 +1062,7 @@ export default async function PaymentsPage({
             </section>
 
             {canWrite ? (
-              <CashOperationForm />
+              <CashOperationForm hasInitialOpening={hasInitialOpeningRecorded} />
             ) : (
               <section className="rounded-2xl border border-dashed border-black/20 bg-white/80 p-4 text-xs text-black/65 dark:border-white/20 dark:bg-zinc-900/70 dark:text-white/65">
                 Profil en lecture seule sur les autres écritures de caisse. Les encodages restent réservés aux profils autorisés.
@@ -1084,8 +1093,8 @@ export default async function PaymentsPage({
                   <tbody>
                     <tr className="border-t border-black/5 bg-black/2 dark:border-white/10 dark:bg-white/3">
                       <td className="px-4 py-3 font-semibold">{cashRange.startRaw}</td>
-                      <td className="px-4 py-3 font-semibold">Report à nouveau</td>
-                      <td className="px-4 py-3 text-black/60 dark:text-white/60">Solde d&apos;ouverture période</td>
+                      <td className="px-4 py-3 font-semibold">Report à nouveau / solde d&apos;ouverture</td>
+                      <td className="px-4 py-3 text-black/60 dark:text-white/60">Solde reporté automatiquement depuis la veille / période précédente</td>
                       <td className="px-4 py-3">-</td>
                       <td className="px-4 py-3">-</td>
                       <td className="px-4 py-3 font-semibold">{openingUsd.toFixed(2)} USD</td>

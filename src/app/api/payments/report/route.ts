@@ -185,6 +185,7 @@ function computeOpeningBuckets(
   cashOperations: Array<{ amount: number; currency?: string | null; method?: string | null; direction: string; category?: string | null; occurredAt?: Date | string | null }>,
 ): Record<BalanceBucket, BalanceSnapshot> {
   const buckets = buildEmptyOpeningBuckets();
+  const openingApplied = new Map<BalanceBucket, { usd: boolean; cdf: boolean }>();
   const events = [
     ...ticketPayments.map((payment) => ({
       at: new Date(payment.paidAt ?? new Date(0)),
@@ -212,14 +213,21 @@ function computeOpeningBuckets(
 
   for (const event of events) {
     const snapshot = buckets[event.bucket];
+    const flags = openingApplied.get(event.bucket) ?? { usd: false, cdf: false };
+
     if (event.category === "OPENING_BALANCE") {
       if (event.currency === "USD") {
+        if (flags.usd) continue;
         snapshot.usd = event.amount;
         snapshot.initializedUsd = true;
+        flags.usd = true;
       } else {
+        if (flags.cdf) continue;
         snapshot.cdf = event.amount;
         snapshot.initializedCdf = true;
+        flags.cdf = true;
       }
+      openingApplied.set(event.bucket, flags);
       continue;
     }
 
@@ -701,8 +709,8 @@ export async function GET(request: NextRequest) {
     let y = 488;
 
     page.drawText(periodStart, { x: 24, y, size: 7.4, font, color: textBlack });
-    page.drawText("Report à nouveau", { x: 72, y, size: 7.4, font, color: textBlack });
-    page.drawText("Solde d'ouverture période", { x: 140, y, size: 7.4, font, color: textBlack });
+    page.drawText("Report à nouveau / solde d'ouverture", { x: 72, y, size: 7.4, font, color: textBlack });
+    page.drawText("Solde reporté automatiquement", { x: 140, y, size: 7.4, font, color: textBlack });
     page.drawText(`${openingUsd.toFixed(2)}`, { x: 466, y, size: 7.4, font, color: textBlack });
     page.drawText(`${openingCdf.toFixed(2)}`, { x: 676, y, size: 7.4, font, color: textBlack });
     y -= 12;
