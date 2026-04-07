@@ -838,6 +838,8 @@ export default async function PaymentsPage({
       </section>
 
       <PaymentsWritingWorkspace
+        jobTitle={session.user.jobTitle ?? null}
+        role={role}
         paymentOrdersWorkspace={canWrite ? (
           <section className="space-y-4 rounded-2xl border border-black/10 bg-white p-4 dark:border-white/10 dark:bg-zinc-900">
             <div>
