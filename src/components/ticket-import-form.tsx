@@ -192,7 +192,7 @@ export function TicketImportForm({
     startDate: defaults.startDate,
     endDate: defaults.endDate,
     sheetName: "",
-    defaultSellerEmail,
+    defaultSellerEmail: "",
     dryRun: true,
     replaceExistingPeriod: false,
   });
@@ -380,7 +380,7 @@ export function TicketImportForm({
       <div>
         <h3 className="text-sm font-semibold">Import Excel billets</h3>
         <p className="text-xs text-black/60 dark:text-white/60">
-          L&apos;employé autorisé peut déposer un fichier Excel et lancer le traitement directement depuis l&apos;application.
+          Le fichier doit contenir les billets <span className="font-semibold">ligne par ligne</span>. Aucune compagnie, aucun émetteur et aucun payant ne sont créés automatiquement.
         </p>
       </div>
 
@@ -499,7 +499,7 @@ export function TicketImportForm({
         type="email"
         value={form.defaultSellerEmail}
         onChange={(event) => update("defaultSellerEmail", event.target.value)}
-        placeholder="Email vendeur par défaut"
+        placeholder="Email vendeur par défaut (optionnel, déjà existant en base)"
         className="rounded-md border border-black/15 px-3 py-2 text-sm dark:border-white/20 dark:bg-zinc-900"
       />
 

@@ -118,7 +118,7 @@ export async function POST(request: NextRequest) {
     const sheetName = typeof sheetNameValue === "string" && sheetNameValue.trim() ? sheetNameValue.trim() : undefined;
     const typedDefaultSellerEmail = typeof defaultSellerEmailValue === "string" && defaultSellerEmailValue.trim()
       ? defaultSellerEmailValue.trim().toLowerCase()
-      : access.session.user.email?.trim().toLowerCase();
+      : undefined;
 
     const result = await importTicketWorkbookFromBuffer({
       fileBuffer: buffer,

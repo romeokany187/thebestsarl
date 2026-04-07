@@ -576,7 +576,7 @@ function resolveAirlineIdentity(codeRaw: string | null | undefined, nameRaw: str
   });
 
   const canonicalCode = alias?.canonicalCode ?? normalizedCode;
-  const canonicalName = alias?.canonicalName ?? (nameRaw?.trim().replace(/\s+/g, " ") || "Compagnie inconnue");
+  const canonicalName = alias?.canonicalName ?? (nameRaw?.trim().replace(/\s+/g, " ") || "");
   const lookupKeys = new Set<string>([
     normalizeLookupKey(canonicalName),
     compactLookupKey(canonicalName),
@@ -652,6 +652,11 @@ function resolveImportedPayerName(
   const compact = compactLookupKey(raw);
   const stripped = normalizeLookupKey(raw.replace(/^(agent|employe|employe e|employe\(e\)|equipe|team|agence|client)\s*[-:]?\s*/i, ""));
   const lookupKeys = Array.from(new Set([normalized, compact, stripped, compactLookupKey(stripped)]).values()).filter(Boolean);
+  const genericPayerValues = new Set(["client", "clients", "cash", "comptant", "passager", "passagers"]);
+
+  if (genericPayerValues.has(normalized) || genericPayerValues.has(compact)) {
+    return null;
+  }
 
   for (const key of lookupKeys) {
     const matchedTeam = lookups.teamsByKey.get(key);
@@ -662,28 +667,6 @@ function resolveImportedPayerName(
     if (matchedUser) {
       return `Agent - ${matchedUser}`;
     }
-  }
-
-  const partialTeamMatches = lookups.teamKeys.filter((key) => key.includes(compact) || compact.includes(key));
-  if (partialTeamMatches.length === 1) {
-    const matchedTeam = lookups.teamsByKey.get(partialTeamMatches[0]);
-    if (matchedTeam) return `Équipe - ${matchedTeam}`;
-  }
-
-  const partialUserMatches = lookups.userKeys.filter((key) => key.includes(compact) || compact.includes(key));
-  if (partialUserMatches.length === 1) {
-    const matchedUser = lookups.usersByKey.get(partialUserMatches[0]);
-    if (matchedUser) return `Agent - ${matchedUser}`;
-  }
-
-  const fuzzyTeam = findClosestMapValue(raw, lookups.teamsByKey.entries(), 72);
-  if (fuzzyTeam) {
-    return `Équipe - ${fuzzyTeam}`;
-  }
-
-  const fuzzyUser = findClosestMapValue(raw, lookups.usersByKey.entries(), 72);
-  if (fuzzyUser) {
-    return `Agent - ${fuzzyUser}`;
   }
 
   return raw;
@@ -958,6 +941,11 @@ export async function importTicketWorkbookFromBuffer(options: TicketWorkbookImpo
 
   const userByEmail = new Map(users.map((user) => [user.email.trim().toLowerCase(), user]));
   const userByName = new Map(users.map((user) => [normalizePersonKey(user.name), user]));
+  const explicitDefaultSellerEmail = options.defaultSellerEmail?.trim().toLowerCase();
+
+  if (explicitDefaultSellerEmail && !userByEmail.has(explicitDefaultSellerEmail)) {
+    throw new Error(`L'émetteur par défaut ${explicitDefaultSellerEmail} n'existe pas dans la base. Corrigez le fichier ou laissez ce champ vide.`);
+  }
   const usersByPayerKey = new Map<string, string>();
   users.forEach((user) => {
     addLookupCandidate(new Set<string>([normalizeLookupKey(user.name)]), user.name);
@@ -1089,11 +1077,6 @@ export async function importTicketWorkbookFromBuffer(options: TicketWorkbookImpo
       if (userByName.has(key)) {
         return userByName.get(key)!;
       }
-
-      const fuzzyUser = findClosestMapValue(sellerName, userByName.entries(), 72);
-      if (fuzzyUser) {
-        return fuzzyUser;
-      }
     }
 
     return { id: null, email: sellerEmail, name: sellerName ?? sellerEmail };
@@ -1125,145 +1108,37 @@ export async function importTicketWorkbookFromBuffer(options: TicketWorkbookImpo
       const isSummaryRow = summaryMonthNumber !== null && summaryTicketCount !== null && summaryTicketCount > 0 && summaryTotalAmount !== null && summaryTotalAmount > 0;
 
       if (isSummaryRow) {
+        const summaryDate = summaryMonthNumber !== null
+          ? new Date(Date.UTC(range.anchorYear, summaryMonthNumber - 1, 1, 12, 0, 0, 0))
+          : null;
+        const message = hasDetailedTicketSheets
+          ? "Ligne de synthèse détectée et ignorée: l'import travaille uniquement billet par billet."
+          : "Fichier de synthèse globale détecté. Import refusé pour cette ligne: fournissez un fichier détaillé ligne par ligne, sans création automatique.";
+
         if (hasDetailedTicketSheets) {
           summary.skippedEmpty += 1;
-          continue;
+        } else {
+          summary.failed += 1;
+          errors.push(`[${sheetName}] Ligne ${line}: ${message}`);
         }
 
-        const soldAt = new Date(Date.UTC(range.anchorYear, summaryMonthNumber - 1, 1, 12, 0, 0, 0));
-
-        if (soldAt < range.start || soldAt > range.end) {
-          summary.skippedOutsideRange += 1;
-          continue;
-        }
-
-        const summaryAirlines = [
-          { headers: ["CAA"], fallbackName: "CAA" },
-          { headers: ["AIRCONGO", "AIR CONGO", "ACG"], fallbackName: "Air Congo" },
-          { headers: ["ET", "ETH", "ETHIOPIAN"], fallbackName: "Ethiopian Airlines" },
-          { headers: ["KENYA", "KQ"], fallbackName: "Kenya Airways" },
-          { headers: ["MG", "MGB", "MONT GABAON"], fallbackName: "Mont Gabaon" },
-          { headers: ["DAKOTA", "DKT"], fallbackName: "Dakota" },
-          { headers: ["UR", "UGANDA"], fallbackName: "Uganda Airlines" },
-          { headers: ["TC", "TANZANIA"], fallbackName: "Air Tanzania" },
-          { headers: ["AF", "AIR FRANCE"], fallbackName: "Air France" },
-          { headers: ["WB", "RWANDAIR"], fallbackName: "RwandAir" },
-        ];
-
-        const breakdown = summaryAirlines
-          .map((entry) => ({
-            amount: asNumber(pickValue(row, entry.headers)),
-            fallbackName: entry.fallbackName,
-          }))
-          .filter((entry): entry is { amount: number; fallbackName: string } => typeof entry.amount === "number" && entry.amount > 0);
-
-        if (breakdown.length === 0) {
-          summary.skippedEmpty += 1;
-          continue;
-        }
-
-        const allocatedCounts = distributeWholeUnits(Math.round(summaryTicketCount), breakdown.map((entry) => entry.amount));
-        let remainingCommission = Number((summaryCommissionAmount ?? 0).toFixed(2));
-
-        for (let breakdownIndex = 0; breakdownIndex < breakdown.length; breakdownIndex += 1) {
-          const item = breakdown[breakdownIndex];
-          const airline = findClosestMapValue(item.fallbackName, airlineByName.entries(), 68)
-            ?? findClosestMapValue(item.fallbackName, airlineByCode.entries(), 80);
-
-          if (!airline) {
-            errors.push(`[${sheetName}] ${summaryMonthLabel}: compagnie introuvable dans la base pour la synthèse (${item.fallbackName}).`);
-            summary.failed += 1;
-            continue;
-          }
-
-          const commissionShare = breakdownIndex === breakdown.length - 1
-            ? Number(remainingCommission.toFixed(2))
-            : Number((((summaryCommissionAmount ?? 0) * item.amount) / summaryTotalAmount).toFixed(2));
-          remainingCommission = Number((remainingCommission - commissionShare).toFixed(2));
-
-          const syntheticTicketNumber = `RPT-${range.anchorYear}${String(summaryMonthNumber).padStart(2, "0")}-${airline.code}-${String(breakdownIndex + 1).padStart(2, "0")}`;
-
-          if (pnrSequence.has(syntheticTicketNumber) || existingTicketNumbers.has(syntheticTicketNumber)) {
-            errors.push(`[${sheetName}] ${summaryMonthLabel}: le résumé ${syntheticTicketNumber} existe déjà. Utilisez le remplacement de période si nécessaire.`);
-            summary.failed += 1;
-            continue;
-          }
-
-          pnrSequence.set(syntheticTicketNumber, 1);
-          const syntheticNotes = [
-            `SOURCE_REPORT:GLOBAL_SUMMARY`,
-            `SOURCE_TICKET_COUNT:${allocatedCounts[breakdownIndex] ?? 0}`,
-            `SOURCE_MONTH:${summaryMonthLabel}`,
-            `SOURCE_TOTAL_MONTH_TICKETS:${Math.round(summaryTicketCount)}`,
-            `SOURCE_TOTAL_MONTH_AMOUNT:${summaryTotalAmount.toFixed(2)}`,
-          ].join(" | ");
-
-          const data: Prisma.TicketSaleUncheckedCreateInput = {
-            ticketNumber: syntheticTicketNumber,
-            customerName: `Synthèse ${summaryMonthLabel} ${range.anchorYear}`,
-            route: `RAPPORT GLOBAL ${summaryMonthLabel}`,
-            travelClass: TravelClass.ECONOMY,
-            travelDate: soldAt,
-            soldAt,
-            amount: item.amount,
-            baseFareAmount: item.amount,
+        if (includePreview) {
+          const stored = pushPreviewRow(previewRows, {
+            sheet: sheetName,
+            line,
+            sourceTicketNumber: ticketNumber,
+            finalTicketNumber: null,
+            customerName: customerNamePreview,
+            sellerName: sellerNamePreview,
+            airlineName: asString(pickValue(row, ["airlineName", "compagnie", "airline"])),
+            route: routePreview,
+            amount: summaryTotalAmount,
             currency: "USD",
-            airlineId: airline.id,
-            sellerName: "Import rapport global",
-            saleNature: SaleNature.CASH,
-            paymentStatus: PaymentStatus.PAID,
-            payerName: null,
-            agencyMarkupPercent: 0,
-            agencyMarkupAmount: 0,
-            commissionBaseAmount: item.amount,
-            commissionCalculationStatus: CommissionCalculationStatus.FINAL,
-            commissionRateUsed: item.amount > 0 ? (commissionShare / item.amount) * 100 : 0,
-            commissionAmount: commissionShare,
-            commissionModeApplied: CommissionMode.IMMEDIATE,
-            notes: syntheticNotes,
-          };
-
-          if (dryRun) {
-            summary.created += 1;
-          } else {
-            await prisma.$transaction(async (tx) => {
-              const createdTicket = await tx.ticketSale.create({ data });
-              const depositAccount = getAirlineDepositAccountByAirlineCode(airline.code);
-              if (depositAccount) {
-                await recordAirlineDepositMovement(tx, {
-                  accountKey: depositAccount.key,
-                  movementType: "DEBIT",
-                  amount: item.amount,
-                  reference: `RAPPORT ${syntheticTicketNumber}`,
-                  description: `Import synthèse ${summaryMonthLabel} - ${airline.name}`,
-                  airlineId: airline.id,
-                  ticketSaleId: createdTicket.id,
-                  createdAt: soldAt,
-                });
-              }
-            });
-            existingTicketNumbers.add(syntheticTicketNumber);
-            summary.created += 1;
-          }
-
-          if (includePreview) {
-            const stored = pushPreviewRow(previewRows, {
-              sheet: sheetName,
-              line,
-              sourceTicketNumber: syntheticTicketNumber,
-              finalTicketNumber: syntheticTicketNumber,
-              customerName: `Synthèse ${summaryMonthLabel}`,
-              sellerName: "Import rapport global",
-              airlineName: airline.name,
-              route: `RAPPORT GLOBAL ${summaryMonthLabel}`,
-              amount: item.amount,
-              currency: "USD",
-              soldAt: soldAt.toISOString().slice(0, 10),
-              status: "READY",
-              message: `${allocatedCounts[breakdownIndex] ?? 0} billet(s) • Commission ${commissionShare.toFixed(2)}`,
-            }, maxPreviewRows);
-            if (!stored) previewTruncated = true;
-          }
+            soldAt: summaryDate?.toISOString().slice(0, 10) ?? null,
+            status: hasDetailedTicketSheets ? "SKIPPED_EMPTY" : "ERROR",
+            message,
+          }, maxPreviewRows);
+          if (!stored) previewTruncated = true;
         }
 
         continue;
@@ -1325,18 +1200,30 @@ export async function importTicketWorkbookFromBuffer(options: TicketWorkbookImpo
           continue;
         }
 
-        const customerName = asString(pickValue(row, ["customerName", "customer", "passenger", "nom client", "client", "nom passager", "beneficiare", "beneficiaire"])) ?? "Client non renseigné";
-        let route = asString(pickValue(row, ["route", "itineraire", "trajet", "from-to", "itineriaire", "itinerare"])) ?? "ROUTE-NR";
+        const customerName = asString(pickValue(row, ["customerName", "customer", "passenger", "nom client", "client", "nom passager", "beneficiare", "beneficiaire"]));
+        if (!customerName) {
+          throw new Error("Nom du client/passager manquant sur la ligne.");
+        }
+
+        let route = asString(pickValue(row, ["route", "itineraire", "trajet", "from-to", "itineriaire", "itinerare"]));
+        if (!route) {
+          throw new Error("Itinéraire manquant sur la ligne.");
+        }
+
         const amount = asNumber(pickValue(row, ["amount", "prix", "montant", "ticket amount"]));
         if (!amount || amount <= 0) {
           throw new Error("Montant billet invalide.");
         }
 
-        let resolvedTicketNumber = ticketNumber as string;
+        let resolvedTicketNumber = ticketNumber ?? "";
         if (looksLikeRouteValue(resolvedTicketNumber) && looksLikePnrValue(route)) {
           const swapped = route;
           route = resolvedTicketNumber;
           resolvedTicketNumber = swapped;
+        }
+
+        if (!resolvedTicketNumber.trim()) {
+          throw new Error("Numéro/PNR du billet manquant sur la ligne.");
         }
 
         const currency = (asString(pickValue(row, ["currency", "devise"])) ?? "USD").toUpperCase();
@@ -1351,7 +1238,10 @@ export async function importTicketWorkbookFromBuffer(options: TicketWorkbookImpo
         const seller = await resolveSeller({ sellerEmail, sellerName });
 
         const airlineCodeRaw = asString(pickValue(row, ["airlineCode", "compagnieCode", "code compagnie", "code"]));
-        const airlineNameRaw = asString(pickValue(row, ["airlineName", "compagnie", "airline"])) ?? "Compagnie inconnue";
+        const airlineNameRaw = asString(pickValue(row, ["airlineName", "compagnie", "airline"]));
+        if (!airlineCodeRaw && !airlineNameRaw) {
+          throw new Error("Compagnie manquante sur la ligne.");
+        }
         const airlineIdentity = resolveAirlineIdentity(airlineCodeRaw, airlineNameRaw);
 
         let airline = airlineIdentity.canonicalCode ? airlineByCode.get(airlineIdentity.canonicalCode) : null;
