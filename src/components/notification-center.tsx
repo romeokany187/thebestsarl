@@ -52,7 +52,7 @@ function notificationTarget(notification: WorkflowNotification) {
     : null;
 
   if (notification.type === "PAYMENT_ORDER_APPROVAL_REQUIRED" && paymentOrderId) {
-    return { href: `/inbox/validate#payment-${paymentOrderId}`, label: "Aller à la section OP à approuver" };
+    return { href: `/admin/approvals#payment-${paymentOrderId}`, label: "Ouvrir la route admin d'approbation OP" };
   }
 
   if (notification.type === "PAYMENT_ORDER_EXECUTION_REQUIRED" && paymentOrderId) {
@@ -64,7 +64,7 @@ function notificationTarget(notification: WorkflowNotification) {
   }
 
   if (notification.type === "PROCUREMENT_APPROVAL" && needRequestId) {
-    return { href: `/inbox/validate#need-${needRequestId}`, label: "Aller à la section EDB à approuver" };
+    return { href: `/admin/approvals#need-${needRequestId}`, label: "Ouvrir la route admin d'approbation EDB" };
   }
 
   if (notification.type === "PROCUREMENT_FINANCE_EXECUTION" && needRequestId) {
@@ -100,42 +100,39 @@ export function NotificationCenter({
   notifications: WorkflowNotification[];
 }) {
   return (
-    <section className="space-y-3">
+    <section className="overflow-hidden rounded-2xl border border-black/10 bg-white shadow-sm dark:border-white/10 dark:bg-zinc-900">
       {notifications.length === 0 ? (
-        <div className="rounded-2xl border border-black/10 bg-white p-5 text-sm text-black/60 shadow-sm dark:border-white/10 dark:bg-zinc-900 dark:text-white/60">
+        <div className="p-5 text-sm text-black/60 dark:text-white/60">
           Aucune notification pour le moment.
         </div>
-      ) : notifications.map((notification) => {
-        const target = notificationTarget(notification);
+      ) : (
+        <div className="divide-y divide-black/10 dark:divide-white/10">
+          {notifications.map((notification) => {
+            const target = notificationTarget(notification);
 
-        return (
-          <Link key={notification.id} href={target.href} className="block">
-            <article className="rounded-2xl border border-black/10 bg-white p-4 shadow-sm transition hover:border-black/20 hover:bg-black/[0.02] dark:border-white/10 dark:bg-zinc-900 dark:hover:border-white/20 dark:hover:bg-white/[0.02]">
-              <div className="flex flex-wrap items-start justify-between gap-2">
-                <div>
-                  <div className="flex flex-wrap items-center gap-2">
-                    <p className="font-semibold">{notification.title}</p>
-                    {!notification.isRead ? (
-                      <span className="rounded-full bg-red-600 px-2 py-0.5 text-[10px] font-semibold text-white">Nouveau</span>
-                    ) : null}
+            return (
+              <Link key={notification.id} href={target.href} className="block px-4 py-3 transition hover:bg-black/[0.03] dark:hover:bg-white/[0.03]">
+                <div className="flex flex-wrap items-start justify-between gap-2">
+                  <div className="min-w-0 flex-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="text-[11px] text-black/50 dark:text-white/50">{formatWhen(notification.createdAt)}</span>
+                      <span className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold ${notificationBadgeClass(notification.type)}`}>
+                        {notificationTypeLabel(notification.type)}
+                      </span>
+                      {!notification.isRead ? (
+                        <span className="rounded-full bg-red-600 px-2 py-0.5 text-[10px] font-semibold text-white">Nouveau</span>
+                      ) : null}
+                    </div>
+                    <p className="mt-1 text-sm font-medium text-black/85 dark:text-white/85">{notification.title}</p>
+                    <p className="mt-1 text-sm text-black/70 dark:text-white/70">{notification.message}</p>
+                    <p className="mt-1 text-[11px] font-semibold text-black/55 dark:text-white/55">{target.label} →</p>
                   </div>
-                  <p className="mt-1 text-[11px] text-black/50 dark:text-white/50">{formatWhen(notification.createdAt)}</p>
                 </div>
-                <span className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold ${notificationBadgeClass(notification.type)}`}>
-                  {notificationTypeLabel(notification.type)}
-                </span>
-              </div>
-
-              <p className="mt-3 text-sm text-black/70 dark:text-white/70">{notification.message}</p>
-
-              <div className="mt-3 flex items-center justify-between gap-2 text-[11px] font-semibold text-black/55 dark:text-white/55">
-                <span>{target.label}</span>
-                <span aria-hidden="true">→</span>
-              </div>
-            </article>
-          </Link>
-        );
-      })}
+              </Link>
+            );
+          })}
+        </div>
+      )}
     </section>
   );
 }

@@ -101,8 +101,8 @@ export async function POST(request: NextRequest) {
     await prisma.userNotification.createMany({
       data: admins.map((admin) => ({
         userId: admin.id,
-        title: "Nouvel ordre de paiement à approuver",
-        message: `${me.name} a créé l'OP ${paymentOrder.code} pour ${parsed.data.beneficiary} • Motif: ${parsed.data.purpose} • Affectation: ${paymentOrderAssignmentLabel(orderAssignment)} • Montant: ${parsed.data.amount} ${orderCurrency}. Description: ${parsed.data.description}. Consultez le PDF OP avant d'approuver ou rejeter.`,
+        title: "Nouvel OP à approuver",
+        message: `Vous avez un nouvel ordre de paiement à approuver émis par ${me.name} : ${paymentOrder.code} pour ${parsed.data.beneficiary} (${parsed.data.amount} ${orderCurrency}).`,
         type: "PAYMENT_ORDER_APPROVAL_REQUIRED",
         metadata: {
           paymentOrderId: paymentOrder.id,

@@ -120,8 +120,8 @@ export async function POST(request: NextRequest) {
     await prisma.userNotification.createMany({
       data: validators.map((user) => ({
         userId: user.id,
-        title: "Validation EDB requise",
-        message: `Un nouvel état de besoin est soumis: ${need.code ?? need.title} — ${need.title}.`,
+        title: "Nouvel EDB à approuver",
+        message: `Vous avez un nouvel état de besoin à approuver émis par ${access.session.user.name ?? "un utilisateur"} : ${need.code ?? need.title} — ${need.title}.`,
         type: "PROCUREMENT_APPROVAL",
         metadata: {
           needRequestId: need.id,

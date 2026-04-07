@@ -22,6 +22,12 @@ const links = [
     roles: ["ADMIN", "DIRECTEUR_GENERAL", "MANAGER", "EMPLOYEE", "ACCOUNTANT"] as AppRole[],
   },
   {
+    href: "/admin/approvals",
+    label: "À approuver",
+    module: "admin" as AppModule,
+    roles: ["ADMIN", "DIRECTEUR_GENERAL"] as AppRole[],
+  },
+  {
     href: "/sales",
     label: "Ventes",
     module: "sales" as AppModule,

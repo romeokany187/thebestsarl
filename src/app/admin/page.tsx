@@ -27,10 +27,20 @@ export default async function AdminPage() {
   return (
     <AppShell role={role} accessNote="Accès administrateur: gestion des utilisateurs, équipes et paramétrage rapide des commissions.">
       <section className="mb-6">
-        <h1 className="text-2xl font-semibold">Administration</h1>
-        <p className="text-sm text-black/60 dark:text-white/60">
-          Référentiel des utilisateurs, équipes et paramètres essentiels.
-        </p>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h1 className="text-2xl font-semibold">Administration</h1>
+            <p className="text-sm text-black/60 dark:text-white/60">
+              Référentiel des utilisateurs, équipes et paramètres essentiels.
+            </p>
+          </div>
+          <a
+            href="/admin/approvals"
+            className="rounded-md border border-black/20 px-3 py-2 text-sm font-semibold hover:bg-black/5 dark:border-white/20 dark:hover:bg-white/10"
+          >
+            Ouvrir OP & EDB à approuver
+          </a>
+        </div>
       </section>
 
       <section className="mb-6">
