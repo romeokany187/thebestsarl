@@ -73,9 +73,11 @@ type TicketSaleRow = {
 
 type PaymentClient = { findMany(args: unknown): Promise<TicketPaymentRow[]> };
 type CashOperationClient = { findMany(args: unknown): Promise<CashOperationRow[]> };
+type PaymentOrderOverviewClient = { findMany(args: unknown): Promise<any[]> };
 
 const paymentClient = (prisma as unknown as { payment: PaymentClient }).payment;
 const cashOperationClient = (prisma as unknown as { cashOperation: CashOperationClient }).cashOperation;
+const paymentOrderClient = (prisma as unknown as { paymentOrder: PaymentOrderOverviewClient }).paymentOrder;
 
 type SearchParams = {
   startDate?: string;
@@ -422,6 +424,37 @@ export default async function PaymentsPage({
       },
       take: 5000,
     }),
+    canWrite
+      ? paymentOrderClient.findMany({
+          where: { status: "APPROVED" },
+          select: {
+            id: true,
+            code: true,
+            beneficiary: true,
+            amount: true,
+            currency: true,
+            approvedAt: true,
+          },
+          orderBy: { approvedAt: "desc" },
+          take: 12,
+        })
+      : Promise.resolve([]),
+    canWrite
+      ? prisma.needRequest.findMany({
+          where: { status: "APPROVED" },
+          select: {
+            id: true,
+            code: true,
+            title: true,
+            estimatedAmount: true,
+            currency: true,
+            approvedAt: true,
+            reviewComment: true,
+          },
+          orderBy: { approvedAt: "desc" },
+          take: 12,
+        })
+      : Promise.resolve([]),
   ]);
 
   const [
@@ -432,6 +465,8 @@ export default async function PaymentsPage({
     cashOperations,
     ticketPaymentsBeforeStart,
     cashOperationsBeforeStart,
+    paymentOrdersReadyForExecution,
+    needsReadyForExecutionRaw,
   ] = paymentsData as [
     AirlineRow[],
     TicketSaleRow[],
@@ -440,6 +475,8 @@ export default async function PaymentsPage({
     CashOperationRow[],
     Array<{ paidAt?: Date | string | null; amount: number; currency?: string | null; amountUsd?: number | null; amountCdf?: number | null; fxRateUsdToCdf?: number | null; method?: string | null }>,
     Array<{ occurredAt?: Date | string | null; category?: string | null; amount: number; direction: string; method?: string | null; currency?: string | null; amountUsd?: number | null; fxRateToUsd?: number | null; fxRateUsdToCdf?: number | null }>,
+    Array<{ id: string; code?: string | null; beneficiary: string; amount: number; currency?: string | null; approvedAt?: Date | null }>,
+    Array<{ id: string; code?: string | null; title: string; estimatedAmount?: number | null; currency?: string | null; approvedAt?: Date | null; reviewComment?: string | null }>,
   ];
 
   const sequenceByTicketId = new Map<string, number>();
@@ -586,6 +623,12 @@ export default async function PaymentsPage({
         usdOut: 0,
         cdfIn: currency === "CDF" ? payment.amount : 0,
         cdfOut: 0,
+        actionType: "payment" as const,
+        paymentId: payment.id,
+        paymentAmount: payment.amount,
+        paymentCurrency: currency,
+        paymentMethod: payment.method ?? "CASH",
+        paymentPaidAt: new Date(payment.paidAt).toISOString(),
       };
     }),
     ...cashOperations.map((operation) => {
@@ -600,6 +643,13 @@ export default async function PaymentsPage({
         usdOut: !isInflow && currency === "USD" ? operation.amount : 0,
         cdfIn: isInflow && currency === "CDF" ? operation.amount : 0,
         cdfOut: !isInflow && currency === "CDF" ? operation.amount : 0,
+        actionType: "cash-operation" as const,
+        cashOperationId: operation.id,
+        cashAmount: operation.amount,
+        cashCurrency: normalizeMoneyCurrency(operation.currency),
+        cashMethod: operation.method ?? "CASH",
+        cashDescription: operation.description,
+        cashOccurredAt: new Date(operation.occurredAt).toISOString(),
       };
     }),
   ].sort((a, b) => a.occurredAt.getTime() - b.occurredAt.getTime());
@@ -717,6 +767,11 @@ export default async function PaymentsPage({
       invoiceNumber: ticket.invoiceNumber,
     }));
 
+  const needsReadyForExecution = needsReadyForExecutionRaw.filter(
+    (need) => !(need.reviewComment ?? "").includes("EXECUTION_CAISSE:"),
+  );
+  const executionItemsCount = paymentOrdersReadyForExecution.length + needsReadyForExecution.length;
+
   return (
     <AppShell
       role={role}
@@ -733,12 +788,59 @@ export default async function PaymentsPage({
 
       <PaymentsWritingWorkspace
         closedSummary={(
-          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-            <KpiCard label="Total encaissé" value={`${grossInflows.toFixed(2)} USD`} hint={`Billets ${ticketPaymentInflowsUsd.toFixed(2)} + autres ${otherInflows.toFixed(2)}`} />
-            <KpiCard label="Total dépensé" value={`${cashOutflows.toFixed(2)} USD`} />
-            <KpiCard label="Solde caisse USD" value={`${closingUsd.toFixed(2)} USD`} />
-            <KpiCard label="Total caisse CDF" value={`${closingCdf.toFixed(2)} CDF`} />
-            <KpiCard label="Niveau de risque" value={riskLevel} hint={riskHint} />
+          <div className="space-y-4">
+            {canWrite ? (
+              <section className="rounded-2xl border border-amber-300/70 bg-amber-50/80 p-4 dark:border-amber-700/60 dark:bg-amber-950/20">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <h2 className="text-sm font-semibold">OP / EDB à exécuter</h2>
+                    <p className="mt-1 text-xs text-black/65 dark:text-white/65">
+                      {executionItemsCount > 0
+                        ? `${executionItemsCount} dossier(s) approuvé(s) sont prêts pour l'exécution financière.`
+                        : "Aucun OP ou EDB approuvé n'est actuellement en attente d'exécution."}
+                    </p>
+                  </div>
+                  <a
+                    href="/inbox/execute"
+                    className="inline-flex rounded-md border border-black/20 px-3 py-1.5 text-xs font-semibold hover:bg-black/5 dark:border-white/20 dark:hover:bg-white/10"
+                  >
+                    Ouvrir l&apos;exécution
+                  </a>
+                </div>
+                {executionItemsCount > 0 ? (
+                  <div className="mt-3 grid gap-3 md:grid-cols-2">
+                    <div>
+                      <p className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-black/55 dark:text-white/55">Ordres de paiement</p>
+                      <ul className="space-y-1 text-xs text-black/75 dark:text-white/75">
+                        {paymentOrdersReadyForExecution.slice(0, 5).map((order) => (
+                          <li key={order.id}>
+                            • {order.code ?? "OP"} - {order.beneficiary} - {order.amount.toFixed(2)} {normalizeMoneyCurrency(order.currency)}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                    <div>
+                      <p className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-black/55 dark:text-white/55">États de besoin</p>
+                      <ul className="space-y-1 text-xs text-black/75 dark:text-white/75">
+                        {needsReadyForExecution.slice(0, 5).map((need) => (
+                          <li key={need.id}>
+                            • {need.code ?? "EDB"} - {need.title} - {Number(need.estimatedAmount ?? 0).toFixed(2)} {normalizeMoneyCurrency(need.currency)}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  </div>
+                ) : null}
+              </section>
+            ) : null}
+
+            <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+              <KpiCard label="Total encaissé" value={`${grossInflows.toFixed(2)} USD`} hint={`Billets ${ticketPaymentInflowsUsd.toFixed(2)} + autres ${otherInflows.toFixed(2)}`} />
+              <KpiCard label="Total dépensé" value={`${cashOutflows.toFixed(2)} USD`} />
+              <KpiCard label="Solde caisse USD" value={`${closingUsd.toFixed(2)} USD`} />
+              <KpiCard label="Total caisse CDF" value={`${closingCdf.toFixed(2)} CDF`} />
+              <KpiCard label="Niveau de risque" value={riskLevel} hint={riskHint} />
+            </div>
           </div>
         )}
         ticketWorkspace={(
@@ -874,6 +976,27 @@ export default async function PaymentsPage({
               <KpiCard label="Solde clôture CDF" value={`${closingCdf.toFixed(2)} CDF`} hint={`Billets CDF ${ticketPaymentInflowCdf.toFixed(2)} + autres CDF ${cashInflowCdf.toFixed(2)} - sorties CDF ${cashOutflowCdf.toFixed(2)}`} />
             </div>
 
+            {canWrite ? (
+              <section className="rounded-2xl border border-amber-300/70 bg-amber-50/80 p-4 dark:border-amber-700/60 dark:bg-amber-950/20">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <h2 className="text-sm font-semibold">Exécution OP / EDB</h2>
+                    <p className="mt-1 text-xs text-black/65 dark:text-white/65">
+                      {executionItemsCount > 0
+                        ? `${executionItemsCount} dossier(s) approuvé(s) sont visibles pour exécution.`
+                        : "Aucun dossier approuvé n'est en attente d'exécution pour l'instant."}
+                    </p>
+                  </div>
+                  <a
+                    href="/inbox/execute"
+                    className="inline-flex rounded-md border border-black/20 px-3 py-1.5 text-xs font-semibold hover:bg-black/5 dark:border-white/20 dark:hover:bg-white/10"
+                  >
+                    Voir les OP / EDB
+                  </a>
+                </div>
+              </section>
+            ) : null}
+
             <section className="rounded-2xl border border-black/10 bg-white p-4 dark:border-white/10 dark:bg-zinc-900">
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div className="max-w-3xl">
@@ -942,6 +1065,7 @@ export default async function PaymentsPage({
                       <th className="px-4 py-3 text-left font-semibold">CDF Sorties</th>
                       <th className="px-4 py-3 text-left font-semibold">CDF Solde</th>
                       <th className="px-4 py-3 text-left font-semibold">Référence</th>
+                      {canManageLedger ? <th className="px-4 py-3 text-left font-semibold">Actions</th> : null}
                     </tr>
                   </thead>
                   <tbody>
@@ -956,6 +1080,7 @@ export default async function PaymentsPage({
                       <td className="px-4 py-3">-</td>
                       <td className="px-4 py-3 font-semibold">{openingCdf.toFixed(2)} CDF</td>
                       <td className="px-4 py-3">-</td>
+                      {canManageLedger ? <td className="px-4 py-3">-</td> : null}
                     </tr>
 
                     {caisseLedger.map((row, index) => (
@@ -970,11 +1095,35 @@ export default async function PaymentsPage({
                         <td className="px-4 py-3">{row.cdfOut > 0 ? `${row.cdfOut.toFixed(2)} CDF` : "-"}</td>
                         <td className="px-4 py-3">{row.cdfBalance.toFixed(2)} CDF</td>
                         <td className="px-4 py-3">{row.reference}</td>
+                        {canManageLedger ? (
+                          <td className="px-4 py-3">
+                            {row.actionType === "payment" ? (
+                              <PaymentRowAdminActions
+                                paymentId={row.paymentId}
+                                amount={row.paymentAmount}
+                                currency={row.paymentCurrency}
+                                method={row.paymentMethod}
+                                reference={row.reference === "-" ? null : row.reference}
+                                paidAt={row.paymentPaidAt}
+                              />
+                            ) : (
+                              <CashOperationRowActions
+                                cashOperationId={row.cashOperationId}
+                                amount={row.cashAmount}
+                                currency={row.cashCurrency}
+                                method={row.cashMethod}
+                                reference={row.reference === "-" ? null : row.reference}
+                                description={row.cashDescription}
+                                occurredAt={row.cashOccurredAt}
+                              />
+                            )}
+                          </td>
+                        ) : null}
                       </tr>
                     ))}
                     {caisseLedger.length === 0 ? (
                       <tr>
-                        <td colSpan={10} className="px-4 py-8 text-center text-sm text-black/55 dark:text-white/55">
+                        <td colSpan={canManageLedger ? 11 : 10} className="px-4 py-8 text-center text-sm text-black/55 dark:text-white/55">
                           Aucune opération de caisse sur cette période.
                         </td>
                       </tr>
@@ -984,60 +1133,6 @@ export default async function PaymentsPage({
               </div>
             </section>
 
-            {canManageLedger ? (
-              <section className="overflow-hidden rounded-2xl border border-black/10 bg-white shadow-sm dark:border-white/10 dark:bg-zinc-900">
-                <div className="border-b border-black/10 px-4 py-3 dark:border-white/10">
-                  <h2 className="text-sm font-semibold">Modification / suppression des écritures de caisse</h2>
-                </div>
-                <div className="overflow-x-auto">
-                  <table className="min-w-full text-sm">
-                    <thead className="bg-black/5 dark:bg-white/10">
-                      <tr>
-                        <th className="px-4 py-3 text-left font-semibold">Date</th>
-                        <th className="px-4 py-3 text-left font-semibold">Sens</th>
-                        <th className="px-4 py-3 text-left font-semibold">Catégorie</th>
-                        <th className="px-4 py-3 text-left font-semibold">Montant</th>
-                        <th className="px-4 py-3 text-left font-semibold">Méthode</th>
-                        <th className="px-4 py-3 text-left font-semibold">Référence</th>
-                        <th className="px-4 py-3 text-left font-semibold">Libellé</th>
-                        <th className="px-4 py-3 text-left font-semibold">Actions</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {cashOperations.map((operation) => (
-                        <tr key={operation.id} className="border-t border-black/5 dark:border-white/10">
-                          <td className="px-4 py-3">{new Date(operation.occurredAt).toLocaleString("fr-FR")}</td>
-                          <td className="px-4 py-3">{operation.direction === "INFLOW" ? "Entrée" : "Sortie"}</td>
-                          <td className="px-4 py-3">{operation.category ?? "-"}</td>
-                          <td className="px-4 py-3">{operation.amount.toFixed(2)} {normalizeMoneyCurrency(operation.currency)}</td>
-                          <td className="px-4 py-3">{operation.method ?? "-"}</td>
-                          <td className="px-4 py-3">{operation.reference ?? "-"}</td>
-                          <td className="px-4 py-3">{operation.description}</td>
-                          <td className="px-4 py-3">
-                            <CashOperationRowActions
-                              cashOperationId={operation.id}
-                              amount={operation.amount}
-                              currency={normalizeMoneyCurrency(operation.currency)}
-                              method={operation.method ?? "CASH"}
-                              reference={operation.reference ?? null}
-                              description={operation.description}
-                              occurredAt={new Date(operation.occurredAt).toISOString()}
-                            />
-                          </td>
-                        </tr>
-                      ))}
-                      {cashOperations.length === 0 ? (
-                        <tr>
-                          <td colSpan={8} className="px-4 py-8 text-center text-sm text-black/55 dark:text-white/55">
-                            Aucune écriture de caisse à corriger sur cette période.
-                          </td>
-                        </tr>
-                      ) : null}
-                    </tbody>
-                  </table>
-                </div>
-              </section>
-            ) : null}
           </div>
         )}
         virtualWorkspace={(

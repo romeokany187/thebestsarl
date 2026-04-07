@@ -26,7 +26,7 @@ export function PaymentsWritingWorkspace({
           <div>
             <h2 className="text-sm font-semibold">Actions paiements</h2>
             <p className="mt-1 text-xs text-black/60 dark:text-white/60">
-              Choisissez un espace financier autorisé pour votre profil, puis refermez pour revenir au menu.
+              Choisissez un espace financier autorisé pour votre profil. Les soldes d&apos;ouverture se trouvent dans <span className="font-semibold">Caisse / solde d&apos;ouverture</span>.
             </p>
           </div>
           {mode !== "none" ? (
@@ -64,7 +64,7 @@ export function PaymentsWritingWorkspace({
                   : "border border-black/20 hover:bg-black/5 dark:border-white/20 dark:hover:bg-white/10"
               }`}
             >
-              Autres écritures caisse
+              Caisse / solde d&apos;ouverture
             </button>
           ) : null}
           {virtualWorkspace ? (

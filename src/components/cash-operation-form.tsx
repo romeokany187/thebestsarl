@@ -217,7 +217,10 @@ export function CashOperationForm() {
 
   return (
     <section className="mb-6 rounded-2xl border border-black/10 bg-white p-4 dark:border-white/10 dark:bg-zinc-900">
-      <h2 className="mb-3 text-sm font-semibold">Journal de caisse - Nouvelle opération</h2>
+      <h2 className="mb-3 text-sm font-semibold">Caisse - soldes d&apos;ouverture et nouvelles opérations</h2>
+      <p className="mb-3 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-xs text-blue-900 dark:border-blue-800/60 dark:bg-blue-950/30 dark:text-blue-100">
+        Pour encoder un solde d&apos;ouverture, choisissez la catégorie <strong>Solde d&apos;ouverture manuel</strong>, puis sélectionnez la méthode souhaitée <strong>(Cash, Airtel Money, Orange Money, M-Pesa, Equity, Rowbank ou IllicoCash)</strong>.
+      </p>
       <p className="mb-3 text-xs text-black/60 dark:text-white/60">
         Au tout premier démarrage, saisissez manuellement les soldes d'ouverture avec la catégorie <strong>Solde d'ouverture manuel</strong>, aussi bien pour la caisse physique que pour les comptes virtuels (Airtel, Orange, M-Pesa, Equity, Rowbank, IllicoCash). Ensuite, le report à nouveau des mois suivants se calcule automatiquement.
       </p>

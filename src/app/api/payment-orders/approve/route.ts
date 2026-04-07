@@ -89,19 +89,22 @@ export async function PATCH(request: NextRequest) {
     });
   }
 
-  // If approved, notify cashiers to execute
+  // If approved, notify all authorized finance executors
   if (nextStatus === "APPROVED") {
-    const cashiers = await prisma.user.findMany({
+    const financeExecutionUsers = await prisma.user.findMany({
       where: {
-        jobTitle: "CAISSIER",
+        OR: [
+          { role: { in: ["ADMIN", "ACCOUNTANT"] } },
+          { jobTitle: { in: ["CAISSIER", "COMPTABLE"] } },
+        ],
       },
       select: { id: true },
       take: 160,
     });
 
-    cashiers.forEach((cashier) => {
+    financeExecutionUsers.forEach((financeUser) => {
       notifications.push({
-        userId: cashier.id,
+        userId: financeUser.id,
         title: "Ordre de paiement approuvé à exécuter",
         message: `L'ordre de paiement ${paymentOrder.code ?? ""} pour ${paymentOrder.beneficiary} (${paymentOrder.amount} ${paymentOrder.currency}) est approuvé. ${paymentOrder.description}. Lisez le PDF OP puis exécutez depuis votre inbox.`,
         type: "PAYMENT_ORDER_EXECUTION_REQUIRED",
@@ -115,8 +118,12 @@ export async function PATCH(request: NextRequest) {
   }
 
   if (notifications.length > 0) {
+    const unique = notifications.filter((notification, index, list) => {
+      return list.findIndex((item) => item.userId === notification.userId && item.type === notification.type && item.metadata.paymentOrderId === notification.metadata.paymentOrderId) === index;
+    });
+
     await prisma.userNotification.createMany({
-      data: notifications,
+      data: unique,
     });
   }
 

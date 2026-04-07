@@ -4,7 +4,7 @@ import { requireApiRoles } from "@/lib/rbac";
 import { needApprovalSchema } from "@/lib/validators";
 
 export async function POST(request: NextRequest) {
-  const access = await requireApiRoles(["DIRECTEUR_GENERAL"]);
+  const access = await requireApiRoles(["DIRECTEUR_GENERAL", "ADMIN"]);
   if (access.error) return access.error;
 
   const me = await prisma.user.findUnique({
@@ -82,19 +82,22 @@ export async function POST(request: NextRequest) {
   }
 
   if (nextStatus === "APPROVED") {
-    const cashierUsers = await prisma.user.findMany({
+    const financeExecutionUsers = await prisma.user.findMany({
       where: {
-        jobTitle: "CAISSIER",
+        OR: [
+          { role: { in: ["ADMIN", "ACCOUNTANT"] } },
+          { jobTitle: { in: ["CAISSIER", "COMPTABLE"] } },
+        ],
       },
       select: { id: true },
       take: 160,
     });
 
-    cashierUsers.forEach((cashier) => {
+    financeExecutionUsers.forEach((financeUser) => {
       notifications.push({
-        userId: cashier.id,
+        userId: financeUser.id,
         title: "EDB approuvé à exécuter",
-        message: `L'état de besoin \"${updated.title}\" est approuvé par le Directeur Général. Exécuter la caisse depuis votre inbox.`,
+        message: `L'état de besoin \"${updated.title}\" est approuvé par la Direction. Exécuter la caisse depuis votre inbox.`,
         type: "PROCUREMENT_FINANCE_EXECUTION",
         metadata: {
           needRequestId: updated.id,
