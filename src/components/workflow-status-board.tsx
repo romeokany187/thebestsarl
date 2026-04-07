@@ -1,4 +1,8 @@
 import Link from "next/link";
+import { PaymentOrderAdminActions } from "@/components/payment-order-admin-actions";
+import { PaymentOrderCashExecutionActions } from "@/components/payment-order-cash-execution-actions";
+import { ProcurementInboxActions } from "@/components/procurement-inbox-actions";
+import { ProcurementCashExecutionActions } from "@/components/procurement-cash-execution-actions";
 import type { WorkflowNeed, WorkflowPaymentOrder } from "@/lib/inbox-workflow";
 
 type WorkflowMode = "validate" | "execute" | "history";
@@ -87,7 +91,7 @@ function needEmptyText(mode: WorkflowMode) {
   return "Aucun EDB dans l'historique.";
 }
 
-function renderPaymentCard(order: WorkflowPaymentOrder) {
+function renderPaymentCard(order: WorkflowPaymentOrder, mode: WorkflowMode) {
   return (
     <article
       id={`payment-${order.id}`}
@@ -114,11 +118,26 @@ function renderPaymentCard(order: WorkflowPaymentOrder) {
       <p className="text-[11px] text-black/50 dark:text-white/50">
         DG: {order.issuedBy?.name ?? "-"} • Créé le {formatWhen(order.createdAt)}
       </p>
+
+      {mode === "validate" ? <PaymentOrderAdminActions paymentOrderId={order.id} /> : null}
+      {mode === "execute" ? <PaymentOrderCashExecutionActions paymentOrderId={order.id} /> : null}
+      {mode === "history" ? (
+        <div className="mt-2 flex flex-wrap gap-2">
+          <a
+            href={`/api/payment-orders/${order.id}/pdf`}
+            target="_blank"
+            rel="noreferrer"
+            className="rounded-md border border-black/20 px-2.5 py-1 text-[11px] font-semibold hover:bg-black/5 dark:border-white/20 dark:hover:bg-white/10"
+          >
+            Lire PDF OP
+          </a>
+        </div>
+      ) : null}
     </article>
   );
 }
 
-function renderNeedCard(need: WorkflowNeed) {
+function renderNeedCard(need: WorkflowNeed, mode: WorkflowMode) {
   const labelStatus = needStatusLabel(need.status, need.reviewComment);
   const badgeStatus = labelStatus === "Exécuté" ? "EXECUTED" : need.status;
 
@@ -146,6 +165,21 @@ function renderNeedCard(need: WorkflowNeed) {
       <p className="text-[11px] text-black/50 dark:text-white/50">
         Soumis le {formatWhen(need.submittedAt ?? need.createdAt)}
       </p>
+
+      {mode === "validate" ? <ProcurementInboxActions needRequestId={need.id} /> : null}
+      {mode === "execute" ? <ProcurementCashExecutionActions needRequestId={need.id} /> : null}
+      {mode === "history" ? (
+        <div className="mt-2 flex flex-wrap gap-2">
+          <a
+            href={`/api/procurement/needs/${need.id}/pdf`}
+            target="_blank"
+            rel="noreferrer"
+            className="rounded-md border border-black/20 px-2.5 py-1 text-[11px] font-semibold hover:bg-black/5 dark:border-white/20 dark:hover:bg-white/10"
+          >
+            Lire PDF EDB
+          </a>
+        </div>
+      ) : null}
     </article>
   );
 }
@@ -186,7 +220,7 @@ export function WorkflowStatusBoard({
           paymentOrders.length === 0 ? (
             <p className="text-sm text-black/60 dark:text-white/60">{paymentEmptyText(mode)}</p>
           ) : (
-            <div className="grid gap-3 lg:grid-cols-2">{paymentOrders.map((item) => renderPaymentCard(item))}</div>
+            <div className="grid gap-3 lg:grid-cols-2">{paymentOrders.map((item) => renderPaymentCard(item, mode))}</div>
           )
         ) : !groupedPayments || Object.keys(groupedPayments).length === 0 ? (
           <p className="text-sm text-black/60 dark:text-white/60">{paymentEmptyText(mode)}</p>
@@ -195,7 +229,7 @@ export function WorkflowStatusBoard({
             {Object.entries(groupedPayments).map(([label, items]) => (
               <div key={label} className="space-y-2">
                 <p className="text-xs font-semibold uppercase tracking-wide text-black/50 dark:text-white/50">{label}</p>
-                <div className="grid gap-3 lg:grid-cols-2">{items.map((item) => renderPaymentCard(item))}</div>
+                <div className="grid gap-3 lg:grid-cols-2">{items.map((item) => renderPaymentCard(item, mode))}</div>
               </div>
             ))}
           </div>
@@ -212,7 +246,7 @@ export function WorkflowStatusBoard({
           needs.length === 0 ? (
             <p className="text-sm text-black/60 dark:text-white/60">{needEmptyText(mode)}</p>
           ) : (
-            <div className="grid gap-3 lg:grid-cols-2">{needs.map((item) => renderNeedCard(item))}</div>
+            <div className="grid gap-3 lg:grid-cols-2">{needs.map((item) => renderNeedCard(item, mode))}</div>
           )
         ) : !groupedNeeds || Object.keys(groupedNeeds).length === 0 ? (
           <p className="text-sm text-black/60 dark:text-white/60">{needEmptyText(mode)}</p>
@@ -221,7 +255,7 @@ export function WorkflowStatusBoard({
             {Object.entries(groupedNeeds).map(([label, items]) => (
               <div key={label} className="space-y-2">
                 <p className="text-xs font-semibold uppercase tracking-wide text-black/50 dark:text-white/50">{label}</p>
-                <div className="grid gap-3 lg:grid-cols-2">{items.map((item) => renderNeedCard(item))}</div>
+                <div className="grid gap-3 lg:grid-cols-2">{items.map((item) => renderNeedCard(item, mode))}</div>
               </div>
             ))}
           </div>
