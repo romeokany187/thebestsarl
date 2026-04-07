@@ -47,6 +47,42 @@ function parseIsoDay(value: string) {
   return date;
 }
 
+function parsePositiveNumber(value: unknown, fallback: number) {
+  const parsed = Number.parseFloat(String(value ?? ""));
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+}
+
+function normalizeMoneyCurrency(value: unknown) {
+  const normalized = String(value ?? "USD").trim().toUpperCase();
+  return normalized === "CDF" ? "CDF" : "USD";
+}
+
+function amountToUsd(amount: number, currency: string, fxRateUsdToCdf: number) {
+  return currency === "CDF" ? amount / fxRateUsdToCdf : amount;
+}
+
+function amountToCdf(amount: number, currency: string, fxRateUsdToCdf: number) {
+  return currency === "CDF" ? amount : amount * fxRateUsdToCdf;
+}
+
+function amountToTicketCurrency(amount: number, fromCurrency: string, ticketCurrency: string, fxRateUsdToCdf: number) {
+  if (fromCurrency === ticketCurrency) {
+    return amount;
+  }
+
+  if (ticketCurrency === "USD") {
+    return amountToUsd(amount, fromCurrency, fxRateUsdToCdf);
+  }
+
+  return amountToCdf(amount, fromCurrency, fxRateUsdToCdf);
+}
+
+function computePaymentStatus(totalDue: number, paidTotal: number) {
+  if (paidTotal <= 0.0001) return PaymentStatus.UNPAID;
+  if (paidTotal + 0.0001 < totalDue) return PaymentStatus.PARTIAL;
+  return PaymentStatus.PAID;
+}
+
 export async function POST(request: NextRequest) {
   const access = await requireApiModuleAccess("sales", ["ADMIN"]);
   if (access.error) {
@@ -71,31 +107,51 @@ export async function POST(request: NextRequest) {
       999,
     ));
 
-    const logs = await prisma.auditLog.findMany({
-      where: {
-        action: "TICKET_CREATED",
-        entityType: "TICKET_SALE",
-        createdAt: { gte: dayStart, lte: dayEnd },
-      },
-      orderBy: [{ createdAt: "asc" }, { id: "asc" }],
-      select: {
-        id: true,
-        createdAt: true,
-        actorId: true,
-        actor: { select: { id: true, name: true, email: true } },
-        payload: true,
-      },
-    });
+    const [logs, paymentLogs] = await Promise.all([
+      prisma.auditLog.findMany({
+        where: {
+          action: "TICKET_CREATED",
+          entityType: "TICKET_SALE",
+          createdAt: { gte: dayStart, lte: dayEnd },
+        },
+        orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+        select: {
+          id: true,
+          createdAt: true,
+          actorId: true,
+          actor: { select: { id: true, name: true, email: true } },
+          payload: true,
+        },
+      }),
+      prisma.auditLog.findMany({
+        where: {
+          action: "PAYMENT_RECORDED",
+          entityType: "PAYMENT",
+          createdAt: { gte: dayStart, lte: dayEnd },
+        },
+        orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+        select: {
+          id: true,
+          createdAt: true,
+          actorId: true,
+          actor: { select: { id: true, name: true, email: true } },
+          payload: true,
+        },
+      }),
+    ]);
 
-    if (!logs.length) {
+    if (!logs.length && !paymentLogs.length) {
       return NextResponse.json({
         data: {
           date: rawDate,
           dryRun,
           restored: 0,
+          restoredPayments: 0,
           skipped: 0,
+          skippedPayments: 0,
           tickets: [],
-          message: "Aucun billet créé ce jour n'a été trouvé dans l'historique.",
+          payments: [],
+          message: "Aucun billet ni paiement créé ce jour n'a été trouvé dans l'historique.",
         },
       });
     }
@@ -106,7 +162,7 @@ export async function POST(request: NextRequest) {
     const airlineByCode = new Map(airlines.map((airline) => [airline.code.trim().toUpperCase(), airline]));
     const airlineByName = new Map(airlines.map((airline) => [normalizeLookup(airline.name), airline]));
 
-    const requestedTicketNumbers = logs
+    const ticketNumbersFromLogs = logs
       .map((log) => {
         const payload = (log.payload && typeof log.payload === "object" && !Array.isArray(log.payload)
           ? log.payload
@@ -118,16 +174,33 @@ export async function POST(request: NextRequest) {
       })
       .filter(Boolean);
 
+    const ticketNumbersFromPayments = paymentLogs
+      .map((log) => {
+        const payload = (log.payload && typeof log.payload === "object" && !Array.isArray(log.payload)
+          ? log.payload
+          : {}) as Record<string, unknown>;
+        const details = (payload.details && typeof payload.details === "object" && !Array.isArray(payload.details)
+          ? payload.details
+          : {}) as Record<string, unknown>;
+        return typeof details.ticketNumber === "string" ? details.ticketNumber.trim() : "";
+      })
+      .filter(Boolean);
+
+    const requestedTicketNumbers = Array.from(new Set([...ticketNumbersFromLogs, ...ticketNumbersFromPayments]));
+
     const existingTickets = requestedTicketNumbers.length > 0
       ? await prisma.ticketSale.findMany({
           where: { ticketNumber: { in: requestedTicketNumbers } },
-          select: { ticketNumber: true },
+          include: { payments: true },
         })
       : [];
 
+    const ticketByNumber = new Map(existingTickets.map((ticket) => [ticket.ticketNumber, ticket]));
     const existingTicketNumbers = new Set(existingTickets.map((ticket) => ticket.ticketNumber));
     const restoredTickets: Array<{ ticketNumber: string; customerName: string; airlineName: string; amount: number }> = [];
     const skippedTickets: Array<{ ticketNumber: string; reason: string }> = [];
+    const restoredPayments: Array<{ ticketNumber: string; amount: number; currency: string; method: string | null }> = [];
+    const skippedPayments: Array<{ ticketNumber: string; reason: string }> = [];
 
     for (const log of logs) {
       const payload = (log.payload && typeof log.payload === "object" && !Array.isArray(log.payload)
@@ -198,8 +271,9 @@ export async function POST(request: NextRequest) {
       };
 
       if (!dryRun) {
-        await prisma.ticketSale.create({ data });
+        const createdTicket = await prisma.ticketSale.create({ data });
         existingTicketNumbers.add(ticketNumber);
+        ticketByNumber.set(ticketNumber, { ...createdTicket, payments: [] });
       }
 
       restoredTickets.push({
@@ -210,18 +284,113 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    if (!dryRun && restoredTickets.length > 0) {
+    const fxRateUsdToCdf = parsePositiveNumber(process.env.CASH_DEFAULT_USD_TO_CDF_RATE, 2800);
+    const paymentFingerprints = new Set(
+      existingTickets.flatMap((ticket) =>
+        ticket.payments.map((payment) => `${ticket.ticketNumber}|${payment.amount.toFixed(2)}|${(payment.currency ?? ticket.currency).toUpperCase()}|${payment.reference ?? ""}`),
+      ),
+    );
+
+    for (const log of paymentLogs) {
+      const payload = (log.payload && typeof log.payload === "object" && !Array.isArray(log.payload)
+        ? log.payload
+        : {}) as Record<string, unknown>;
+      const details = (payload.details && typeof payload.details === "object" && !Array.isArray(payload.details)
+        ? payload.details
+        : {}) as Record<string, unknown>;
+
+      const ticketNumber = typeof details.ticketNumber === "string" ? details.ticketNumber.trim() : "";
+      if (!ticketNumber) {
+        skippedPayments.push({ ticketNumber: `audit:${log.id}`, reason: "Billet du paiement introuvable dans l'historique." });
+        continue;
+      }
+
+      const ticket = ticketByNumber.get(ticketNumber) ?? await prisma.ticketSale.findUnique({
+        where: { ticketNumber },
+        include: { payments: true },
+      });
+
+      if (!ticket) {
+        skippedPayments.push({ ticketNumber, reason: "Billet absent: paiement non restauré." });
+        continue;
+      }
+
+      ticketByNumber.set(ticketNumber, ticket);
+
+      const amount = typeof details.amount === "number"
+        ? details.amount
+        : Number.parseFloat(String(details.amount ?? ""));
+      if (!Number.isFinite(amount) || amount <= 0) {
+        skippedPayments.push({ ticketNumber, reason: "Montant de paiement invalide dans l'historique." });
+        continue;
+      }
+
+      const currency = normalizeMoneyCurrency(details.currency);
+      const method = typeof details.method === "string" && details.method.trim() ? details.method.trim() : "Paiement restauré";
+      const reference = typeof details.reference === "string" && details.reference.trim() ? details.reference.trim() : null;
+      const fingerprint = `${ticketNumber}|${amount.toFixed(2)}|${currency}|${reference ?? ""}`;
+      if (paymentFingerprints.has(fingerprint)) {
+        skippedPayments.push({ ticketNumber, reason: "Paiement déjà présent." });
+        continue;
+      }
+
+      if (!dryRun) {
+        await prisma.$transaction(async (tx) => {
+          await tx.payment.create({
+            data: {
+              ticketId: ticket.id,
+              amount,
+              currency,
+              fxRateUsdToCdf,
+              amountUsd: amountToUsd(amount, currency, fxRateUsdToCdf),
+              amountCdf: amountToCdf(amount, currency, fxRateUsdToCdf),
+              paidAt: log.createdAt,
+              method,
+              reference,
+            },
+          });
+
+          const refreshed = await tx.ticketSale.findUnique({
+            where: { id: ticket.id },
+            include: { payments: true },
+          });
+
+          if (refreshed) {
+            const paidTotal = refreshed.payments.reduce((sum, payment) => (
+              sum + amountToTicketCurrency(
+                payment.amount,
+                normalizeMoneyCurrency(payment.currency ?? refreshed.currency),
+                normalizeMoneyCurrency(refreshed.currency),
+                payment.fxRateUsdToCdf ?? fxRateUsdToCdf,
+              )
+            ), 0);
+
+            await tx.ticketSale.update({
+              where: { id: ticket.id },
+              data: { paymentStatus: computePaymentStatus(refreshed.amount, paidTotal) },
+            });
+          }
+        });
+      }
+
+      paymentFingerprints.add(fingerprint);
+      restoredPayments.push({ ticketNumber, amount, currency, method });
+    }
+
+    if (!dryRun && (restoredTickets.length > 0 || restoredPayments.length > 0)) {
       await writeActivityLog({
         actorId: access.session.user.id,
         action: "TICKET_RESTORED_FROM_AUDIT",
         entityType: "TICKET_SALE",
         entityId: "GLOBAL",
-        summary: `${restoredTickets.length} billet(s) du ${rawDate} restauré(s) depuis l'historique d'activité.`,
+        summary: `${restoredTickets.length} billet(s) et ${restoredPayments.length} paiement(s) du ${rawDate} restauré(s) depuis l'historique d'activité.`,
         payload: {
           date: rawDate,
           restoredTickets,
           skippedTickets,
-          note: "Restauration d'urgence sans ajustement rétroactif du dépôt ni des paiements.",
+          restoredPayments,
+          skippedPayments,
+          note: "Restauration d'urgence sans ajustement rétroactif du dépôt.",
         } as Prisma.InputJsonValue,
       });
     }
@@ -231,12 +400,15 @@ export async function POST(request: NextRequest) {
         date: rawDate,
         dryRun,
         restored: restoredTickets.length,
+        restoredPayments: restoredPayments.length,
         skipped: skippedTickets.length,
+        skippedPayments: skippedPayments.length,
         tickets: restoredTickets,
+        payments: restoredPayments,
         skippedTickets,
-        message: restoredTickets.length > 0
-          ? `${restoredTickets.length} billet(s) restauré(s) depuis l'historique.`
-          : "Aucun billet manquant à restaurer pour cette date.",
+        message: (restoredTickets.length > 0 || restoredPayments.length > 0)
+          ? `${restoredTickets.length} billet(s) et ${restoredPayments.length} paiement(s) restauré(s) depuis l'historique.`
+          : "Aucune donnée manquante à restaurer pour cette date.",
       },
     });
   } catch (error) {

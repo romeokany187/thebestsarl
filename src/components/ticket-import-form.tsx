@@ -377,7 +377,7 @@ export function TicketImportForm({
     const restoreDate = currentPeriodDefaults().date;
     setRestoreLoading(true);
     setStatusType("loading");
-    setStatus(`Restauration d'urgence des billets du ${restoreDate} depuis l'historique...`);
+    setStatus(`Restauration d'urgence des billets et paiements du ${restoreDate} depuis l'historique...`);
 
     const response = await fetch("/api/tickets/restore-from-audit", {
       method: "POST",
@@ -394,12 +394,13 @@ export function TicketImportForm({
     }
 
     const restored = Number(body?.data?.restored ?? 0);
-    const skipped = Number(body?.data?.skipped ?? 0);
+    const restoredPayments = Number(body?.data?.restoredPayments ?? 0);
+    const skipped = Number(body?.data?.skipped ?? 0) + Number(body?.data?.skippedPayments ?? 0);
     setStatusType("success");
     setStatus(
-      restored > 0
-        ? `${restored} billet(s) du ${restoreDate} restauré(s) depuis l'historique.${skipped > 0 ? ` ${skipped} déjà présents ou ignorés.` : ""}`
-        : (body?.data?.message ?? `Aucun billet manquant à restaurer pour le ${restoreDate}.`),
+      restored > 0 || restoredPayments > 0
+        ? `${restored} billet(s) et ${restoredPayments} paiement(s) du ${restoreDate} restauré(s) depuis l'historique.${skipped > 0 ? ` ${skipped} déjà présents ou ignorés.` : ""}`
+        : (body?.data?.message ?? `Aucune donnée manquante à restaurer pour le ${restoreDate}.`),
     );
     router.refresh();
     setRestoreLoading(false);
@@ -582,7 +583,7 @@ export function TicketImportForm({
             disabled={statusType === "loading" || restoreLoading}
             className="rounded-md border border-amber-500 px-4 py-2 text-sm font-semibold text-amber-700 disabled:cursor-not-allowed disabled:opacity-60 dark:border-amber-400 dark:text-amber-200"
           >
-            {restoreLoading ? "Restauration..." : "Restaurer les billets du jour depuis l'historique"}
+            {restoreLoading ? "Restauration..." : "Restaurer les billets et paiements du jour"}
           </button>
         </>
       ) : null}
