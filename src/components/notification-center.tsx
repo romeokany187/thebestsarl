@@ -56,7 +56,7 @@ function notificationTarget(notification: WorkflowNotification) {
   }
 
   if (notification.type === "PAYMENT_ORDER_EXECUTION_REQUIRED" && paymentOrderId) {
-    return { href: `/inbox/execute#payment-${paymentOrderId}`, label: "Aller à la section OP à exécuter" };
+    return { href: "/payments", label: "Ouvrir Paiements pour exécuter l'OP" };
   }
 
   if (notification.type.startsWith("PAYMENT_ORDER_") && paymentOrderId) {
@@ -68,7 +68,7 @@ function notificationTarget(notification: WorkflowNotification) {
   }
 
   if (notification.type === "PROCUREMENT_FINANCE_EXECUTION" && needRequestId) {
-    return { href: `/inbox/execute#need-${needRequestId}`, label: "Aller à la section EDB à exécuter" };
+    return { href: "/payments", label: "Ouvrir Paiements pour exécuter l'EDB" };
   }
 
   if (notification.type.startsWith("PROCUREMENT_") && needRequestId) {

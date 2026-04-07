@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 
 type PaymentOrderAssignment = "A_MON_COMPTE" | "VISAS" | "SAFETY" | "BILLETTERIE" | "TSL";
+type PaymentOrderIssuerRole = "ADMIN" | "DIRECTEUR_GENERAL";
 
 const ASSIGNMENT_LABELS: Record<PaymentOrderAssignment, string> = {
   A_MON_COMPTE: "À mon compte",
@@ -13,8 +14,17 @@ const ASSIGNMENT_LABELS: Record<PaymentOrderAssignment, string> = {
   TSL: "TSL",
 };
 
-export function PaymentOrderForm() {
+const PURPOSE_SUGGESTIONS = [
+  "Approvisionnement compagnie",
+  "Paiement fournisseur",
+  "Règlement visa",
+  "Frais opérationnels",
+  "Avance de mission",
+];
+
+export function PaymentOrderForm({ issuerRole = "DIRECTEUR_GENERAL" }: { issuerRole?: PaymentOrderIssuerRole }) {
   const router = useRouter();
+  const isAdminIssuer = issuerRole === "ADMIN";
   const [beneficiary, setBeneficiary] = useState("");
   const [purpose, setPurpose] = useState("");
   const [description, setDescription] = useState("");
@@ -60,8 +70,15 @@ export function PaymentOrderForm() {
         return;
       }
 
+      const createdCode = payload?.data?.code ?? "";
+      const createdStatus = payload?.data?.status ?? "";
+
       setState("success");
-      setMessage(`Ordre de paiement ${payload?.data?.code ?? ""} envoyé pour validation.`.trim());
+      setMessage(
+        (createdStatus === "APPROVED"
+          ? `Ordre de paiement ${createdCode} envoyé directement en exécution.`
+          : `Ordre de paiement ${createdCode} envoyé pour validation.`).trim(),
+      );
       setPdfUrl(payload?.pdf?.url ?? null);
       setBeneficiary("");
       setPurpose("");
@@ -78,9 +95,11 @@ export function PaymentOrderForm() {
 
   return (
     <form onSubmit={(event) => void submitOrder(event)} className="mb-6 rounded-2xl border border-black/10 bg-white p-4 shadow-sm dark:border-white/10 dark:bg-zinc-900">
-      <h2 className="text-sm font-semibold">Nouvel ordre de paiement (DG)</h2>
+      <h2 className="text-sm font-semibold">{isAdminIssuer ? "Nouvel ordre de paiement (Admin)" : "Nouvel ordre de paiement (DG)"}</h2>
       <p className="mt-1 text-xs text-black/60 dark:text-white/60">
-        L&apos;OP exige le bénéficiaire, le motif, la description, l&apos;affectation, le montant et la devise. Le document PDF est généré automatiquement.
+        {isAdminIssuer
+          ? "Un OP émis par l'admin part directement en exécution caisse, sans attente d'approbation."
+          : "Un OP émis par la DG part d'abord à l'approbation admin puis à l'exécution caisse."}
       </p>
 
       <div className="mt-3 grid gap-3 md:grid-cols-2">
@@ -92,14 +111,22 @@ export function PaymentOrderForm() {
           className="rounded-md border border-black/15 bg-white px-3 py-2 text-sm dark:border-white/15 dark:bg-zinc-900"
           disabled={state === "loading"}
         />
-        <input
-          value={purpose}
-          onChange={(event) => setPurpose(event.target.value)}
-          placeholder="Motif"
-          maxLength={180}
-          className="rounded-md border border-black/15 bg-white px-3 py-2 text-sm dark:border-white/15 dark:bg-zinc-900"
-          disabled={state === "loading"}
-        />
+        <>
+          <input
+            list="payment-order-purpose-suggestions"
+            value={purpose}
+            onChange={(event) => setPurpose(event.target.value)}
+            placeholder="Motif (ex: Approvisionnement compagnie)"
+            maxLength={180}
+            className="rounded-md border border-black/15 bg-white px-3 py-2 text-sm dark:border-white/15 dark:bg-zinc-900"
+            disabled={state === "loading"}
+          />
+          <datalist id="payment-order-purpose-suggestions">
+            {PURPOSE_SUGGESTIONS.map((item) => (
+              <option key={item} value={item} />
+            ))}
+          </datalist>
+        </>
       </div>
 
       <div className="mt-3 grid gap-3 md:grid-cols-[minmax(0,1fr)_180px_120px_96px]">
@@ -147,7 +174,7 @@ export function PaymentOrderForm() {
           disabled={state === "loading"}
           className="rounded-md border border-black/20 px-3 py-1.5 text-xs font-semibold hover:bg-black/5 disabled:opacity-60 dark:border-white/20 dark:hover:bg-white/10"
         >
-          Envoyer OP
+          Émettre OP
         </button>
         {pdfUrl ? (
           <a

@@ -1,7 +1,7 @@
 import { AppShell } from "@/components/app-shell";
 import { PaymentOrderForm } from "@/components/payment-order-form";
-import { requirePageRoles } from "@/lib/rbac";
 import { prisma } from "@/lib/prisma";
+import { requirePageModuleAccess } from "@/lib/rbac";
 
 const paymentOrderClient = (prisma as unknown as { paymentOrder: any }).paymentOrder;
 
@@ -21,36 +21,39 @@ function paymentOrderAssignmentLabel(value: string | null | undefined) {
 
 export const dynamic = "force-dynamic";
 
-export default async function DgPaymentOrdersPage() {
-  const { role, session } = await requirePageRoles(["DIRECTEUR_GENERAL"]);
+export default async function AdminPaymentOrdersPage() {
+  const { role } = await requirePageModuleAccess("admin", ["ADMIN"]);
 
   const orders = await paymentOrderClient.findMany({
-    where: { issuedById: session.user.id },
+    where: {
+      issuedBy: { role: "ADMIN" },
+    },
     include: {
+      issuedBy: { select: { name: true, jobTitle: true } },
       approvedBy: { select: { name: true } },
       executedBy: { select: { name: true } },
     },
-    orderBy: { createdAt: "desc" },
+    orderBy: [{ executedAt: "desc" }, { approvedAt: "desc" }, { createdAt: "desc" }],
     take: 120,
   });
 
   return (
     <AppShell
       role={role}
-      accessNote="Espace DG: création des ordres de paiement avec validation admin avant exécution caisse."
+      accessNote="Espace admin: création des ordres de paiement avec passage direct en exécution caisse."
     >
       <section className="mb-6">
-        <h1 className="text-2xl font-semibold tracking-tight">Espace DG - Ordres de paiement</h1>
+        <h1 className="text-2xl font-semibold tracking-tight">Espace Admin - Ordres de paiement</h1>
         <p className="text-sm text-black/60 dark:text-white/60">
-          Les OP émis par la DG passent d&apos;abord par l&apos;approbation admin, puis par l&apos;exécution caisse.
+          Les OP émis par l&apos;admin sont validés automatiquement et vont directement à l&apos;exécution caisse.
         </p>
       </section>
 
-      <PaymentOrderForm issuerRole="DIRECTEUR_GENERAL" />
+      <PaymentOrderForm issuerRole="ADMIN" />
 
       <section className="overflow-hidden rounded-2xl border border-black/10 bg-white shadow-sm dark:border-white/10 dark:bg-zinc-900">
         <div className="border-b border-black/10 px-4 py-3 dark:border-white/10">
-          <h2 className="text-sm font-semibold">Mes ordres de paiement</h2>
+          <h2 className="text-sm font-semibold">Ordres de paiement émis par l&apos;admin</h2>
         </div>
         <div className="overflow-x-auto">
           <table className="min-w-full text-sm">
@@ -63,6 +66,7 @@ export default async function DgPaymentOrdersPage() {
                 <th className="px-4 py-3 text-left font-semibold">Affectation</th>
                 <th className="px-4 py-3 text-left font-semibold">Description</th>
                 <th className="px-4 py-3 text-left font-semibold">Montant</th>
+                <th className="px-4 py-3 text-left font-semibold">Émis par</th>
                 <th className="px-4 py-3 text-left font-semibold">Validé par</th>
                 <th className="px-4 py-3 text-left font-semibold">Exécuté par</th>
                 <th className="px-4 py-3 text-left font-semibold">Statut</th>
@@ -79,6 +83,7 @@ export default async function DgPaymentOrdersPage() {
                   <td className="px-4 py-3">{paymentOrderAssignmentLabel(order.assignment)}</td>
                   <td className="px-4 py-3">{order.description}</td>
                   <td className="px-4 py-3">{order.amount.toFixed(2)} {normalizeMoneyCurrency(order.currency)}</td>
+                  <td className="px-4 py-3">{order.issuedBy?.name ?? "-"}</td>
                   <td className="px-4 py-3">{order.approvedBy?.name ?? "-"}</td>
                   <td className="px-4 py-3">{order.executedBy?.name ?? "-"}</td>
                   <td className="px-4 py-3">{order.status}</td>
@@ -96,8 +101,8 @@ export default async function DgPaymentOrdersPage() {
               ))}
               {orders.length === 0 ? (
                 <tr>
-                  <td colSpan={11} className="px-4 py-8 text-center text-sm text-black/55 dark:text-white/55">
-                    Aucun ordre de paiement créé pour le moment.
+                  <td colSpan={12} className="px-4 py-8 text-center text-sm text-black/55 dark:text-white/55">
+                    Aucun ordre de paiement admin créé pour le moment.
                   </td>
                 </tr>
               ) : null}

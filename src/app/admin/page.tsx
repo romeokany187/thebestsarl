@@ -34,12 +34,20 @@ export default async function AdminPage() {
               Référentiel des utilisateurs, équipes et paramètres essentiels.
             </p>
           </div>
-          <a
-            href="/admin/approvals"
-            className="rounded-md border border-black/20 px-3 py-2 text-sm font-semibold hover:bg-black/5 dark:border-white/20 dark:hover:bg-white/10"
-          >
-            Ouvrir OP & EDB à approuver
-          </a>
+          <div className="flex flex-wrap gap-2">
+            <a
+              href="/admin/approvals"
+              className="rounded-md border border-black/20 px-3 py-2 text-sm font-semibold hover:bg-black/5 dark:border-white/20 dark:hover:bg-white/10"
+            >
+              Ouvrir OP & EDB à approuver
+            </a>
+            <a
+              href="/admin/ordres-paiement"
+              className="rounded-md border border-black/20 px-3 py-2 text-sm font-semibold hover:bg-black/5 dark:border-white/20 dark:hover:bg-white/10"
+            >
+              Ouvrir OP Admin
+            </a>
+          </div>
         </div>
       </section>
 

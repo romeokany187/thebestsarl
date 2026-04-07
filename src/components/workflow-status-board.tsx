@@ -116,7 +116,7 @@ function renderPaymentCard(order: WorkflowPaymentOrder, mode: WorkflowMode) {
         Montant: <span className="font-semibold">{order.amount.toFixed(2)} {normalizeMoneyCurrency(order.currency)}</span>
       </p>
       <p className="text-[11px] text-black/50 dark:text-white/50">
-        DG: {order.issuedBy?.name ?? "-"} • Créé le {formatWhen(order.createdAt)}
+        Émis par: {order.issuedBy?.name ?? "-"}{order.issuedBy?.jobTitle ? ` (${order.issuedBy.jobTitle})` : ""} • Créé le {formatWhen(order.createdAt)}
       </p>
 
       {mode === "validate" ? <PaymentOrderAdminActions paymentOrderId={order.id} /> : null}

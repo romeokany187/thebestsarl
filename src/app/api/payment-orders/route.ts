@@ -1,3 +1,4 @@
+import type { Prisma } from "@prisma/client";
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireApiRoles } from "@/lib/rbac";
@@ -29,7 +30,7 @@ function paymentOrderAssignmentLabel(value: string | null | undefined) {
 }
 
 export async function POST(request: NextRequest) {
-  const access = await requireApiRoles(["DIRECTEUR_GENERAL"]);
+  const access = await requireApiRoles(["DIRECTEUR_GENERAL", "ADMIN"]);
   if (access.error) return access.error;
 
   const me = await prisma.user.findUnique({
@@ -56,6 +57,9 @@ export async function POST(request: NextRequest) {
   }
 
   const now = new Date();
+  const isAdminIssuer = access.role === "ADMIN";
+  const issuerLabel = isAdminIssuer ? "Admin" : "DG";
+  const codePrefix = isAdminIssuer ? "TB-ADM-OP" : "TB-DG-OP";
   const orderCurrency = normalizeMoneyCurrency(parsed.data.currency);
   const orderAssignment = normalizePaymentOrderAssignment(parsed.data.assignment);
   const year = now.getUTCFullYear();
@@ -66,11 +70,12 @@ export async function POST(request: NextRequest) {
     const count = await (tx as unknown as { paymentOrder: any }).paymentOrder.count({
       where: {
         createdAt: { gte: yearStart, lt: yearEnd },
+        code: { startsWith: `${codePrefix}-` },
       },
     });
 
     const sequence = String(count + 1).padStart(3, "0");
-    const code = `TB-DG-OP-${sequence}-${year}`;
+    const code = `${codePrefix}-${sequence}-${year}`;
 
     return (tx as unknown as { paymentOrder: any }).paymentOrder.create({
       data: {
@@ -81,29 +86,43 @@ export async function POST(request: NextRequest) {
         assignment: orderAssignment,
         amount: parsed.data.amount,
         currency: orderCurrency,
-        status: "SUBMITTED",
+        status: isAdminIssuer ? "APPROVED" : "SUBMITTED",
         issuedById: me.id,
         submittedAt: now,
+        approvedById: isAdminIssuer ? me.id : undefined,
+        approvedAt: isAdminIssuer ? now : undefined,
       },
     });
   });
 
-  // Notify all admins about the new payment order
-  const admins = await prisma.user.findMany({
-    where: {
-      role: "ADMIN",
-    },
-    select: { id: true },
-    take: 100,
-  });
+  const notifications: Array<{
+    userId: string;
+    title: string;
+    message: string;
+    type: string;
+    paymentOrderId: string;
+    metadata: Prisma.InputJsonValue;
+  }> = [];
 
-  if (admins.length > 0) {
-    await prisma.userNotification.createMany({
-      data: admins.map((admin) => ({
-        userId: admin.id,
-        title: "Nouvel OP à approuver",
-        message: `Vous avez un nouvel ordre de paiement à approuver émis par ${me.name} : ${paymentOrder.code} pour ${parsed.data.beneficiary} (${parsed.data.amount} ${orderCurrency}).`,
-        type: "PAYMENT_ORDER_APPROVAL_REQUIRED",
+  if (isAdminIssuer) {
+    const financeExecutionUsers = await prisma.user.findMany({
+      where: {
+        OR: [
+          { role: { in: ["ADMIN", "ACCOUNTANT"] } },
+          { jobTitle: { in: ["CAISSIER", "COMPTABLE"] } },
+        ],
+      },
+      select: { id: true },
+      take: 160,
+    });
+
+    financeExecutionUsers.forEach((financeUser) => {
+      notifications.push({
+        userId: financeUser.id,
+        title: "Ordre de paiement admin à exécuter",
+        message: `L'ordre de paiement ${paymentOrder.code} pour ${parsed.data.beneficiary} (${parsed.data.amount} ${orderCurrency}) a été émis par l'admin ${me.name}. Exécution directe depuis Paiements.`,
+        type: "PAYMENT_ORDER_EXECUTION_REQUIRED",
+        paymentOrderId: paymentOrder.id,
         metadata: {
           paymentOrderId: paymentOrder.id,
           code: paymentOrder.code,
@@ -114,9 +133,51 @@ export async function POST(request: NextRequest) {
           currency: orderCurrency,
           description: parsed.data.description,
           issuedBy: me.name,
+          issuedByRole: me.role,
+          source: "PAYMENTS_EXECUTION",
+        },
+      });
+    });
+  } else {
+    const admins = await prisma.user.findMany({
+      where: {
+        role: "ADMIN",
+      },
+      select: { id: true },
+      take: 100,
+    });
+
+    admins.forEach((admin) => {
+      notifications.push({
+        userId: admin.id,
+        title: "Nouvel OP à approuver",
+        message: `Vous avez un nouvel ordre de paiement à approuver émis par la DG ${me.name} : ${paymentOrder.code} pour ${parsed.data.beneficiary} (${parsed.data.amount} ${orderCurrency}).`,
+        type: "PAYMENT_ORDER_APPROVAL_REQUIRED",
+        paymentOrderId: paymentOrder.id,
+        metadata: {
+          paymentOrderId: paymentOrder.id,
+          code: paymentOrder.code,
+          beneficiary: parsed.data.beneficiary,
+          purpose: parsed.data.purpose,
+          assignment: orderAssignment,
+          amount: parsed.data.amount,
+          currency: orderCurrency,
+          description: parsed.data.description,
+          issuedBy: me.name,
+          issuedByRole: me.role,
           source: "INBOX_APPROVAL",
         },
-      })),
+      });
+    });
+  }
+
+  if (notifications.length > 0) {
+    const unique = notifications.filter((notification, index, list) => {
+      return list.findIndex((item) => item.userId === notification.userId && item.type === notification.type && item.paymentOrderId === notification.paymentOrderId) === index;
+    });
+
+    await prisma.userNotification.createMany({
+      data: unique.map(({ paymentOrderId: _paymentOrderId, ...notification }) => notification),
     });
   }
 
@@ -125,7 +186,7 @@ export async function POST(request: NextRequest) {
     action: "PAYMENT_ORDER_CREATED",
     entityType: "PAYMENT_ORDER",
     entityId: paymentOrder.id,
-    summary: `OP ${paymentOrder.code} émis pour ${paymentOrder.beneficiary} (${paymentOrder.amount.toFixed(2)} ${paymentOrder.currency}).`,
+    summary: `OP ${paymentOrder.code} émis par ${issuerLabel} pour ${paymentOrder.beneficiary} (${paymentOrder.amount.toFixed(2)} ${paymentOrder.currency}).`,
     payload: {
       code: paymentOrder.code,
       beneficiary: paymentOrder.beneficiary,
@@ -133,6 +194,8 @@ export async function POST(request: NextRequest) {
       assignment: paymentOrder.assignment,
       amount: paymentOrder.amount,
       currency: paymentOrder.currency,
+      issuedByRole: issuerLabel,
+      status: paymentOrder.status,
     },
   });
 

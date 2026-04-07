@@ -107,7 +107,7 @@ export async function PATCH(request: NextRequest) {
       notifications.push({
         userId: financeUser.id,
         title: "Ordre de paiement approuvé à exécuter",
-        message: `L'ordre de paiement ${paymentOrder.code ?? ""} pour ${paymentOrder.beneficiary} (${paymentOrder.amount} ${paymentOrder.currency}) est approuvé. ${paymentOrder.description}. Lisez le PDF OP puis exécutez depuis votre inbox.`,
+        message: `L'ordre de paiement ${paymentOrder.code ?? ""} pour ${paymentOrder.beneficiary} (${paymentOrder.amount} ${paymentOrder.currency}) est approuvé. ${paymentOrder.description}. Lisez le PDF OP puis exécutez depuis Paiements.`, 
         type: "PAYMENT_ORDER_EXECUTION_REQUIRED",
         metadata: {
           paymentOrderId: updated.id,

@@ -201,7 +201,7 @@ export async function GET(request: NextRequest, context: RouteContext) {
     y -= Math.max(16, wrapped.length * 12 + 4);
   };
 
-  page.drawText(`Réf: ${paymentOrder.code ?? `TB-DG-OP-${paymentOrder.id.slice(0, 8).toUpperCase()}`}`, {
+  page.drawText(`Réf: ${paymentOrder.code ?? `TB-OP-${paymentOrder.id.slice(0, 8).toUpperCase()}`}`, {
     x: CONTENT_LEFT,
     y,
     size: 10.5,
@@ -229,7 +229,7 @@ export async function GET(request: NextRequest, context: RouteContext) {
   drawLine("Motif", paymentOrder.purpose || "-");
   drawLine("Affectation", paymentOrderAssignmentLabel(paymentOrder.assignment));
   drawLine("Montant", `${Number(paymentOrder.amount ?? 0).toFixed(2)} ${normalizeMoneyCurrency(paymentOrder.currency)}`);
-  drawLine("Demandeur DG", paymentOrder.issuedBy?.name ? `${paymentOrder.issuedBy.name} (${paymentOrder.issuedBy.jobTitle})` : "-");
+  drawLine("Émis par", paymentOrder.issuedBy?.name ? `${paymentOrder.issuedBy.name} (${paymentOrder.issuedBy.jobTitle})` : "-");
   drawLine("Soumis le", formatDate(paymentOrder.submittedAt));
   drawLine("Validé par", paymentOrder.approvedBy?.name ? `${paymentOrder.approvedBy.name} (${paymentOrder.approvedBy.jobTitle})` : "-");
   drawLine("Date validation", formatDate(paymentOrder.approvedAt));
