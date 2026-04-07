@@ -237,7 +237,15 @@ export async function POST(request: NextRequest) {
   const parsed = attendanceSignSchema.safeParse(body);
 
   if (!parsed.success) {
-    return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
+    const flattened = parsed.error.flatten();
+    const firstFieldError = Object.values(flattened.fieldErrors)
+      .flat()
+      .find((item) => typeof item === "string" && item.trim());
+
+    return NextResponse.json(
+      { error: flattened.formErrors[0] ?? firstFieldError ?? "Coordonnées de signature invalides." },
+      { status: 400 },
+    );
   }
 
   const signTime = new Date();

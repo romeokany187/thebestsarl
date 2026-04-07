@@ -3,6 +3,42 @@
 import { useEffect, useState } from "react";
 import type { AppRole } from "@/lib/rbac";
 
+function extractErrorMessage(errorPayload: unknown) {
+  if (!errorPayload || typeof errorPayload !== "object") {
+    return "Signature échouée. Vérifiez vos permissions.";
+  }
+
+  const record = errorPayload as {
+    error?:
+      | string
+      | {
+        formErrors?: string[];
+        fieldErrors?: Record<string, string[] | undefined>;
+      };
+  };
+
+  if (typeof record.error === "string" && record.error.trim()) {
+    return record.error.trim();
+  }
+
+  if (record.error && typeof record.error === "object") {
+    const formError = record.error.formErrors?.find((item) => typeof item === "string" && item.trim());
+    if (formError) {
+      return formError;
+    }
+
+    const fieldError = Object.values(record.error.fieldErrors ?? {})
+      .flat()
+      .find((item) => typeof item === "string" && item.trim());
+
+    if (fieldError) {
+      return fieldError;
+    }
+  }
+
+  return "Signature échouée. Vérifiez vos permissions.";
+}
+
 export function AttendanceForm({ role }: { role: AppRole }) {
   const [status, setStatus] = useState<string>("");
   const [isSigning, setIsSigning] = useState(false);
@@ -67,7 +103,7 @@ export function AttendanceForm({ role }: { role: AppRole }) {
         const payload = {
           latitude: position.coords.latitude,
           longitude: position.coords.longitude,
-          accuracyM: position.coords.accuracy,
+          accuracyM: Number.isFinite(position.coords.accuracy) ? position.coords.accuracy : undefined,
           action,
         };
 
@@ -79,7 +115,7 @@ export function AttendanceForm({ role }: { role: AppRole }) {
 
         if (!response.ok) {
           const errorPayload = await response.json().catch(() => null);
-          setStatus(errorPayload?.error ?? "Signature échouée. Vérifiez vos permissions.");
+          setStatus(extractErrorMessage(errorPayload));
           setIsSigning(false);
           return;
         }
