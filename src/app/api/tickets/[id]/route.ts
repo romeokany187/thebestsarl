@@ -6,6 +6,7 @@ import { ticketUpdateSchema } from "@/lib/validators";
 import { computeCommissionAmount, pickCommissionRule } from "@/lib/commission";
 import { getAirlineDepositAccountByAirlineCode, recordAirlineDepositMovement } from "@/lib/airline-deposit";
 import { ensureAirlineCatalog } from "@/lib/airline-catalog";
+import { getTicketDepositDebitAmount } from "@/lib/ticket-pricing";
 import { canManageTicketRecord } from "@/lib/assignment";
 import { writeActivityLog } from "@/lib/activity-log";
 
@@ -294,8 +295,21 @@ export async function PATCH(request: NextRequest, { params }: Params) {
         });
       }
 
+      const previousDepositAmount = previousDepositAccount
+        ? getTicketDepositDebitAmount({
+          ...existing,
+          airline: { code: existing.airline.code },
+        })
+        : 0;
+      const nextDepositAmount = nextDepositAccount
+        ? getTicketDepositDebitAmount({
+          ...saved,
+          airline: { code: targetAirline.code },
+        })
+        : 0;
+
       if (previousDepositAccount && nextDepositAccount && previousDepositAccount.key === nextDepositAccount.key) {
-        const deltaAmount = saved.amount - existing.amount;
+        const deltaAmount = nextDepositAmount - previousDepositAmount;
         if (Math.abs(deltaAmount) > 0.0001) {
           await recordAirlineDepositMovement(tx, {
             accountKey: nextDepositAccount.key,
@@ -311,11 +325,11 @@ export async function PATCH(request: NextRequest, { params }: Params) {
           });
         }
       } else {
-        if (previousDepositAccount) {
+        if (previousDepositAccount && previousDepositAmount > 0) {
           await recordAirlineDepositMovement(tx, {
             accountKey: previousDepositAccount.key,
             movementType: "CREDIT",
-            amount: existing.amount,
+            amount: previousDepositAmount,
             reference: `TRANSFERT ${existing.ticketNumber}`,
             description: `Restitution ancienne compagnie pour billet ${existing.ticketNumber} - ${existing.airline.name}`,
             airlineId: existing.airlineId,
@@ -324,11 +338,11 @@ export async function PATCH(request: NextRequest, { params }: Params) {
           });
         }
 
-        if (nextDepositAccount) {
+        if (nextDepositAccount && nextDepositAmount > 0) {
           await recordAirlineDepositMovement(tx, {
             accountKey: nextDepositAccount.key,
             movementType: "DEBIT",
-            amount: saved.amount,
+            amount: nextDepositAmount,
             reference: `PNR ${saved.ticketNumber}`,
             description: `Débit automatique billet ${saved.ticketNumber} - ${targetAirline.name}`,
             airlineId: saved.airlineId,
@@ -402,6 +416,12 @@ export async function DELETE(_request: NextRequest, { params }: Params) {
         id: true,
         sellerId: true,
         amount: true,
+        agencyMarkupAmount: true,
+        commissionAmount: true,
+        commissionModeApplied: true,
+        commissionCalculationStatus: true,
+        commissionBaseAmount: true,
+        baseFareAmount: true,
         ticketNumber: true,
         soldAt: true,
         airlineId: true,
@@ -422,16 +442,23 @@ export async function DELETE(_request: NextRequest, { params }: Params) {
 
     await prisma.$transaction(async (tx) => {
       if (depositAccount) {
-        await recordAirlineDepositMovement(tx, {
-          accountKey: depositAccount.key,
-          movementType: "CREDIT",
-          amount: existing.amount,
-          reference: `ANNUL ${existing.ticketNumber}`,
-          description: `Restitution après suppression billet ${existing.ticketNumber} - ${existing.airline.name}`,
-          airlineId: existing.airlineId,
-          ticketSaleId: existing.id,
-          createdById: access.session.user.id,
+        const depositCreditAmount = getTicketDepositDebitAmount({
+          ...existing,
+          airline: { code: existing.airline.code },
         });
+
+        if (depositCreditAmount > 0) {
+          await recordAirlineDepositMovement(tx, {
+            accountKey: depositAccount.key,
+            movementType: "CREDIT",
+            amount: depositCreditAmount,
+            reference: `ANNUL ${existing.ticketNumber}`,
+            description: `Restitution après suppression billet ${existing.ticketNumber} - ${existing.airline.name}`,
+            airlineId: existing.airlineId,
+            ticketSaleId: existing.id,
+            createdById: access.session.user.id,
+          });
+        }
       }
 
       await tx.ticketSale.delete({ where: { id } });

@@ -93,6 +93,18 @@ export function getTicketBaseCommissionAmount(ticket: TicketPricingInput, overri
   return round2(Math.max(0, totalCommission - markupAmount));
 }
 
+export function getTicketDepositDebitAmount(ticket: TicketPricingInput, overrideCommissionAmount?: number | null) {
+  const mode = (ticket.commissionModeApplied ?? "").trim().toUpperCase();
+  if (mode === "AFTER_DEPOSIT") {
+    return round2(Math.max(0, ticket.amount));
+  }
+
+  const markupAmount = getTicketMarkupAmount(ticket);
+  const totalCommission = getTicketCommissionAmount(ticket, overrideCommissionAmount);
+  const baseFareCommission = round2(Math.max(0, totalCommission - markupAmount));
+  return round2(Math.max(0, ticket.amount - baseFareCommission));
+}
+
 export function getTicketTotalAmount(ticket: TicketPricingInput, _overrideCommissionAmount?: number | null) {
   const markupAmount = getTicketMarkupAmount(ticket);
   return round2(Math.max(0, ticket.amount) + markupAmount);

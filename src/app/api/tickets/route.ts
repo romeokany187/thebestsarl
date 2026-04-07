@@ -9,6 +9,7 @@ import { CommissionCalculationStatus, CommissionMode } from "@prisma/client";
 import { ensureAirlineCatalog } from "@/lib/airline-catalog";
 import { Prisma } from "@prisma/client";
 import { invoiceNumberFromChronology } from "@/lib/invoice";
+import { getTicketDepositDebitAmount } from "@/lib/ticket-pricing";
 import { canSellTickets } from "@/lib/assignment";
 import { writeActivityLog } from "@/lib/activity-log";
 
@@ -204,17 +205,24 @@ export async function POST(request: NextRequest) {
       }
 
       if (depositAccount) {
-        await recordAirlineDepositMovement(tx, {
-          accountKey: depositAccount.key,
-          movementType: "DEBIT",
-          amount: created.amount,
-          reference: `PNR ${created.ticketNumber}`,
-          description: `Débit automatique billet ${created.ticketNumber} - ${airline.name}`,
-          airlineId: airline.id,
-          ticketSaleId: created.id,
-          createdById: access.session.user.id,
-          createdAt: created.soldAt,
+        const depositDebitAmount = getTicketDepositDebitAmount({
+          ...created,
+          airline: { code: airline.code },
         });
+
+        if (depositDebitAmount > 0) {
+          await recordAirlineDepositMovement(tx, {
+            accountKey: depositAccount.key,
+            movementType: "DEBIT",
+            amount: depositDebitAmount,
+            reference: `PNR ${created.ticketNumber}`,
+            description: `Débit automatique billet ${created.ticketNumber} - ${airline.name}`,
+            airlineId: airline.id,
+            ticketSaleId: created.id,
+            createdById: access.session.user.id,
+            createdAt: created.soldAt,
+          });
+        }
       }
 
       return created;

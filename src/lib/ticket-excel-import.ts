@@ -1,6 +1,7 @@
 import { CommissionCalculationStatus, CommissionMode, PaymentStatus, Prisma, SaleNature, TravelClass } from "@prisma/client";
 import * as XLSX from "xlsx";
 import { computeCommissionAmount, pickCommissionRule } from "@/lib/commission";
+import { getTicketDepositDebitAmount } from "@/lib/ticket-pricing";
 import { prisma } from "@/lib/prisma";
 import {
   buildAirlineDepositAccountSummaries,
@@ -1011,6 +1012,12 @@ export async function importTicketWorkbookFromBuffer(options: TicketWorkbookImpo
       select: {
         id: true,
         amount: true,
+        agencyMarkupAmount: true,
+        commissionAmount: true,
+        commissionModeApplied: true,
+        commissionCalculationStatus: true,
+        commissionBaseAmount: true,
+        baseFareAmount: true,
         ticketNumber: true,
         airlineId: true,
         airline: {
@@ -1031,15 +1038,22 @@ export async function importTicketWorkbookFromBuffer(options: TicketWorkbookImpo
             continue;
           }
 
-          await recordAirlineDepositMovement(tx, {
-            accountKey: depositAccount.key,
-            movementType: "CREDIT",
-            amount: ticket.amount,
-            reference: `REMIMPORT ${ticket.ticketNumber}`,
-            description: `Restitution suite remplacement import - ${ticket.airline.name}`,
-            airlineId: ticket.airlineId,
-            ticketSaleId: ticket.id,
+          const depositCreditAmount = getTicketDepositDebitAmount({
+            ...ticket,
+            airline: { code: ticket.airline.code },
           });
+
+          if (depositCreditAmount > 0) {
+            await recordAirlineDepositMovement(tx, {
+              accountKey: depositAccount.key,
+              movementType: "CREDIT",
+              amount: depositCreditAmount,
+              reference: `REMIMPORT ${ticket.ticketNumber}`,
+              description: `Restitution suite remplacement import - ${ticket.airline.name}`,
+              airlineId: ticket.airlineId,
+              ticketSaleId: ticket.id,
+            });
+          }
         }
 
         await tx.payment.deleteMany({ where: { ticketId: { in: ticketIds } } });
@@ -1392,27 +1406,40 @@ export async function importTicketWorkbookFromBuffer(options: TicketWorkbookImpo
           ].filter(Boolean).join(" | ") || null,
         };
 
+        const depositDebitAmount = depositAccount
+          ? getTicketDepositDebitAmount({
+            amount,
+            agencyMarkupAmount,
+            commissionAmount,
+            commissionModeApplied,
+            commissionCalculationStatus,
+            commissionBaseAmount: resolvedCommissionBaseAmount,
+            baseFareAmount,
+            airline: { code: airline.code },
+          })
+          : 0;
+
         if (dryRun) {
           if (depositAccount) {
-            depositBalanceByAccountKey.set(depositAccount.key, (depositBalanceByAccountKey.get(depositAccount.key) ?? 0) - amount);
+            depositBalanceByAccountKey.set(depositAccount.key, (depositBalanceByAccountKey.get(depositAccount.key) ?? 0) - depositDebitAmount);
           }
           summary.created += 1;
         } else {
           await prisma.$transaction(async (tx) => {
             const createdTicket = await tx.ticketSale.create({ data });
 
-            if (depositAccount) {
+            if (depositAccount && depositDebitAmount > 0) {
               await recordAirlineDepositMovement(tx, {
                 accountKey: depositAccount.key,
                 movementType: "DEBIT",
-                amount,
+                amount: depositDebitAmount,
                 reference: `PNR ${normalizedTicketNumber}`,
                 description: `Débit automatique import billet ${normalizedTicketNumber} - ${airline.name}`,
                 airlineId: airline.id,
                 ticketSaleId: createdTicket.id,
                 createdAt: soldAt,
               });
-              depositBalanceByAccountKey.set(depositAccount.key, (depositBalanceByAccountKey.get(depositAccount.key) ?? 0) - amount);
+              depositBalanceByAccountKey.set(depositAccount.key, (depositBalanceByAccountKey.get(depositAccount.key) ?? 0) - depositDebitAmount);
             }
           });
           existingTicketNumbers.add(normalizedTicketNumber);
