@@ -61,10 +61,7 @@ export default async function DgPaymentOrdersPage() {
                 <th className="px-4 py-3 text-left font-semibold">Bénéficiaire</th>
                 <th className="px-4 py-3 text-left font-semibold">Motif</th>
                 <th className="px-4 py-3 text-left font-semibold">Affectation</th>
-                <th className="px-4 py-3 text-left font-semibold">Description</th>
                 <th className="px-4 py-3 text-left font-semibold">Montant</th>
-                <th className="px-4 py-3 text-left font-semibold">Validé par</th>
-                <th className="px-4 py-3 text-left font-semibold">Exécuté par</th>
                 <th className="px-4 py-3 text-left font-semibold">Statut</th>
                 <th className="px-4 py-3 text-left font-semibold">PDF</th>
               </tr>
@@ -77,10 +74,7 @@ export default async function DgPaymentOrdersPage() {
                   <td className="px-4 py-3">{order.beneficiary || "-"}</td>
                   <td className="px-4 py-3">{order.purpose || "-"}</td>
                   <td className="px-4 py-3">{paymentOrderAssignmentLabel(order.assignment)}</td>
-                  <td className="px-4 py-3">{order.description}</td>
                   <td className="px-4 py-3">{order.amount.toFixed(2)} {normalizeMoneyCurrency(order.currency)}</td>
-                  <td className="px-4 py-3">{order.approvedBy?.name ?? "-"}</td>
-                  <td className="px-4 py-3">{order.executedBy?.name ?? "-"}</td>
                   <td className="px-4 py-3">{order.status}</td>
                   <td className="px-4 py-3">
                     <a
@@ -96,7 +90,7 @@ export default async function DgPaymentOrdersPage() {
               ))}
               {orders.length === 0 ? (
                 <tr>
-                  <td colSpan={11} className="px-4 py-8 text-center text-sm text-black/55 dark:text-white/55">
+                  <td colSpan={8} className="px-4 py-8 text-center text-sm text-black/55 dark:text-white/55">
                     Aucun ordre de paiement créé pour le moment.
                   </td>
                 </tr>
