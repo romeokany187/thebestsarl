@@ -30,6 +30,18 @@ function paymentOrderAssignmentLabel(value: string | null | undefined) {
   return "À mon compte";
 }
 
+function buildNextPaymentOrderCode(existingCodes: Array<string | null | undefined>, codePrefix: string, year: number) {
+  const maxSequence = existingCodes.reduce((max, code) => {
+    const match = (code ?? "").match(/-(\d+)-\d{4}$/);
+    if (!match) return max;
+    const sequence = Number.parseInt(match[1], 10);
+    return Number.isFinite(sequence) ? Math.max(max, sequence) : max;
+  }, 0);
+
+  const nextSequence = String(maxSequence + 1).padStart(3, "0");
+  return `${codePrefix}-${nextSequence}-${year}`;
+}
+
 export async function POST(request: NextRequest) {
   const access = await requireApiRoles(["DIRECTEUR_GENERAL", "ADMIN"]);
   if (access.error) return access.error;
@@ -51,161 +63,186 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const body = await request.json();
-  const parsed = paymentOrderCreationSchema.safeParse(body);
-  if (!parsed.success) {
-    return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
-  }
+  try {
+    const body = await request.json();
+    const parsed = paymentOrderCreationSchema.safeParse(body);
+    if (!parsed.success) {
+      return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
+    }
 
-  const now = new Date();
-  const isAdminIssuer = access.role === "ADMIN";
-  const issuerLabel = isAdminIssuer ? "Admin" : "DG";
-  const codePrefix = isAdminIssuer ? "TB-ADM-OP" : "TB-DG-OP";
-  const orderCurrency = normalizeMoneyCurrency(parsed.data.currency);
-  const orderAssignment = normalizePaymentOrderAssignment(parsed.data.assignment);
-  const year = now.getUTCFullYear();
-  const yearStart = new Date(Date.UTC(year, 0, 1, 0, 0, 0, 0));
-  const yearEnd = new Date(Date.UTC(year + 1, 0, 1, 0, 0, 0, 0));
+    const now = new Date();
+    const isAdminIssuer = access.role === "ADMIN";
+    const issuerLabel = isAdminIssuer ? "Admin" : "DG";
+    const codePrefix = isAdminIssuer ? "TB-ADM-OP" : "TB-DG-OP";
+    const orderCurrency = normalizeMoneyCurrency(parsed.data.currency);
+    const orderAssignment = normalizePaymentOrderAssignment(parsed.data.assignment);
+    const year = now.getUTCFullYear();
+    const yearStart = new Date(Date.UTC(year, 0, 1, 0, 0, 0, 0));
+    const yearEnd = new Date(Date.UTC(year + 1, 0, 1, 0, 0, 0, 0));
 
-  const paymentOrder = await prisma.$transaction(async (tx) => {
-    const count = await (tx as unknown as { paymentOrder: any }).paymentOrder.count({
-      where: {
-        createdAt: { gte: yearStart, lt: yearEnd },
-        code: { startsWith: `${codePrefix}-` },
-      },
-    });
+    const paymentOrder = await prisma.$transaction(async (tx) => {
+      const existingOrders = await (tx as unknown as { paymentOrder: any }).paymentOrder.findMany({
+        where: {
+          createdAt: { gte: yearStart, lt: yearEnd },
+          code: { startsWith: `${codePrefix}-` },
+        },
+        select: { code: true },
+        take: 5000,
+      });
 
-    const sequence = String(count + 1).padStart(3, "0");
-    const code = `${codePrefix}-${sequence}-${year}`;
+      const code = buildNextPaymentOrderCode(existingOrders.map((order: { code?: string | null }) => order.code), codePrefix, year);
 
-    return (tx as unknown as { paymentOrder: any }).paymentOrder.create({
-      data: {
-        code,
-        beneficiary: parsed.data.beneficiary.trim(),
-        purpose: parsed.data.purpose.trim(),
-        description: parsed.data.description.trim(),
-        assignment: orderAssignment,
-        amount: parsed.data.amount,
-        currency: orderCurrency,
-        status: isAdminIssuer ? "APPROVED" : "SUBMITTED",
-        issuedById: me.id,
-        submittedAt: now,
-        approvedById: isAdminIssuer ? me.id : undefined,
-        approvedAt: isAdminIssuer ? now : undefined,
-      },
-    });
-  });
-
-  const notifications: Array<{
-    userId: string;
-    title: string;
-    message: string;
-    type: string;
-    paymentOrderId: string;
-    metadata: Prisma.InputJsonValue;
-  }> = [];
-
-  if (isAdminIssuer) {
-    const financeExecutionUsers = await prisma.user.findMany({
-      where: {
-        OR: [
-          { role: { in: ["ADMIN", "ACCOUNTANT"] } },
-          { jobTitle: { in: [...CASH_JOB_TITLES, "COMPTABLE"] } },
-        ],
-      },
-      select: { id: true },
-      take: 160,
-    });
-
-    financeExecutionUsers.forEach((financeUser) => {
-      notifications.push({
-        userId: financeUser.id,
-        title: "Ordre de paiement admin à exécuter",
-        message: `L'ordre de paiement ${paymentOrder.code} pour ${parsed.data.beneficiary} (${parsed.data.amount} ${orderCurrency}) a été émis par l'admin ${me.name}. Exécution directe depuis Paiements.`,
-        type: "PAYMENT_ORDER_EXECUTION_REQUIRED",
-        paymentOrderId: paymentOrder.id,
-        metadata: {
-          paymentOrderId: paymentOrder.id,
-          code: paymentOrder.code,
-          beneficiary: parsed.data.beneficiary,
-          purpose: parsed.data.purpose,
+      return (tx as unknown as { paymentOrder: any }).paymentOrder.create({
+        data: {
+          code,
+          beneficiary: parsed.data.beneficiary.trim(),
+          purpose: parsed.data.purpose.trim(),
+          description: parsed.data.description.trim(),
           assignment: orderAssignment,
           amount: parsed.data.amount,
           currency: orderCurrency,
-          description: parsed.data.description,
-          issuedBy: me.name,
-          issuedByRole: me.role,
-          source: "PAYMENTS_EXECUTION",
+          status: isAdminIssuer ? "APPROVED" : "SUBMITTED",
+          issuedById: me.id,
+          submittedAt: now,
+          approvedById: isAdminIssuer ? me.id : undefined,
+          approvedAt: isAdminIssuer ? now : undefined,
         },
       });
     });
-  } else {
-    const admins = await prisma.user.findMany({
-      where: {
-        role: "ADMIN",
-      },
-      select: { id: true },
-      take: 100,
-    });
 
-    admins.forEach((admin) => {
-      notifications.push({
-        userId: admin.id,
-        title: "Nouvel OP à approuver",
-        message: `Vous avez un nouvel ordre de paiement à approuver émis par la DG ${me.name} : ${paymentOrder.code} pour ${parsed.data.beneficiary} (${parsed.data.amount} ${orderCurrency}).`,
-        type: "PAYMENT_ORDER_APPROVAL_REQUIRED",
-        paymentOrderId: paymentOrder.id,
-        metadata: {
+    const notifications: Array<{
+      userId: string;
+      title: string;
+      message: string;
+      type: string;
+      paymentOrderId: string;
+      metadata: Prisma.InputJsonValue;
+    }> = [];
+
+    if (isAdminIssuer) {
+      const financeExecutionUsers = await prisma.user.findMany({
+        where: {
+          OR: [
+            { role: { in: ["ADMIN", "ACCOUNTANT"] } },
+            { jobTitle: { in: [...CASH_JOB_TITLES, "COMPTABLE"] } },
+          ],
+        },
+        select: { id: true },
+        take: 160,
+      });
+
+      financeExecutionUsers.forEach((financeUser) => {
+        notifications.push({
+          userId: financeUser.id,
+          title: "Ordre de paiement admin à exécuter",
+          message: `L'ordre de paiement ${paymentOrder.code} pour ${parsed.data.beneficiary} (${parsed.data.amount} ${orderCurrency}) a été émis par l'admin ${me.name}. Exécution directe depuis Paiements.`,
+          type: "PAYMENT_ORDER_EXECUTION_REQUIRED",
           paymentOrderId: paymentOrder.id,
+          metadata: {
+            paymentOrderId: paymentOrder.id,
+            code: paymentOrder.code,
+            beneficiary: parsed.data.beneficiary,
+            purpose: parsed.data.purpose,
+            assignment: orderAssignment,
+            amount: parsed.data.amount,
+            currency: orderCurrency,
+            description: parsed.data.description,
+            issuedBy: me.name,
+            issuedByRole: me.role,
+            source: "PAYMENTS_EXECUTION",
+          },
+        });
+      });
+    } else {
+      const admins = await prisma.user.findMany({
+        where: {
+          role: "ADMIN",
+        },
+        select: { id: true },
+        take: 100,
+      });
+
+      admins.forEach((admin) => {
+        notifications.push({
+          userId: admin.id,
+          title: "Nouvel OP à approuver",
+          message: `Vous avez un nouvel ordre de paiement à approuver émis par la DG ${me.name} : ${paymentOrder.code} pour ${parsed.data.beneficiary} (${parsed.data.amount} ${orderCurrency}).`,
+          type: "PAYMENT_ORDER_APPROVAL_REQUIRED",
+          paymentOrderId: paymentOrder.id,
+          metadata: {
+            paymentOrderId: paymentOrder.id,
+            code: paymentOrder.code,
+            beneficiary: parsed.data.beneficiary,
+            purpose: parsed.data.purpose,
+            assignment: orderAssignment,
+            amount: parsed.data.amount,
+            currency: orderCurrency,
+            description: parsed.data.description,
+            issuedBy: me.name,
+            issuedByRole: me.role,
+            source: "INBOX_APPROVAL",
+          },
+        });
+      });
+    }
+
+    if (notifications.length > 0) {
+      const unique = notifications.filter((notification, index, list) => {
+        return list.findIndex((item) => item.userId === notification.userId && item.type === notification.type && item.paymentOrderId === notification.paymentOrderId) === index;
+      });
+
+      try {
+        await prisma.userNotification.createMany({
+          data: unique.map(({ paymentOrderId: _paymentOrderId, ...notification }) => notification),
+        });
+      } catch (notificationError) {
+        console.error("[payment-orders.create] Notification error", notificationError);
+      }
+    }
+
+    try {
+      await writeActivityLog({
+        actorId: access.session.user.id,
+        action: "PAYMENT_ORDER_CREATED",
+        entityType: "PAYMENT_ORDER",
+        entityId: paymentOrder.id,
+        summary: `OP ${paymentOrder.code} émis par ${issuerLabel} pour ${paymentOrder.beneficiary} (${paymentOrder.amount.toFixed(2)} ${paymentOrder.currency}).`,
+        payload: {
           code: paymentOrder.code,
-          beneficiary: parsed.data.beneficiary,
-          purpose: parsed.data.purpose,
-          assignment: orderAssignment,
-          amount: parsed.data.amount,
-          currency: orderCurrency,
-          description: parsed.data.description,
-          issuedBy: me.name,
-          issuedByRole: me.role,
-          source: "INBOX_APPROVAL",
+          beneficiary: paymentOrder.beneficiary,
+          purpose: paymentOrder.purpose,
+          assignment: paymentOrder.assignment,
+          amount: paymentOrder.amount,
+          currency: paymentOrder.currency,
+          issuedByRole: issuerLabel,
+          status: paymentOrder.status,
         },
       });
-    });
+    } catch (activityError) {
+      console.error("[payment-orders.create] Activity log error", activityError);
+    }
+
+    return NextResponse.json({
+      data: paymentOrder,
+      pdf: {
+        url: `/api/payment-orders/${paymentOrder.id}/pdf`,
+      },
+    }, { status: 201 });
+  } catch (error) {
+    console.error("[payment-orders.create] Failed", error);
+
+    if (error instanceof Error && "code" in error && (error as { code?: string }).code === "P2002") {
+      return NextResponse.json(
+        { error: "Un numéro d'ordre de paiement identique existe déjà. Réessayez l'opération." },
+        { status: 409 },
+      );
+    }
+
+    return NextResponse.json(
+      { error: "Erreur serveur lors de la création de l'ordre de paiement." },
+      { status: 500 },
+    );
   }
-
-  if (notifications.length > 0) {
-    const unique = notifications.filter((notification, index, list) => {
-      return list.findIndex((item) => item.userId === notification.userId && item.type === notification.type && item.paymentOrderId === notification.paymentOrderId) === index;
-    });
-
-    await prisma.userNotification.createMany({
-      data: unique.map(({ paymentOrderId: _paymentOrderId, ...notification }) => notification),
-    });
-  }
-
-  await writeActivityLog({
-    actorId: access.session.user.id,
-    action: "PAYMENT_ORDER_CREATED",
-    entityType: "PAYMENT_ORDER",
-    entityId: paymentOrder.id,
-    summary: `OP ${paymentOrder.code} émis par ${issuerLabel} pour ${paymentOrder.beneficiary} (${paymentOrder.amount.toFixed(2)} ${paymentOrder.currency}).`,
-    payload: {
-      code: paymentOrder.code,
-      beneficiary: paymentOrder.beneficiary,
-      purpose: paymentOrder.purpose,
-      assignment: paymentOrder.assignment,
-      amount: paymentOrder.amount,
-      currency: paymentOrder.currency,
-      issuedByRole: issuerLabel,
-      status: paymentOrder.status,
-    },
-  });
-
-  return NextResponse.json({
-    data: paymentOrder,
-    pdf: {
-      url: `/api/payment-orders/${paymentOrder.id}/pdf`,
-    },
-  }, { status: 201 });
 }
 
 export async function GET(request: NextRequest) {

@@ -22,6 +22,27 @@ const PURPOSE_SUGGESTIONS = [
   "Avance de mission",
 ];
 
+function getApiErrorMessage(payload: unknown, fallback: string) {
+  if (!payload || typeof payload !== "object") return fallback;
+
+  const error = "error" in payload ? payload.error : undefined;
+  if (typeof error === "string" && error.trim()) {
+    return error;
+  }
+
+  if (error && typeof error === "object") {
+    const formErrors = Array.isArray((error as { formErrors?: unknown }).formErrors)
+      ? (error as { formErrors: unknown[] }).formErrors.filter((value): value is string => typeof value === "string" && value.trim().length > 0)
+      : [];
+
+    if (formErrors.length > 0) {
+      return formErrors.join(" ");
+    }
+  }
+
+  return fallback;
+}
+
 export function PaymentOrderForm({ issuerRole = "DIRECTEUR_GENERAL" }: { issuerRole?: PaymentOrderIssuerRole }) {
   const router = useRouter();
   const isAdminIssuer = issuerRole === "ADMIN";
@@ -66,7 +87,7 @@ export function PaymentOrderForm({ issuerRole = "DIRECTEUR_GENERAL" }: { issuerR
       const payload = await response.json().catch(() => null);
       if (!response.ok) {
         setState("error");
-        setMessage(payload?.error ?? "Impossible de créer l'ordre de paiement.");
+        setMessage(getApiErrorMessage(payload, "Impossible de créer l'ordre de paiement."));
         return;
       }
 
