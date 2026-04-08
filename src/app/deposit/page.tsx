@@ -22,7 +22,7 @@ export default async function DepositPage() {
       <section className="mb-6">
         <h1 className="text-2xl font-semibold">Dépôts compagnies</h1>
         <p className="text-sm text-black/60 dark:text-white/60">
-          Centralisation des crédits, débits automatiques et suivi des comptes de dépôt des compagnies aériennes.
+          Centralisation des approvisionnements manuels et suivi des comptes de dépôt des compagnies aériennes. Les billets n&apos;impactent plus ces comptes.
         </p>
       </section>
 

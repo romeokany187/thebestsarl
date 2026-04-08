@@ -122,6 +122,47 @@ function movementSignedAmount(movementType: AirlineDepositMovementTypeValue, amo
   return movementType === "CREDIT" ? amount : -amount;
 }
 
+function isTicketGeneratedDepositMovement(input: {
+  reference?: string | null;
+  description?: string | null;
+  ticketSaleId?: string | null;
+}) {
+  const reference = (input.reference ?? "").trim().toUpperCase();
+  const description = (input.description ?? "").trim().toLowerCase();
+
+  return Boolean(input.ticketSaleId)
+    || reference.startsWith("PNR ")
+    || reference.startsWith("AJUST ")
+    || reference.startsWith("TRANSFERT ")
+    || reference.startsWith("ANNUL ")
+    || reference.startsWith("REMIMPORT ")
+    || description.startsWith("débit automatique billet")
+    || description.startsWith("ajustement débit billet")
+    || description.startsWith("ajustement crédit billet")
+    || description.startsWith("restitution ancienne compagnie pour billet")
+    || description.startsWith("restitution après suppression billet")
+    || description.startsWith("restitution suite remplacement import");
+}
+
+function ticketGeneratedMovementWhere() {
+  return {
+    OR: [
+      { ticketSaleId: { not: null } },
+      { reference: { startsWith: "PNR " } },
+      { reference: { startsWith: "AJUST " } },
+      { reference: { startsWith: "TRANSFERT " } },
+      { reference: { startsWith: "ANNUL " } },
+      { reference: { startsWith: "REMIMPORT " } },
+      { description: { startsWith: "Débit automatique billet" } },
+      { description: { startsWith: "Ajustement débit billet" } },
+      { description: { startsWith: "Ajustement crédit billet" } },
+      { description: { startsWith: "Restitution ancienne compagnie pour billet" } },
+      { description: { startsWith: "Restitution après suppression billet" } },
+      { description: { startsWith: "Restitution suite remplacement import" } },
+    ],
+  };
+}
+
 function startOfUtcDay(date: Date) {
   return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate(), 0, 0, 0, 0));
 }
@@ -131,32 +172,35 @@ export async function getAirlineDepositBalance(
   accountKey: string,
   options?: { upTo?: Date },
 ) {
-  const movementClient = (client as unknown as { airlineDepositMovement: { findMany: (args?: any) => Promise<Array<{ amount: number; movementType: AirlineDepositMovementTypeValue }>> } }).airlineDepositMovement;
+  const movementClient = (client as unknown as { airlineDepositMovement: { findMany: (args?: any) => Promise<Array<{ amount: number; movementType: AirlineDepositMovementTypeValue; reference?: string | null; description?: string | null; ticketSaleId?: string | null }>> } }).airlineDepositMovement;
   const movements = await movementClient.findMany({
     where: {
       accountKey: { in: accountKeysForLookup(accountKey) },
       ...(options?.upTo ? { createdAt: { lte: options.upTo } } : {}),
     },
-    select: { amount: true, movementType: true },
+    select: { amount: true, movementType: true, reference: true, description: true, ticketSaleId: true },
   });
 
-  return movements.reduce(
-    (sum: number, movement: { amount: number; movementType: AirlineDepositMovementTypeValue }) => sum + movementSignedAmount(movement.movementType, movement.amount),
-    0,
-  );
+  return movements
+    .filter((movement) => !isTicketGeneratedDepositMovement(movement))
+    .reduce(
+      (sum: number, movement: { amount: number; movementType: AirlineDepositMovementTypeValue }) => sum + movementSignedAmount(movement.movementType, movement.amount),
+      0,
+    );
 }
 
 async function getFirstAirlineDepositCreditDate(client: Prisma.TransactionClient, accountKey: string) {
-  const movementClient = (client as unknown as { airlineDepositMovement: { findFirst: (args?: any) => Promise<{ createdAt: Date } | null> } }).airlineDepositMovement;
-  const firstCredit = await movementClient.findFirst({
+  const movementClient = (client as unknown as { airlineDepositMovement: { findMany: (args?: any) => Promise<Array<{ createdAt: Date; reference?: string | null; description?: string | null; ticketSaleId?: string | null }>> } }).airlineDepositMovement;
+  const credits = await movementClient.findMany({
     where: {
       accountKey: { in: accountKeysForLookup(accountKey) },
       movementType: "CREDIT",
     },
     orderBy: [{ createdAt: "asc" }, { id: "asc" }],
-    select: { createdAt: true },
+    select: { createdAt: true, reference: true, description: true, ticketSaleId: true },
   });
 
+  const firstCredit = credits.find((movement) => !isTicketGeneratedDepositMovement(movement));
   return firstCredit?.createdAt ?? null;
 }
 
@@ -177,6 +221,14 @@ export async function recordAirlineDepositMovement(
   const account = getAirlineDepositAccountByKey(input.accountKey);
   if (!account) {
     throw new Error(`INVALID_AIRLINE_DEPOSIT_ACCOUNT:${input.accountKey}`);
+  }
+
+  if (isTicketGeneratedDepositMovement({
+    reference: input.reference,
+    description: input.description,
+    ticketSaleId: input.ticketSaleId,
+  })) {
+    return null;
   }
 
   const amount = Number(input.amount);
@@ -222,10 +274,16 @@ export async function recordAirlineDepositMovement(
 }
 
 export async function buildAirlineDepositAccountSummaries(
-  client: { airlineDepositMovement: { findMany: (args?: any) => Promise<any[]> } },
+  client: { airlineDepositMovement: { findMany: (args?: any) => Promise<any[]>; deleteMany?: (args?: any) => Promise<unknown> } },
   recentLimit = 6,
   options?: { upTo?: Date },
 ): Promise<AirlineDepositAccountSummary[]> {
+  if (typeof client.airlineDepositMovement.deleteMany === "function") {
+    await client.airlineDepositMovement.deleteMany({
+      where: ticketGeneratedMovementWhere(),
+    });
+  }
+
   const movements = await client.airlineDepositMovement.findMany({
     where: {
       ...(options?.upTo ? { createdAt: { lte: options.upTo } } : {}),
@@ -238,6 +296,14 @@ export async function buildAirlineDepositAccountSummaries(
     },
   });
 
+  const filteredMovements = (movements as AirlineDepositMovementRecord[]).filter(
+    (movement) => !isTicketGeneratedDepositMovement({
+      reference: movement.reference,
+      description: movement.description,
+      ticketSaleId: movement.ticketSale?.id ?? null,
+    }),
+  );
+
   const totals = new Map(
     AIRLINE_DEPOSIT_ACCOUNT_CONFIGS.map((config) => [
       config.key,
@@ -245,7 +311,7 @@ export async function buildAirlineDepositAccountSummaries(
     ]),
   );
 
-  [...(movements as AirlineDepositMovementRecord[])]
+  [...filteredMovements]
     .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime() || a.id.localeCompare(b.id))
     .forEach((movement) => {
       const normalizedAccountKey = normalizeAccountKey(movement.accountKey);
@@ -261,7 +327,7 @@ export async function buildAirlineDepositAccountSummaries(
 
   return AIRLINE_DEPOSIT_ACCOUNT_CONFIGS.map((config) => {
     const bucket = totals.get(config.key) ?? { balance: 0, totalCredits: 0, totalDebits: 0 };
-    const recentMovements = (movements as AirlineDepositMovementRecord[])
+    const recentMovements = filteredMovements
       .filter((movement) => normalizeAccountKey(movement.accountKey) === config.key)
       .slice(0, recentLimit)
       .map((movement) => ({

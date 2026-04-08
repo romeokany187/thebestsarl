@@ -618,7 +618,7 @@ export function TicketForm({
       {selectedDepositAccount ? (
         <div className={`space-y-1 text-xs ${requestedTicketAmount > selectedDepositAccount.balance ? "text-red-600 dark:text-red-300" : "text-black/60 dark:text-white/60"}`}>
           <p>
-            {selectedDepositAccount.label}: solde disponible {selectedDepositAccount.balance.toFixed(2)} USD. Chaque billet de cette compagnie sera débité automatiquement.
+            {selectedDepositAccount.label}: solde disponible {selectedDepositAccount.balance.toFixed(2)} USD. Les billets n&apos;affectent plus ce compte dépôt automatiquement.
           </p>
           {isBackdatedAdminEntry ? (
             <p className="text-black/55 dark:text-white/55">

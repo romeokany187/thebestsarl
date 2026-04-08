@@ -86,7 +86,7 @@ export function AirlineDepositAccountManager({
       <div className="mb-4 flex flex-col gap-1">
         <h2 className="text-lg font-semibold">Comptes dépôts compagnies</h2>
         <p className="text-sm text-black/60 dark:text-white/60">
-          Section admin / DG / comptable : l'administrateur, le DG ou le comptable peut créditer ces comptes, puis chaque billet des compagnies concernées est débité automatiquement.
+          Section admin / DG / comptable : l&apos;administrateur, le DG ou le comptable peut créditer ces comptes. Les billets n&apos;affectent plus automatiquement les dépôts compagnies.
         </p>
       </div>
 
