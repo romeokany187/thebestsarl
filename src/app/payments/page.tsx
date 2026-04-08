@@ -370,6 +370,9 @@ export default async function PaymentsPage({
     mode: "month",
     month: cashRange.monthRaw,
   }).toString();
+  const selectedYear = range.start.getUTCFullYear();
+  const yearStart = new Date(Date.UTC(selectedYear, 0, 1, 0, 0, 0, 0));
+  const yearEnd = new Date(Date.UTC(selectedYear + 1, 0, 1, 0, 0, 0, 0));
 
   const accessNote = canWrite
     ? "Admin, comptable et profils caisse: encaissements, écritures de caisse, conversions et exécutions financières autorisés selon le profil."
@@ -392,6 +395,17 @@ export default async function PaymentsPage({
       },
       orderBy: { soldAt: "desc" },
       take: 800,
+    }),
+    prisma.ticketSale.findMany({
+      where: {
+        soldAt: { gte: yearStart, lt: yearEnd },
+      },
+      select: {
+        id: true,
+        soldAt: true,
+      },
+      orderBy: [{ soldAt: "asc" }, { id: "asc" }],
+      take: 10000,
     }),
     prisma.payment.findMany({
       where: {
@@ -506,6 +520,7 @@ export default async function PaymentsPage({
   const [
     airlines,
     tickets,
+    yearTickets,
     payments,
     cashPayments,
     cashOperations,
@@ -516,6 +531,7 @@ export default async function PaymentsPage({
   ] = paymentsData as [
     AirlineRow[],
     TicketSaleRow[],
+    Array<{ id: string; soldAt: Date }>,
     TicketPaymentRow[],
     TicketPaymentRow[],
     CashOperationRow[],
@@ -526,7 +542,7 @@ export default async function PaymentsPage({
   ];
 
   const sequenceByTicketId = new Map<string, number>();
-  tickets
+  yearTickets
     .slice()
     .sort((a, b) => {
       const diff = new Date(a.soldAt).getTime() - new Date(b.soldAt).getTime();

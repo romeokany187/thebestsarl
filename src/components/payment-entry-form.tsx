@@ -41,6 +41,7 @@ export function PaymentEntryForm({ tickets }: { tickets: TicketOption[] }) {
   const [error, setError] = useState<string>("");
 
   const selected = useMemo(() => tickets.find((ticket) => ticket.id === ticketId) ?? null, [ticketId, tickets]);
+  const selectedInvoiceNumber = (selected?.invoiceNumber ?? "").trim();
   const remaining = selected ? Math.max(0, selected.amount - selected.paidAmount) : 0;
   const ticketCurrency = normalizeCurrency(selected?.currency);
   const paymentCurrency = normalizeCurrency(currency);
@@ -74,8 +75,8 @@ export function PaymentEntryForm({ tickets }: { tickets: TicketOption[] }) {
       return;
     }
 
-    if (selected && reference.trim() !== selected.invoiceNumber) {
-      setError(`La référence du paiement doit être le numéro de facture ${selected.invoiceNumber}.`);
+    if (selected && reference.trim() !== selectedInvoiceNumber) {
+      setError(`La référence du paiement doit être le numéro de facture ${selectedInvoiceNumber}.`);
       setLoading(false);
       return;
     }
@@ -172,9 +173,10 @@ export function PaymentEntryForm({ tickets }: { tickets: TicketOption[] }) {
           <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-black/60 dark:text-white/60">N° facture</label>
           <input
             value={reference}
+            title={reference}
             readOnly
             required
-            className="w-full rounded-md border border-black/15 bg-black/5 px-3 py-2 text-sm font-medium dark:border-white/15 dark:bg-white/10"
+            className="w-full rounded-md border border-black/15 bg-black/5 px-3 py-2 text-xs font-medium dark:border-white/15 dark:bg-white/10"
             placeholder="Numéro de facture"
           />
         </div>
