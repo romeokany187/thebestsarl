@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 type WritingMode = "none" | "tickets" | "cash" | "virtual" | "billetage" | "payment-orders" | "needs";
 type CashDeskValue = "THE_BEST" | "CAISSE_SAFETY" | "CAISSE_VISAS" | "CAISSE_TSL" | "CAISSE_AGENCE";
 type CashDeskOption = { value: CashDeskValue; label: string; description: string };
+type AdminCashRoleScope = "CAISSIER" | "CAISSE_2_SIEGE" | "CAISSE_AGENCE";
 
 type AppRoleLike = "ADMIN" | "DIRECTEUR_GENERAL" | "MANAGER" | "EMPLOYEE" | "ACCOUNTANT";
 
@@ -36,20 +37,28 @@ const ALL_CASH_DESKS: CashDeskOption[] = [
   },
 ];
 
-function getManagedCashDesks(jobTitle?: string | null, role?: AppRoleLike | string | null) {
-  const normalizedJobTitle = (jobTitle ?? "").trim().toUpperCase();
-  const normalizedRole = (role ?? "").trim().toUpperCase();
+const ADMIN_CASH_ROLE_OPTIONS: Array<{ value: AdminCashRoleScope; label: string; description: string }> = [
+  {
+    value: "CAISSIER",
+    label: "Caisse 1 Siège",
+    description: "Vue admin du caissier 1 siège et des comptes qu'il gère.",
+  },
+  {
+    value: "CAISSE_2_SIEGE",
+    label: "Caisse 2 Siège",
+    description: "Vue admin du caissier 2 siège et des comptes qu'il gère.",
+  },
+  {
+    value: "CAISSE_AGENCE",
+    label: "Caisse agence",
+    description: "Vue admin de la caisse agence et de ses opérations.",
+  },
+];
 
-  if (
-    normalizedRole === "ADMIN"
-    || normalizedRole === "DIRECTEUR_GENERAL"
-    || normalizedRole === "ACCOUNTANT"
-    || normalizedJobTitle === "COMPTABLE"
-  ) {
-    return ALL_CASH_DESKS;
-  }
+function getManagedCashDesksForScope(scope?: string | null) {
+  const normalizedScope = (scope ?? "").trim().toUpperCase();
 
-  if (["CAISSIER", "CAISSE_2_SIEGE"].includes(normalizedJobTitle)) {
+  if (["CAISSIER", "CAISSE_2_SIEGE"].includes(normalizedScope)) {
     return ALL_CASH_DESKS.filter((desk) => [
       "THE_BEST",
       "CAISSE_SAFETY",
@@ -58,11 +67,34 @@ function getManagedCashDesks(jobTitle?: string | null, role?: AppRoleLike | stri
     ].includes(desk.value));
   }
 
-  if (normalizedJobTitle === "CAISSE_AGENCE") {
+  if (normalizedScope === "CAISSE_AGENCE") {
     return ALL_CASH_DESKS.filter((desk) => desk.value === "CAISSE_AGENCE");
   }
 
   return ALL_CASH_DESKS.filter((desk) => desk.value === "THE_BEST");
+}
+
+function getManagedCashDesks(
+  jobTitle?: string | null,
+  role?: AppRoleLike | string | null,
+  adminScope?: AdminCashRoleScope | null,
+) {
+  const normalizedJobTitle = (jobTitle ?? "").trim().toUpperCase();
+  const normalizedRole = (role ?? "").trim().toUpperCase();
+
+  if (normalizedRole === "ADMIN") {
+    return getManagedCashDesksForScope(adminScope ?? "CAISSIER");
+  }
+
+  if (
+    normalizedRole === "DIRECTEUR_GENERAL"
+    || normalizedRole === "ACCOUNTANT"
+    || normalizedJobTitle === "COMPTABLE"
+  ) {
+    return ALL_CASH_DESKS;
+  }
+
+  return getManagedCashDesksForScope(normalizedJobTitle);
 }
 
 function getAllowedActionsForDesk(deskValue: CashDeskValue | string): Array<Exclude<WritingMode, "none">> {
@@ -99,7 +131,9 @@ export function PaymentsWritingWorkspace({
   role?: AppRoleLike | string | null;
 }) {
   const [mode, setMode] = useState<WritingMode>("none");
-  const deskOptions = useMemo(() => getManagedCashDesks(jobTitle, role), [jobTitle, role]);
+  const isAdminUser = (role ?? "").trim().toUpperCase() === "ADMIN";
+  const [adminScope, setAdminScope] = useState<AdminCashRoleScope>("CAISSIER");
+  const deskOptions = useMemo(() => getManagedCashDesks(jobTitle, role, adminScope), [jobTitle, role, adminScope]);
   const [selectedDesk, setSelectedDesk] = useState<CashDeskValue | "">(deskOptions[0]?.value ?? "");
 
   useEffect(() => {
@@ -149,6 +183,27 @@ export function PaymentsWritingWorkspace({
           <p className="mt-1 text-xs text-black/60 dark:text-white/60">
             Choisissez une caisse parmi celles que votre profil gère, puis ouvrez le menu d&apos;action correspondant dans cette navigation latérale dédiée.
           </p>
+
+          {isAdminUser ? (
+            <div className="mt-4">
+              <label className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-black/60 dark:text-white/60">Caisse générale</label>
+              <select
+                value={adminScope}
+                onChange={(event) => {
+                  setAdminScope(event.target.value as AdminCashRoleScope);
+                  setMode("none");
+                }}
+                className="w-full rounded-md border border-black/15 bg-white px-3 py-2 text-sm dark:border-white/15 dark:bg-zinc-900"
+              >
+                {ADMIN_CASH_ROLE_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>{option.label}</option>
+                ))}
+              </select>
+              <p className="mt-2 rounded-lg border border-black/10 bg-black/5 px-3 py-2 text-xs text-black/65 dark:border-white/10 dark:bg-white/5 dark:text-white/65">
+                {ADMIN_CASH_ROLE_OPTIONS.find((option) => option.value === adminScope)?.description}
+              </p>
+            </div>
+          ) : null}
 
           <div className="mt-4">
             <label className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-black/60 dark:text-white/60">Caisses gérées</label>
