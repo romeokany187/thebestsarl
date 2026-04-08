@@ -56,6 +56,27 @@ function roleLabel(role: UserRole) {
   return "Collaborateur";
 }
 
+function getApiErrorMessage(payload: unknown, fallback: string) {
+  if (!payload || typeof payload !== "object") return fallback;
+
+  const error = "error" in payload ? payload.error : undefined;
+  if (typeof error === "string" && error.trim()) {
+    return error;
+  }
+
+  if (error && typeof error === "object") {
+    const formErrors = Array.isArray((error as { formErrors?: unknown }).formErrors)
+      ? (error as { formErrors: unknown[] }).formErrors.filter((value): value is string => typeof value === "string" && value.trim().length > 0)
+      : [];
+
+    if (formErrors.length > 0) {
+      return formErrors.join(" ");
+    }
+  }
+
+  return fallback;
+}
+
 export function TeamAssignmentAdmin({
   users,
   teams,
@@ -146,7 +167,7 @@ export function TeamAssignmentAdmin({
     const payload = await response.json().catch(() => null);
 
     if (!response.ok) {
-      setStatus(payload?.error ?? "Échec de l'affectation.");
+      setStatus(getApiErrorMessage(payload, "Échec de l'affectation."));
       setSavingId("");
       return;
     }
@@ -171,7 +192,7 @@ export function TeamAssignmentAdmin({
     const payload = await response.json().catch(() => null);
 
     if (!response.ok) {
-      setStatus(payload?.error ?? "Échec de la désaffectation.");
+      setStatus(getApiErrorMessage(payload, "Échec de la désaffectation."));
       setSavingId("");
       return;
     }
@@ -204,7 +225,7 @@ export function TeamAssignmentAdmin({
     const payload = await response.json().catch(() => null);
 
     if (!response.ok) {
-      setStatus(payload?.error ?? "Échec de mise à jour du chef.");
+      setStatus(getApiErrorMessage(payload, "Échec de mise à jour du chef."));
       setSavingId("");
       return;
     }
@@ -236,7 +257,7 @@ export function TeamAssignmentAdmin({
     const payload = await response.json().catch(() => null);
 
     if (!response.ok) {
-      setStatus(payload?.error ?? "Impossible de supprimer l'équipe.");
+      setStatus(getApiErrorMessage(payload, "Impossible de supprimer l'équipe."));
       setDeletingTeamId("");
       return;
     }
@@ -269,7 +290,7 @@ export function TeamAssignmentAdmin({
     const payload = await response.json().catch(() => null);
 
     if (!response.ok) {
-      setStatus(payload?.error ?? "Impossible de créer l'équipe.");
+      setStatus(getApiErrorMessage(payload, "Impossible de créer l'équipe."));
       setCreatingTeam(false);
       return;
     }

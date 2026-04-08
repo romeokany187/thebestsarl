@@ -6,6 +6,64 @@ import { requireApiModuleAccess } from "@/lib/rbac";
 import { isMailConfigured, sendMailBatch } from "@/lib/mail";
 import { writeActivityLog } from "@/lib/activity-log";
 
+const CASHIER_ASSIGNMENT_JOB_TITLES = new Set(["CAISSE_2_SIEGE", "CAISSE_AGENCE"]);
+
+function isMySqlFamilyDatabase() {
+  const databaseUrl = process.env.DATABASE_URL?.trim().toLowerCase() ?? "";
+  return databaseUrl.startsWith("mysql://") || databaseUrl.startsWith("mariadb://");
+}
+
+function isJobTitleSchemaIssue(error: unknown) {
+  const message = error instanceof Error ? error.message : String(error ?? "");
+  return /jobtitle|enum|caisse_2_siege|caisse_agence|data truncated|invalid value for enum/i.test(message);
+}
+
+async function ensureAssignableCashJobTitles() {
+  if (isMySqlFamilyDatabase()) {
+    await prisma.$executeRawUnsafe(`
+      ALTER TABLE \`User\`
+      MODIFY COLUMN \`jobTitle\` ENUM(
+        'COMMERCIAL',
+        'COMPTABLE',
+        'AUDITEUR',
+        'CAISSIER',
+        'CAISSE_2_SIEGE',
+        'CAISSE_AGENCE',
+        'RELATION_PUBLIQUE',
+        'APPROVISIONNEMENT',
+        'AGENT_TERRAIN',
+        'DIRECTION_GENERALE',
+        'CHEF_AGENCE'
+      ) NOT NULL DEFAULT 'AGENT_TERRAIN';
+    `);
+    return;
+  }
+
+  await prisma.$executeRawUnsafe(`
+    DO $$
+    BEGIN
+      IF NOT EXISTS (
+        SELECT 1
+        FROM pg_enum e
+        JOIN pg_type t ON e.enumtypid = t.oid
+        WHERE t.typname = 'JobTitle' AND e.enumlabel = 'CAISSE_2_SIEGE'
+      ) THEN
+        ALTER TYPE "JobTitle" ADD VALUE 'CAISSE_2_SIEGE';
+      END IF;
+
+      IF NOT EXISTS (
+        SELECT 1
+        FROM pg_enum e
+        JOIN pg_type t ON e.enumtypid = t.oid
+        WHERE t.typname = 'JobTitle' AND e.enumlabel = 'CAISSE_AGENCE'
+      ) THEN
+        ALTER TYPE "JobTitle" ADD VALUE 'CAISSE_AGENCE';
+      END IF;
+    END
+    $$;
+  `);
+}
+
 const userUpdateSchema = z.object({
   jobTitle: z.nativeEnum(JobTitle).optional(),
   teamId: z.string().min(1).nullable().optional(),
@@ -88,7 +146,9 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
 
   let assignmentMessage = "";
 
-  try {
+  const applyAssignmentUpdate = async () => {
+    assignmentMessage = "";
+
     const updated = await prisma.$transaction(async (tx) => {
       const user = await tx.user.update({
         where: { id },
@@ -197,16 +257,31 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
       },
     });
 
+    return updated;
+  };
+
+  try {
+    let updated;
+
+    try {
+      updated = await applyAssignmentUpdate();
+    } catch (error) {
+      const requestedJobTitle = parsed.data.jobTitle;
+      if (requestedJobTitle && CASHIER_ASSIGNMENT_JOB_TITLES.has(requestedJobTitle) && isJobTitleSchemaIssue(error)) {
+        await ensureAssignableCashJobTitles();
+        updated = await applyAssignmentUpdate();
+      } else {
+        throw error;
+      }
+    }
+
     return NextResponse.json({ data: updated });
   } catch (error) {
     console.error("PATCH /api/users/[id] failed", error);
 
-    const message = error instanceof Error ? error.message : "";
-    const isJobTitleSchemaIssue = /jobtitle|enum|caisse_2_siege|caisse_agence|data truncated/i.test(message);
-
     return NextResponse.json(
       {
-        error: isJobTitleSchemaIssue
+        error: isJobTitleSchemaIssue(error)
           ? "Affectation impossible: la base de production n'était pas encore synchronisée pour ce poste. Réessayez après le déploiement en cours."
           : "Échec de la mise à jour de l'affectation.",
       },
