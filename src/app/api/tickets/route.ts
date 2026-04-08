@@ -50,6 +50,8 @@ export async function POST(request: NextRequest) {
     return access.error;
   }
 
+  let attemptedTicketNumber = "";
+
   if (!canSellTickets(access.session.user.jobTitle ?? "")) {
     return NextResponse.json(
       { error: "Le billetage est en lecture seule pour ce profil. Seul le caissier peut enregistrer un billet." },
@@ -66,6 +68,29 @@ export async function POST(request: NextRequest) {
     }
 
     await ensureAirlineCatalog(prisma);
+
+    const normalizedTicketNumber = parsed.data.ticketNumber.trim();
+    attemptedTicketNumber = normalizedTicketNumber;
+    const existingTicketWithSamePnr = await prisma.ticketSale.findFirst({
+      where: { ticketNumber: normalizedTicketNumber },
+      select: {
+        id: true,
+        ticketNumber: true,
+        customerName: true,
+        soldAt: true,
+        route: true,
+        airline: { select: { code: true, name: true } },
+      },
+    });
+
+    if (existingTicketWithSamePnr) {
+      return NextResponse.json(
+        {
+          error: `Le PNR ${existingTicketWithSamePnr.ticketNumber} est déjà enregistré pour ${existingTicketWithSamePnr.customerName} sur ${existingTicketWithSamePnr.airline?.name ?? "cette compagnie"}, en date du ${new Date(existingTicketWithSamePnr.soldAt).toLocaleDateString("fr-FR")}${existingTicketWithSamePnr.route ? ` (${existingTicketWithSamePnr.route})` : ""}.`,
+        },
+        { status: 400 },
+      );
+    }
 
     const airline = await prisma.airline.findUnique({
       where: { id: parsed.data.airlineId },
@@ -171,6 +196,7 @@ export async function POST(request: NextRequest) {
       const created = await tx.ticketSale.create({
         data: {
           ...parsed.data,
+          ticketNumber: normalizedTicketNumber,
           travelDate: enforcedTravelDate,
           soldAt: enforcedSoldAt,
           currency: "USD",
@@ -282,8 +308,25 @@ export async function POST(request: NextRequest) {
 
     if (error instanceof Prisma.PrismaClientKnownRequestError) {
       if (error.code === "P2002") {
+        const duplicatedTicket = attemptedTicketNumber
+          ? await prisma.ticketSale.findFirst({
+              where: { ticketNumber: attemptedTicketNumber },
+              select: {
+                ticketNumber: true,
+                customerName: true,
+                soldAt: true,
+                route: true,
+                airline: { select: { name: true } },
+              },
+            }).catch(() => null)
+          : null;
+
         return NextResponse.json(
-          { error: "Ce code billet (PNR) existe déjà. Utilisez un autre PNR." },
+          {
+            error: duplicatedTicket
+              ? `Le PNR ${duplicatedTicket.ticketNumber} est déjà enregistré pour ${duplicatedTicket.customerName} sur ${duplicatedTicket.airline?.name ?? "cette compagnie"}, en date du ${new Date(duplicatedTicket.soldAt).toLocaleDateString("fr-FR")}${duplicatedTicket.route ? ` (${duplicatedTicket.route})` : ""}.`
+              : "Ce code billet (PNR) existe déjà. Utilisez un autre PNR.",
+          },
           { status: 400 },
         );
       }
