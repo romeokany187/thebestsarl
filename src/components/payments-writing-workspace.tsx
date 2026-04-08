@@ -84,24 +84,73 @@ function getManagedCashDesksForScope(scope?: string | null) {
   return ALL_CASH_DESKS.filter((desk) => desk.value === "PROXY_BANKING");
 }
 
-function getManagedCashDesks(
+function getDefaultCashRoleScope(
   jobTitle?: string | null,
   role?: AppRoleLike | string | null,
-  adminScope?: AdminCashRoleScope | null,
+): AdminCashRoleScope {
+  const normalizedJobTitle = (jobTitle ?? "").trim().toUpperCase();
+  const normalizedRole = (role ?? "").trim().toUpperCase();
+
+  if (normalizedJobTitle === "CAISSE_2_SIEGE") return "CAISSE_2_SIEGE";
+  if (normalizedJobTitle === "CAISSE_AGENCE") return "CAISSE_AGENCE";
+  if (
+    normalizedRole === "ADMIN"
+    || normalizedRole === "DIRECTEUR_GENERAL"
+    || normalizedRole === "ACCOUNTANT"
+    || normalizedJobTitle === "COMPTABLE"
+  ) {
+    return "CAISSIER";
+  }
+
+  return "CAISSIER";
+}
+
+function getVisibleCashRoleOptions(
+  jobTitle?: string | null,
+  role?: AppRoleLike | string | null,
 ) {
   const normalizedJobTitle = (jobTitle ?? "").trim().toUpperCase();
   const normalizedRole = (role ?? "").trim().toUpperCase();
 
-  if (normalizedRole === "ADMIN") {
-    return getManagedCashDesksForScope(adminScope ?? "CAISSIER");
-  }
-
   if (
-    normalizedRole === "DIRECTEUR_GENERAL"
+    normalizedRole === "ADMIN"
+    || normalizedRole === "DIRECTEUR_GENERAL"
     || normalizedRole === "ACCOUNTANT"
     || normalizedJobTitle === "COMPTABLE"
   ) {
-    return ALL_CASH_DESKS;
+    return ADMIN_CASH_ROLE_OPTIONS;
+  }
+
+  if (normalizedJobTitle === "CAISSE_2_SIEGE") {
+    return ADMIN_CASH_ROLE_OPTIONS.filter((option) => option.value === "CAISSE_2_SIEGE");
+  }
+
+  if (normalizedJobTitle === "CAISSE_AGENCE") {
+    return ADMIN_CASH_ROLE_OPTIONS.filter((option) => option.value === "CAISSE_AGENCE");
+  }
+
+  if (normalizedJobTitle === "CAISSIER") {
+    return ADMIN_CASH_ROLE_OPTIONS.filter((option) => option.value === "CAISSIER");
+  }
+
+  return [];
+}
+
+function getManagedCashDesks(
+  jobTitle?: string | null,
+  role?: AppRoleLike | string | null,
+  scope?: AdminCashRoleScope | null,
+) {
+  const normalizedJobTitle = (jobTitle ?? "").trim().toUpperCase();
+  const visibleScopeOptions = getVisibleCashRoleOptions(jobTitle, role);
+
+  if (visibleScopeOptions.length > 0) {
+    const fallbackScope = visibleScopeOptions[0]?.value ?? getDefaultCashRoleScope(jobTitle, role);
+    const selectedScope = visibleScopeOptions.some((option) => option.value === scope)
+      ? (scope ?? fallbackScope)
+      : fallbackScope;
+
+    return getManagedCashDesksForScope(selectedScope);
   }
 
   return getManagedCashDesksForScope(normalizedJobTitle);
@@ -151,10 +200,17 @@ export function PaymentsWritingWorkspace({
   role?: AppRoleLike | string | null;
 }) {
   const [mode, setMode] = useState<WritingMode>("none");
-  const isAdminUser = (role ?? "").trim().toUpperCase() === "ADMIN";
-  const [adminScope, setAdminScope] = useState<AdminCashRoleScope>("CAISSIER");
+  const scopeOptions = useMemo(() => getVisibleCashRoleOptions(jobTitle, role), [jobTitle, role]);
+  const [adminScope, setAdminScope] = useState<AdminCashRoleScope>(() => getDefaultCashRoleScope(jobTitle, role));
   const deskOptions = useMemo(() => getManagedCashDesks(jobTitle, role, adminScope), [jobTitle, role, adminScope]);
   const [selectedDesk, setSelectedDesk] = useState<CashDeskValue | "">(deskOptions[0]?.value ?? "");
+
+  useEffect(() => {
+    if (!scopeOptions.some((option) => option.value === adminScope) && scopeOptions.length > 0) {
+      setAdminScope(scopeOptions[0].value);
+      setMode("none");
+    }
+  }, [adminScope, scopeOptions]);
 
   useEffect(() => {
     if (!deskOptions.some((desk) => desk.value === selectedDesk)) {
@@ -215,7 +271,7 @@ export function PaymentsWritingWorkspace({
           <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-black/50 dark:text-white/50">Caisses</p>
           <h2 className="mt-1 text-sm font-semibold">Sous-menu Paiements</h2>
 
-          {isAdminUser ? (
+          {scopeOptions.length > 0 ? (
             <div className="mt-4">
               <label className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-black/60 dark:text-white/60">Caisse générale</label>
               <select
@@ -224,9 +280,10 @@ export function PaymentsWritingWorkspace({
                   setAdminScope(event.target.value as AdminCashRoleScope);
                   setMode("none");
                 }}
-                className="w-full rounded-md border border-black/15 bg-white px-3 py-2 text-sm dark:border-white/15 dark:bg-zinc-900"
+                disabled={scopeOptions.length === 1}
+                className="w-full rounded-md border border-black/15 bg-white px-3 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-70 dark:border-white/15 dark:bg-zinc-900"
               >
-                {ADMIN_CASH_ROLE_OPTIONS.map((option) => (
+                {scopeOptions.map((option) => (
                   <option key={option.value} value={option.value}>{option.label}</option>
                 ))}
               </select>
