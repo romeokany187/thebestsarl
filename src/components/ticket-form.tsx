@@ -591,6 +591,9 @@ export function TicketForm({
       <p className="text-xs text-black/60 dark:text-white/60">
         Le champ payant est auto-rempli: Client, Agent de l&apos;agence ou Équipe (Lubumbashi/Partenaires selon les équipes disponibles).
       </p>
+      <p className="text-xs text-black/60 dark:text-white/60">
+        Les doublons de PNR sont autorisés si les billets correspondent à des passagers ou dossiers distincts.
+      </p>
       {allowAdminEncodingDate ? (
         <p className="text-xs text-black/60 dark:text-white/60">
           Admin uniquement: vous pouvez ajuster la date d&apos;encodage du billet pour la conformité des données.

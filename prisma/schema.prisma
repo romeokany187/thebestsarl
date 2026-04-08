@@ -334,7 +334,7 @@ model CommissionRule {
 
 model TicketSale {
   id                 String        @id @default(cuid())
-  ticketNumber       String        @unique
+  ticketNumber       String
   customerName       String
   route              String
   travelClass        TravelClass   @default(ECONOMY)
@@ -363,6 +363,8 @@ model TicketSale {
   depositMovements   AirlineDepositMovement[]
   createdAt          DateTime      @default(now())
   updatedAt          DateTime      @updatedAt
+
+  @@index([ticketNumber])
 }
 
 model Payment {

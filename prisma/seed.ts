@@ -309,10 +309,16 @@ async function main() {
     skipDuplicates: true,
   }).catch(() => undefined);
 
-  const ticket = await prisma.ticketSale.upsert({
-    where: { ticketNumber: "TBS-2026-0001" },
-    update: {},
-    create: {
+  const existingDemoTicket = await prisma.ticketSale.findFirst({
+    where: {
+      ticketNumber: "TBS-2026-0001",
+      customerName: "Client Démo",
+      airlineId: airFrance.id,
+    },
+  });
+
+  const ticket = existingDemoTicket ?? await prisma.ticketSale.create({
+    data: {
       ticketNumber: "TBS-2026-0001",
       customerName: "Client Démo",
       route: "CDG-DKR",

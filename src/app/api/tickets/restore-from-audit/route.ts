@@ -373,9 +373,10 @@ export async function POST(request: NextRequest) {
         continue;
       }
 
-      const ticket = ticketByNumber.get(ticketNumber) ?? await prisma.ticketSale.findUnique({
+      const ticket = ticketByNumber.get(ticketNumber) ?? await prisma.ticketSale.findFirst({
         where: { ticketNumber },
         include: { payments: true },
+        orderBy: { soldAt: "desc" },
       });
 
       if (!ticket) {

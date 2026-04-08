@@ -349,7 +349,7 @@ async function main() {
 
   for (const gap of gapRows) {
     try {
-      const existing = await prisma.ticketSale.findUnique({ where: { ticketNumber: gap.ticketNumber }, select: { id: true } });
+      const existing = await prisma.ticketSale.findFirst({ where: { ticketNumber: gap.ticketNumber }, select: { id: true } });
       if (existing) {
         skipped += 1;
         continue;

@@ -23,9 +23,10 @@ async function main() {
   });
   summary.deletedDemoNeedsById = deletedDemoNeeds.count;
 
-  const seedTicket = await prisma.ticketSale.findUnique({
+  const seedTicket = await prisma.ticketSale.findFirst({
     where: { ticketNumber: "TBS-2026-0001" },
     select: { id: true },
+    orderBy: { createdAt: "asc" },
   });
 
   if (seedTicket) {

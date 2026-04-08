@@ -1131,11 +1131,6 @@ export async function importTicketWorkbookFromBuffer(options: TicketWorkbookImpo
   ]);
 
   const ticketCountByAirlineId = new Map(ticketCounts.map((entry) => [entry.airlineId, entry._count._all]));
-  const existingTicketNumbers = new Set(
-    existingTickets
-      .filter((ticket) => !replacementDateKeys.has(ticket.soldAt.toISOString().slice(0, 10)))
-      .map((ticket) => ticket.ticketNumber),
-  );
   const consumedAmountByAirlineId = new Map(consumedByAirline.map((entry) => [entry.airlineId, entry._sum.amount ?? 0]));
   const depositBalanceByAccountKey = new Map(depositAccountSummaries.map((account) => [account.key, account.balance]));
 
@@ -1401,17 +1396,8 @@ export async function importTicketWorkbookFromBuffer(options: TicketWorkbookImpo
         knownFingerprints.add(fingerprint);
         pnrFingerprints.set(resolvedTicketNumber, knownFingerprints);
 
-        if (existingTicketNumbers.has(resolvedTicketNumber)) {
-          throw new Error(`Le billet ${resolvedTicketNumber} existe déjà dans la base. Utilisez le remplacement de période si vous voulez le réimporter.`);
-        }
-
-        let normalizedTicketNumber = resolvedTicketNumber;
-        let duplicateIndex = 1;
-        while (pnrSequence.has(normalizedTicketNumber) || existingTicketNumbers.has(normalizedTicketNumber)) {
-          duplicateIndex += 1;
-          normalizedTicketNumber = `${resolvedTicketNumber}-R${duplicateIndex}`;
-        }
-        pnrSequence.set(normalizedTicketNumber, duplicateIndex);
+        const normalizedTicketNumber = resolvedTicketNumber;
+        pnrSequence.set(normalizedTicketNumber, (pnrSequence.get(normalizedTicketNumber) ?? 0) + 1);
 
         const travelClass = parseTravelClass(pickValue(row, ["travelClass", "classe", "class"]));
         const activeRule = pickCommissionRule(airline.commissionRules, route, travelClass) ?? null;
@@ -1501,7 +1487,6 @@ export async function importTicketWorkbookFromBuffer(options: TicketWorkbookImpo
           commissionModeApplied,
           notes: [
             asString(pickValue(row, ["notes", "observation", "commentaire"])),
-            normalizedTicketNumber !== resolvedTicketNumber ? `PNR source: ${resolvedTicketNumber}` : null,
           ].filter(Boolean).join(" | ") || null,
         };
 
@@ -1541,7 +1526,6 @@ export async function importTicketWorkbookFromBuffer(options: TicketWorkbookImpo
               depositBalanceByAccountKey.set(depositAccount.key, (depositBalanceByAccountKey.get(depositAccount.key) ?? 0) - depositDebitAmount);
             }
           });
-          existingTicketNumbers.add(normalizedTicketNumber);
           summary.created += 1;
         }
 
