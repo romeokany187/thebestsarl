@@ -268,10 +268,13 @@ export async function POST(request: NextRequest) {
     console.error("POST /api/tickets failed", error);
 
     if (error instanceof Error && error.message.startsWith("INSUFFICIENT_AIRLINE_DEPOSIT:")) {
-      const [, label, available, requested] = error.message.split(":");
+      const [, label, available, requested, balanceDate] = error.message.split(":");
+      const dateLabel = balanceDate
+        ? ` à la date du ${new Date(balanceDate).toLocaleDateString("fr-FR")}`
+        : "";
       return NextResponse.json(
         {
-          error: `${label}: solde insuffisant (${available} USD disponibles pour ${requested} USD demandés). Veuillez d'abord créditer le compte dépôt compagnie.`,
+          error: `${label}: solde insuffisant${dateLabel} (${available} USD disponibles pour ${requested} USD demandés). Veuillez d'abord créditer le compte dépôt compagnie.`,
         },
         { status: 400 },
       );

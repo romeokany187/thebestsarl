@@ -9,16 +9,23 @@ import { airlineDepositTopUpSchema } from "@/lib/validators";
 import { requireApiModuleAccess } from "@/lib/rbac";
 import { writeActivityLog } from "@/lib/activity-log";
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   const access = await requireApiModuleAccess("payments", ["ADMIN", "DIRECTEUR_GENERAL", "ACCOUNTANT", "EMPLOYEE"]);
   if (access.error) {
     return access.error;
   }
 
+  const asOfDateRaw = request.nextUrl.searchParams.get("asOfDate")?.trim() ?? "";
+  const asOfDate = /^\d{4}-\d{2}-\d{2}$/.test(asOfDateRaw)
+    ? new Date(`${asOfDateRaw}T23:59:59.999Z`)
+    : undefined;
+
   const accounts = await buildAirlineDepositAccountSummaries(
     prisma as unknown as { airlineDepositMovement: { findMany: (args: unknown) => Promise<any[]> } },
+    6,
+    asOfDate ? { upTo: asOfDate } : undefined,
   );
-  return NextResponse.json({ data: accounts });
+  return NextResponse.json({ data: accounts, asOfDate: asOfDateRaw || null });
 }
 
 export async function POST(request: NextRequest) {

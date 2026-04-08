@@ -197,7 +197,7 @@ export async function recordAirlineDepositMovement(
     );
 
   if (!allowHistoricalPreDepositDebit && input.movementType === "DEBIT" && amount > balanceBefore + 0.0001) {
-    throw new Error(`INSUFFICIENT_AIRLINE_DEPOSIT:${account.label}:${balanceBefore.toFixed(2)}:${amount.toFixed(2)}`);
+    throw new Error(`INSUFFICIENT_AIRLINE_DEPOSIT:${account.label}:${balanceBefore.toFixed(2)}:${amount.toFixed(2)}:${effectiveCreatedAt.toISOString()}`);
   }
 
   const balanceAfter = balanceBefore + movementSignedAmount(input.movementType, amount);
@@ -224,8 +224,12 @@ export async function recordAirlineDepositMovement(
 export async function buildAirlineDepositAccountSummaries(
   client: { airlineDepositMovement: { findMany: (args?: any) => Promise<any[]> } },
   recentLimit = 6,
+  options?: { upTo?: Date },
 ): Promise<AirlineDepositAccountSummary[]> {
   const movements = await client.airlineDepositMovement.findMany({
+    where: {
+      ...(options?.upTo ? { createdAt: { lte: options.upTo } } : {}),
+    },
     orderBy: [{ createdAt: "desc" }, { id: "desc" }],
     include: {
       airline: { select: { id: true, code: true, name: true } },

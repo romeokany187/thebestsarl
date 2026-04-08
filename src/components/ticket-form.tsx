@@ -147,6 +147,9 @@ export function TicketForm({
   const [itineraryForm, setItineraryForm] = useState<ItineraryFormState>(buildItineraryForm());
   const [isItineraryOpen, setIsItineraryOpen] = useState(false);
   const [isSavingItinerary, setIsSavingItinerary] = useState(false);
+  const [balancePreviewByKey, setBalancePreviewByKey] = useState<Record<string, number>>({});
+  const [balancePreviewDate, setBalancePreviewDate] = useState<string>("");
+  const [isLoadingBalancePreview, setIsLoadingBalancePreview] = useState(false);
 
   useEffect(() => {
     function openItineraryModal(ticket: EditableTicket) {
@@ -224,6 +227,9 @@ export function TicketForm({
     [depositAccounts, selectedAirline],
   );
   const requestedTicketAmount = Number(form.amount) || 0;
+  const selectedPreviewBalance = selectedDepositAccount ? balancePreviewByKey[selectedDepositAccount.key] : undefined;
+  const effectiveDepositBalance = typeof selectedPreviewBalance === "number" ? selectedPreviewBalance : selectedDepositAccount?.balance;
+  const isBackdatedAdminEntry = allowAdminEncodingDate && Boolean(form.travelDate) && form.travelDate !== todayDateInputValue();
 
   const clientPayerValue = useMemo(() => {
     const customer = form.customerName.trim();
@@ -258,6 +264,51 @@ export function TicketForm({
       return prev;
     });
   }, [clientPayerValue]);
+
+  useEffect(() => {
+    if (!allowAdminEncodingDate || !form.travelDate) {
+      setBalancePreviewByKey({});
+      setBalancePreviewDate("");
+      return;
+    }
+
+    const controller = new AbortController();
+    setIsLoadingBalancePreview(true);
+
+    fetch(`/api/airline-deposits?asOfDate=${encodeURIComponent(form.travelDate)}`, {
+      signal: controller.signal,
+      cache: "no-store",
+    })
+      .then(async (response) => {
+        if (!response.ok) {
+          throw new Error("BALANCE_PREVIEW_FAILED");
+        }
+        return response.json();
+      })
+      .then((payload) => {
+        const nextBalances = Object.fromEntries(
+          Array.isArray(payload?.data)
+            ? payload.data.map((account: { key: string; balance: number }) => [account.key, Number(account.balance) || 0])
+            : [],
+        ) as Record<string, number>;
+        setBalancePreviewByKey(nextBalances);
+        setBalancePreviewDate(typeof payload?.asOfDate === "string" ? payload.asOfDate : form.travelDate);
+      })
+      .catch((error: unknown) => {
+        if ((error as { name?: string })?.name === "AbortError") {
+          return;
+        }
+        setBalancePreviewByKey({});
+        setBalancePreviewDate("");
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) {
+          setIsLoadingBalancePreview(false);
+        }
+      });
+
+    return () => controller.abort();
+  }, [allowAdminEncodingDate, form.travelDate]);
 
   function updateField<K extends keyof FormState>(key: K, value: FormState[K]) {
     setForm((prev) => ({ ...prev, [key]: value }));
@@ -615,9 +666,19 @@ export function TicketForm({
         </p>
       ) : null}
       {selectedDepositAccount ? (
-        <p className={`text-xs ${requestedTicketAmount > selectedDepositAccount.balance ? "text-red-600 dark:text-red-300" : "text-black/60 dark:text-white/60"}`}>
-          {selectedDepositAccount.label}: solde disponible {selectedDepositAccount.balance.toFixed(2)} USD. Chaque billet de cette compagnie sera débité automatiquement.
-        </p>
+        <div className={`space-y-1 text-xs ${requestedTicketAmount > (effectiveDepositBalance ?? 0) ? "text-red-600 dark:text-red-300" : "text-black/60 dark:text-white/60"}`}>
+          <p>
+            {selectedDepositAccount.label}: {allowAdminEncodingDate && balancePreviewDate ? `solde à la date du ${balancePreviewDate}` : "solde disponible"} {typeof effectiveDepositBalance === "number" ? `${effectiveDepositBalance.toFixed(2)} USD` : "indisponible"}. Chaque billet de cette compagnie sera débité automatiquement.
+          </p>
+          {isLoadingBalancePreview ? (
+            <p className="text-black/55 dark:text-white/55">Vérification du solde à la date choisie...</p>
+          ) : null}
+          {isBackdatedAdminEntry ? (
+            <p className="text-black/55 dark:text-white/55">
+              Solde actuel: {selectedDepositAccount.balance.toFixed(2)} USD. Pour un billet antidaté, le contrôle se fait sur le solde disponible à la date d&apos;encodage choisie.
+            </p>
+          ) : null}
+        </div>
       ) : null}
 
       <textarea
