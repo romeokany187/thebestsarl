@@ -7,6 +7,7 @@ import { KpiCard } from "@/components/kpi-card";
 import { PaymentEntryForm } from "@/components/payment-entry-form";
 import { PaymentOrderCashExecutionActions } from "@/components/payment-order-cash-execution-actions";
 import { PaymentRowAdminActions } from "@/components/payment-row-admin-actions";
+import { ProxyBankingForm } from "@/components/proxy-banking-form";
 import { PaymentsWritingWorkspace } from "@/components/payments-writing-workspace";
 import { ProcurementCashExecutionActions } from "@/components/procurement-cash-execution-actions";
 import { invoiceNumberFromChronology } from "@/lib/invoice";
@@ -210,6 +211,27 @@ function detectVirtualChannel(methodRaw: string | null | undefined): VirtualChan
     || method.includes("ILLICO")
   ) return "RAWBANK_ILLICOCASH";
   return null;
+}
+
+function isProxyBankingOperation(operation: { description?: string | null }) {
+  return (operation.description ?? "").startsWith("PROXY_BANKING:");
+}
+
+function proxyChannelLabel(channel: string) {
+  if (channel === "AIRTEL_MONEY") return "Airtel Money";
+  if (channel === "ORANGE_MONEY") return "Orange Money";
+  if (channel === "MPESA") return "M-Pesa";
+  if (channel === "EQUITY") return "Equity";
+  if (channel === "RAWBANK_ILLICOCASH") return "Rawbank & Illicocash";
+  return "Cash";
+}
+
+function proxyOperationLabel(descriptionRaw: string | null | undefined) {
+  const description = descriptionRaw ?? "";
+  if (description.includes(":DEPOSIT:")) return "Dépôt client";
+  if (description.includes(":WITHDRAWAL:")) return "Retrait client";
+  if (description.includes(":OPENING_BALANCE:")) return "Solde initial";
+  return "Opération proxy";
 }
 
 type BalanceBucket = "CASH" | VirtualChannel;
@@ -478,6 +500,7 @@ export default async function PaymentsPage({
         amountUsd: true,
         fxRateToUsd: true,
         fxRateUsdToCdf: true,
+        description: true,
       },
       take: 5000,
     }),
@@ -533,7 +556,7 @@ export default async function PaymentsPage({
     TicketPaymentRow[],
     CashOperationRow[],
     Array<{ paidAt?: Date | string | null; amount: number; currency?: string | null; amountUsd?: number | null; amountCdf?: number | null; fxRateUsdToCdf?: number | null; method?: string | null }>,
-    Array<{ occurredAt?: Date | string | null; category?: string | null; amount: number; direction: string; method?: string | null; currency?: string | null; amountUsd?: number | null; fxRateToUsd?: number | null; fxRateUsdToCdf?: number | null }>,
+    Array<{ occurredAt?: Date | string | null; category?: string | null; amount: number; direction: string; method?: string | null; currency?: string | null; amountUsd?: number | null; fxRateToUsd?: number | null; fxRateUsdToCdf?: number | null; description?: string | null }>,
     Array<{ id: string; code?: string | null; beneficiary: string; amount: number; currency?: string | null; approvedAt?: Date | null }>,
     Array<{ id: string; code?: string | null; title: string; estimatedAmount?: number | null; currency?: string | null; approvedAt?: Date | null; reviewComment?: string | null }>,
   ];
@@ -604,11 +627,16 @@ export default async function PaymentsPage({
   const collectionRate = totalTicketAmount > 0 ? (totalPaid / totalTicketAmount) * 100 : 0;
   const partialCoverageRate = partialBilled > 0 ? (partialCollected / partialBilled) * 100 : 0;
 
-  const openingBuckets = computeOpeningBuckets(ticketPaymentsBeforeStart, cashOperationsBeforeStart);
-  const displayOpeningBuckets = applyOpeningFallbackFromCurrentPeriod(openingBuckets, cashOperations);
-  const cashOperationsWithoutOpeningBalance = cashOperations.filter((operation) => operation.category !== "OPENING_BALANCE");
-  const hasInitialOpeningRecorded = [...cashOperationsBeforeStart, ...cashOperations].some((operation) => operation.category === "OPENING_BALANCE");
-  const hasOpeningInsideSelectedRange = cashOperations.some((operation) => operation.category === "OPENING_BALANCE");
+  const generalCashOperations = cashOperations.filter((operation) => !isProxyBankingOperation(operation));
+  const generalCashOperationsBeforeStart = cashOperationsBeforeStart.filter((operation) => !isProxyBankingOperation(operation));
+  const proxyCashOperations = cashOperations.filter((operation) => isProxyBankingOperation(operation));
+  const proxyCashOperationsBeforeStart = cashOperationsBeforeStart.filter((operation) => isProxyBankingOperation(operation));
+
+  const openingBuckets = computeOpeningBuckets(ticketPaymentsBeforeStart, generalCashOperationsBeforeStart);
+  const displayOpeningBuckets = applyOpeningFallbackFromCurrentPeriod(openingBuckets, generalCashOperations);
+  const cashOperationsWithoutOpeningBalance = generalCashOperations.filter((operation) => operation.category !== "OPENING_BALANCE");
+  const hasInitialOpeningRecorded = [...generalCashOperationsBeforeStart, ...generalCashOperations].some((operation) => operation.category === "OPENING_BALANCE");
+  const hasOpeningInsideSelectedRange = generalCashOperations.some((operation) => operation.category === "OPENING_BALANCE");
   const openingBalance = (Object.values(displayOpeningBuckets) as Array<BalanceSnapshot>).reduce(
     (sum, snapshot) => sum + bucketUsdEquivalent(snapshot),
     0,
@@ -817,6 +845,93 @@ export default async function PaymentsPage({
     },
   );
 
+  const proxyOpeningBuckets = computeOpeningBuckets([], proxyCashOperationsBeforeStart);
+  const proxyDisplayOpeningBuckets = applyOpeningFallbackFromCurrentPeriod(proxyOpeningBuckets, proxyCashOperations);
+  const proxyCashOperationsWithoutOpeningBalance = proxyCashOperations.filter((operation) => operation.category !== "OPENING_BALANCE");
+  const proxyCashOpeningUsd = proxyDisplayOpeningBuckets.CASH.usd;
+  const proxyCashOpeningCdf = proxyDisplayOpeningBuckets.CASH.cdf;
+  const proxyCashInflowUsd = proxyCashOperationsWithoutOpeningBalance
+    .filter((operation) => bucketFromMethod(operation.method) === "CASH" && operation.direction === "INFLOW" && normalizeMoneyCurrency(operation.currency) === "USD")
+    .reduce((sum, operation) => sum + operation.amount, 0);
+  const proxyCashOutflowUsd = proxyCashOperationsWithoutOpeningBalance
+    .filter((operation) => bucketFromMethod(operation.method) === "CASH" && operation.direction === "OUTFLOW" && normalizeMoneyCurrency(operation.currency) === "USD")
+    .reduce((sum, operation) => sum + operation.amount, 0);
+  const proxyCashInflowCdf = proxyCashOperationsWithoutOpeningBalance
+    .filter((operation) => bucketFromMethod(operation.method) === "CASH" && operation.direction === "INFLOW" && normalizeMoneyCurrency(operation.currency) === "CDF")
+    .reduce((sum, operation) => sum + operation.amount, 0);
+  const proxyCashOutflowCdf = proxyCashOperationsWithoutOpeningBalance
+    .filter((operation) => bucketFromMethod(operation.method) === "CASH" && operation.direction === "OUTFLOW" && normalizeMoneyCurrency(operation.currency) === "CDF")
+    .reduce((sum, operation) => sum + operation.amount, 0);
+  const proxyClosingUsd = proxyCashOpeningUsd + proxyCashInflowUsd - proxyCashOutflowUsd;
+  const proxyClosingCdf = proxyCashOpeningCdf + proxyCashInflowCdf - proxyCashOutflowCdf;
+
+  const proxyVirtualRows = virtualChannels.map(({ key, label }) => {
+    const openingUsd = proxyDisplayOpeningBuckets[key].usd;
+    const openingCdf = proxyDisplayOpeningBuckets[key].cdf;
+    const inUsd = proxyCashOperationsWithoutOpeningBalance
+      .filter((operation) => bucketFromMethod(operation.method) === key && operation.direction === "INFLOW" && normalizeMoneyCurrency(operation.currency) === "USD")
+      .reduce((sum, operation) => sum + operation.amount, 0);
+    const outUsd = proxyCashOperationsWithoutOpeningBalance
+      .filter((operation) => bucketFromMethod(operation.method) === key && operation.direction === "OUTFLOW" && normalizeMoneyCurrency(operation.currency) === "USD")
+      .reduce((sum, operation) => sum + operation.amount, 0);
+    const inCdf = proxyCashOperationsWithoutOpeningBalance
+      .filter((operation) => bucketFromMethod(operation.method) === key && operation.direction === "INFLOW" && normalizeMoneyCurrency(operation.currency) === "CDF")
+      .reduce((sum, operation) => sum + operation.amount, 0);
+    const outCdf = proxyCashOperationsWithoutOpeningBalance
+      .filter((operation) => bucketFromMethod(operation.method) === key && operation.direction === "OUTFLOW" && normalizeMoneyCurrency(operation.currency) === "CDF")
+      .reduce((sum, operation) => sum + operation.amount, 0);
+
+    return {
+      key,
+      label,
+      openingUsd,
+      openingCdf,
+      inUsd,
+      outUsd,
+      inCdf,
+      outCdf,
+      closingUsd: openingUsd + inUsd - outUsd,
+      closingCdf: openingCdf + inCdf - outCdf,
+    };
+  });
+
+  const proxyVirtualTotals = proxyVirtualRows.reduce(
+    (sum, row) => {
+      sum.openingUsd += row.openingUsd;
+      sum.openingCdf += row.openingCdf;
+      sum.inUsd += row.inUsd;
+      sum.outUsd += row.outUsd;
+      sum.inCdf += row.inCdf;
+      sum.outCdf += row.outCdf;
+      sum.closingUsd += row.closingUsd;
+      sum.closingCdf += row.closingCdf;
+      return sum;
+    },
+    {
+      openingUsd: 0,
+      openingCdf: 0,
+      inUsd: 0,
+      outUsd: 0,
+      inCdf: 0,
+      outCdf: 0,
+      closingUsd: 0,
+      closingCdf: 0,
+    },
+  );
+
+  const proxyHistoryRows = proxyCashOperations
+    .slice()
+    .sort((a, b) => new Date(b.occurredAt).getTime() - new Date(a.occurredAt).getTime())
+    .map((operation) => ({
+      ...operation,
+      channelLabel: proxyChannelLabel((bucketFromMethod(operation.method) === "CASH" ? "CASH" : bucketFromMethod(operation.method)) as string),
+      operationLabel: proxyOperationLabel(operation.description),
+    }));
+
+  const proxyEventCount = new Set(
+    proxyCashOperationsWithoutOpeningBalance.map((operation) => `${operation.reference ?? "-"}:${proxyOperationLabel(operation.description)}`),
+  ).size;
+
   const paymentTickets = ticketsWithComputedStatus
     .filter((ticket) => ticket.computedStatus !== PaymentStatus.PAID)
     .map((ticket) => ({
@@ -836,6 +951,146 @@ export default async function PaymentsPage({
   const paymentOrdersExecutionCount = paymentOrdersReadyForExecution.length;
   const needsExecutionCount = needsReadyForExecution.length;
 
+  function separatedDeskSummary(label: string) {
+    return (
+      <section className="rounded-2xl border border-dashed border-black/20 bg-white px-4 py-5 text-sm text-black/65 dark:border-white/20 dark:bg-zinc-900 dark:text-white/65">
+        {label} n&apos;utilise pas les données actuelles de <span className="font-semibold">THE BEST / Caisse 2 siège</span>. Aucun récapitulatif séparé n&apos;est encore enregistré ici.
+      </section>
+    );
+  }
+
+  function separatedDeskWorkspace(label: string) {
+    return (
+      <section className="rounded-2xl border border-dashed border-black/20 bg-white px-4 py-5 text-sm text-black/65 dark:border-white/20 dark:bg-zinc-900 dark:text-white/65">
+        Aucun historique ni aucune opération distincte n&apos;est encore enregistré pour <span className="font-semibold">{label}</span>. Les écritures actuelles restent réservées à <span className="font-semibold">THE BEST / Caisse 2 siège</span>.
+      </section>
+    );
+  }
+
+  const workspaceOverrides = {
+    PROXY_BANKING: {
+      summary: (
+        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-2 2xl:grid-cols-5">
+          <KpiCard label="Cash proxy USD" value={`${proxyClosingUsd.toFixed(2)} USD`} />
+          <KpiCard label="Cash proxy CDF" value={`${proxyClosingCdf.toFixed(2)} CDF`} />
+          <KpiCard label="Virtuel USD" value={`${proxyVirtualTotals.closingUsd.toFixed(2)} USD`} />
+          <KpiCard label="Virtuel CDF" value={`${proxyVirtualTotals.closingCdf.toFixed(2)} CDF`} />
+          <KpiCard label="Opérations proxy" value={`${proxyEventCount}`} hint="Dépôts, retraits et soldes initiaux" />
+        </div>
+      ),
+      cash: (
+        <div className="space-y-4">
+          <ProxyBankingForm />
+
+          <section className="overflow-hidden rounded-2xl border border-black/10 bg-white shadow-sm dark:border-white/10 dark:bg-zinc-900">
+            <div className="border-b border-black/10 px-4 py-3 dark:border-white/10">
+              <h2 className="text-sm font-semibold">Historique proxy banking</h2>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="min-w-full text-sm">
+                <thead className="bg-black/5 dark:bg-white/10">
+                  <tr>
+                    <th className="px-4 py-3 text-left font-semibold">Date</th>
+                    <th className="px-4 py-3 text-left font-semibold">Opération</th>
+                    <th className="px-4 py-3 text-left font-semibold">Canal</th>
+                    <th className="px-4 py-3 text-left font-semibold">Sens</th>
+                    <th className="px-4 py-3 text-left font-semibold">Montant</th>
+                    <th className="px-4 py-3 text-left font-semibold">Référence</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {proxyHistoryRows.map((row) => (
+                    <tr key={row.id} className="border-t border-black/5 dark:border-white/10">
+                      <td className="px-4 py-3">{new Date(row.occurredAt).toLocaleString("fr-FR")}</td>
+                      <td className="px-4 py-3 font-medium">{row.operationLabel}</td>
+                      <td className="px-4 py-3">{row.channelLabel}</td>
+                      <td className="px-4 py-3">{row.direction === "INFLOW" ? "Entrée" : "Sortie"}</td>
+                      <td className="px-4 py-3">{row.amount.toFixed(2)} {normalizeMoneyCurrency(row.currency)}</td>
+                      <td className="px-4 py-3">{row.reference ?? "-"}</td>
+                    </tr>
+                  ))}
+                  {proxyHistoryRows.length === 0 ? (
+                    <tr>
+                      <td colSpan={6} className="px-4 py-8 text-center text-sm text-black/55 dark:text-white/55">
+                        Aucun dépôt, retrait ou solde initial proxy banking enregistré pour cette période.
+                      </td>
+                    </tr>
+                  ) : null}
+                </tbody>
+              </table>
+            </div>
+          </section>
+        </div>
+      ),
+      virtual: (
+        <section className="overflow-hidden rounded-2xl border border-black/10 bg-white shadow-sm dark:border-white/10 dark:bg-zinc-900">
+          <div className="border-b border-black/10 px-4 py-3 dark:border-white/10">
+            <h2 className="text-sm font-semibold">Soldes comptes virtuels proxy banking</h2>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="min-w-full text-sm">
+              <thead className="bg-black/5 dark:bg-white/10">
+                <tr>
+                  <th className="px-4 py-3 text-left font-semibold">Canal</th>
+                  <th className="px-4 py-3 text-left font-semibold">Ouverture USD</th>
+                  <th className="px-4 py-3 text-left font-semibold">Ouverture CDF</th>
+                  <th className="px-4 py-3 text-left font-semibold">Entrées USD</th>
+                  <th className="px-4 py-3 text-left font-semibold">Sorties USD</th>
+                  <th className="px-4 py-3 text-left font-semibold">Solde USD</th>
+                  <th className="px-4 py-3 text-left font-semibold">Entrées CDF</th>
+                  <th className="px-4 py-3 text-left font-semibold">Sorties CDF</th>
+                  <th className="px-4 py-3 text-left font-semibold">Solde CDF</th>
+                </tr>
+              </thead>
+              <tbody>
+                {proxyVirtualRows.map((row) => (
+                  <tr key={row.key} className="border-t border-black/5 dark:border-white/10">
+                    <td className="px-4 py-3 font-medium">{row.label}</td>
+                    <td className="px-4 py-3">{row.openingUsd.toFixed(2)} USD</td>
+                    <td className="px-4 py-3">{row.openingCdf.toFixed(2)} CDF</td>
+                    <td className="px-4 py-3">{row.inUsd.toFixed(2)} USD</td>
+                    <td className="px-4 py-3">{row.outUsd.toFixed(2)} USD</td>
+                    <td className="px-4 py-3 font-semibold">{row.closingUsd.toFixed(2)} USD</td>
+                    <td className="px-4 py-3">{row.inCdf.toFixed(2)} CDF</td>
+                    <td className="px-4 py-3">{row.outCdf.toFixed(2)} CDF</td>
+                    <td className="px-4 py-3 font-semibold">{row.closingCdf.toFixed(2)} CDF</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      ),
+      billetage: <CashBilletageWorkspace expectedUsd={proxyClosingUsd} expectedCdf={proxyClosingCdf} />,
+    },
+    CAISSE_SAFETY: {
+      summary: separatedDeskSummary("Caisse Safety"),
+      cash: separatedDeskWorkspace("Caisse Safety"),
+      virtual: separatedDeskWorkspace("Caisse Safety"),
+      billetage: separatedDeskWorkspace("Caisse Safety"),
+    },
+    CAISSE_VISAS: {
+      summary: separatedDeskSummary("Caisse Visas"),
+      cash: separatedDeskWorkspace("Caisse Visas"),
+      virtual: separatedDeskWorkspace("Caisse Visas"),
+      billetage: separatedDeskWorkspace("Caisse Visas"),
+    },
+    CAISSE_TSL: {
+      summary: separatedDeskSummary("Caisse TSL"),
+      cash: separatedDeskWorkspace("Caisse TSL"),
+      virtual: separatedDeskWorkspace("Caisse TSL"),
+      billetage: separatedDeskWorkspace("Caisse TSL"),
+    },
+    CAISSE_AGENCE: {
+      summary: separatedDeskSummary("Caisse agence"),
+      cash: separatedDeskWorkspace("Caisse agence"),
+      virtual: separatedDeskWorkspace("Caisse agence"),
+      billetage: separatedDeskWorkspace("Caisse agence"),
+      "payment-orders": separatedDeskWorkspace("Caisse agence"),
+      needs: separatedDeskWorkspace("Caisse agence"),
+    },
+  } as const;
+
   return (
     <AppShell role={role}>
       <section className="mb-6">
@@ -845,6 +1100,7 @@ export default async function PaymentsPage({
       <PaymentsWritingWorkspace
         jobTitle={session.user.jobTitle ?? null}
         role={role}
+        workspaceOverrides={workspaceOverrides}
         paymentOrdersWorkspace={canWrite ? (
           <section className="space-y-4 rounded-2xl border border-black/10 bg-white p-4 dark:border-white/10 dark:bg-zinc-900">
             <div>

@@ -6,6 +6,7 @@ type WritingMode = "none" | "tickets" | "cash" | "virtual" | "billetage" | "paym
 type CashDeskValue = "PROXY_BANKING" | "THE_BEST" | "CAISSE_SAFETY" | "CAISSE_VISAS" | "CAISSE_TSL" | "CAISSE_AGENCE";
 type CashDeskOption = { value: CashDeskValue; label: string; description: string };
 type AdminCashRoleScope = "CAISSIER" | "CAISSE_2_SIEGE" | "CAISSE_AGENCE";
+type DeskWorkspaceOverride = Partial<Record<Exclude<WritingMode, "none"> | "summary", React.ReactNode>>;
 
 type AppRoleLike = "ADMIN" | "DIRECTEUR_GENERAL" | "MANAGER" | "EMPLOYEE" | "ACCOUNTANT";
 
@@ -115,6 +116,10 @@ function getAllowedActionsForDesk(deskValue: CashDeskValue | string): Array<Excl
     return ["cash", "virtual", "billetage", "payment-orders", "needs"];
   }
 
+  if (deskValue === "CAISSE_AGENCE") {
+    return [];
+  }
+
   return ["cash", "payment-orders", "billetage", "virtual", "needs"];
 }
 
@@ -128,6 +133,7 @@ export function PaymentsWritingWorkspace({
   needsWorkspace,
   needsLabel,
   closedSummary,
+  workspaceOverrides,
   jobTitle,
   role,
 }: {
@@ -140,6 +146,7 @@ export function PaymentsWritingWorkspace({
   needsWorkspace?: React.ReactNode;
   needsLabel?: string;
   closedSummary?: React.ReactNode;
+  workspaceOverrides?: Partial<Record<CashDeskValue, DeskWorkspaceOverride>>;
   jobTitle?: string | null;
   role?: AppRoleLike | string | null;
 }) {
@@ -156,20 +163,28 @@ export function PaymentsWritingWorkspace({
   }, [deskOptions, selectedDesk]);
 
   const currentDesk = deskOptions.find((desk) => desk.value === selectedDesk) ?? deskOptions[0] ?? null;
+  const deskOverride = selectedDesk ? workspaceOverrides?.[selectedDesk] : undefined;
+  const resolvedTicketWorkspace = deskOverride?.tickets ?? ticketWorkspace;
+  const resolvedCashWorkspace = deskOverride?.cash ?? cashWorkspace;
+  const resolvedVirtualWorkspace = deskOverride?.virtual ?? virtualWorkspace;
+  const resolvedBilletageWorkspace = deskOverride?.billetage ?? billetageWorkspace;
+  const resolvedPaymentOrdersWorkspace = deskOverride?.["payment-orders"] ?? paymentOrdersWorkspace;
+  const resolvedNeedsWorkspace = deskOverride?.needs ?? needsWorkspace;
+  const resolvedClosedSummary = deskOverride?.summary ?? closedSummary;
 
   const actionItems = [
-    ticketWorkspace ? { key: "tickets" as const, label: "Paiement des billets (THE BEST)", tone: "emerald" } : null,
-    cashWorkspace
+    resolvedTicketWorkspace ? { key: "tickets" as const, label: "Paiement des billets (THE BEST)", tone: "emerald" } : null,
+    resolvedCashWorkspace
       ? {
           key: "cash" as const,
           label: selectedDesk === "PROXY_BANKING" ? "Dépôts / retraits proxy banking" : "Autres opérations de caisse",
           tone: "blue",
         }
       : null,
-    paymentOrdersWorkspace ? { key: "payment-orders" as const, label: paymentOrdersLabel ?? "OP à exécuter", tone: "amber" } : null,
-    billetageWorkspace ? { key: "billetage" as const, label: "Billetage", tone: "sky" } : null,
-    virtualWorkspace ? { key: "virtual" as const, label: "Virtuel", tone: "cyan" } : null,
-    needsWorkspace ? { key: "needs" as const, label: needsLabel ?? "EDB à exécuter", tone: "violet" } : null,
+    resolvedPaymentOrdersWorkspace ? { key: "payment-orders" as const, label: paymentOrdersLabel ?? "OP à exécuter", tone: "amber" } : null,
+    resolvedBilletageWorkspace ? { key: "billetage" as const, label: "Billetage", tone: "sky" } : null,
+    resolvedVirtualWorkspace ? { key: "virtual" as const, label: "Virtuel", tone: "cyan" } : null,
+    resolvedNeedsWorkspace ? { key: "needs" as const, label: needsLabel ?? "EDB à exécuter", tone: "violet" } : null,
   ].filter(Boolean) as Array<{ key: Exclude<WritingMode, "none">; label: string; tone: string }>;
   const allowedActionKeys = getAllowedActionsForDesk(selectedDesk);
   const visibleActionItems = actionItems.filter((item) => allowedActionKeys.includes(item.key));
@@ -275,13 +290,13 @@ export function PaymentsWritingWorkspace({
           </section>
 
           <div className="space-y-4">
-            {mode === "none" ? closedSummary : null}
-            {mode === "tickets" ? ticketWorkspace : null}
-            {mode === "cash" ? cashWorkspace : null}
-            {mode === "virtual" ? virtualWorkspace : null}
-            {mode === "billetage" ? billetageWorkspace : null}
-            {mode === "payment-orders" ? paymentOrdersWorkspace : null}
-            {mode === "needs" ? needsWorkspace : null}
+            {mode === "none" ? resolvedClosedSummary : null}
+            {mode === "tickets" ? resolvedTicketWorkspace : null}
+            {mode === "cash" ? resolvedCashWorkspace : null}
+            {mode === "virtual" ? resolvedVirtualWorkspace : null}
+            {mode === "billetage" ? resolvedBilletageWorkspace : null}
+            {mode === "payment-orders" ? resolvedPaymentOrdersWorkspace : null}
+            {mode === "needs" ? resolvedNeedsWorkspace : null}
           </div>
         </div>
       </section>
