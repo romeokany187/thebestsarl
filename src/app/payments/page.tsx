@@ -847,9 +847,7 @@ export default async function PaymentsPage({
       <section className="mb-6">
         <h1 className="text-2xl font-semibold tracking-tight">Paiements</h1>
         <p className="text-sm text-black/60 dark:text-white/60">
-          {role === "ADMIN" || isComptable
-            ? "Pilotage financier complet: encaissements, écritures de caisse, conversions, exécutions et corrections autorisées."
-            : "Pilotage financier des billets vendus et des paiements reçus (USD / CDF)."}
+          Espace paiements unifié : encaissements billets, opérations de caisse, virtuel, billetage, OP et EDB selon vos droits et la caisse sélectionnée.
         </p>
       </section>
 

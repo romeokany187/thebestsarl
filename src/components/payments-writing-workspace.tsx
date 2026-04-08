@@ -3,17 +3,37 @@
 import { useEffect, useMemo, useState } from "react";
 
 type WritingMode = "none" | "tickets" | "cash" | "virtual" | "billetage" | "payment-orders" | "needs";
-type CashDeskOption = { value: string; label: string; description: string };
+type CashDeskValue = "THE_BEST" | "CAISSE_SAFETY" | "CAISSE_VISAS" | "CAISSE_TSL" | "CAISSE_AGENCE";
+type CashDeskOption = { value: CashDeskValue; label: string; description: string };
 
 type AppRoleLike = "ADMIN" | "DIRECTEUR_GENERAL" | "MANAGER" | "EMPLOYEE" | "ACCOUNTANT";
 
 const ALL_CASH_DESKS: CashDeskOption[] = [
-  { value: "CAISSE_1_SIEGE", label: "Caisse 1 Siège", description: "Caisse principale du siège." },
-  { value: "CAISSE_2_SIEGE", label: "Caisse 2 Siège", description: "Poste central qui pilote plusieurs caisses rattachées." },
-  { value: "CAISSE_BILLETTERIE", label: "Caisse Billetterie", description: "Encaissements et suivi dédiés au billetage." },
-  { value: "CAISSE_BESTSAFETY", label: "Caisse BestSafety", description: "Suivi des opérations de la caisse BestSafety." },
-  { value: "CAISSE_TSL", label: "Caisse TSL", description: "Suivi des opérations de la caisse TSL." },
-  { value: "CAISSE_AGENCE", label: "Caisse agence", description: "Caisse locale utilisée par les agences." },
+  {
+    value: "THE_BEST",
+    label: "THE BEST",
+    description: "Caisse principale THE BEST : paiements billets + autres opérations de caisse.",
+  },
+  {
+    value: "CAISSE_SAFETY",
+    label: "Caisse Safety",
+    description: "Compte Safety : opérations de caisse, billetage, virtuel, OP et EDB.",
+  },
+  {
+    value: "CAISSE_VISAS",
+    label: "Caisse Visas",
+    description: "Compte Visas : opérations de caisse, billetage, virtuel, OP et EDB.",
+  },
+  {
+    value: "CAISSE_TSL",
+    label: "Caisse TSL",
+    description: "Compte TSL : opérations de caisse, billetage, virtuel, OP et EDB.",
+  },
+  {
+    value: "CAISSE_AGENCE",
+    label: "Caisse agence",
+    description: "Caisse locale de l'agence : opérations de caisse, billetage, virtuel, OP et EDB.",
+  },
 ];
 
 function getManagedCashDesks(jobTitle?: string | null, role?: AppRoleLike | string | null) {
@@ -29,11 +49,11 @@ function getManagedCashDesks(jobTitle?: string | null, role?: AppRoleLike | stri
     return ALL_CASH_DESKS;
   }
 
-  if (normalizedJobTitle === "CAISSE_2_SIEGE") {
+  if (["CAISSIER", "CAISSE_2_SIEGE"].includes(normalizedJobTitle)) {
     return ALL_CASH_DESKS.filter((desk) => [
-      "CAISSE_2_SIEGE",
-      "CAISSE_BILLETTERIE",
-      "CAISSE_BESTSAFETY",
+      "THE_BEST",
+      "CAISSE_SAFETY",
+      "CAISSE_VISAS",
       "CAISSE_TSL",
     ].includes(desk.value));
   }
@@ -42,7 +62,15 @@ function getManagedCashDesks(jobTitle?: string | null, role?: AppRoleLike | stri
     return ALL_CASH_DESKS.filter((desk) => desk.value === "CAISSE_AGENCE");
   }
 
-  return ALL_CASH_DESKS.filter((desk) => desk.value === "CAISSE_1_SIEGE");
+  return ALL_CASH_DESKS.filter((desk) => desk.value === "THE_BEST");
+}
+
+function getAllowedActionsForDesk(deskValue: CashDeskValue | string): Array<Exclude<WritingMode, "none">> {
+  if (deskValue === "THE_BEST") {
+    return ["tickets", "cash", "payment-orders", "billetage", "virtual", "needs"];
+  }
+
+  return ["cash", "payment-orders", "billetage", "virtual", "needs"];
 }
 
 export function PaymentsWritingWorkspace({
@@ -72,7 +100,7 @@ export function PaymentsWritingWorkspace({
 }) {
   const [mode, setMode] = useState<WritingMode>("none");
   const deskOptions = useMemo(() => getManagedCashDesks(jobTitle, role), [jobTitle, role]);
-  const [selectedDesk, setSelectedDesk] = useState(deskOptions[0]?.value ?? "");
+  const [selectedDesk, setSelectedDesk] = useState<CashDeskValue | "">(deskOptions[0]?.value ?? "");
 
   useEffect(() => {
     if (!deskOptions.some((desk) => desk.value === selectedDesk)) {
@@ -83,13 +111,21 @@ export function PaymentsWritingWorkspace({
   const currentDesk = deskOptions.find((desk) => desk.value === selectedDesk) ?? deskOptions[0] ?? null;
 
   const actionItems = [
-    ticketWorkspace ? { key: "tickets" as const, label: "Opérations de paiement des billets", tone: "emerald" } : null,
+    ticketWorkspace ? { key: "tickets" as const, label: "Paiement des billets (THE BEST)", tone: "emerald" } : null,
     cashWorkspace ? { key: "cash" as const, label: "Autres opérations de caisse", tone: "blue" } : null,
     paymentOrdersWorkspace ? { key: "payment-orders" as const, label: paymentOrdersLabel ?? "OP à exécuter", tone: "amber" } : null,
     billetageWorkspace ? { key: "billetage" as const, label: "Billetage", tone: "sky" } : null,
     virtualWorkspace ? { key: "virtual" as const, label: "Virtuel", tone: "cyan" } : null,
     needsWorkspace ? { key: "needs" as const, label: needsLabel ?? "EDB à exécuter", tone: "violet" } : null,
   ].filter(Boolean) as Array<{ key: Exclude<WritingMode, "none">; label: string; tone: string }>;
+  const allowedActionKeys = getAllowedActionsForDesk(selectedDesk);
+  const visibleActionItems = actionItems.filter((item) => allowedActionKeys.includes(item.key));
+
+  useEffect(() => {
+    if (mode !== "none" && !visibleActionItems.some((item) => item.key === mode)) {
+      setMode("none");
+    }
+  }, [mode, visibleActionItems]);
 
   function actionToneClass(itemTone: string, active: boolean) {
     if (!active) {
@@ -111,7 +147,7 @@ export function PaymentsWritingWorkspace({
           <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-black/50 dark:text-white/50">Caisses</p>
           <h2 className="mt-1 text-sm font-semibold">Sous-menu Paiements</h2>
           <p className="mt-1 text-xs text-black/60 dark:text-white/60">
-            Choisissez une caisse dans la liste puis ouvrez le menu d&apos;action correspondant, comme dans une navigation latérale dédiée.
+            Choisissez une caisse parmi celles que votre profil gère, puis ouvrez le menu d&apos;action correspondant dans cette navigation latérale dédiée.
           </p>
 
           <div className="mt-4">
@@ -119,7 +155,7 @@ export function PaymentsWritingWorkspace({
             <select
               value={selectedDesk}
               onChange={(event) => {
-                setSelectedDesk(event.target.value);
+                setSelectedDesk(event.target.value as CashDeskValue);
                 setMode("none");
               }}
               className="w-full rounded-md border border-black/15 bg-white px-3 py-2 text-sm dark:border-white/15 dark:bg-zinc-900"
@@ -136,7 +172,7 @@ export function PaymentsWritingWorkspace({
           </div>
 
           <div className="mt-4 space-y-2">
-            {actionItems.map((item) => (
+            {visibleActionItems.map((item) => (
               <button
                 key={item.key}
                 type="button"
@@ -169,7 +205,7 @@ export function PaymentsWritingWorkspace({
                 <p className="mt-1 text-xs text-black/60 dark:text-white/60">
                   {mode === "none"
                     ? "Sélectionnez maintenant une action dans le menu latéral de gauche."
-                    : `Vue ouverte : ${actionItems.find((item) => item.key === mode)?.label ?? "Action"}.`}
+                    : `Vue ouverte : ${visibleActionItems.find((item) => item.key === mode)?.label ?? "Action"}.`}
                 </p>
               </div>
             </div>
@@ -184,7 +220,7 @@ export function PaymentsWritingWorkspace({
             {mode === "needs" ? needsWorkspace : null}
             {mode === "none" ? (
               <p className="rounded-xl border border-dashed border-black/20 px-4 py-5 text-xs text-black/60 dark:border-white/20 dark:text-white/60">
-                La caisse <span className="font-semibold">{currentDesk?.label ?? "sélectionnée"}</span> est prête. Utilisez le sous-menu de gauche pour ouvrir les opérations de paiement des billets, les autres opérations de caisse, les OP à exécuter, le billetage, le virtuel ou les EDB.
+                La caisse <span className="font-semibold">{currentDesk?.label ?? "sélectionnée"}</span> est prête. Utilisez le sous-menu de gauche pour ouvrir uniquement les rubriques disponibles pour cette caisse : {visibleActionItems.map((item) => item.label).join(", ") || "aucune action disponible"}.
               </p>
             ) : null}
           </div>
