@@ -107,40 +107,24 @@ export async function POST(request: NextRequest) {
       999,
     ));
 
-    const [logs, paymentLogs] = await Promise.all([
-      prisma.auditLog.findMany({
-        where: {
-          action: "TICKET_CREATED",
-          entityType: "TICKET_SALE",
-          createdAt: { gte: dayStart, lte: dayEnd },
-        },
-        orderBy: [{ createdAt: "asc" }, { id: "asc" }],
-        select: {
-          id: true,
-          createdAt: true,
-          actorId: true,
-          actor: { select: { id: true, name: true, email: true } },
-          payload: true,
-        },
-      }),
-      prisma.auditLog.findMany({
-        where: {
-          action: "PAYMENT_RECORDED",
-          entityType: "PAYMENT",
-          createdAt: { gte: dayStart, lte: dayEnd },
-        },
-        orderBy: [{ createdAt: "asc" }, { id: "asc" }],
-        select: {
-          id: true,
-          createdAt: true,
-          actorId: true,
-          actor: { select: { id: true, name: true, email: true } },
-          payload: true,
-        },
-      }),
-    ]);
+    const logs = await prisma.auditLog.findMany({
+      where: {
+        action: "TICKET_CREATED",
+        entityType: "TICKET_SALE",
+        createdAt: { gte: dayStart, lte: dayEnd },
+      },
+      orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+      select: {
+        id: true,
+        entityId: true,
+        createdAt: true,
+        actorId: true,
+        actor: { select: { id: true, name: true, email: true } },
+        payload: true,
+      },
+    });
 
-    if (!logs.length && !paymentLogs.length) {
+    if (!logs.length) {
       return NextResponse.json({
         data: {
           date: rawDate,
@@ -151,7 +135,7 @@ export async function POST(request: NextRequest) {
           skippedPayments: 0,
           tickets: [],
           payments: [],
-          message: "Aucun billet ni paiement créé ce jour n'a été trouvé dans l'historique.",
+          message: "Aucun billet créé à cette date n'a été trouvé dans l'historique.",
         },
       });
     }
@@ -174,19 +158,66 @@ export async function POST(request: NextRequest) {
       })
       .filter(Boolean);
 
-    const ticketNumbersFromPayments = paymentLogs
-      .map((log) => {
-        const payload = (log.payload && typeof log.payload === "object" && !Array.isArray(log.payload)
-          ? log.payload
-          : {}) as Record<string, unknown>;
-        const details = (payload.details && typeof payload.details === "object" && !Array.isArray(payload.details)
-          ? payload.details
-          : {}) as Record<string, unknown>;
-        return typeof details.ticketNumber === "string" ? details.ticketNumber.trim() : "";
-      })
-      .filter(Boolean);
+    const requestedTicketNumbers = Array.from(new Set(ticketNumbersFromLogs));
+    const requestedTicketNumberSet = new Set(requestedTicketNumbers);
 
-    const requestedTicketNumbers = Array.from(new Set([...ticketNumbersFromLogs, ...ticketNumbersFromPayments]));
+    const [ticketLifecycleLogs, paymentAuditLogs] = requestedTicketNumbers.length > 0
+      ? await Promise.all([
+          prisma.auditLog.findMany({
+            where: {
+              action: { in: ["TICKET_CREATED", "TICKET_UPDATED", "TICKET_DELETED"] },
+              entityType: "TICKET_SALE",
+            },
+            orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+            select: {
+              id: true,
+              action: true,
+              createdAt: true,
+              payload: true,
+            },
+          }),
+          prisma.auditLog.findMany({
+            where: {
+              action: { in: ["PAYMENT_RECORDED", "PAYMENT_UPDATED", "PAYMENT_DELETED"] },
+              entityType: "PAYMENT",
+            },
+            orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+            select: {
+              id: true,
+              entityId: true,
+              action: true,
+              createdAt: true,
+              payload: true,
+            },
+          }),
+        ])
+      : [[], []];
+
+    const latestTicketStateByNumber = new Map<string, {
+      action: string;
+      createdAt: Date;
+      details: Record<string, unknown>;
+    }>();
+
+    for (const log of ticketLifecycleLogs) {
+      const payload = (log.payload && typeof log.payload === "object" && !Array.isArray(log.payload)
+        ? log.payload
+        : {}) as Record<string, unknown>;
+      const details = (payload.details && typeof payload.details === "object" && !Array.isArray(payload.details)
+        ? payload.details
+        : {}) as Record<string, unknown>;
+      const ticketNumber = typeof details.ticketNumber === "string" ? details.ticketNumber.trim() : "";
+
+      if (!ticketNumber || !requestedTicketNumberSet.has(ticketNumber)) {
+        continue;
+      }
+
+      latestTicketStateByNumber.set(ticketNumber, {
+        action: log.action,
+        createdAt: log.createdAt,
+        details,
+      });
+    }
 
     const existingTickets = requestedTicketNumbers.length > 0
       ? await prisma.ticketSale.findMany({
@@ -221,16 +252,23 @@ export async function POST(request: NextRequest) {
         continue;
       }
 
-      const amount = typeof details.amount === "number"
-        ? details.amount
-        : Number.parseFloat(String(details.amount ?? ""));
+      const latestTicketState = latestTicketStateByNumber.get(ticketNumber);
+      if (latestTicketState?.action === "TICKET_DELETED") {
+        skippedTickets.push({ ticketNumber, reason: "Billet marqué supprimé dans l'historique." });
+        continue;
+      }
+
+      const mergedDetails = latestTicketState?.details ?? details;
+      const amount = typeof mergedDetails.amount === "number"
+        ? mergedDetails.amount
+        : Number.parseFloat(String(mergedDetails.amount ?? details.amount ?? ""));
       if (!Number.isFinite(amount) || amount <= 0) {
         skippedTickets.push({ ticketNumber, reason: "Montant invalide dans l'historique." });
         continue;
       }
 
-      const airlineCode = typeof details.airlineCode === "string" ? details.airlineCode.trim().toUpperCase() : "";
-      const airlineNameFromLog = typeof details.airlineName === "string" ? details.airlineName.trim() : "";
+      const airlineCode = typeof mergedDetails.airlineCode === "string" ? mergedDetails.airlineCode.trim().toUpperCase() : "";
+      const airlineNameFromLog = typeof mergedDetails.airlineName === "string" ? mergedDetails.airlineName.trim() : "";
       const airline = airlineByCode.get(airlineCode) ?? airlineByName.get(normalizeLookup(airlineNameFromLog));
       if (!airline) {
         skippedTickets.push({ ticketNumber, reason: `Compagnie introuvable pour ${airlineNameFromLog || airlineCode || "N/A"}.` });
@@ -291,17 +329,47 @@ export async function POST(request: NextRequest) {
       ),
     );
 
-    for (const log of paymentLogs) {
+    const latestPaymentLogByKey = new Map<string, {
+      logId: string;
+      entityId: string;
+      action: string;
+      createdAt: Date;
+      ticketNumber: string;
+      details: Record<string, unknown>;
+    }>();
+
+    for (const log of paymentAuditLogs) {
       const payload = (log.payload && typeof log.payload === "object" && !Array.isArray(log.payload)
         ? log.payload
         : {}) as Record<string, unknown>;
       const details = (payload.details && typeof payload.details === "object" && !Array.isArray(payload.details)
         ? payload.details
         : {}) as Record<string, unknown>;
-
       const ticketNumber = typeof details.ticketNumber === "string" ? details.ticketNumber.trim() : "";
-      if (!ticketNumber) {
-        skippedPayments.push({ ticketNumber: `audit:${log.id}`, reason: "Billet du paiement introuvable dans l'historique." });
+
+      if (!ticketNumber || !requestedTicketNumberSet.has(ticketNumber)) {
+        continue;
+      }
+
+      const entityKey = typeof log.entityId === "string" && log.entityId.trim().length > 0
+        ? log.entityId.trim()
+        : `${ticketNumber}|${String(details.reference ?? "")}|${String(details.amount ?? "")}|${String(details.method ?? "")}`;
+
+      latestPaymentLogByKey.set(entityKey, {
+        logId: log.id,
+        entityId: entityKey,
+        action: log.action,
+        createdAt: log.createdAt,
+        ticketNumber,
+        details,
+      });
+    }
+
+    for (const paymentEntry of latestPaymentLogByKey.values()) {
+      const { ticketNumber, details, action, createdAt, logId } = paymentEntry;
+
+      if (action === "PAYMENT_DELETED") {
+        skippedPayments.push({ ticketNumber, reason: "Paiement marqué supprimé dans l'historique." });
         continue;
       }
 
@@ -344,7 +412,7 @@ export async function POST(request: NextRequest) {
               fxRateUsdToCdf,
               amountUsd: amountToUsd(amount, currency, fxRateUsdToCdf),
               amountCdf: amountToCdf(amount, currency, fxRateUsdToCdf),
-              paidAt: log.createdAt,
+              paidAt: createdAt,
               method,
               reference,
             },
@@ -374,7 +442,7 @@ export async function POST(request: NextRequest) {
       }
 
       paymentFingerprints.add(fingerprint);
-      restoredPayments.push({ ticketNumber, amount, currency, method });
+      restoredPayments.push({ ticketNumber, amount, currency, method: method || `audit:${logId}` });
     }
 
     if (!dryRun && (restoredTickets.length > 0 || restoredPayments.length > 0)) {

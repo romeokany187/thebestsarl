@@ -204,6 +204,7 @@ export function TicketImportForm({
   const [histFilter, setHistFilter] = useState({ year: "", month: "", email: "" });
   const [histLoading, setHistLoading] = useState(false);
   const [restoreLoading, setRestoreLoading] = useState(false);
+  const [restoreDate, setRestoreDate] = useState(defaults.date);
 
   const currentSignature = useMemo(() => {
     const fileSignature = form.file
@@ -373,16 +374,16 @@ export function TicketImportForm({
     setHistLoading(false);
   }
 
-  async function restoreTodayFromAudit() {
-    const restoreDate = currentPeriodDefaults().date;
+  async function restoreFromAudit() {
+    const effectiveRestoreDate = restoreDate.trim() || currentPeriodDefaults().date;
     setRestoreLoading(true);
     setStatusType("loading");
-    setStatus(`Restauration d'urgence des billets et paiements du ${restoreDate} depuis l'historique...`);
+    setStatus(`Restauration d'urgence des billets et paiements du ${effectiveRestoreDate} depuis l'historique...`);
 
     const response = await fetch("/api/tickets/restore-from-audit", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ date: restoreDate }),
+      body: JSON.stringify({ date: effectiveRestoreDate }),
     });
 
     const body = await response.json().catch(() => null);
@@ -399,8 +400,8 @@ export function TicketImportForm({
     setStatusType("success");
     setStatus(
       restored > 0 || restoredPayments > 0
-        ? `${restored} billet(s) et ${restoredPayments} paiement(s) du ${restoreDate} restauré(s) depuis l'historique.${skipped > 0 ? ` ${skipped} déjà présents ou ignorés.` : ""}`
-        : (body?.data?.message ?? `Aucune donnée manquante à restaurer pour le ${restoreDate}.`),
+        ? `${restored} billet(s) et ${restoredPayments} paiement(s) du ${effectiveRestoreDate} restauré(s) depuis l'historique.${skipped > 0 ? ` ${skipped} déjà présents ou ignorés.` : ""}`
+        : (body?.data?.message ?? `Aucune donnée manquante à restaurer pour le ${effectiveRestoreDate}.`),
     );
     router.refresh();
     setRestoreLoading(false);
@@ -577,14 +578,26 @@ export function TicketImportForm({
             Une date absente du fichier (par exemple <span className="font-semibold">07.04</span>) ne supprime plus les billets déjà encodés ce jour-là.
           </div>
 
-          <button
-            type="button"
-            onClick={restoreTodayFromAudit}
-            disabled={statusType === "loading" || restoreLoading}
-            className="rounded-md border border-amber-500 px-4 py-2 text-sm font-semibold text-amber-700 disabled:cursor-not-allowed disabled:opacity-60 dark:border-amber-400 dark:text-amber-200"
-          >
-            {restoreLoading ? "Restauration..." : "Restaurer les billets et paiements du jour"}
-          </button>
+          <div className="grid gap-2 sm:grid-cols-[minmax(0,220px)_1fr] sm:items-end">
+            <label className="grid gap-1 text-xs font-semibold uppercase tracking-wide text-black/60 dark:text-white/60">
+              Date à restaurer
+              <input
+                type="date"
+                value={restoreDate}
+                onChange={(event) => setRestoreDate(event.target.value)}
+                className="rounded-md border border-black/15 px-3 py-2 text-sm font-normal text-black dark:border-white/20 dark:bg-zinc-900 dark:text-white"
+              />
+            </label>
+
+            <button
+              type="button"
+              onClick={restoreFromAudit}
+              disabled={statusType === "loading" || restoreLoading}
+              className="rounded-md border border-amber-500 px-4 py-2 text-sm font-semibold text-amber-700 disabled:cursor-not-allowed disabled:opacity-60 dark:border-amber-400 dark:text-amber-200"
+            >
+              {restoreLoading ? "Restauration..." : "Restaurer les billets et paiements liés"}
+            </button>
+          </div>
         </>
       ) : null}
 
