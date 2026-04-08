@@ -3,13 +3,18 @@
 import { useEffect, useMemo, useState } from "react";
 
 type WritingMode = "none" | "tickets" | "cash" | "virtual" | "billetage" | "payment-orders" | "needs";
-type CashDeskValue = "THE_BEST" | "CAISSE_SAFETY" | "CAISSE_VISAS" | "CAISSE_TSL" | "CAISSE_AGENCE";
+type CashDeskValue = "PROXY_BANKING" | "THE_BEST" | "CAISSE_SAFETY" | "CAISSE_VISAS" | "CAISSE_TSL" | "CAISSE_AGENCE";
 type CashDeskOption = { value: CashDeskValue; label: string; description: string };
 type AdminCashRoleScope = "CAISSIER" | "CAISSE_2_SIEGE" | "CAISSE_AGENCE";
 
 type AppRoleLike = "ADMIN" | "DIRECTEUR_GENERAL" | "MANAGER" | "EMPLOYEE" | "ACCOUNTANT";
 
 const ALL_CASH_DESKS: CashDeskOption[] = [
+  {
+    value: "PROXY_BANKING",
+    label: "Proxy Banking",
+    description: "Airtel Money, Orange Money, M-Pesa, Equity et Illicocash : dépôts, retraits, virtuel et billetage.",
+  },
   {
     value: "THE_BEST",
     label: "THE BEST",
@@ -41,7 +46,7 @@ const ADMIN_CASH_ROLE_OPTIONS: Array<{ value: AdminCashRoleScope; label: string;
   {
     value: "CAISSIER",
     label: "Caisse 1 Siège",
-    description: "Vue admin du caissier 1 siège et des comptes qu'il gère.",
+    description: "Vue admin du proxy banking, du billetage et des OP/EDB de la caisse 1 siège.",
   },
   {
     value: "CAISSE_2_SIEGE",
@@ -58,7 +63,11 @@ const ADMIN_CASH_ROLE_OPTIONS: Array<{ value: AdminCashRoleScope; label: string;
 function getManagedCashDesksForScope(scope?: string | null) {
   const normalizedScope = (scope ?? "").trim().toUpperCase();
 
-  if (["CAISSIER", "CAISSE_2_SIEGE"].includes(normalizedScope)) {
+  if (normalizedScope === "CAISSIER") {
+    return ALL_CASH_DESKS.filter((desk) => desk.value === "PROXY_BANKING");
+  }
+
+  if (normalizedScope === "CAISSE_2_SIEGE") {
     return ALL_CASH_DESKS.filter((desk) => [
       "THE_BEST",
       "CAISSE_SAFETY",
@@ -71,7 +80,7 @@ function getManagedCashDesksForScope(scope?: string | null) {
     return ALL_CASH_DESKS.filter((desk) => desk.value === "CAISSE_AGENCE");
   }
 
-  return ALL_CASH_DESKS.filter((desk) => desk.value === "THE_BEST");
+  return ALL_CASH_DESKS.filter((desk) => desk.value === "PROXY_BANKING");
 }
 
 function getManagedCashDesks(
@@ -100,6 +109,10 @@ function getManagedCashDesks(
 function getAllowedActionsForDesk(deskValue: CashDeskValue | string): Array<Exclude<WritingMode, "none">> {
   if (deskValue === "THE_BEST") {
     return ["tickets", "cash", "payment-orders", "billetage", "virtual", "needs"];
+  }
+
+  if (deskValue === "PROXY_BANKING") {
+    return ["cash", "virtual", "billetage", "payment-orders", "needs"];
   }
 
   return ["cash", "payment-orders", "billetage", "virtual", "needs"];
@@ -146,7 +159,13 @@ export function PaymentsWritingWorkspace({
 
   const actionItems = [
     ticketWorkspace ? { key: "tickets" as const, label: "Paiement des billets (THE BEST)", tone: "emerald" } : null,
-    cashWorkspace ? { key: "cash" as const, label: "Autres opérations de caisse", tone: "blue" } : null,
+    cashWorkspace
+      ? {
+          key: "cash" as const,
+          label: selectedDesk === "PROXY_BANKING" ? "Dépôts / retraits proxy banking" : "Autres opérations de caisse",
+          tone: "blue",
+        }
+      : null,
     paymentOrdersWorkspace ? { key: "payment-orders" as const, label: paymentOrdersLabel ?? "OP à exécuter", tone: "amber" } : null,
     billetageWorkspace ? { key: "billetage" as const, label: "Billetage", tone: "sky" } : null,
     virtualWorkspace ? { key: "virtual" as const, label: "Virtuel", tone: "cyan" } : null,
