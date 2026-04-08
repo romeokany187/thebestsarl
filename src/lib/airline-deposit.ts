@@ -186,7 +186,7 @@ export async function recordAirlineDepositMovement(
 
   const effectiveCreatedAt = input.createdAt ?? new Date();
   const [balanceBefore, firstCreditAt] = await Promise.all([
-    getAirlineDepositBalance(client, account.key, { upTo: effectiveCreatedAt }),
+    getAirlineDepositBalance(client, account.key),
     getFirstAirlineDepositCreditDate(client, account.key),
   ]);
 
@@ -197,7 +197,7 @@ export async function recordAirlineDepositMovement(
     );
 
   if (!allowHistoricalPreDepositDebit && input.movementType === "DEBIT" && amount > balanceBefore + 0.0001) {
-    throw new Error(`INSUFFICIENT_AIRLINE_DEPOSIT:${account.label}:${balanceBefore.toFixed(2)}:${amount.toFixed(2)}:${effectiveCreatedAt.toISOString()}`);
+    throw new Error(`INSUFFICIENT_AIRLINE_DEPOSIT:${account.label}:${balanceBefore.toFixed(2)}:${amount.toFixed(2)}`);
   }
 
   const balanceAfter = balanceBefore + movementSignedAmount(input.movementType, amount);
