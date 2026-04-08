@@ -374,9 +374,6 @@ export default async function PaymentsPage({
   const yearStart = new Date(Date.UTC(selectedYear, 0, 1, 0, 0, 0, 0));
   const yearEnd = new Date(Date.UTC(selectedYear + 1, 0, 1, 0, 0, 0, 0));
 
-  const accessNote = canWrite
-    ? "Admin, comptable et profils caisse: encaissements, écritures de caisse, conversions et exécutions financières autorisés selon le profil."
-    : "Module financier réservé aux profils autorisés."
 
   const paymentsData = await Promise.all([
     prisma.airline.findMany({
@@ -840,15 +837,9 @@ export default async function PaymentsPage({
   const needsExecutionCount = needsReadyForExecution.length;
 
   return (
-    <AppShell
-      role={role}
-      accessNote={accessNote}
-    >
+    <AppShell role={role}>
       <section className="mb-6">
         <h1 className="text-2xl font-semibold tracking-tight">Paiements</h1>
-        <p className="text-sm text-black/60 dark:text-white/60">
-          Espace paiements unifié : encaissements billets, opérations de caisse, virtuel, billetage, OP et EDB selon vos droits et la caisse sélectionnée.
-        </p>
       </section>
 
       <PaymentsWritingWorkspace
@@ -858,9 +849,6 @@ export default async function PaymentsPage({
           <section className="space-y-4 rounded-2xl border border-black/10 bg-white p-4 dark:border-white/10 dark:bg-zinc-900">
             <div>
               <h2 className="text-sm font-semibold">OP à exécuter</h2>
-              <p className="mt-1 text-xs text-black/60 dark:text-white/60">
-                L&apos;exécution et le suivi des ordres de paiement se font ici dans <span className="font-semibold">Paiements</span>.
-              </p>
             </div>
 
             {paymentOrdersReadyForExecution.length === 0 ? (
@@ -895,9 +883,6 @@ export default async function PaymentsPage({
           <section className="space-y-4 rounded-2xl border border-black/10 bg-white p-4 dark:border-white/10 dark:bg-zinc-900">
             <div>
               <h2 className="text-sm font-semibold">EDB à exécuter</h2>
-              <p className="mt-1 text-xs text-black/60 dark:text-white/60">
-                L&apos;exécution et le suivi des états de besoin se font ici dans <span className="font-semibold">Paiements</span>.
-              </p>
             </div>
 
             {needsReadyForExecution.length === 0 ? (
@@ -929,7 +914,7 @@ export default async function PaymentsPage({
         ) : undefined}
         needsLabel={`EDB à exécuter (${needsExecutionCount})`}
         closedSummary={(
-          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-2 2xl:grid-cols-5">
             <KpiCard label="Total encaissé" value={`${grossInflows.toFixed(2)} USD`} hint={`Billets ${ticketPaymentInflowsUsd.toFixed(2)} + autres ${otherInflows.toFixed(2)}`} />
             <KpiCard label="Total dépensé" value={`${cashOutflows.toFixed(2)} USD`} />
             <KpiCard label="Solde caisse USD" value={`${closingUsd.toFixed(2)} USD`} />

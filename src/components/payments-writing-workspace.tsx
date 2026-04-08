@@ -176,13 +176,10 @@ export function PaymentsWritingWorkspace({
 
   return (
     <>
-      <section className="mb-6 grid gap-4 xl:grid-cols-[280px_minmax(0,1fr)]">
-        <aside className="rounded-2xl border border-black/10 bg-white p-4 shadow-sm dark:border-white/10 dark:bg-zinc-900">
+      <section className="mb-6 grid items-start gap-4 xl:grid-cols-[300px_minmax(0,1fr)] 2xl:grid-cols-[320px_minmax(0,1fr)]">
+        <aside className="rounded-2xl border border-black/10 bg-white p-4 shadow-sm xl:sticky xl:top-24 xl:max-h-[calc(100vh-7rem)] xl:overflow-y-auto dark:border-white/10 dark:bg-zinc-900">
           <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-black/50 dark:text-white/50">Caisses</p>
           <h2 className="mt-1 text-sm font-semibold">Sous-menu Paiements</h2>
-          <p className="mt-1 text-xs text-black/60 dark:text-white/60">
-            Choisissez une caisse parmi celles que votre profil gère, puis ouvrez le menu d&apos;action correspondant dans cette navigation latérale dédiée.
-          </p>
 
           {isAdminUser ? (
             <div className="mt-4">
@@ -199,9 +196,6 @@ export function PaymentsWritingWorkspace({
                   <option key={option.value} value={option.value}>{option.label}</option>
                 ))}
               </select>
-              <p className="mt-2 rounded-lg border border-black/10 bg-black/5 px-3 py-2 text-xs text-black/65 dark:border-white/10 dark:bg-white/5 dark:text-white/65">
-                {ADMIN_CASH_ROLE_OPTIONS.find((option) => option.value === adminScope)?.description}
-              </p>
             </div>
           ) : null}
 
@@ -219,11 +213,6 @@ export function PaymentsWritingWorkspace({
                 <option key={desk.value} value={desk.value}>{desk.label}</option>
               ))}
             </select>
-            {currentDesk ? (
-              <p className="mt-2 rounded-lg border border-black/10 bg-black/5 px-3 py-2 text-xs text-black/65 dark:border-white/10 dark:bg-white/5 dark:text-white/65">
-                {currentDesk.description}
-              </p>
-            ) : null}
           </div>
 
           <div className="mt-4 space-y-2">
@@ -253,38 +242,31 @@ export function PaymentsWritingWorkspace({
 
         <div className="min-w-0">
           <section className="mb-4 rounded-2xl border border-black/10 bg-white p-4 shadow-sm dark:border-white/10 dark:bg-zinc-900">
-            <div className="flex flex-wrap items-start justify-between gap-3">
+            <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
                 <p className="text-[11px] font-semibold uppercase tracking-wide text-black/55 dark:text-white/55">Caisse active</p>
                 <h3 className="text-sm font-semibold">{currentDesk?.label ?? "Aucune caisse"}</h3>
-                <p className="mt-1 text-xs text-black/60 dark:text-white/60">
-                  {mode === "none"
-                    ? "Sélectionnez maintenant une action dans le menu latéral de gauche."
-                    : `Vue ouverte : ${visibleActionItems.find((item) => item.key === mode)?.label ?? "Action"}.`}
-                </p>
               </div>
+              {mode !== "none" ? (
+                <span className="rounded-full border border-black/15 px-3 py-1 text-[11px] font-semibold dark:border-white/15">
+                  {visibleActionItems.find((item) => item.key === mode)?.label ?? "Action"}
+                </span>
+              ) : null}
             </div>
           </section>
 
-          <div>
+          <div className="space-y-4">
+            {mode === "none" ? closedSummary : null}
             {mode === "tickets" ? ticketWorkspace : null}
             {mode === "cash" ? cashWorkspace : null}
             {mode === "virtual" ? virtualWorkspace : null}
             {mode === "billetage" ? billetageWorkspace : null}
             {mode === "payment-orders" ? paymentOrdersWorkspace : null}
             {mode === "needs" ? needsWorkspace : null}
-            {mode === "none" ? (
-              <p className="rounded-xl border border-dashed border-black/20 px-4 py-5 text-xs text-black/60 dark:border-white/20 dark:text-white/60">
-                La caisse <span className="font-semibold">{currentDesk?.label ?? "sélectionnée"}</span> est prête. Utilisez le sous-menu de gauche pour ouvrir uniquement les rubriques disponibles pour cette caisse : {visibleActionItems.map((item) => item.label).join(", ") || "aucune action disponible"}.
-              </p>
-            ) : null}
           </div>
         </div>
       </section>
 
-      {mode === "none" && closedSummary ? (
-        <section className="mb-6">{closedSummary}</section>
-      ) : null}
     </>
   );
 }

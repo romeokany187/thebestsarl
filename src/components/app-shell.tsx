@@ -174,8 +174,8 @@ export async function AppShell({
   const roleLabel = role ? `Rôle ${displayRoleLabel(role)}` : null;
 
   return (
-    <div className="min-h-screen bg-background text-foreground">
-      <div className="mx-auto flex min-h-screen max-w-400">
+    <div className="min-h-screen w-full bg-background text-foreground">
+      <div className="flex min-h-screen w-full">
         <aside className="sticky top-0 hidden h-screen w-72 shrink-0 overflow-y-auto border-r border-black/10 bg-white/70 p-5 backdrop-blur md:block dark:border-white/10 dark:bg-zinc-950/70">
           <div className="mb-6">
             <Link href="/" className="block rounded-lg p-1 transition hover:bg-black/5 dark:hover:bg-white/10">
@@ -209,7 +209,7 @@ export async function AppShell({
         </aside>
 
         <div className="flex min-w-0 flex-1 flex-col">
-          <header className="sticky top-0 z-40 border-b border-black/10 bg-white/75 px-4 py-4 backdrop-blur sm:px-6 lg:px-8 dark:border-white/10 dark:bg-zinc-950/75">
+          <header className="sticky top-0 z-40 border-b border-black/10 bg-white/75 px-4 py-4 backdrop-blur sm:px-6 lg:px-8 2xl:px-10 dark:border-white/10 dark:bg-zinc-950/75">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <Link href="/" className="rounded-lg p-1 transition hover:bg-black/5 dark:hover:bg-white/10">
                 <p className="text-sm font-semibold tracking-tight">THEBEST SARL</p>
@@ -248,7 +248,7 @@ export async function AppShell({
             </nav>
           </header>
 
-          <main className="flex-1 px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
+          <main className="flex-1 px-4 py-6 sm:px-6 lg:px-8 2xl:px-10 lg:py-8">
             {accessNote ? (
               <p className="mb-5 rounded-xl border border-black/10 bg-white px-4 py-3 text-xs text-black/70 shadow-sm dark:border-white/10 dark:bg-zinc-900 dark:text-white/70">
                 {accessNote}
