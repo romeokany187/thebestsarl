@@ -79,6 +79,8 @@ jobs:
             mkdir -p "$APP_DIR" "$BUNDLE_DIR"
             find "$APP_DIR" -mindepth 1 -maxdepth 1 ! -name tmp -exec rm -rf {} +
             tar -xzf "$BUNDLE" -C "$APP_DIR"
+            cd "$APP_DIR"
+            npx prisma db push --schema prisma/schema.mysql.prisma --accept-data-loss
             mkdir -p "$APP_DIR/tmp"
             touch "$APP_DIR/tmp/restart.txt" || true
           '

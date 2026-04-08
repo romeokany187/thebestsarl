@@ -88,115 +88,131 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
 
   let assignmentMessage = "";
 
-  const updated = await prisma.$transaction(async (tx) => {
-    const user = await tx.user.update({
-      where: { id },
-      data: {
-        ...(parsed.data.jobTitle !== undefined ? { jobTitle: parsed.data.jobTitle } : {}),
-        ...(parsed.data.teamId !== undefined ? { teamId: parsed.data.teamId } : {}),
-        ...(parsed.data.role !== undefined ? { role: parsed.data.role } : {}),
-        ...(parsed.data.canImportTicketWorkbook !== undefined ? { canImportTicketWorkbook: parsed.data.canImportTicketWorkbook } : {}),
-      },
-      select: {
-        id: true,
-        name: true,
-        email: true,
-        role: true,
-        jobTitle: true,
-        canImportTicketWorkbook: true,
-        team: { select: { id: true, name: true } },
+  try {
+    const updated = await prisma.$transaction(async (tx) => {
+      const user = await tx.user.update({
+        where: { id },
+        data: {
+          ...(parsed.data.jobTitle !== undefined ? { jobTitle: parsed.data.jobTitle } : {}),
+          ...(parsed.data.teamId !== undefined ? { teamId: parsed.data.teamId } : {}),
+          ...(parsed.data.role !== undefined ? { role: parsed.data.role } : {}),
+          ...(parsed.data.canImportTicketWorkbook !== undefined ? { canImportTicketWorkbook: parsed.data.canImportTicketWorkbook } : {}),
+        },
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          role: true,
+          jobTitle: true,
+          canImportTicketWorkbook: true,
+          team: { select: { id: true, name: true } },
+        },
+      });
+
+      const teamChanged = parsed.data.teamId !== undefined && parsed.data.teamId !== existing.teamId;
+      const jobChanged = parsed.data.jobTitle !== undefined && parsed.data.jobTitle !== existing.jobTitle;
+      const roleChanged = parsed.data.role !== undefined && parsed.data.role !== existing.role;
+      const importPermissionChanged = parsed.data.canImportTicketWorkbook !== undefined && parsed.data.canImportTicketWorkbook !== existing.canImportTicketWorkbook;
+
+      if (teamChanged || jobChanged || roleChanged || importPermissionChanged) {
+        const title = "Nouvelle affectation";
+        const fromTeam = existing.team?.name ?? "Sans équipe";
+        const toTeam = user.team?.name ?? "Sans équipe";
+        const fromJob = existing.jobTitle;
+        const toJob = user.jobTitle;
+        const fromRole = existing.role;
+        const toRole = user.role;
+        const messageParts: string[] = [];
+
+        if (teamChanged) messageParts.push(`Équipe ${fromTeam} → ${toTeam}`);
+        if (jobChanged) messageParts.push(`Fonction ${fromJob} → ${toJob}`);
+        if (roleChanged) messageParts.push(`Rôle ${fromRole} → ${toRole}`);
+        if (importPermissionChanged) messageParts.push(`Import Excel billets ${existing.canImportTicketWorkbook ? "autorisé" : "interdit"} → ${user.canImportTicketWorkbook ? "autorisé" : "interdit"}`);
+
+        assignmentMessage = `Votre affectation a été mise à jour: ${messageParts.join("; ")}.`;
+
+        await tx.userNotification.create({
+          data: {
+            userId: user.id,
+            title,
+            type: "ASSIGNMENT",
+            message: assignmentMessage,
+            metadata: {
+              fromTeam,
+              toTeam,
+              fromJob,
+              toJob,
+              fromRole,
+              toRole,
+              importPermissionChanged,
+              fromCanImportTicketWorkbook: existing.canImportTicketWorkbook,
+              toCanImportTicketWorkbook: user.canImportTicketWorkbook,
+              changedBy: actor.id,
+            },
+          },
+        });
+      }
+
+      return user;
+    });
+
+    if (assignmentMessage && isMailConfigured()) {
+      try {
+        await sendMailBatch({
+          recipients: [{ email: updated.email, name: updated.name }],
+          subject: "Mise à jour de votre affectation",
+          text: [
+            `Bonjour ${updated.name},`,
+            "",
+            assignmentMessage,
+            "",
+            `Mis à jour par: ${actor.name}`,
+          ].join("\n"),
+          html: `
+            <p>Bonjour ${updated.name},</p>
+            <p>${assignmentMessage}</p>
+            <p><strong>Mis à jour par:</strong> ${actor.name}</p>
+          `,
+          replyTo: actor.email,
+        });
+      } catch {
+        // Ne pas bloquer la mise à jour d'affectation si l'email échoue.
+      }
+    }
+
+    await writeActivityLog({
+      actorId: access.session.user.id,
+      action: "USER_ASSIGNMENT_UPDATED",
+      entityType: "USER",
+      entityId: updated.id,
+      summary: `Affectation mise à jour pour ${updated.name}.`,
+      payload: {
+        name: updated.name,
+        email: updated.email,
+        role: updated.role,
+        jobTitle: updated.jobTitle,
+        teamName: updated.team?.name ?? null,
+        changedBy: actor.name,
+        assignmentMessage,
       },
     });
 
-    const teamChanged = parsed.data.teamId !== undefined && parsed.data.teamId !== existing.teamId;
-    const jobChanged = parsed.data.jobTitle !== undefined && parsed.data.jobTitle !== existing.jobTitle;
-    const roleChanged = parsed.data.role !== undefined && parsed.data.role !== existing.role;
-    const importPermissionChanged = parsed.data.canImportTicketWorkbook !== undefined && parsed.data.canImportTicketWorkbook !== existing.canImportTicketWorkbook;
+    return NextResponse.json({ data: updated });
+  } catch (error) {
+    console.error("PATCH /api/users/[id] failed", error);
 
-    if (teamChanged || jobChanged || roleChanged || importPermissionChanged) {
-      const title = "Nouvelle affectation";
-      const fromTeam = existing.team?.name ?? "Sans équipe";
-      const toTeam = user.team?.name ?? "Sans équipe";
-      const fromJob = existing.jobTitle;
-      const toJob = user.jobTitle;
-      const fromRole = existing.role;
-      const toRole = user.role;
-      const messageParts: string[] = [];
+    const message = error instanceof Error ? error.message : "";
+    const isJobTitleSchemaIssue = /jobtitle|enum|caisse_2_siege|caisse_agence|data truncated/i.test(message);
 
-      if (teamChanged) messageParts.push(`Équipe ${fromTeam} → ${toTeam}`);
-      if (jobChanged) messageParts.push(`Fonction ${fromJob} → ${toJob}`);
-      if (roleChanged) messageParts.push(`Rôle ${fromRole} → ${toRole}`);
-      if (importPermissionChanged) messageParts.push(`Import Excel billets ${existing.canImportTicketWorkbook ? "autorisé" : "interdit"} → ${user.canImportTicketWorkbook ? "autorisé" : "interdit"}`);
-
-      assignmentMessage = `Votre affectation a été mise à jour: ${messageParts.join("; ")}.`;
-
-      await tx.userNotification.create({
-        data: {
-          userId: user.id,
-          title,
-          type: "ASSIGNMENT",
-          message: assignmentMessage,
-          metadata: {
-            fromTeam,
-            toTeam,
-            fromJob,
-            toJob,
-            fromRole,
-            toRole,
-            importPermissionChanged,
-            fromCanImportTicketWorkbook: existing.canImportTicketWorkbook,
-            toCanImportTicketWorkbook: user.canImportTicketWorkbook,
-            changedBy: actor.id,
-          },
-        },
-      });
-    }
-
-    return user;
-  });
-
-  if (assignmentMessage && isMailConfigured()) {
-    try {
-      await sendMailBatch({
-        recipients: [{ email: updated.email, name: updated.name }],
-        subject: "Mise à jour de votre affectation",
-        text: [
-          `Bonjour ${updated.name},`,
-          "",
-          assignmentMessage,
-          "",
-          `Mis à jour par: ${actor.name}`,
-        ].join("\n"),
-        html: `
-          <p>Bonjour ${updated.name},</p>
-          <p>${assignmentMessage}</p>
-          <p><strong>Mis à jour par:</strong> ${actor.name}</p>
-        `,
-        replyTo: actor.email,
-      });
-    } catch {
-      // Ne pas bloquer la mise à jour d'affectation si l'email échoue.
-    }
+    return NextResponse.json(
+      {
+        error: isJobTitleSchemaIssue
+          ? "Affectation impossible: la base de production n'était pas encore synchronisée pour ce poste. Réessayez après le déploiement en cours."
+          : "Échec de la mise à jour de l'affectation.",
+      },
+      { status: 500 },
+    );
   }
-
-  await writeActivityLog({
-    actorId: access.session.user.id,
-    action: "USER_ASSIGNMENT_UPDATED",
-    entityType: "USER",
-    entityId: updated.id,
-    summary: `Affectation mise à jour pour ${updated.name}.`,
-    payload: {
-      name: updated.name,
-      email: updated.email,
-      role: updated.role,
-      jobTitle: updated.jobTitle,
-      teamName: updated.team?.name ?? null,
-      changedBy: actor.name,
-      assignmentMessage,
-    },
-  });
-
-  return NextResponse.json({ data: updated });
 }
 
 export async function DELETE(_request: NextRequest, context: RouteContext) {
