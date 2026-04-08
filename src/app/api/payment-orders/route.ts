@@ -224,3 +224,70 @@ export async function GET(request: NextRequest) {
 
   return NextResponse.json(orders);
 }
+
+export async function DELETE(request: NextRequest) {
+  const access = await requireApiRoles(["ADMIN", "DIRECTEUR_GENERAL"]);
+  if (access.error) return access.error;
+
+  const paymentOrderId = request.nextUrl.searchParams.get("paymentOrderId")?.trim() ?? "";
+  if (!paymentOrderId) {
+    return NextResponse.json({ error: "Ordre de paiement introuvable." }, { status: 400 });
+  }
+
+  const existingOrder = await paymentOrderClient.findUnique({
+    where: { id: paymentOrderId },
+    select: {
+      id: true,
+      code: true,
+      beneficiary: true,
+      amount: true,
+      currency: true,
+      status: true,
+      issuedById: true,
+      executedAt: true,
+    },
+  });
+
+  if (!existingOrder) {
+    return NextResponse.json({ error: "Ordre de paiement introuvable." }, { status: 404 });
+  }
+
+  if (existingOrder.status === "EXECUTED" || existingOrder.executedAt) {
+    return NextResponse.json(
+      { error: "Impossible de supprimer un ordre de paiement déjà exécuté." },
+      { status: 400 },
+    );
+  }
+
+  await prisma.$transaction(async (tx) => {
+    await tx.userNotification.deleteMany({
+      where: {
+        OR: [
+          { metadata: { path: "$.paymentOrderId", equals: existingOrder.id } },
+          ...(existingOrder.code
+            ? [{ message: { contains: existingOrder.code } }]
+            : []),
+        ],
+      },
+    });
+
+    await (tx as unknown as { paymentOrder: any }).paymentOrder.delete({ where: { id: existingOrder.id } });
+  });
+
+  await writeActivityLog({
+    actorId: access.session.user.id,
+    action: "PAYMENT_ORDER_DELETED",
+    entityType: "PAYMENT_ORDER",
+    entityId: existingOrder.id,
+    summary: `OP ${existingOrder.code ?? existingOrder.id} supprimé pour ${existingOrder.beneficiary}.`,
+    payload: {
+      code: existingOrder.code,
+      beneficiary: existingOrder.beneficiary,
+      amount: existingOrder.amount,
+      currency: existingOrder.currency,
+      status: existingOrder.status,
+    },
+  });
+
+  return NextResponse.json({ success: true });
+}

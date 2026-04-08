@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { PaymentOrderAdminActions } from "@/components/payment-order-admin-actions";
 import { PaymentOrderCashExecutionActions } from "@/components/payment-order-cash-execution-actions";
+import { PaymentOrderDeleteButton } from "@/components/payment-order-delete-button";
 import { ProcurementInboxActions } from "@/components/procurement-inbox-actions";
 import { ProcurementCashExecutionActions } from "@/components/procurement-cash-execution-actions";
 import type { WorkflowNeed, WorkflowPaymentOrder } from "@/lib/inbox-workflow";
@@ -131,6 +132,7 @@ function renderPaymentCard(order: WorkflowPaymentOrder, mode: WorkflowMode) {
           >
             Lire PDF OP
           </a>
+          <PaymentOrderDeleteButton paymentOrderId={order.id} status={order.status} compact />
         </div>
       ) : null}
     </article>

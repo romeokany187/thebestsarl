@@ -1,4 +1,5 @@
 import { AppShell } from "@/components/app-shell";
+import { PaymentOrderDeleteButton } from "@/components/payment-order-delete-button";
 import { PaymentOrderForm } from "@/components/payment-order-form";
 import { prisma } from "@/lib/prisma";
 import { requirePageModuleAccess } from "@/lib/rbac";
@@ -66,7 +67,7 @@ export default async function AdminPaymentOrdersPage() {
                 <th className="px-4 py-3 text-left font-semibold">Affectation</th>
                 <th className="px-4 py-3 text-left font-semibold">Montant</th>
                 <th className="px-4 py-3 text-left font-semibold">Statut</th>
-                <th className="px-4 py-3 text-left font-semibold">PDF</th>
+                <th className="px-4 py-3 text-left font-semibold">Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -80,14 +81,17 @@ export default async function AdminPaymentOrdersPage() {
                   <td className="px-4 py-3">{order.amount.toFixed(2)} {normalizeMoneyCurrency(order.currency)}</td>
                   <td className="px-4 py-3">{order.status}</td>
                   <td className="px-4 py-3">
-                    <a
-                      href={`/api/payment-orders/${order.id}/pdf`}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="inline-flex rounded-md border border-black/20 px-2.5 py-1 text-[11px] font-semibold hover:bg-black/5 dark:border-white/20 dark:hover:bg-white/10"
-                    >
-                      PDF
-                    </a>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <a
+                        href={`/api/payment-orders/${order.id}/pdf`}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="inline-flex rounded-md border border-black/20 px-2.5 py-1 text-[11px] font-semibold hover:bg-black/5 dark:border-white/20 dark:hover:bg-white/10"
+                      >
+                        PDF
+                      </a>
+                      <PaymentOrderDeleteButton paymentOrderId={order.id} status={order.status} compact />
+                    </div>
                   </td>
                 </tr>
               ))}

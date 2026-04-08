@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { PaymentOrderDeleteButton } from "@/components/payment-order-delete-button";
 
 export function PaymentOrderAdminActions({ paymentOrderId }: { paymentOrderId: string }) {
   const router = useRouter();
@@ -77,6 +78,7 @@ export function PaymentOrderAdminActions({ paymentOrderId }: { paymentOrderId: s
         >
           Rejeter OP
         </button>
+        <PaymentOrderDeleteButton paymentOrderId={paymentOrderId} />
       </div>
       {message ? <span className="text-[11px] text-black/60 dark:text-white/60">{message}</span> : null}
     </div>
