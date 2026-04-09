@@ -230,6 +230,7 @@ function proxyOperationLabel(descriptionRaw: string | null | undefined) {
   const description = descriptionRaw ?? "";
   if (description.includes(":DEPOSIT:")) return "Dépôt client";
   if (description.includes(":WITHDRAWAL:")) return "Retrait client";
+  if (description.includes(":EXCHANGE:")) return "Change client";
   if (description.includes(":OPENING_BALANCE:")) return "Solde initial";
   return "Opération proxy";
 }
@@ -975,7 +976,7 @@ export default async function PaymentsPage({
           <KpiCard label="Cash proxy CDF" value={`${proxyClosingCdf.toFixed(2)} CDF`} />
           <KpiCard label="Virtuel USD" value={`${proxyVirtualTotals.closingUsd.toFixed(2)} USD`} />
           <KpiCard label="Virtuel CDF" value={`${proxyVirtualTotals.closingCdf.toFixed(2)} CDF`} />
-          <KpiCard label="Opérations proxy" value={`${proxyEventCount}`} hint="Dépôts, retraits et soldes initiaux" />
+          <KpiCard label="Opérations proxy" value={`${proxyEventCount}`} hint="Dépôts, retraits, changes et soldes initiaux" />
         </div>
       ),
       cash: (
@@ -1012,7 +1013,7 @@ export default async function PaymentsPage({
                   {proxyHistoryRows.length === 0 ? (
                     <tr>
                       <td colSpan={6} className="px-4 py-8 text-center text-sm text-black/55 dark:text-white/55">
-                        Aucun dépôt, retrait ou solde initial proxy banking enregistré pour cette période.
+                        Aucun dépôt, retrait, change ou solde initial proxy banking enregistré pour cette période.
                       </td>
                     </tr>
                   ) : null}
