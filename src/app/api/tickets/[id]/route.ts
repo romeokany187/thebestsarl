@@ -9,6 +9,7 @@ import { ensureAirlineCatalog } from "@/lib/airline-catalog";
 import { getTicketDepositDebitAmount } from "@/lib/ticket-pricing";
 import { canManageTicketRecord } from "@/lib/assignment";
 import { writeActivityLog } from "@/lib/activity-log";
+import { ensureTicketNumberDuplicatesAllowed } from "@/lib/ticket-number-duplicates";
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -76,6 +77,11 @@ export async function PATCH(request: NextRequest, { params }: Params) {
     if (!parsed.success) {
       return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
     }
+
+    await ensureTicketNumberDuplicatesAllowed(prisma as unknown as {
+      $queryRawUnsafe: <T = unknown>(query: string) => Promise<T>;
+      $executeRawUnsafe: (query: string) => Promise<unknown>;
+    });
 
     await ensureAirlineCatalog(prisma);
 

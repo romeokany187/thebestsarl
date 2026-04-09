@@ -231,6 +231,7 @@ function proxyOperationLabel(descriptionRaw: string | null | undefined) {
   if (description.includes(":DEPOSIT:")) return "Dépôt client";
   if (description.includes(":WITHDRAWAL:")) return "Retrait client";
   if (description.includes(":EXCHANGE:")) return "Change client";
+  if (description.includes(":OTHER:")) return "Autre opération cash";
   if (description.includes(":OPENING_BALANCE:")) return "Solde initial";
   return "Opération proxy";
 }
@@ -637,6 +638,7 @@ export default async function PaymentsPage({
   const displayOpeningBuckets = applyOpeningFallbackFromCurrentPeriod(openingBuckets, generalCashOperations);
   const cashOperationsWithoutOpeningBalance = generalCashOperations.filter((operation) => operation.category !== "OPENING_BALANCE");
   const hasInitialOpeningRecorded = [...generalCashOperationsBeforeStart, ...generalCashOperations].some((operation) => operation.category === "OPENING_BALANCE");
+  const proxyHasInitialOpeningRecorded = [...proxyCashOperationsBeforeStart, ...proxyCashOperations].some((operation) => operation.category === "OPENING_BALANCE");
   const hasOpeningInsideSelectedRange = generalCashOperations.some((operation) => operation.category === "OPENING_BALANCE");
   const openingBalance = (Object.values(displayOpeningBuckets) as Array<BalanceSnapshot>).reduce(
     (sum, snapshot) => sum + bucketUsdEquivalent(snapshot),
@@ -982,6 +984,13 @@ export default async function PaymentsPage({
       cash: (
         <div className="space-y-4">
           <ProxyBankingForm />
+          <CashOperationForm
+            hasInitialOpening={proxyHasInitialOpeningRecorded}
+            allowedMethods={["CASH"]}
+            title="Autres opérations cash du proxy banking"
+            showConversionSection={false}
+            descriptionPrefix="PROXY_BANKING:OTHER:"
+          />
 
           <section className="overflow-hidden rounded-2xl border border-black/10 bg-white shadow-sm dark:border-white/10 dark:bg-zinc-900">
             <div className="border-b border-black/10 px-4 py-3 dark:border-white/10">

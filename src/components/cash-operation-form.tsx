@@ -28,13 +28,37 @@ const categories: Array<{ value: string; label: string }> = [
   { value: "OTHER_EXPENSE", label: "Autres dépenses" },
 ];
 
-export function CashOperationForm({ hasInitialOpening = false }: { hasInitialOpening?: boolean }) {
+const cashMethodOptions: Array<{ value: string; label: string }> = [
+  { value: "CASH", label: "Cash" },
+  { value: "AIRTEL_MONEY", label: "Airtel Money" },
+  { value: "ORANGE_MONEY", label: "Orange Money" },
+  { value: "MPESA", label: "M-Pesa" },
+  { value: "EQUITY", label: "Equity" },
+  { value: "RAWBANK_ILLICOCASH", label: "Rawbank & Illicocash" },
+];
+
+export function CashOperationForm({
+  hasInitialOpening = false,
+  allowedMethods,
+  title = "Caisse - report à nouveau initial et nouvelles opérations",
+  showConversionSection = true,
+  descriptionPrefix = "",
+}: {
+  hasInitialOpening?: boolean;
+  allowedMethods?: string[];
+  title?: string;
+  showConversionSection?: boolean;
+  descriptionPrefix?: string;
+}) {
   const router = useRouter();
+  const methodOptions = (allowedMethods?.length
+    ? cashMethodOptions.filter((option) => allowedMethods.includes(option.value))
+    : cashMethodOptions);
   const [direction, setDirection] = useState<"INFLOW" | "OUTFLOW">("INFLOW");
   const [category, setCategory] = useState<string>("OTHER_SALE");
   const [amount, setAmount] = useState<string>("");
   const [currency, setCurrency] = useState<"USD" | "CDF">("USD");
-  const [method, setMethod] = useState<string>("CASH");
+  const [method, setMethod] = useState<string>(methodOptions[0]?.value ?? "CASH");
   const [reference, setReference] = useState<string>("");
   const [description, setDescription] = useState<string>("");
   const [occurredAt, setOccurredAt] = useState<string>(toLocalDateTimeInputValue(new Date()));
@@ -125,7 +149,7 @@ export function CashOperationForm({ hasInitialOpening = false }: { hasInitialOpe
         currency: normalizedCurrency,
         method: method.trim(),
         reference: reference.trim(),
-        description: description.trim(),
+        description: `${descriptionPrefix}${description.trim()}`,
         occurredAt: new Date(occurredAt).toISOString(),
       }),
     });
@@ -217,7 +241,7 @@ export function CashOperationForm({ hasInitialOpening = false }: { hasInitialOpe
 
   return (
     <section className="mb-6 rounded-2xl border border-black/10 bg-white p-4 dark:border-white/10 dark:bg-zinc-900">
-      <h2 className="mb-3 text-sm font-semibold">Caisse - report à nouveau initial et nouvelles opérations</h2>
+      <h2 className="mb-3 text-sm font-semibold">{title}</h2>
       <p className="mb-3 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-xs text-blue-900 dark:border-blue-800/60 dark:bg-blue-950/30 dark:text-blue-100">
         Le <strong>solde d&apos;ouverture</strong> correspond au <strong>report à nouveau initial</strong>. Il ne s&apos;encode qu&apos;une seule fois au démarrage pour une caisse/canal donné, puis le dernier solde du jour devient automatiquement le report à nouveau du lendemain.
       </p>
@@ -292,14 +316,12 @@ export function CashOperationForm({ hasInitialOpening = false }: { hasInitialOpe
           <select
             value={method}
             onChange={(event) => setMethod(event.target.value)}
-            className="w-full rounded-md border border-black/15 bg-white px-3 py-2 text-sm dark:border-white/15 dark:bg-zinc-900"
+            disabled={methodOptions.length === 1}
+            className="w-full rounded-md border border-black/15 bg-white px-3 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-70 dark:border-white/15 dark:bg-zinc-900"
           >
-            <option value="CASH">Cash</option>
-            <option value="AIRTEL_MONEY">Airtel Money</option>
-            <option value="ORANGE_MONEY">Orange Money</option>
-            <option value="MPESA">M-Pesa</option>
-            <option value="EQUITY">Equity</option>
-            <option value="RAWBANK_ILLICOCASH">Rawbank & Illicocash</option>
+            {methodOptions.map((option) => (
+              <option key={option.value} value={option.value}>{option.label}</option>
+            ))}
           </select>
         </div>
 
@@ -343,93 +365,95 @@ export function CashOperationForm({ hasInitialOpening = false }: { hasInitialOpe
         </button>
       </form>
 
-      <div className="mt-4 border-t border-black/10 pt-4 dark:border-white/10">
-        <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-black/60 dark:text-white/60">
-          Conversion caisse USD/CDF (à utiliser uniquement si nécessaire)
-        </h3>
-        <form onSubmit={onConvertSubmit} className="grid gap-3 lg:grid-cols-5 lg:items-end">
-          <div>
-            <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-black/60 dark:text-white/60">Débiter</label>
-            <select
-              value={conversionSourceCurrency}
-              onChange={(event) => setConversionSourceCurrency(event.target.value as "USD" | "CDF")}
-              className="w-full rounded-md border border-black/15 bg-white px-3 py-2 text-sm uppercase dark:border-white/15 dark:bg-zinc-900"
+      {showConversionSection ? (
+        <div className="mt-4 border-t border-black/10 pt-4 dark:border-white/10">
+          <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-black/60 dark:text-white/60">
+            Conversion caisse USD/CDF (à utiliser uniquement si nécessaire)
+          </h3>
+          <form onSubmit={onConvertSubmit} className="grid gap-3 lg:grid-cols-5 lg:items-end">
+            <div>
+              <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-black/60 dark:text-white/60">Débiter</label>
+              <select
+                value={conversionSourceCurrency}
+                onChange={(event) => setConversionSourceCurrency(event.target.value as "USD" | "CDF")}
+                className="w-full rounded-md border border-black/15 bg-white px-3 py-2 text-sm uppercase dark:border-white/15 dark:bg-zinc-900"
+              >
+                <option value="USD">USD</option>
+                <option value="CDF">CDF</option>
+              </select>
+            </div>
+
+            <div>
+              <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-black/60 dark:text-white/60">Montant débité</label>
+              <input
+                type="number"
+                step="0.01"
+                min="0"
+                value={conversionSourceAmount}
+                onChange={(event) => setConversionSourceAmount(event.target.value)}
+                className="w-full rounded-md border border-black/15 bg-white px-3 py-2 text-sm dark:border-white/15 dark:bg-zinc-900"
+                placeholder="0.00"
+              />
+            </div>
+
+            <div>
+              <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-black/60 dark:text-white/60">Taux du jour</label>
+              <input
+                type="number"
+                step="0.01"
+                min="0.01"
+                value={fxRateUsdToCdf}
+                onChange={(event) => setFxRateUsdToCdf(event.target.value)}
+                className="w-full rounded-md border border-black/15 bg-white px-3 py-2 text-sm dark:border-white/15 dark:bg-zinc-900"
+                placeholder="1 USD = X CDF"
+              />
+            </div>
+
+            <div>
+              <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-black/60 dark:text-white/60">Date conversion</label>
+              <input
+                type="datetime-local"
+                value={conversionOccurredAt}
+                onChange={(event) => setConversionOccurredAt(event.target.value)}
+                className="w-full rounded-md border border-black/15 bg-white px-3 py-2 text-sm dark:border-white/15 dark:bg-zinc-900"
+              />
+            </div>
+
+            <button
+              type="submit"
+              disabled={conversionLoading}
+              className="rounded-md border border-black/20 px-4 py-2 text-sm font-semibold hover:bg-black/5 disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/20 dark:hover:bg-white/10"
             >
-              <option value="USD">USD</option>
-              <option value="CDF">CDF</option>
-            </select>
-          </div>
+              {conversionLoading ? "Conversion..." : `Convertir vers ${conversionTargetCurrency}`}
+            </button>
 
-          <div>
-            <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-black/60 dark:text-white/60">Montant débité</label>
-            <input
-              type="number"
-              step="0.01"
-              min="0"
-              value={conversionSourceAmount}
-              onChange={(event) => setConversionSourceAmount(event.target.value)}
-              className="w-full rounded-md border border-black/15 bg-white px-3 py-2 text-sm dark:border-white/15 dark:bg-zinc-900"
-              placeholder="0.00"
-            />
-          </div>
+            <div>
+              <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-black/60 dark:text-white/60">Référence conversion</label>
+              <input
+                value={conversionReference}
+                onChange={(event) => setConversionReference(event.target.value)}
+                required
+                className="w-full rounded-md border border-black/15 bg-white px-3 py-2 text-sm dark:border-white/15 dark:bg-zinc-900"
+                placeholder="N° pièce justificative / bordereau"
+              />
+            </div>
 
-          <div>
-            <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-black/60 dark:text-white/60">Taux du jour</label>
-            <input
-              type="number"
-              step="0.01"
-              min="0.01"
-              value={fxRateUsdToCdf}
-              onChange={(event) => setFxRateUsdToCdf(event.target.value)}
-              className="w-full rounded-md border border-black/15 bg-white px-3 py-2 text-sm dark:border-white/15 dark:bg-zinc-900"
-              placeholder="1 USD = X CDF"
-            />
-          </div>
+            <div className="lg:col-span-3">
+              <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-black/60 dark:text-white/60">Libellé conversion</label>
+              <input
+                value={conversionDescription}
+                onChange={(event) => setConversionDescription(event.target.value)}
+                className="w-full rounded-md border border-black/15 bg-white px-3 py-2 text-sm dark:border-white/15 dark:bg-zinc-900"
+                placeholder="Conversion interne de caisse"
+              />
+            </div>
+          </form>
 
-          <div>
-            <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-black/60 dark:text-white/60">Date conversion</label>
-            <input
-              type="datetime-local"
-              value={conversionOccurredAt}
-              onChange={(event) => setConversionOccurredAt(event.target.value)}
-              className="w-full rounded-md border border-black/15 bg-white px-3 py-2 text-sm dark:border-white/15 dark:bg-zinc-900"
-            />
-          </div>
-
-          <button
-            type="submit"
-            disabled={conversionLoading}
-            className="rounded-md border border-black/20 px-4 py-2 text-sm font-semibold hover:bg-black/5 disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/20 dark:hover:bg-white/10"
-          >
-            {conversionLoading ? "Conversion..." : `Convertir vers ${conversionTargetCurrency}`}
-          </button>
-
-          <div>
-            <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-black/60 dark:text-white/60">Référence conversion</label>
-            <input
-              value={conversionReference}
-              onChange={(event) => setConversionReference(event.target.value)}
-              required
-              className="w-full rounded-md border border-black/15 bg-white px-3 py-2 text-sm dark:border-white/15 dark:bg-zinc-900"
-              placeholder="N° pièce justificative / bordereau"
-            />
-          </div>
-
-          <div className="lg:col-span-3">
-            <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-black/60 dark:text-white/60">Libellé conversion</label>
-            <input
-              value={conversionDescription}
-              onChange={(event) => setConversionDescription(event.target.value)}
-              className="w-full rounded-md border border-black/15 bg-white px-3 py-2 text-sm dark:border-white/15 dark:bg-zinc-900"
-              placeholder="Conversion interne de caisse"
-            />
-          </div>
-        </form>
-
-        <p className="mt-2 text-xs text-black/60 dark:text-white/60">
-          Toute entrée, sortie ou conversion doit être rattachée à une pièce justificative. Crédit cible estimé: {conversionTargetAmountPreview.toFixed(2)} {conversionTargetCurrency} (taux 1 USD = {Number.isFinite(numericRatePreview) ? numericRatePreview.toFixed(2) : "0.00"} CDF)
-        </p>
-      </div>
+          <p className="mt-2 text-xs text-black/60 dark:text-white/60">
+            Toute entrée, sortie ou conversion doit être rattachée à une pièce justificative. Crédit cible estimé: {conversionTargetAmountPreview.toFixed(2)} {conversionTargetCurrency} (taux 1 USD = {Number.isFinite(numericRatePreview) ? numericRatePreview.toFixed(2) : "0.00"} CDF)
+          </p>
+        </div>
+      ) : null}
 
       {message ? <p className="mt-2 text-xs text-emerald-600">{message}</p> : null}
       {error ? <p className="mt-2 text-xs text-red-600">{error}</p> : null}

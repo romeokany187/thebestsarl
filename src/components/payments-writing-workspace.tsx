@@ -233,7 +233,7 @@ export function PaymentsWritingWorkspace({
     resolvedCashWorkspace
       ? {
           key: "cash" as const,
-          label: selectedDesk === "PROXY_BANKING" ? "Dépôts / retraits proxy banking" : "Autres opérations de caisse",
+          label: selectedDesk === "PROXY_BANKING" ? "Opérations proxy banking" : "Autres opérations de caisse",
           tone: "blue",
         }
       : null,

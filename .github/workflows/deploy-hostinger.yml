@@ -81,6 +81,7 @@ jobs:
             tar -xzf "$BUNDLE" -C "$APP_DIR"
             cd "$APP_DIR"
             npx prisma db push --schema prisma/schema.mysql.prisma --accept-data-loss
+            npm run db:allow:pnr-duplicates
             npm run db:reset:airline-deposits
             mkdir -p "$APP_DIR/tmp"
             touch "$APP_DIR/tmp/restart.txt" || true

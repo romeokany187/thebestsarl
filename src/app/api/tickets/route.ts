@@ -12,6 +12,7 @@ import { invoiceNumberFromChronology } from "@/lib/invoice";
 import { getTicketDepositDebitAmount } from "@/lib/ticket-pricing";
 import { canSellTickets } from "@/lib/assignment";
 import { writeActivityLog } from "@/lib/activity-log";
+import { ensureTicketNumberDuplicatesAllowed } from "@/lib/ticket-number-duplicates";
 
 function clamp(value: number, min: number, max: number) {
   return Math.max(min, Math.min(max, value));
@@ -94,6 +95,11 @@ export async function POST(request: NextRequest) {
     if (!parsed.success) {
       return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
     }
+
+    await ensureTicketNumberDuplicatesAllowed(prisma as unknown as {
+      $queryRawUnsafe: <T = unknown>(query: string) => Promise<T>;
+      $executeRawUnsafe: (query: string) => Promise<unknown>;
+    });
 
     await ensureAirlineCatalog(prisma);
 
