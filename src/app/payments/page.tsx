@@ -990,6 +990,7 @@ export default async function PaymentsPage({
             title="Autres opérations cash du proxy banking"
             showConversionSection={false}
             descriptionPrefix="PROXY_BANKING:OTHER:"
+            categoryInputMode="text"
           />
 
           <section className="overflow-hidden rounded-2xl border border-black/10 bg-white shadow-sm dark:border-white/10 dark:bg-zinc-900">

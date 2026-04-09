@@ -1,7 +1,7 @@
 import { AppShell } from "@/components/app-shell";
 import { AdminCommissionQuickForm } from "@/components/admin-commission-quick-form";
+import { AdminOpeningBalances } from "@/components/admin-opening-balances";
 import { UserJobTitleAdmin } from "@/components/user-job-title-admin";
-import { WorkSiteAdmin } from "@/components/worksite-admin";
 import { prisma } from "@/lib/prisma";
 import { requirePageModuleAccess } from "@/lib/rbac";
 
@@ -10,7 +10,7 @@ export const dynamic = "force-dynamic";
 export default async function AdminPage() {
   const { role } = await requirePageModuleAccess("admin", ["ADMIN"]);
 
-  const [users, airlines, sites] = await Promise.all([
+  const [users, airlines, openingBalances] = await Promise.all([
     prisma.user.findMany({
       include: { team: true },
       orderBy: { createdAt: "desc" },
@@ -19,8 +19,11 @@ export default async function AdminPage() {
       select: { id: true, code: true, name: true },
       orderBy: { code: "asc" },
     }),
-    prisma.workSite.findMany({
-      orderBy: { createdAt: "desc" },
+    prisma.cashOperation.findMany({
+      where: { category: "OPENING_BALANCE" },
+      include: { createdBy: { select: { name: true } } },
+      orderBy: { occurredAt: "desc" },
+      take: 200,
     }),
   ]);
 
@@ -69,7 +72,18 @@ export default async function AdminPage() {
       </section>
 
       <section className="mt-6">
-        <WorkSiteAdmin sites={sites} />
+        <AdminOpeningBalances
+          entries={openingBalances.map((entry) => ({
+            id: entry.id,
+            occurredAt: entry.occurredAt.toISOString(),
+            method: entry.method,
+            currency: entry.currency,
+            amount: entry.amount,
+            reference: entry.reference ?? null,
+            description: entry.description,
+            createdByName: entry.createdBy?.name ?? null,
+          }))}
+        />
       </section>
     </AppShell>
   );

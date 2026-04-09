@@ -43,12 +43,14 @@ export function CashOperationForm({
   title = "Caisse - report à nouveau initial et nouvelles opérations",
   showConversionSection = true,
   descriptionPrefix = "",
+  categoryInputMode = "select",
 }: {
   hasInitialOpening?: boolean;
   allowedMethods?: string[];
   title?: string;
   showConversionSection?: boolean;
   descriptionPrefix?: string;
+  categoryInputMode?: "select" | "text";
 }) {
   const router = useRouter();
   const methodOptions = (allowedMethods?.length
@@ -59,6 +61,7 @@ export function CashOperationForm({
   const [amount, setAmount] = useState<string>("");
   const [currency, setCurrency] = useState<"USD" | "CDF">("USD");
   const [method, setMethod] = useState<string>(methodOptions[0]?.value ?? "CASH");
+  const [categoryLabel, setCategoryLabel] = useState<string>("");
   const [reference, setReference] = useState<string>("");
   const [description, setDescription] = useState<string>("");
   const [occurredAt, setOccurredAt] = useState<string>(toLocalDateTimeInputValue(new Date()));
@@ -73,7 +76,8 @@ export function CashOperationForm({
   const [message, setMessage] = useState<string>("");
   const [error, setError] = useState<string>("");
 
-  const isOpeningBalance = category === "OPENING_BALANCE";
+  const usesFreeTextCategory = categoryInputMode === "text";
+  const isOpeningBalance = !usesFreeTextCategory && category === "OPENING_BALANCE";
   const referenceLabel = isOpeningBalance
     ? "Référence report initial"
     : direction === "OUTFLOW"
@@ -117,6 +121,12 @@ export function CashOperationForm({
       return;
     }
 
+    if (usesFreeTextCategory && !categoryLabel.trim()) {
+      setError("Saisissez la catégorie libre de l'opération.");
+      setLoading(false);
+      return;
+    }
+
     if (isOpeningBalance && direction !== "INFLOW") {
       setError("Le solde d'ouverture doit être saisi comme une entrée de fonds.");
       setLoading(false);
@@ -132,6 +142,9 @@ export function CashOperationForm({
     }
 
     const normalizedCurrency = currency;
+    const normalizedCategory = usesFreeTextCategory
+      ? (direction === "OUTFLOW" ? "OTHER_EXPENSE" : "OTHER_SALE")
+      : category;
 
     if (!occurredAt) {
       setError("Sélectionnez la date et l'heure de l'opération.");
@@ -144,12 +157,12 @@ export function CashOperationForm({
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         direction,
-        category,
+        category: normalizedCategory,
         amount: numericAmount,
         currency: normalizedCurrency,
         method: method.trim(),
         reference: reference.trim(),
-        description: `${descriptionPrefix}${description.trim()}`,
+        description: `${descriptionPrefix}${usesFreeTextCategory ? `[${categoryLabel.trim()}] ` : ""}${description.trim()}`,
         occurredAt: new Date(occurredAt).toISOString(),
       }),
     });
@@ -268,22 +281,33 @@ export function CashOperationForm({
         </div>
 
         <div>
-          <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-black/60 dark:text-white/60">Catégorie</label>
-          <select
-            value={category}
-            onChange={(event) => {
-              const nextCategory = event.target.value;
-              setCategory(nextCategory);
-              if (nextCategory === "OPENING_BALANCE") {
-                setDirection("INFLOW");
-              }
-            }}
-            className="w-full rounded-md border border-black/15 bg-white px-3 py-2 text-sm dark:border-white/15 dark:bg-zinc-900"
-          >
-            {categories.map((item) => (
-              <option key={item.value} value={item.value}>{item.label}</option>
-            ))}
-          </select>
+          <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-black/60 dark:text-white/60">
+            {usesFreeTextCategory ? "Catégorie libre" : "Catégorie"}
+          </label>
+          {usesFreeTextCategory ? (
+            <input
+              value={categoryLabel}
+              onChange={(event) => setCategoryLabel(event.target.value)}
+              className="w-full rounded-md border border-black/15 bg-white px-3 py-2 text-sm dark:border-white/15 dark:bg-zinc-900"
+              placeholder="Ex: ajustement cash, frais client, correction"
+            />
+          ) : (
+            <select
+              value={category}
+              onChange={(event) => {
+                const nextCategory = event.target.value;
+                setCategory(nextCategory);
+                if (nextCategory === "OPENING_BALANCE") {
+                  setDirection("INFLOW");
+                }
+              }}
+              className="w-full rounded-md border border-black/15 bg-white px-3 py-2 text-sm dark:border-white/15 dark:bg-zinc-900"
+            >
+              {categories.map((item) => (
+                <option key={item.value} value={item.value}>{item.label}</option>
+              ))}
+            </select>
+          )}
         </div>
 
         <div>
