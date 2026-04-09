@@ -1087,29 +1087,15 @@ export default async function PaymentsPage({
     },
     CAISSE_SAFETY: {
       summary: separatedDeskSummary("Caisse Safety"),
-      cash: separatedDeskWorkspace("Caisse Safety"),
-      virtual: separatedDeskWorkspace("Caisse Safety"),
-      billetage: separatedDeskWorkspace("Caisse Safety"),
     },
     CAISSE_VISAS: {
       summary: separatedDeskSummary("Caisse Visas"),
-      cash: separatedDeskWorkspace("Caisse Visas"),
-      virtual: separatedDeskWorkspace("Caisse Visas"),
-      billetage: separatedDeskWorkspace("Caisse Visas"),
     },
     CAISSE_TSL: {
       summary: separatedDeskSummary("Caisse TSL"),
-      cash: separatedDeskWorkspace("Caisse TSL"),
-      virtual: separatedDeskWorkspace("Caisse TSL"),
-      billetage: separatedDeskWorkspace("Caisse TSL"),
     },
     CAISSE_AGENCE: {
       summary: separatedDeskSummary("Caisse agence"),
-      cash: separatedDeskWorkspace("Caisse agence"),
-      virtual: separatedDeskWorkspace("Caisse agence"),
-      billetage: separatedDeskWorkspace("Caisse agence"),
-      "payment-orders": separatedDeskWorkspace("Caisse agence"),
-      needs: separatedDeskWorkspace("Caisse agence"),
     },
   } as const;
 

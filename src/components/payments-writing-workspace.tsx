@@ -162,11 +162,7 @@ function getAllowedActionsForDesk(deskValue: CashDeskValue | string): Array<Excl
   }
 
   if (deskValue === "PROXY_BANKING") {
-    return ["cash", "virtual", "billetage", "payment-orders", "needs"];
-  }
-
-  if (deskValue === "CAISSE_AGENCE") {
-    return [];
+    return ["cash", "virtual", "billetage"];
   }
 
   return ["cash", "payment-orders", "billetage", "virtual", "needs"];
