@@ -302,6 +302,7 @@ export const airlineDepositTopUpSchema = z.object({
   amount: z.number().positive(),
   reference: z.string().trim().min(2).max(180),
   description: z.string().trim().min(3).max(300),
+  createdAt: z.coerce.date().optional(),
 });
 
 export const cashOperationCreateSchema = z.object({

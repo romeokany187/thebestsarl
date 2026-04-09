@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import {
+  AIRLINE_TICKET_DEPOSIT_START_LABEL,
   buildAirlineDepositAccountSummaries,
   getAirlineDepositAccountByKey,
   recordAirlineDepositMovement,
@@ -66,6 +67,7 @@ export async function POST(request: NextRequest) {
       reference: parsed.data.reference,
       description: parsed.data.description,
       createdById: access.session.user.id,
+      createdAt: parsed.data.createdAt,
     }));
 
     await writeActivityLog({
@@ -73,13 +75,15 @@ export async function POST(request: NextRequest) {
       action: "AIRLINE_DEPOSIT_CREDITED",
       entityType: "AIRLINE_DEPOSIT",
       entityId: account.key,
-      summary: `${account.label} crédité de ${parsed.data.amount.toFixed(2)} USD (${parsed.data.reference}).`,
+      summary: `${account.label} crédité de ${parsed.data.amount.toFixed(2)} USD (${parsed.data.reference})${parsed.data.createdAt ? ` au ${parsed.data.createdAt.toLocaleDateString("fr-FR")}` : ""}.`,
       payload: {
         accountKey: account.key,
         accountLabel: account.label,
         amount: parsed.data.amount,
         reference: parsed.data.reference,
         description: parsed.data.description,
+        createdAt: parsed.data.createdAt?.toISOString() ?? null,
+        ticketDepositStartLabel: AIRLINE_TICKET_DEPOSIT_START_LABEL,
       },
     });
 

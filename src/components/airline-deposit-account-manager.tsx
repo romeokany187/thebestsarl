@@ -1,14 +1,23 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import type { AirlineDepositAccountSummary } from "@/lib/airline-deposit";
+import {
+  AIRLINE_TICKET_DEPOSIT_START_ISO,
+  AIRLINE_TICKET_DEPOSIT_START_LABEL,
+  type AirlineDepositAccountSummary,
+} from "@/lib/airline-deposit";
 
 type FormState = {
   accountKey: string;
   amount: string;
   reference: string;
   description: string;
+  movementDate: string;
 };
+
+function todayIsoDate() {
+  return new Date().toISOString().slice(0, 10);
+}
 
 function formatUsd(value: number) {
   return new Intl.NumberFormat("fr-FR", {
@@ -31,6 +40,7 @@ export function AirlineDepositAccountManager({
     amount: "",
     reference: "",
     description: "Approvisionnement compte dépôt compagnie",
+    movementDate: todayIsoDate(),
   });
   const [status, setStatus] = useState("");
   const [statusType, setStatusType] = useState<"idle" | "success" | "error" | "loading">("idle");
@@ -62,6 +72,7 @@ export function AirlineDepositAccountManager({
         amount: Number(form.amount),
         reference: form.reference,
         description: form.description,
+        createdAt: form.movementDate ? `${form.movementDate}T12:00:00.000Z` : undefined,
       }),
     });
 
@@ -86,13 +97,13 @@ export function AirlineDepositAccountManager({
       <div className="mb-4 flex flex-col gap-1">
         <h2 className="text-lg font-semibold">Comptes dépôts compagnies</h2>
         <p className="text-sm text-black/60 dark:text-white/60">
-          Section admin / DG / comptable : l&apos;administrateur, le DG ou le comptable peut créditer ces comptes. Les billets n&apos;affectent plus automatiquement les dépôts compagnies.
+          Section admin / DG / comptable : vous pouvez réinitialiser puis ressaisir les dépôts à leur date réelle. Les billets et ajustements datés à partir du {AIRLINE_TICKET_DEPOSIT_START_LABEL} impactent automatiquement ces comptes.
         </p>
       </div>
 
       {canManage ? (
         <form onSubmit={onSubmit} className="mb-4 grid gap-3 rounded-lg border border-black/10 p-3 dark:border-white/10">
-          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
             <select
               required
               value={form.accountKey}
@@ -129,11 +140,20 @@ export function AirlineDepositAccountManager({
               placeholder="Libellé"
               className="rounded-md border px-3 py-2"
             />
+            <input
+              required
+              type="date"
+              min={AIRLINE_TICKET_DEPOSIT_START_ISO}
+              max={todayIsoDate()}
+              value={form.movementDate}
+              onChange={(event) => updateField("movementDate", event.target.value)}
+              className="rounded-md border px-3 py-2"
+            />
           </div>
 
           {selectedAccount ? (
             <p className="text-xs text-black/60 dark:text-white/60">
-              Solde actuel: <span className="font-semibold">{formatUsd(selectedAccount.balance)}</span> • Compagnies liées: {selectedAccount.airlineNames.join(", ")}
+              Solde actuel: <span className="font-semibold">{formatUsd(selectedAccount.balance)}</span> • Compagnies liées: {selectedAccount.airlineNames.join(", ")} • Date d&apos;écriture: {form.movementDate || "aujourd&apos;hui"}
             </p>
           ) : null}
 

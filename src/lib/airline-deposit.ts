@@ -85,8 +85,9 @@ const accountByAirlineCode = new Map(
   AIRLINE_DEPOSIT_ACCOUNT_CONFIGS.flatMap((config) => config.airlineCodes.map((code) => [code, config] as const)),
 );
 
-export const AIRLINE_TICKET_DEPOSIT_START_DATE = new Date(Date.UTC(2026, 3, 6, 0, 0, 0, 0));
-export const AIRLINE_TICKET_DEPOSIT_START_LABEL = "06/04/2026";
+export const AIRLINE_TICKET_DEPOSIT_START_ISO = "2026-04-01";
+export const AIRLINE_TICKET_DEPOSIT_START_DATE = new Date(Date.UTC(2026, 3, 1, 0, 0, 0, 0));
+export const AIRLINE_TICKET_DEPOSIT_START_LABEL = "01/04/2026";
 
 function normalizeAccountKey(value: string | null | undefined) {
   const normalized = (value ?? "").trim().toUpperCase();
