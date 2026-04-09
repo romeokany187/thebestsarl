@@ -1026,7 +1026,7 @@ export default async function PaymentsPage({
       virtual: (
         <section className="overflow-hidden rounded-2xl border border-black/10 bg-white shadow-sm dark:border-white/10 dark:bg-zinc-900">
           <div className="border-b border-black/10 px-4 py-3 dark:border-white/10">
-            <h2 className="text-sm font-semibold">Soldes comptes virtuels proxy banking</h2>
+            <h2 className="text-sm font-semibold">Soldes proxy banking (cash + virtuel)</h2>
           </div>
           <div className="overflow-x-auto">
             <table className="min-w-full text-sm">
@@ -1044,6 +1044,17 @@ export default async function PaymentsPage({
                 </tr>
               </thead>
               <tbody>
+                <tr className="border-t border-black/5 bg-black/2 dark:border-white/10 dark:bg-white/3">
+                  <td className="px-4 py-3 font-semibold">Cash</td>
+                  <td className="px-4 py-3">{proxyCashOpeningUsd.toFixed(2)} USD</td>
+                  <td className="px-4 py-3">{proxyCashOpeningCdf.toFixed(2)} CDF</td>
+                  <td className="px-4 py-3">{proxyCashInflowUsd.toFixed(2)} USD</td>
+                  <td className="px-4 py-3">{proxyCashOutflowUsd.toFixed(2)} USD</td>
+                  <td className="px-4 py-3 font-semibold">{proxyClosingUsd.toFixed(2)} USD</td>
+                  <td className="px-4 py-3">{proxyCashInflowCdf.toFixed(2)} CDF</td>
+                  <td className="px-4 py-3">{proxyCashOutflowCdf.toFixed(2)} CDF</td>
+                  <td className="px-4 py-3 font-semibold">{proxyClosingCdf.toFixed(2)} CDF</td>
+                </tr>
                 {proxyVirtualRows.map((row) => (
                   <tr key={row.key} className="border-t border-black/5 dark:border-white/10">
                     <td className="px-4 py-3 font-medium">{row.label}</td>

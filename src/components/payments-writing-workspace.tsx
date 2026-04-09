@@ -239,7 +239,13 @@ export function PaymentsWritingWorkspace({
       : null,
     resolvedPaymentOrdersWorkspace ? { key: "payment-orders" as const, label: paymentOrdersLabel ?? "OP à exécuter", tone: "amber" } : null,
     resolvedBilletageWorkspace ? { key: "billetage" as const, label: "Billetage", tone: "sky" } : null,
-    resolvedVirtualWorkspace ? { key: "virtual" as const, label: "Virtuel", tone: "cyan" } : null,
+    resolvedVirtualWorkspace
+      ? {
+          key: "virtual" as const,
+          label: selectedDesk === "PROXY_BANKING" ? "Solde" : "Virtuel",
+          tone: "cyan",
+        }
+      : null,
     resolvedNeedsWorkspace ? { key: "needs" as const, label: needsLabel ?? "EDB à exécuter", tone: "violet" } : null,
   ].filter(Boolean) as Array<{ key: Exclude<WritingMode, "none">; label: string; tone: string }>;
   const allowedActionKeys = getAllowedActionsForDesk(selectedDesk);
