@@ -21,6 +21,34 @@ function normalizeTicketDate(value: Date) {
   return new Date(Date.UTC(value.getUTCFullYear(), value.getUTCMonth(), value.getUTCDate(), 0, 0, 0, 0));
 }
 
+async function buildTicketConflictMessage(ticketNumber: string) {
+  const normalizedTicketNumber = ticketNumber.trim();
+  if (!normalizedTicketNumber) {
+    return "Conflit de données: vérifiez les informations uniques déjà existantes, puis réessayez.";
+  }
+
+  const existingTickets = await prisma.ticketSale.findMany({
+    where: { ticketNumber: normalizedTicketNumber },
+    select: {
+      ticketNumber: true,
+      customerName: true,
+      soldAt: true,
+      airline: { select: { name: true } },
+    },
+    orderBy: [{ soldAt: "desc" }, { createdAt: "desc" }],
+    take: 3,
+  });
+
+  if (!existingTickets.length) {
+    return `Conflit de données sur le PNR ${normalizedTicketNumber}. Vérifiez si ce billet existe déjà.`;
+  }
+
+  const [firstTicket, ...otherTickets] = existingTickets;
+  const otherDates = otherTickets.map((ticket) => ticket.soldAt.toLocaleDateString("fr-FR"));
+
+  return `Le PNR ${normalizedTicketNumber} existe déjà pour ${firstTicket.customerName} sur ${firstTicket.airline.name} à la date du ${firstTicket.soldAt.toLocaleDateString("fr-FR")}.${otherDates.length ? ` Autres dates trouvées: ${otherDates.join(", ")}.` : ""}`;
+}
+
 export async function GET() {
   const access = await requireApiModuleAccess("tickets", ["DIRECTEUR_GENERAL"]);
   if (access.error) {
@@ -57,6 +85,8 @@ export async function POST(request: NextRequest) {
     );
   }
 
+  let attemptedTicketNumber = "";
+
   try {
     const body = await request.json();
     const parsed = ticketSchema.safeParse(body);
@@ -68,6 +98,7 @@ export async function POST(request: NextRequest) {
     await ensureAirlineCatalog(prisma);
 
     const normalizedTicketNumber = parsed.data.ticketNumber.trim();
+    attemptedTicketNumber = normalizedTicketNumber;
 
     const airline = await prisma.airline.findUnique({
       where: { id: parsed.data.airlineId },
@@ -287,7 +318,7 @@ export async function POST(request: NextRequest) {
     if (error instanceof Prisma.PrismaClientKnownRequestError) {
       if (error.code === "P2002") {
         return NextResponse.json(
-          { error: "Conflit de données: vérifiez les informations uniques déjà existantes, puis réessayez." },
+          { error: await buildTicketConflictMessage(attemptedTicketNumber) },
           { status: 400 },
         );
       }

@@ -20,6 +20,37 @@ function normalizeTicketDate(value: Date) {
   return new Date(Date.UTC(value.getUTCFullYear(), value.getUTCMonth(), value.getUTCDate(), 0, 0, 0, 0));
 }
 
+async function buildTicketConflictMessage(ticketNumber: string, excludeId?: string) {
+  const normalizedTicketNumber = ticketNumber.trim();
+  if (!normalizedTicketNumber) {
+    return "Conflit de données: vérifiez les champs uniques.";
+  }
+
+  const existingTickets = await prisma.ticketSale.findMany({
+    where: {
+      ticketNumber: normalizedTicketNumber,
+      ...(excludeId ? { id: { not: excludeId } } : {}),
+    },
+    select: {
+      ticketNumber: true,
+      customerName: true,
+      soldAt: true,
+      airline: { select: { name: true } },
+    },
+    orderBy: [{ soldAt: "desc" }, { createdAt: "desc" }],
+    take: 3,
+  });
+
+  if (!existingTickets.length) {
+    return `Conflit de données sur le PNR ${normalizedTicketNumber}. Vérifiez si ce billet existe déjà.`;
+  }
+
+  const [firstTicket, ...otherTickets] = existingTickets;
+  const otherDates = otherTickets.map((ticket) => ticket.soldAt.toLocaleDateString("fr-FR"));
+
+  return `Le PNR ${normalizedTicketNumber} existe déjà pour ${firstTicket.customerName} sur ${firstTicket.airline.name} à la date du ${firstTicket.soldAt.toLocaleDateString("fr-FR")}.${otherDates.length ? ` Autres dates trouvées: ${otherDates.join(", ")}.` : ""}`;
+}
+
 export async function PATCH(request: NextRequest, { params }: Params) {
   const access = await requireApiModuleAccess("sales", ["ADMIN", "DIRECTEUR_GENERAL", "MANAGER", "EMPLOYEE", "ACCOUNTANT"]);
   if (access.error) {
@@ -33,8 +64,12 @@ export async function PATCH(request: NextRequest, { params }: Params) {
     );
   }
 
+  let attemptedTicketNumber = "";
+  let currentTicketId = "";
+
   try {
     const { id } = await params;
+    currentTicketId = id;
     const body = await request.json();
     const parsed = ticketUpdateSchema.safeParse(body);
 
@@ -82,6 +117,8 @@ export async function PATCH(request: NextRequest, { params }: Params) {
 
     const previousDepositAccount = getAirlineDepositAccountByAirlineCode(existing.airline.code);
     const nextDepositAccount = getAirlineDepositAccountByAirlineCode(targetAirline.code);
+
+    attemptedTicketNumber = (parsed.data.ticketNumber ?? existing.ticketNumber).trim();
 
     const nextTicket = {
       ...existing,
@@ -358,7 +395,7 @@ export async function PATCH(request: NextRequest, { params }: Params) {
 
     if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
       return NextResponse.json(
-        { error: "Conflit de données: vérifiez les champs uniques." },
+        { error: await buildTicketConflictMessage(attemptedTicketNumber, currentTicketId) },
         { status: 400 },
       );
     }
