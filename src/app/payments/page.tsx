@@ -986,8 +986,8 @@ export default async function PaymentsPage({
           <ProxyBankingForm />
           <CashOperationForm
             hasInitialOpening={proxyHasInitialOpeningRecorded}
-            allowedMethods={["CASH"]}
-            title="Autres opérations cash du proxy banking"
+            allowedMethods={["CASH", "AIRTEL_MONEY", "ORANGE_MONEY", "MPESA", "EQUITY", "RAWBANK_ILLICOCASH"]}
+            title="Autres opérations cash et virtuel du proxy banking"
             showConversionSection={false}
             descriptionPrefix="PROXY_BANKING:OTHER:"
             categoryInputMode="text"
