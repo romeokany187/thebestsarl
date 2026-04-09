@@ -88,6 +88,8 @@ const accountByAirlineCode = new Map(
 export const AIRLINE_TICKET_DEPOSIT_START_ISO = "2026-04-01";
 export const AIRLINE_TICKET_DEPOSIT_START_DATE = new Date(Date.UTC(2026, 3, 1, 0, 0, 0, 0));
 export const AIRLINE_TICKET_DEPOSIT_START_LABEL = "01/04/2026";
+export const AIRLINE_DEPOSIT_RESET_MARKER_REFERENCE = "SYSTEM_RESET_AIRLINE_DEPOSITS_2026_04_01";
+export const AIRLINE_DEPOSIT_RESET_MARKER_DESCRIPTION = "Réinitialisation globale des comptes dépôts compagnies";
 
 function normalizeAccountKey(value: string | null | undefined) {
   const normalized = (value ?? "").trim().toUpperCase();
@@ -180,6 +182,13 @@ function resolveTicketMovementAnchorDate(input: {
   return input.ticketSoldAt ?? input.ticketSale?.soldAt ?? input.createdAt ?? null;
 }
 
+function isAirlineDepositResetMarker(input: {
+  reference?: string | null;
+  description?: string | null;
+}) {
+  return (input.reference ?? "").trim().toUpperCase() === AIRLINE_DEPOSIT_RESET_MARKER_REFERENCE;
+}
+
 function isTrackedTicketDepositDate(date: Date | null | undefined) {
   return Boolean(date && startOfUtcDay(date).getTime() >= AIRLINE_TICKET_DEPOSIT_START_DATE.getTime());
 }
@@ -192,6 +201,10 @@ function shouldIgnoreAirlineDepositMovement(input: {
   ticketSoldAt?: Date | null;
   ticketSale?: { soldAt?: Date | null } | null;
 }) {
+  if (isAirlineDepositResetMarker(input)) {
+    return true;
+  }
+
   if (!isTicketGeneratedDepositMovement(input)) {
     return false;
   }
@@ -219,6 +232,33 @@ async function hasTrackedTicketMovement(
   return movements.some((movement) => !shouldIgnoreAirlineDepositMovement(movement));
 }
 
+async function getTicketSyncEligibleAccountKeys(
+  client: {
+    airlineDepositMovement: { findMany: (args?: any) => Promise<any[]> };
+  },
+) {
+  const movements = await client.airlineDepositMovement.findMany({
+    where: {
+      movementType: "CREDIT",
+      amount: { gt: 0 },
+      createdAt: { gte: AIRLINE_TICKET_DEPOSIT_START_DATE },
+    },
+    select: {
+      accountKey: true,
+      reference: true,
+      description: true,
+      ticketSaleId: true,
+      createdAt: true,
+    },
+  });
+
+  return new Set(
+    movements
+      .filter((movement) => !shouldIgnoreAirlineDepositMovement(movement))
+      .map((movement) => normalizeAccountKey(movement.accountKey)),
+  );
+}
+
 async function syncEligibleTicketDepositMovements(
   client: {
     airlineDepositMovement: { findMany: (args?: any) => Promise<any[]>; create?: (args: any) => Promise<unknown> };
@@ -235,6 +275,11 @@ async function syncEligibleTicketDepositMovements(
 
   const trackedAirlineCodes = Array.from(accountByAirlineCode.keys());
   if (!trackedAirlineCodes.length) {
+    return;
+  }
+
+  const eligibleAccountKeys = await getTicketSyncEligibleAccountKeys(client);
+  if (!eligibleAccountKeys.size) {
     return;
   }
 
@@ -288,7 +333,7 @@ async function syncEligibleTicketDepositMovements(
     }
 
     const depositAccount = getAirlineDepositAccountByAirlineCode(ticket.airline?.code ?? null);
-    if (!depositAccount) {
+    if (!depositAccount || !eligibleAccountKeys.has(depositAccount.key)) {
       continue;
     }
 
@@ -369,17 +414,17 @@ export async function getAirlineDepositBalance(
 }
 
 async function getFirstAirlineDepositCreditDate(client: Prisma.TransactionClient, accountKey: string) {
-  const movementClient = (client as unknown as { airlineDepositMovement: { findMany: (args?: any) => Promise<Array<{ createdAt: Date; reference?: string | null; description?: string | null; ticketSaleId?: string | null }>> } }).airlineDepositMovement;
+  const movementClient = (client as unknown as { airlineDepositMovement: { findMany: (args?: any) => Promise<Array<{ createdAt: Date; amount: number; reference?: string | null; description?: string | null; ticketSaleId?: string | null }>> } }).airlineDepositMovement;
   const credits = await movementClient.findMany({
     where: {
       accountKey: { in: accountKeysForLookup(accountKey) },
       movementType: "CREDIT",
     },
     orderBy: [{ createdAt: "asc" }, { id: "asc" }],
-    select: { createdAt: true, reference: true, description: true, ticketSaleId: true },
+    select: { createdAt: true, amount: true, reference: true, description: true, ticketSaleId: true },
   });
 
-  const firstCredit = credits.find((movement) => !isTicketGeneratedDepositMovement(movement));
+  const firstCredit = credits.find((movement) => movement.amount > 0 && !shouldIgnoreAirlineDepositMovement(movement));
   return firstCredit?.createdAt ?? null;
 }
 

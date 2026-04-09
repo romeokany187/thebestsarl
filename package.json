@@ -19,6 +19,7 @@
     "deploy:hostinger": "bash scripts/deploy-hostinger.sh",
     "db:seed": "tsx prisma/seed.ts",
     "db:import:tickets:excel": "tsx scripts/import-tickets-excel.ts",
+    "db:reset:airline-deposits": "tsx scripts/reset-airline-deposits.ts",
     "db:dedup:airlines": "tsx scripts/dedup-airlines.ts",
     "db:normalize:ticket-payers": "tsx scripts/normalize-ticket-payers.ts",
     "db:reset:operational": "tsx scripts/reset-operational-data.ts"
