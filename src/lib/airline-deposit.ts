@@ -88,8 +88,8 @@ const accountByAirlineCode = new Map(
 export const AIRLINE_TICKET_DEPOSIT_START_ISO = "2026-04-01";
 export const AIRLINE_TICKET_DEPOSIT_START_DATE = new Date(Date.UTC(2026, 3, 1, 0, 0, 0, 0));
 export const AIRLINE_TICKET_DEPOSIT_START_LABEL = "01/04/2026";
-export const AIRLINE_DEPOSIT_RESET_MARKER_REFERENCE = "SYSTEM_RESET_AIRLINE_DEPOSITS_2026_04_01";
-export const AIRLINE_DEPOSIT_RESET_MARKER_DESCRIPTION = "Réinitialisation globale des comptes dépôts compagnies";
+export const AIRLINE_DEPOSIT_RESET_MARKER_REFERENCE = "SYSTEM_RESET_AIRLINE_DEPOSITS_2026_04_09_V2";
+export const AIRLINE_DEPOSIT_RESET_MARKER_DESCRIPTION = "Réinitialisation globale des comptes dépôts compagnies du 09/04/2026";
 
 function normalizeAccountKey(value: string | null | undefined) {
   const normalized = (value ?? "").trim().toUpperCase();
@@ -187,6 +187,51 @@ function isAirlineDepositResetMarker(input: {
   description?: string | null;
 }) {
   return (input.reference ?? "").trim().toUpperCase() === AIRLINE_DEPOSIT_RESET_MARKER_REFERENCE;
+}
+
+async function ensureAirlineDepositResetApplied(
+  client: {
+    airlineDepositMovement: {
+      findFirst?: (args?: any) => Promise<any>;
+      deleteMany?: (args?: any) => Promise<unknown>;
+      create?: (args: any) => Promise<unknown>;
+    };
+  },
+) {
+  const movementClient = client.airlineDepositMovement;
+
+  if (
+    typeof movementClient.findFirst !== "function"
+    || typeof movementClient.deleteMany !== "function"
+    || typeof movementClient.create !== "function"
+  ) {
+    return;
+  }
+
+  const marker = await movementClient.findFirst({
+    where: { reference: AIRLINE_DEPOSIT_RESET_MARKER_REFERENCE },
+    select: { id: true },
+  });
+
+  if (marker) {
+    return;
+  }
+
+  await movementClient.deleteMany({});
+
+  const anchorAccount = AIRLINE_DEPOSIT_ACCOUNT_CONFIGS[0];
+  await movementClient.create({
+    data: {
+      accountKey: anchorAccount.key,
+      accountLabel: anchorAccount.label,
+      movementType: "CREDIT",
+      amount: 0,
+      balanceAfter: 0,
+      reference: AIRLINE_DEPOSIT_RESET_MARKER_REFERENCE,
+      description: AIRLINE_DEPOSIT_RESET_MARKER_DESCRIPTION,
+      createdAt: new Date(),
+    },
+  });
 }
 
 function isTrackedTicketDepositDate(date: Date | null | undefined) {
@@ -464,9 +509,16 @@ export async function recordAirlineDepositMovement(
   }
 
   const movementSupportClient = client as unknown as {
-    airlineDepositMovement: { findMany: (args?: any) => Promise<any[]>; create?: (args: any) => Promise<unknown> };
+    airlineDepositMovement: {
+      findMany: (args?: any) => Promise<any[]>;
+      findFirst?: (args?: any) => Promise<any>;
+      deleteMany?: (args?: any) => Promise<unknown>;
+      create?: (args: any) => Promise<unknown>;
+    };
     ticketSale?: { findMany: (args?: any) => Promise<any[]> };
   };
+
+  await ensureAirlineDepositResetApplied(movementSupportClient);
 
   const isBaseTicketDebit = ticketGeneratedMovement
     && input.movementType === "DEBIT"
@@ -522,12 +574,18 @@ export async function recordAirlineDepositMovement(
 
 export async function buildAirlineDepositAccountSummaries(
   client: {
-    airlineDepositMovement: { findMany: (args?: any) => Promise<any[]>; create?: (args?: any) => Promise<unknown>; deleteMany?: (args?: any) => Promise<unknown> };
+    airlineDepositMovement: {
+      findMany: (args?: any) => Promise<any[]>;
+      findFirst?: (args?: any) => Promise<any>;
+      create?: (args?: any) => Promise<unknown>;
+      deleteMany?: (args?: any) => Promise<unknown>;
+    };
     ticketSale?: { findMany: (args?: any) => Promise<any[]> };
   },
   recentLimit = 6,
   options?: { upTo?: Date },
 ): Promise<AirlineDepositAccountSummary[]> {
+  await ensureAirlineDepositResetApplied(client);
   await syncEligibleTicketDepositMovements(client);
 
   const movements = await client.airlineDepositMovement.findMany({

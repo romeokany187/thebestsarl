@@ -7,12 +7,13 @@ import {
 } from "../src/lib/airline-deposit";
 
 async function main() {
+  const forceReset = process.argv.includes("--force");
   const marker = await prisma.airlineDepositMovement.findFirst({
     where: { reference: AIRLINE_DEPOSIT_RESET_MARKER_REFERENCE },
     select: { id: true },
   });
 
-  if (marker) {
+  if (marker && !forceReset) {
     console.log("[reset-airline-deposits] Reset already applied. Skipping.");
     return;
   }
@@ -30,11 +31,11 @@ async function main() {
       balanceAfter: 0,
       reference: AIRLINE_DEPOSIT_RESET_MARKER_REFERENCE,
       description: AIRLINE_DEPOSIT_RESET_MARKER_DESCRIPTION,
-      createdAt: AIRLINE_TICKET_DEPOSIT_START_DATE,
+      createdAt: new Date(),
     },
   });
 
-  console.log(`[reset-airline-deposits] Reset completed. Removed ${existingCount} movement(s).`);
+  console.log(`[reset-airline-deposits] Reset completed. Removed ${existingCount} movement(s).${forceReset ? " (forced)" : ""}`);
 }
 
 main()
