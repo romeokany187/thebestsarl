@@ -287,6 +287,7 @@ export async function PATCH(request: NextRequest, { params }: Params) {
               : `Ajustement crédit billet ${saved.ticketNumber} - ${targetAirline.name}`,
             airlineId: saved.airlineId,
             ticketSaleId: saved.id,
+            ticketSoldAt: saved.soldAt,
             createdById: access.session.user.id,
           });
         }
@@ -300,6 +301,7 @@ export async function PATCH(request: NextRequest, { params }: Params) {
             description: `Restitution ancienne compagnie pour billet ${existing.ticketNumber} - ${existing.airline.name}`,
             airlineId: existing.airlineId,
             ticketSaleId: existing.id,
+            ticketSoldAt: existing.soldAt,
             createdById: access.session.user.id,
           });
         }
@@ -313,6 +315,7 @@ export async function PATCH(request: NextRequest, { params }: Params) {
             description: `Débit automatique billet ${saved.ticketNumber} - ${targetAirline.name}`,
             airlineId: saved.airlineId,
             ticketSaleId: saved.id,
+            ticketSoldAt: saved.soldAt,
             createdById: access.session.user.id,
             createdAt: saved.soldAt,
           });
@@ -425,6 +428,7 @@ export async function DELETE(_request: NextRequest, { params }: Params) {
             description: `Restitution après suppression billet ${existing.ticketNumber} - ${existing.airline.name}`,
             airlineId: existing.airlineId,
             ticketSaleId: existing.id,
+            ticketSoldAt: existing.soldAt,
             createdById: access.session.user.id,
           });
         }

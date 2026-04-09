@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { AIRLINE_TICKET_DEPOSIT_START_LABEL } from "@/lib/airline-deposit";
 import { defaultTravelMessage, extractTicketItinerary, getPlainTicketNotes, mergeTicketNotesWithItinerary, type TicketItineraryData } from "@/lib/ticket-itinerary";
 
 type UserOption = { id: string; name: string };
@@ -621,11 +622,11 @@ export function TicketForm({
       {selectedDepositAccount ? (
         <div className={`space-y-1 text-xs ${requestedTicketAmount > selectedDepositAccount.balance ? "text-red-600 dark:text-red-300" : "text-black/60 dark:text-white/60"}`}>
           <p>
-            {selectedDepositAccount.label}: solde disponible {selectedDepositAccount.balance.toFixed(2)} USD. Les billets n&apos;affectent plus ce compte dépôt automatiquement.
+            {selectedDepositAccount.label}: solde disponible {selectedDepositAccount.balance.toFixed(2)} USD. Les billets vendus à partir du {AIRLINE_TICKET_DEPOSIT_START_LABEL} débitent ou recréditent automatiquement ce compte.
           </p>
           {isBackdatedAdminEntry ? (
             <p className="text-black/55 dark:text-white/55">
-              Même si la date d&apos;encodage est antidatée, le contrôle se fait désormais sur le niveau actuel du compte dépôt compagnie affiché dans <span className="font-semibold">Dépôts compagnies</span>.
+              Les billets datés avant le {AIRLINE_TICKET_DEPOSIT_START_LABEL} restent exclus de ces opérations, même en cas d&apos;encodage antidaté.
             </p>
           ) : null}
         </div>

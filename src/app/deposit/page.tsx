@@ -1,7 +1,7 @@
 import { AppShell } from "@/components/app-shell";
 import { AirlineDepositAccountManager } from "@/components/airline-deposit-account-manager";
 import { prisma } from "@/lib/prisma";
-import { buildAirlineDepositAccountSummaries } from "@/lib/airline-deposit";
+import { AIRLINE_TICKET_DEPOSIT_START_LABEL, buildAirlineDepositAccountSummaries } from "@/lib/airline-deposit";
 import { requirePageModuleAccess } from "@/lib/rbac";
 
 export const dynamic = "force-dynamic";
@@ -22,7 +22,7 @@ export default async function DepositPage() {
       <section className="mb-6">
         <h1 className="text-2xl font-semibold">Dépôts compagnies</h1>
         <p className="text-sm text-black/60 dark:text-white/60">
-          Centralisation des approvisionnements manuels et suivi des comptes de dépôt des compagnies aériennes. Les billets n&apos;impactent plus ces comptes.
+          Centralisation des approvisionnements manuels et suivi des comptes de dépôt des compagnies aériennes. Les billets vendus à partir du {AIRLINE_TICKET_DEPOSIT_START_LABEL} impactent automatiquement ces comptes; les billets antérieurs restent exclus.
         </p>
       </section>
 

@@ -1113,6 +1113,7 @@ export async function importTicketWorkbookFromBuffer(options: TicketWorkbookImpo
               description: `Restitution suite remplacement import - ${ticket.airline.name}`,
               airlineId: ticket.airlineId,
               ticketSaleId: ticket.id,
+              ticketSoldAt: ticket.soldAt,
             });
           }
         }
@@ -1521,6 +1522,7 @@ export async function importTicketWorkbookFromBuffer(options: TicketWorkbookImpo
                 description: `Débit automatique import billet ${normalizedTicketNumber} - ${airline.name}`,
                 airlineId: airline.id,
                 ticketSaleId: createdTicket.id,
+                ticketSoldAt: soldAt,
                 createdAt: soldAt,
               });
               depositBalanceByAccountKey.set(depositAccount.key, (depositBalanceByAccountKey.get(depositAccount.key) ?? 0) - depositDebitAmount);

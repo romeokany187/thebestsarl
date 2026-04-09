@@ -216,6 +216,7 @@ export async function POST(request: NextRequest) {
             description: `Débit automatique billet ${created.ticketNumber} - ${airline.name}`,
             airlineId: airline.id,
             ticketSaleId: created.id,
+            ticketSoldAt: created.soldAt,
             createdById: access.session.user.id,
             createdAt: created.soldAt,
           });
