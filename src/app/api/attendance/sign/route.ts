@@ -9,6 +9,7 @@ type TeamOfficeGeofence = {
   longitude: number;
   radiusMeters: number;
   label: string;
+  timeZone: string;
 };
 
 const TEAM_OFFICE_GEOFENCES: TeamOfficeGeofence[] = [
@@ -18,6 +19,7 @@ const TEAM_OFFICE_GEOFENCES: TeamOfficeGeofence[] = [
     longitude: 27.48597,
     radiusMeters: 200,
     label: "Bureau Lubumbashi",
+    timeZone: "Africa/Lubumbashi",
   },
   {
     names: ["mbujimayi", "mbuji-mayi", "mbuji mayi"],
@@ -25,6 +27,7 @@ const TEAM_OFFICE_GEOFENCES: TeamOfficeGeofence[] = [
     longitude: 23.60965,
     radiusMeters: 200,
     label: "Bureau Mbuji-Mayi",
+    timeZone: "Africa/Lubumbashi",
   },
 ];
 
@@ -33,6 +36,7 @@ const DEFAULT_REFERENCE_SITE = {
   longitude: 15.30875,
   radiusMeters: 200,
   name: "Point de référence Marché Central",
+  timeZone: "Africa/Kinshasa",
 };
 
 function normalizeTeamName(value: string) {
@@ -74,20 +78,58 @@ function distanceMeters(
   return earthRadius * c;
 }
 
-function computeLatenessMinutes(signTime: Date) {
-  const officeStart = new Date(signTime);
-  officeStart.setHours(8, 30, 0, 0);
-  // Retard starts only after 08:30; partial minutes are not rounded up.
-  const deltaMins = Math.floor((signTime.getTime() - officeStart.getTime()) / 60000);
-  return Math.max(0, deltaMins);
+function resolveAttendanceTimeZone(teamName: string | null | undefined) {
+  return resolveTeamGeofence(teamName)?.timeZone ?? DEFAULT_REFERENCE_SITE.timeZone;
 }
 
-function expectedEndTime(signTime: Date) {
-  const isSaturday = signTime.getDay() === 6;
-  const end = new Date(signTime);
-  end.setHours(isSaturday ? 13 : 16, 0, 0, 0);
+function getZonedDateParts(date: Date, timeZone: string) {
+  const formatter = new Intl.DateTimeFormat("en-CA", {
+    timeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    weekday: "short",
+    hourCycle: "h23",
+  });
+
+  const parts = formatter.formatToParts(date);
+  const readPart = (type: Intl.DateTimeFormatPartTypes) => parts.find((part) => part.type === type)?.value ?? "0";
+
   return {
-    end,
+    year: Number.parseInt(readPart("year"), 10),
+    month: Number.parseInt(readPart("month"), 10),
+    day: Number.parseInt(readPart("day"), 10),
+    hour: Number.parseInt(readPart("hour"), 10),
+    minute: Number.parseInt(readPart("minute"), 10),
+    second: Number.parseInt(readPart("second"), 10),
+    weekday: readPart("weekday").toLowerCase(),
+  };
+}
+
+function buildAttendanceDay(signTime: Date, timeZone: string) {
+  const zoned = getZonedDateParts(signTime, timeZone);
+  return new Date(Date.UTC(zoned.year, zoned.month - 1, zoned.day, 0, 0, 0, 0));
+}
+
+function computeLatenessMinutes(signTime: Date, timeZone: string) {
+  const zoned = getZonedDateParts(signTime, timeZone);
+  const signMinutes = (zoned.hour * 60) + zoned.minute;
+  const officeStartMinutes = (8 * 60) + 30;
+  return Math.max(0, signMinutes - officeStartMinutes);
+}
+
+function expectedEndTime(signTime: Date, timeZone: string) {
+  const zoned = getZonedDateParts(signTime, timeZone);
+  const isSaturday = zoned.weekday.startsWith("sat");
+  const currentMinutes = (zoned.hour * 60) + zoned.minute;
+  const endMinutes = isSaturday ? 13 * 60 : 16 * 60;
+
+  return {
+    currentMinutes,
+    endMinutes,
     label: isSaturday ? "13h00 (samedi)" : "16h00",
   };
 }
@@ -210,8 +252,18 @@ export async function GET(request: NextRequest) {
     ? requestedUserId
     : access.session.user.id;
 
+  const targetUser = await prisma.user.findUnique({
+    where: { id: targetUserId },
+    select: { team: { select: { name: true } } },
+  });
+
+  if (!targetUser) {
+    return NextResponse.json({ error: "Employé introuvable." }, { status: 404 });
+  }
+
   const now = new Date();
-  const day = new Date(now.toDateString());
+  const attendanceTimeZone = resolveAttendanceTimeZone(targetUser.team?.name);
+  const day = buildAttendanceDay(now, attendanceTimeZone);
 
   const todayRecord = await prisma.attendance.findUnique({
     where: {
@@ -263,7 +315,6 @@ export async function POST(request: NextRequest) {
   }
 
   const signTime = new Date();
-  const day = new Date(signTime.toDateString());
   const { latitude, longitude, accuracyM, action } = parsed.data;
   const requestedUserId = parsed.data.userId?.trim();
   const canManageTeamAttendance = access.role === "ADMIN" || access.role === "DIRECTEUR_GENERAL";
@@ -292,6 +343,8 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Employé introuvable." }, { status: 404 });
   }
 
+  const attendanceTimeZone = resolveAttendanceTimeZone(targetUser.team?.name);
+  const day = buildAttendanceDay(signTime, attendanceTimeZone);
   const teamGeofence = resolveTeamGeofence(targetUser.team?.name);
   const referenceSite = teamGeofence
     ? {
@@ -299,6 +352,7 @@ export async function POST(request: NextRequest) {
       longitude: teamGeofence.longitude,
       radiusMeters: teamGeofence.radiusMeters,
       name: teamGeofence.label,
+      timeZone: teamGeofence.timeZone,
     }
     : DEFAULT_REFERENCE_SITE;
   const gpsResolvedAddress = await resolveAddressFromCoords(latitude, longitude);
@@ -333,13 +387,13 @@ export async function POST(request: NextRequest) {
   const isAtOffice = locationStatus === "OFFICE";
 
   const isClockOut = action === "CLOCK_OUT";
-  const latenessMins = isClockOut ? 0 : computeLatenessMinutes(signTime);
-  const { end: endTime, label: endTimeLabel } = expectedEndTime(signTime);
+  const latenessMins = isClockOut ? 0 : computeLatenessMinutes(signTime, attendanceTimeZone);
+  const { currentMinutes, endMinutes, label: endTimeLabel } = expectedEndTime(signTime, attendanceTimeZone);
   const overtimeMins = isClockOut
-    ? Math.max(0, Math.round((signTime.getTime() - endTime.getTime()) / 60000))
+    ? Math.max(0, currentMinutes - endMinutes)
     : 0;
   const earlyDepartureMins = isClockOut
-    ? Math.max(0, Math.round((endTime.getTime() - signTime.getTime()) / 60000))
+    ? Math.max(0, endMinutes - currentMinutes)
     : 0;
 
   const todayRecord = await prisma.attendance.findUnique({
@@ -447,6 +501,7 @@ export async function POST(request: NextRequest) {
       targetUserId,
       targetUserName: targetUser.name ?? null,
       signedForSelf: !signedByAnotherUser,
+      timeZone: attendanceTimeZone,
     },
   });
 }
