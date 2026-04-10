@@ -6,86 +6,76 @@ import path from "node:path";
 import { prisma } from "@/lib/prisma";
 import { requireApiRoles } from "@/lib/rbac";
 import { parseNeedQuote } from "@/lib/need-lines";
-
-type RouteContext = {
-  params: Promise<{ id: string }>;
-};
-
-const PAGE_WIDTH = 595;
-const PAGE_HEIGHT = 842;
-const CONTENT_LEFT = 38;
-const CONTENT_RIGHT = 557;
-const FOOTER_Y = 14;
-const FOOTER_BLOCK_TOP = 122;
-
-async function readFirstExistingFile(candidates: string[]) {
-  for (const candidate of candidates) {
-    try {
-      return await readFile(path.join(process.cwd(), candidate));
-    } catch {
-      continue;
+  if (quote?.items?.length) {
+    const xCols = [CONTENT_LEFT, 68, 185, 365, 418, 484];
+    const colWidths = {
+      designation: 112,
+      description: 168,
+    };
+    for (const [index, item] of quote.items.entries()) {
+      const designationLines = wrapTextByWidth(item.designation, colWidths.designation, boldFont, 9.2);
+      const descriptionLines = wrapTextByWidth(item.description || "-", colWidths.description, regularFont, 9.2);
+      const rowLineCount = Math.max(designationLines.length, descriptionLines.length, 1);
+      const rowHeight = Math.max(34, rowLineCount * 13 + 16);
+      if (detailY - rowHeight < FOOTER_BLOCK_TOP + 8) {
+        page = createPage(true);
+        detailY = 760;
+        drawTableHeader(page, detailY);
+        detailY -= 20;
+      }
+      const rowTopY = detailY;
+      const rowTextY = rowTopY - 15;
+      page.drawText(String(index + 1), { x: xCols[0], y: rowTextY, size: 9.4, font: boldFont, color: black });
+      page.drawText(String(item.quantity), { x: xCols[3], y: rowTextY, size: 9.4, font: boldFont, color: black });
+      page.drawText(item.unitPrice.toFixed(2), { x: xCols[4], y: rowTextY, size: 9.4, font: boldFont, color: black });
+      page.drawText(item.lineTotal.toFixed(2), { x: xCols[5], y: rowTextY, size: 9.4, font: boldFont, color: black });
+      for (let lineIndex = 0; lineIndex < rowLineCount; lineIndex += 1) {
+        const d1 = designationLines[lineIndex] ?? "";
+        const d2 = descriptionLines[lineIndex] ?? "";
+        const lineY = rowTextY - (lineIndex * 13);
+        if (d1) {
+          page.drawText(d1, { x: xCols[1], y: lineY, size: 9.2, font: boldFont, color: black });
+        }
+        if (d2) {
+          page.drawText(d2, { x: xCols[2], y: lineY, size: 9.2, font: regularFont, color: black });
+        }
+      }
+      const rowBottomY = rowTopY - rowHeight;
+      page.drawLine({
+        start: { x: CONTENT_LEFT, y: rowBottomY },
+        end: { x: CONTENT_RIGHT, y: rowBottomY },
+        thickness: 0.3,
+        color: rgb(0.87, 0.87, 0.87),
+      });
+      detailY = rowBottomY;
     }
+    if (detailY < FOOTER_BLOCK_TOP + 52) {
+      page = createPage(true);
+      detailY = 760;
+    }
+    page.drawLine({
+      start: { x: CONTENT_LEFT, y: detailY - 10 },
+      end: { x: CONTENT_RIGHT, y: detailY - 10 },
+      thickness: 0.7,
+      color: grid,
+    });
+    page.drawText(`Total général: ${quote.totalGeneral.toFixed(2)} ${need.currency ?? "XAF"}`, {
+      x: 330,
+      y: detailY - 22,
+      size: 10.8,
+      font: boldFont,
+      color: black,
+    });
+  } else {
+    page.drawText("Aucun article structuré ou données non reconnues.", {
+      x: CONTENT_LEFT,
+      y: detailY - 10,
+      size: 9.5,
+      font: boldFont,
+      color: rgb(0.7, 0.2, 0.2),
+      maxWidth: CONTENT_RIGHT - CONTENT_LEFT,
+    });
   }
-  return null;
-}
-
-async function embedOptionalImage(pdf: PDFDocument, candidates: string[]) {
-  const bytes = await readFirstExistingFile(candidates);
-  if (!bytes) return null;
-
-  const lower = candidates[0]?.toLowerCase() ?? "";
-  if (lower.endsWith(".jpg") || lower.endsWith(".jpeg")) return pdf.embedJpg(bytes);
-  return pdf.embedPng(bytes);
-}
-
-function getContainedSize(image: PDFImage, maxWidth: number, maxHeight: number, allowUpscale = false) {
-  const base = image.scale(1);
-  let ratio = Math.min(maxWidth / base.width, maxHeight / base.height);
-  if (!allowUpscale) {
-    ratio = Math.min(ratio, 1);
-  }
-
-  return {
-    width: base.width * ratio,
-    height: base.height * ratio,
-  };
-}
-
-function formatDate(value: Date | null | undefined) {
-  if (!value) return "-";
-  return new Intl.DateTimeFormat("fr-FR", {
-    dateStyle: "medium",
-    timeStyle: "short",
-  }).format(value);
-}
-
-function wrapTextByWidth(text: string, maxWidth: number, font: import("pdf-lib").PDFFont, fontSize: number) {
-  const normalized = (text || "-").trim() || "-";
-  const words = normalized.split(/\s+/);
-  const lines: string[] = [];
-  let current = "";
-
-  for (const word of words) {
-    const candidate = current ? `${current} ${word}` : word;
-    const candidateWidth = font.widthOfTextAtSize(candidate, fontSize);
-    if (candidateWidth <= maxWidth) {
-      current = candidate;
-      continue;
-    }
-
-    if (current) {
-      lines.push(current);
-      current = word;
-      continue;
-    }
-
-    let part = "";
-    for (const char of word) {
-      const nextPart = `${part}${char}`;
-      if (font.widthOfTextAtSize(nextPart, fontSize) <= maxWidth) {
-        part = nextPart;
-      } else {
-        if (part) lines.push(part);
         part = char;
       }
     }
