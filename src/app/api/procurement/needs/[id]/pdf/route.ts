@@ -47,8 +47,7 @@ import { parseNeedQuote } from "@/lib/need-lines";
         thickness: 0.3,
         color: rgb(0.87, 0.87, 0.87),
       });
-        detailY -= 36;
-  ]);
+          detailY -= 36;
 
   if (!montserratRegular) {
     return NextResponse.json({ error: "Police Montserrat Regular introuvable sur le serveur." }, { status: 500 });
