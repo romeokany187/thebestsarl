@@ -223,10 +223,10 @@ export async function AppShell({
                     {session.user.name}
                     {/* Badge verified si rôle et équipe */}
                     {session.user.role && session.user.teamName ? (
-                      <svg aria-label="Compte vérifié" viewBox="0 0 20 20" fill="currentColor" className="text-blue-500 w-4 h-4" style={{display:'inline'}}>
+                      <svg aria-label="Compte vérifié" viewBox="0 0 24 24" width="18" height="18" className="inline-block align-middle" style={{marginLeft:2}}>
                         <title>Compte vérifié</title>
-                        <circle cx="10" cy="10" r="10" fill="#3b82f6" />
-                        <path d="M7.5 10.5l2 2 3-3" stroke="#fff" strokeWidth="1.5" fill="none" strokeLinecap="round" strokeLinejoin="round" />
+                        <circle cx="12" cy="12" r="11" fill="#1D9BF0" stroke="#fff" strokeWidth="2" />
+                        <path d="M12 7.5l1.45 3.09 3.42.3-2.62 2.28.78 3.33L12 14.13l-2.98 2.37.78-3.33-2.62-2.28 3.42-.3z" fill="#fff"/>
                       </svg>
                     ) : null}
                   </span>
