@@ -39,7 +39,15 @@ function extractErrorMessage(errorPayload: unknown) {
   return "Signature échouée. Vérifiez vos permissions.";
 }
 
-export function AttendanceForm({ role }: { role: AppRole }) {
+export function AttendanceForm({
+  role,
+  targetUserId,
+  targetUserLabel,
+}: {
+  role: AppRole;
+  targetUserId?: string;
+  targetUserLabel?: string;
+}) {
   const [status, setStatus] = useState<string>("");
   const [isSigning, setIsSigning] = useState(false);
   const [hasClockIn, setHasClockIn] = useState(false);
@@ -48,6 +56,11 @@ export function AttendanceForm({ role }: { role: AppRole }) {
   const [clockOut, setClockOut] = useState<string | null>(null);
   const [latenessMins, setLatenessMins] = useState<number>(0);
   const [overtimeMins, setOvertimeMins] = useState<number>(0);
+  const canManageTeamAttendance = role === "ADMIN" || role === "DIRECTEUR_GENERAL";
+  const resolvedTargetLabel = targetUserLabel?.trim() || "l'employé sélectionné";
+  const signStatusUrl = targetUserId
+    ? `/api/attendance/sign?${new URLSearchParams({ userId: targetUserId }).toString()}`
+    : "/api/attendance/sign";
 
   function applyTodayStatus(data?: {
     hasClockIn?: boolean;
@@ -67,9 +80,11 @@ export function AttendanceForm({ role }: { role: AppRole }) {
 
   useEffect(() => {
     let isMounted = true;
+    applyTodayStatus();
+    setStatus("");
 
     async function loadTodayStatus() {
-      const response = await fetch("/api/attendance/sign", { cache: "no-store" });
+      const response = await fetch(signStatusUrl, { cache: "no-store" });
       if (!response.ok || !isMounted) {
         return;
       }
@@ -82,12 +97,12 @@ export function AttendanceForm({ role }: { role: AppRole }) {
       applyTodayStatus(result?.data);
     }
 
-    loadTodayStatus();
+    void loadTodayStatus();
 
     return () => {
       isMounted = false;
     };
-  }, []);
+  }, [signStatusUrl]);
 
   async function sign(action: "CLOCK_IN" | "CLOCK_OUT") {
     if (!navigator.geolocation) {
@@ -96,7 +111,11 @@ export function AttendanceForm({ role }: { role: AppRole }) {
     }
 
     setIsSigning(true);
-    setStatus(action === "CLOCK_IN" ? "Signature d'entrée en cours..." : "Signature de sortie en cours...");
+    setStatus(
+      action === "CLOCK_IN"
+        ? `Signature d'entrée${targetUserId ? ` pour ${resolvedTargetLabel}` : ""} en cours...`
+        : `Signature de sortie${targetUserId ? ` pour ${resolvedTargetLabel}` : ""} en cours...`,
+    );
 
     navigator.geolocation.getCurrentPosition(
       async (position) => {
@@ -105,6 +124,7 @@ export function AttendanceForm({ role }: { role: AppRole }) {
           longitude: position.coords.longitude,
           accuracyM: Number.isFinite(position.coords.accuracy) ? position.coords.accuracy : undefined,
           action,
+          ...(targetUserId ? { userId: targetUserId } : {}),
         };
 
         const response = await fetch("/api/attendance/sign", {
@@ -128,9 +148,9 @@ export function AttendanceForm({ role }: { role: AppRole }) {
         const officeText = result.metadata.isAtOffice ? "Au bureau" : "Hors bureau";
         const addressText = result.metadata.resolvedAddress ? ` • Adresse approximative: ${result.metadata.resolvedAddress}` : "";
         setStatus(
-          `${action === "CLOCK_IN" ? "Entrée" : "Sortie"} signée à ${signedAt} (${officeText} • ${locationLabel}${addressText}).`,
+          `${action === "CLOCK_IN" ? "Entrée" : "Sortie"}${targetUserId ? ` pour ${resolvedTargetLabel}` : ""} signée à ${signedAt} (${officeText} • ${locationLabel}${addressText}).`,
         );
-        const refreshResponse = await fetch("/api/attendance/sign", { cache: "no-store" });
+        const refreshResponse = await fetch(signStatusUrl, { cache: "no-store" });
         if (refreshResponse.ok) {
           const refreshPayload = await refreshResponse.json();
           applyTodayStatus(refreshPayload?.data);
@@ -173,7 +193,13 @@ export function AttendanceForm({ role }: { role: AppRole }) {
       {hasClockOut ? (
         <p className="text-xs text-black/60 dark:text-white/60">La sortie du jour est déjà signée.</p>
       ) : null}
-      {role !== "EMPLOYEE" ? (
+      {canManageTeamAttendance ? (
+        <p className="text-xs text-black/60 dark:text-white/60">
+          {targetUserId
+            ? `Mode admin/direction: la signature sera enregistrée pour ${resolvedTargetLabel}.`
+            : "Mode admin/direction: sans employé filtré, la signature s'applique à votre propre session."}
+        </p>
+      ) : role !== "EMPLOYEE" ? (
         <p className="text-xs text-black/60 dark:text-white/60">
           Signature sur votre propre session ({role}).
         </p>

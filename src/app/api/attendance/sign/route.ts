@@ -190,11 +190,25 @@ async function resolveAddressFromCoords(latitude: number, longitude: number) {
   }
 }
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   const access = await requireApiModuleAccess("attendance", ["ADMIN", "DIRECTEUR_GENERAL", "MANAGER", "EMPLOYEE", "ACCOUNTANT"]);
   if (access.error) {
     return access.error;
   }
+
+  const requestedUserId = request.nextUrl.searchParams.get("userId")?.trim();
+  const canManageTeamAttendance = access.role === "ADMIN" || access.role === "DIRECTEUR_GENERAL";
+
+  if (requestedUserId && requestedUserId !== access.session.user.id && !canManageTeamAttendance) {
+    return NextResponse.json(
+      { error: "Seuls l'administrateur et la direction peuvent consulter la signature d'un autre employé." },
+      { status: 403 },
+    );
+  }
+
+  const targetUserId = requestedUserId && canManageTeamAttendance
+    ? requestedUserId
+    : access.session.user.id;
 
   const now = new Date();
   const day = new Date(now.toDateString());
@@ -202,7 +216,7 @@ export async function GET() {
   const todayRecord = await prisma.attendance.findUnique({
     where: {
       userId_date: {
-        userId: access.session.user.id,
+        userId: targetUserId,
         date: day,
       },
     },
@@ -251,11 +265,34 @@ export async function POST(request: NextRequest) {
   const signTime = new Date();
   const day = new Date(signTime.toDateString());
   const { latitude, longitude, accuracyM, action } = parsed.data;
-  const userTeam = await prisma.user.findUnique({
-    where: { id: access.session.user.id },
-    select: { team: { select: { name: true } } },
+  const requestedUserId = parsed.data.userId?.trim();
+  const canManageTeamAttendance = access.role === "ADMIN" || access.role === "DIRECTEUR_GENERAL";
+
+  if (requestedUserId && requestedUserId !== access.session.user.id && !canManageTeamAttendance) {
+    return NextResponse.json(
+      { error: "Seuls l'administrateur et la direction peuvent signer pour un autre employé." },
+      { status: 403 },
+    );
+  }
+
+  const targetUserId = requestedUserId && canManageTeamAttendance
+    ? requestedUserId
+    : access.session.user.id;
+
+  const targetUser = await prisma.user.findUnique({
+    where: { id: targetUserId },
+    select: {
+      id: true,
+      name: true,
+      team: { select: { name: true } },
+    },
   });
-  const teamGeofence = resolveTeamGeofence(userTeam?.team?.name);
+
+  if (!targetUser) {
+    return NextResponse.json({ error: "Employé introuvable." }, { status: 404 });
+  }
+
+  const teamGeofence = resolveTeamGeofence(targetUser.team?.name);
   const referenceSite = teamGeofence
     ? {
       latitude: teamGeofence.latitude,
@@ -308,7 +345,7 @@ export async function POST(request: NextRequest) {
   const todayRecord = await prisma.attendance.findUnique({
     where: {
       userId_date: {
-        userId: access.session.user.id,
+        userId: targetUserId,
         date: day,
       },
     },
@@ -345,15 +382,20 @@ export async function POST(request: NextRequest) {
         ? `Sortie anticipée: ${earlyDepartureMins} min avant ${endTimeLabel}.`
         : `Sortie à l'heure (${endTimeLabel}).`
     : null;
+  const signedByAnotherUser = targetUserId !== access.session.user.id;
+  const actorLabel = access.session.user.name?.trim() || access.session.user.email || "Administration";
+  const signedByNote = signedByAnotherUser
+    ? ` Signée par ${actorLabel} pour ${targetUser.name?.trim() || "cet employé"}.`
+    : "";
 
   const signNote = isClockOut
-    ? `${isAtOffice ? "Sortie signée au bureau." : "Sortie signée hors bureau."} ${timingNote}${resolvedAddress ? ` Adresse approximative: ${resolvedAddress}.` : ""}`
-    : `${isAtOffice ? "Entrée signée au bureau." : "Entrée signée hors bureau."}${resolvedAddress ? ` Adresse approximative: ${resolvedAddress}.` : ""}`;
+    ? `${isAtOffice ? "Sortie signée au bureau." : "Sortie signée hors bureau."} ${timingNote}${resolvedAddress ? ` Adresse approximative: ${resolvedAddress}.` : ""}${signedByNote}`
+    : `${isAtOffice ? "Entrée signée au bureau." : "Entrée signée hors bureau."}${resolvedAddress ? ` Adresse approximative: ${resolvedAddress}.` : ""}${signedByNote}`;
 
   const record = await prisma.attendance.upsert({
     where: {
       userId_date: {
-        userId: access.session.user.id,
+        userId: targetUserId,
         date: day,
       },
     },
@@ -371,7 +413,7 @@ export async function POST(request: NextRequest) {
       notes: signNote,
     },
     create: {
-      userId: access.session.user.id,
+      userId: targetUserId,
       date: day,
       ...(isClockOut ? { clockOut: signTime } : { clockIn: signTime, signedAt: signTime }),
       status: "PRESENT",
@@ -402,6 +444,9 @@ export async function POST(request: NextRequest) {
       matchedSiteName: matchedSite?.name ?? null,
       matchDistanceM: distanceToReference,
       resolvedAddress,
+      targetUserId,
+      targetUserName: targetUser.name ?? null,
+      signedForSelf: !signedByAnotherUser,
     },
   });
 }

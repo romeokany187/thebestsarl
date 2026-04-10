@@ -298,14 +298,9 @@ export async function DELETE(request: NextRequest) {
 
   await prisma.$transaction(async (tx) => {
     await tx.userNotification.deleteMany({
-      where: {
-        OR: [
-          { metadata: { path: "$.paymentOrderId", equals: existingOrder.id } },
-          ...(existingOrder.code
-            ? [{ message: { contains: existingOrder.code } }]
-            : []),
-        ],
-      },
+      where: existingOrder.code
+        ? { message: { contains: existingOrder.code } }
+        : { message: { contains: existingOrder.id } },
     });
 
     await (tx as unknown as { paymentOrder: any }).paymentOrder.delete({ where: { id: existingOrder.id } });

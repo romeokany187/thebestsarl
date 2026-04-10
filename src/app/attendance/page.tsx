@@ -56,6 +56,9 @@ export default async function AttendancePage({
       orderBy: { name: "asc" },
       take: 300,
     });
+  const selectedUserName = selectedUserId
+    ? users.find((user) => user.id === selectedUserId)?.name
+    : undefined;
 
   const reportQuery = new URLSearchParams({
     startDate: range.startRaw,
@@ -105,7 +108,7 @@ export default async function AttendancePage({
               className="w-full rounded-md border border-black/15 bg-white px-3 py-2 text-sm dark:border-white/15 dark:bg-zinc-900"
             />
           </div>
-          {role === "ADMIN" ? (
+          {canViewGlobalAttendance ? (
             <div>
               <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-black/60 dark:text-white/60">Employé</label>
               <select
@@ -148,7 +151,12 @@ export default async function AttendancePage({
       </section>
 
       <div className="grid gap-6 lg:grid-cols-[380px,1fr]">
-        <AttendanceForm role={role} />
+        <AttendanceForm
+          key={canViewGlobalAttendance ? selectedUserId ?? session.user.id : session.user.id}
+          role={role}
+          targetUserId={canViewGlobalAttendance ? selectedUserId : undefined}
+          targetUserLabel={selectedUserName}
+        />
 
         <AttendanceRecordsTable
           initialRecords={records}
