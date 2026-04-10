@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { PDFDocument, rgb } from "pdf-lib";
 
 // Route PDF EDB minimaliste, compatible Next.js
-export async function GET(request, { params }) {
+export async function GET(request: NextRequest, { params }: { params: { id: string } }) {
   try {
     // Génère un PDF simple
     const pdf = await PDFDocument.create();
