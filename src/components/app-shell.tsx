@@ -215,20 +215,21 @@ export async function AppShell({
                 <p className="text-sm font-semibold tracking-tight">THEBEST SARL</p>
                 <p className="text-xs text-black/60 dark:text-white/60">Gestion de projet et opérations</p>
               </Link>
-              {roleLabel ? (
-                <span className="rounded-full border border-black/15 px-3 py-1 text-xs font-semibold dark:border-white/20">
-                  {roleLabel}
-                </span>
-              ) : null}
-              <InboxRealtimeLink
-                initialUnreadCount={unreadNotifications}
-                initialLatestNotificationId={latestNotification?.id ?? null}
-              />
+              {/* Badge rôle et notifications supprimés de la navbar */}
               <ThemeToggle />
-              {session?.user?.email ? (
-                <div className="rounded-xl border border-black/10 bg-white px-3 py-1.5 text-right dark:border-white/10 dark:bg-zinc-900">
-                  <p className="text-xs font-semibold leading-tight">{session.user.name ?? "Utilisateur"}</p>
-                  <p className="text-[11px] leading-tight text-black/60 dark:text-white/60">{session.user.email}</p>
+              {session?.user?.name ? (
+                <div className="rounded-xl border border-black/10 bg-white px-3 py-1.5 text-right flex items-center gap-2 dark:border-white/10 dark:bg-zinc-900">
+                  <span className="text-xs font-semibold leading-tight flex items-center gap-1">
+                    {session.user.name}
+                    {/* Badge verified si rôle et équipe */}
+                    {session.user.role && session.user.teamName ? (
+                      <svg aria-label="Compte vérifié" viewBox="0 0 20 20" fill="currentColor" className="text-blue-500 w-4 h-4" style={{display:'inline'}}>
+                        <title>Compte vérifié</title>
+                        <circle cx="10" cy="10" r="10" fill="#3b82f6" />
+                        <path d="M7.5 10.5l2 2 3-3" stroke="#fff" strokeWidth="1.5" fill="none" strokeLinecap="round" strokeLinejoin="round" />
+                      </svg>
+                    ) : null}
+                  </span>
                 </div>
               ) : null}
               {session?.user?.email ? <LogoutButton /> : null}
