@@ -31,33 +31,6 @@ export async function GET(request, { params }) {
     return NextResponse.json({ error: "Erreur génération PDF", details: String(e) }, { status: 500 });
   }
 }
-
-    page.drawText("THE BEST SARL", {
-      x: 220,
-      y: 785,
-      size: 16,
-      font: boldFont,
-      color: black,
-    });
-
-    page.drawText(`ÉTAT DE BESOIN - APPROVISIONNEMENT${continuation ? " (suite)" : ""}`, {
-      x: 220,
-      y: 765,
-      size: 10.8,
-      font: regularFont,
-      color: black,
-    });
-
-    page.drawLine({
-      start: { x: 38, y: 742 },
-      end: { x: CONTENT_RIGHT, y: 742 },
-      thickness: 1,
-      color: rgb(0.84, 0.87, 0.95),
-    });
-  };
-
-  const drawFooter = (page: import("pdf-lib").PDFPage, pageNumber: number, totalPages: number) => {
-    page.drawLine({
       start: { x: CONTENT_LEFT, y: 22 },
       end: { x: CONTENT_RIGHT, y: 22 },
       thickness: 0.6,
