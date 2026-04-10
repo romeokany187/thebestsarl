@@ -47,76 +47,7 @@ import { parseNeedQuote } from "@/lib/need-lines";
         thickness: 0.3,
         color: rgb(0.87, 0.87, 0.87),
       });
-      detailY = rowBottomY;
-    }
-    if (detailY < FOOTER_BLOCK_TOP + 52) {
-      page = createPage(true);
-      detailY = 760;
-    }
-    page.drawLine({
-      start: { x: CONTENT_LEFT, y: detailY - 10 },
-      end: { x: CONTENT_RIGHT, y: detailY - 10 },
-      thickness: 0.7,
-      color: grid,
-    });
-    page.drawText(`Total général: ${quote.totalGeneral.toFixed(2)} ${need.currency ?? "XAF"}`, {
-      x: 330,
-      y: detailY - 22,
-      size: 10.8,
-      font: boldFont,
-      color: black,
-    });
-  } else {
-
-    page.drawText("Aucun article structuré ou données non reconnues.", {
-      x: CONTENT_LEFT,
-      y: detailY - 10,
-      size: 9.5,
-      font: boldFont,
-      color: rgb(0.7, 0.2, 0.2),
-      maxWidth: CONTENT_RIGHT - CONTENT_LEFT,
-    });
-  }
-
-export async function GET(request: NextRequest, context: RouteContext) {
-  const access = await requireApiRoles(["ADMIN", "MANAGER", "EMPLOYEE", "ACCOUNTANT"]);
-  if (access.error) {
-    if (access.error.status === 401) {
-      const signInUrl = new URL("/auth/signin", request.url);
-      signInUrl.searchParams.set("callbackUrl", `${request.nextUrl.pathname}${request.nextUrl.search}`);
-      return NextResponse.redirect(signInUrl);
-    }
-    return access.error;
-  }
-
-  const { id } = await context.params;
-  const shouldDownload = request.nextUrl.searchParams.get("download") === "1";
-
-  const need = await prisma.needRequest.findUnique({
-    where: { id },
-    include: {
-      requester: { select: { id: true, name: true, jobTitle: true, email: true } },
-      reviewedBy: { select: { id: true, name: true, role: true } },
-      stockMovements: {
-        where: { movementType: "OUT" },
-        select: { id: true, createdAt: true },
-        orderBy: { createdAt: "desc" },
-        take: 1,
-      },
-    },
-  });
-
-  if (!need) {
-    return NextResponse.json({ error: "État de besoin introuvable." }, { status: 404 });
-  }
-
-  const pdf = await PDFDocument.create();
-  pdf.registerFontkit(fontkit);
-  const pages = [] as Array<import("pdf-lib").PDFPage>;
-
-  const montserratRegular = await readFirstExistingFile([
-    "public/fonts/Montserrat-Regular.ttf",
-    "public/branding/fonts/Montserrat-Regular.ttf",
+        detailY -= 36;
   ]);
 
   if (!montserratRegular) {
