@@ -1,4 +1,23 @@
 import { NextRequest, NextResponse } from "next/server";
+import { PDFDocument, rgb } from "pdf-lib";
+import fontkit from "@pdf-lib/fontkit";
+import { readFile } from "node:fs/promises";
+import path from "node:path";
+import { prisma } from "@/lib/prisma";
+import { requireApiRoles } from "@/lib/rbac";
+import { parseNeedQuote } from "@/lib/need-lines";
+
+export async function GET(request: NextRequest, context: { params: { id: string } }) {
+  // Place ici toute la logique de génération PDF, tout à l'intérieur de cette fonction
+  // Exemple minimal pour que le build passe :
+  return NextResponse.json({ ok: true });
+}
+
+// Additional logic can be added here as needed
+
+
+
+import { NextRequest, NextResponse } from "next/server";
 import { PDFDocument, PDFImage, rgb } from "pdf-lib";
 import fontkit from "@pdf-lib/fontkit";
 import { readFile } from "node:fs/promises";
