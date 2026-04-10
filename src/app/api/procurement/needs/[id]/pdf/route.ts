@@ -67,6 +67,7 @@ import { parseNeedQuote } from "@/lib/need-lines";
       color: black,
     });
   } else {
+
     page.drawText("Aucun article structuré ou données non reconnues.", {
       x: CONTENT_LEFT,
       y: detailY - 10,
@@ -76,15 +77,6 @@ import { parseNeedQuote } from "@/lib/need-lines";
       maxWidth: CONTENT_RIGHT - CONTENT_LEFT,
     });
   }
-        part = char;
-      }
-    }
-    current = part;
-  }
-
-  if (current) lines.push(current);
-  return lines.length > 0 ? lines : ["-"];
-}
 
 export async function GET(request: NextRequest, context: RouteContext) {
   const access = await requireApiRoles(["ADMIN", "MANAGER", "EMPLOYEE", "ACCOUNTANT"]);
