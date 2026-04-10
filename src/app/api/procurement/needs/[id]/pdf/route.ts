@@ -1,3 +1,4 @@
+
 import { NextRequest, NextResponse } from "next/server";
 import { PDFDocument, PDFImage, rgb } from "pdf-lib";
 import fontkit from "@pdf-lib/fontkit";
@@ -6,92 +7,6 @@ import path from "node:path";
 import { prisma } from "@/lib/prisma";
 import { requireApiRoles } from "@/lib/rbac";
 import { parseNeedQuote } from "@/lib/need-lines";
-  if (quote?.items?.length) {
-    const xCols = [CONTENT_LEFT, 68, 185, 365, 418, 484];
-    const colWidths = {
-      designation: 112,
-      description: 168,
-    };
-    for (const [index, item] of quote.items.entries()) {
-      const designationLines = wrapTextByWidth(item.designation, colWidths.designation, boldFont, 9.2);
-      const descriptionLines = wrapTextByWidth(item.description || "-", colWidths.description, regularFont, 9.2);
-      const rowLineCount = Math.max(designationLines.length, descriptionLines.length, 1);
-      const rowHeight = Math.max(34, rowLineCount * 13 + 16);
-      if (detailY - rowHeight < FOOTER_BLOCK_TOP + 8) {
-        page = createPage(true);
-        detailY = 760;
-        drawTableHeader(page, detailY);
-        detailY -= 20;
-      }
-      const rowTopY = detailY;
-      const rowTextY = rowTopY - 15;
-      page.drawText(String(index + 1), { x: xCols[0], y: rowTextY, size: 9.4, font: boldFont, color: black });
-      page.drawText(String(item.quantity), { x: xCols[3], y: rowTextY, size: 9.4, font: boldFont, color: black });
-      page.drawText(item.unitPrice.toFixed(2), { x: xCols[4], y: rowTextY, size: 9.4, font: boldFont, color: black });
-      page.drawText(item.lineTotal.toFixed(2), { x: xCols[5], y: rowTextY, size: 9.4, font: boldFont, color: black });
-      for (let lineIndex = 0; lineIndex < rowLineCount; lineIndex += 1) {
-        const d1 = designationLines[lineIndex] ?? "";
-        const d2 = descriptionLines[lineIndex] ?? "";
-        const lineY = rowTextY - (lineIndex * 13);
-        if (d1) {
-          page.drawText(d1, { x: xCols[1], y: lineY, size: 9.2, font: boldFont, color: black });
-        }
-        if (d2) {
-          page.drawText(d2, { x: xCols[2], y: lineY, size: 9.2, font: regularFont, color: black });
-        }
-      }
-      const rowBottomY = rowTopY - rowHeight;
-      page.drawLine({
-        start: { x: CONTENT_LEFT, y: rowBottomY },
-        end: { x: CONTENT_RIGHT, y: rowBottomY },
-        thickness: 0.3,
-        color: rgb(0.87, 0.87, 0.87),
-      });
-          detailY -= 36;
-
-  if (!montserratRegular) {
-    return NextResponse.json({ error: "Police Montserrat Regular introuvable sur le serveur." }, { status: 500 });
-  }
-
-  const regularFont = await pdf.embedFont(montserratRegular);
-  const boldFont = regularFont;
-
-  const logo = await embedOptionalImage(pdf, [
-    "public/logo thebest.png",
-    "public/branding/logo thebest.png",
-    "public/logo.png",
-    "public/branding/logo.png",
-  ]);
-
-  const stamp = await embedOptionalImage(pdf, [
-    "public/cachet.png",
-    "public/branding/cachet.png",
-  ]);
-
-  const black = rgb(0, 0, 0);
-  const quote = parseNeedQuote(need.details);
-  const grid = rgb(0.82, 0.82, 0.82);
-  const executionMovement = need.stockMovements[0] ?? null;
-  const hasExecutionMarker = (need.reviewComment ?? "").includes("EXECUTION_CAISSE:");
-  const urgencyLabel = quote?.urgencyLevel === "CRITIQUE"
-    ? "Critique"
-    : quote?.urgencyLevel === "ELEVEE"
-      ? "Élevée"
-      : quote?.urgencyLevel === "NORMALE"
-        ? "Normale"
-        : quote?.urgencyLevel === "FAIBLE"
-          ? "Faible"
-          : "-";
-  const beneficiaryLabel = quote?.beneficiaryTeam === "KINSHASA"
-    ? "Kinshasa"
-    : quote?.beneficiaryTeam === "LUBUMBASHI"
-      ? "Lubumbashi"
-      : quote?.beneficiaryTeam === "MBUJIMAYI"
-        ? "Mbujimayi"
-        : "-";
-  const statusLabel = need.status === "APPROVED" && (executionMovement || hasExecutionMarker)
-    ? "APPROUVÉ ET EXÉCUTÉ"
-    : need.status;
 
   const drawHeader = (page: import("pdf-lib").PDFPage, continuation = false) => {
     if (logo) {
