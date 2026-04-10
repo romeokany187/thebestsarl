@@ -223,11 +223,19 @@ export async function AppShell({
                     {session.user.name}
                     {/* Badge verified si rôle et équipe */}
                     {session.user.role && session.user.teamName ? (
-                      <svg aria-label="Compte vérifié" viewBox="0 0 24 24" width="18" height="18" className="inline-block align-middle" style={{marginLeft:2}}>
-                        <title>Compte vérifié</title>
-                        <circle cx="12" cy="12" r="11" fill="#1D9BF0" stroke="#fff" strokeWidth="2" />
-                        <path d="M12 7.5l1.45 3.09 3.42.3-2.62 2.28.78 3.33L12 14.13l-2.98 2.37.78-3.33-2.62-2.28 3.42-.3z" fill="#fff"/>
-                      </svg>
+                      session.user.role === "ADMIN" || session.user.role === "DIRECTEUR_GENERAL" ? (
+                        <svg aria-label="Compte vérifié admin" viewBox="0 0 24 24" width="18" height="18" className="inline-block align-middle" style={{marginLeft:2}}>
+                          <title>Compte vérifié admin</title>
+                          <circle cx="12" cy="12" r="11" fill="#FFD700" stroke="#fff" strokeWidth="2" />
+                          <path d="M12 7.5l1.45 3.09 3.42.3-2.62 2.28.78 3.33L12 14.13l-2.98 2.37.78-3.33-2.62-2.28 3.42-.3z" fill="#fff"/>
+                        </svg>
+                      ) : (
+                        <svg aria-label="Compte vérifié employé" viewBox="0 0 24 24" width="18" height="18" className="inline-block align-middle" style={{marginLeft:2}}>
+                          <title>Compte vérifié employé</title>
+                          <circle cx="12" cy="12" r="11" fill="#1D9BF0" stroke="#fff" strokeWidth="2" />
+                          <path d="M12 7.5l1.45 3.09 3.42.3-2.62 2.28.78 3.33L12 14.13l-2.98 2.37.78-3.33-2.62-2.28 3.42-.3z" fill="#fff"/>
+                        </svg>
+                      )
                     ) : null}
                   </span>
                 </div>
