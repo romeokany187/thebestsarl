@@ -7,10 +7,44 @@ import { prisma } from "@/lib/prisma";
 import { requireApiRoles } from "@/lib/rbac";
 import { parseNeedQuote } from "@/lib/need-lines";
 
+// Fonction utilitaire exemple (tu peux en ajouter d'autres ici)
+async function readFirstExistingFile(candidates: string[]) {
+  for (const candidate of candidates) {
+    try {
+      return await readFile(path.join(process.cwd(), candidate));
+    } catch {
+      continue;
+    }
+  }
+  return null;
+}
+
 export async function GET(request: NextRequest, context: { params: { id: string } }) {
-  // Place ici toute la logique de génération PDF, tout à l'intérieur de cette fonction
-  // Exemple minimal pour que le build passe :
-  return NextResponse.json({ ok: true });
+  // Sécurité d'accès API
+  const access = await requireApiRoles(["ADMIN", "MANAGER", "EMPLOYEE", "ACCOUNTANT"]);
+  if (access.error) {
+    if (access.error.status === 401) {
+      const signInUrl = new URL("/auth/signin", request.url);
+      signInUrl.searchParams.set("callbackUrl", `${request.nextUrl.pathname}${request.nextUrl.search}`);
+      return NextResponse.redirect(signInUrl);
+    }
+    return access.error;
+  }
+
+  // Génération PDF minimal (aucune erreur possible)
+  const pdf = await PDFDocument.create();
+  pdf.registerFontkit(fontkit);
+  pdf.addPage([595, 842]); // Ajoute une page vide A4
+  const bytes = await pdf.save();
+  const body = Buffer.from(bytes);
+  return new NextResponse(body, {
+    status: 200,
+    headers: {
+      "Content-Type": "application/pdf",
+      "Content-Disposition": `inline; filename=etat-besoin.pdf`,
+      "Cache-Control": "no-store",
+    },
+  });
 }
 
 // Additional logic can be added here as needed
