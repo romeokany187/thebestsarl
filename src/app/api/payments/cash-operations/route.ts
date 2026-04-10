@@ -39,7 +39,7 @@ function canWriteCashOperations(role: string, jobTitle: string | null | undefine
 }
 
 function canManageCashOperations(role: string, jobTitle: string | null | undefined) {
-  return role === "ADMIN" || role === "ACCOUNTANT" || jobTitle === "COMPTABLE";
+  return role === "ADMIN";
 }
 
 export async function POST(request: NextRequest) {

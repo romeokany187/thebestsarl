@@ -1,3 +1,66 @@
+// Seul l'admin peut modifier ou supprimer une opération proxy banking
+export async function PATCH(request: NextRequest) {
+  const access = await requireApiModuleAccess("payments", ["ADMIN"]);
+  if (access.error) return access.error;
+
+  const body = await request.json();
+  const cashOperationId = typeof body?.cashOperationId === "string" ? body.cashOperationId.trim() : "";
+  if (!cashOperationId) {
+    return NextResponse.json({ error: "Opération proxy banking introuvable." }, { status: 400 });
+  }
+
+  const existing = await prisma.cashOperation.findUnique({ where: { id: cashOperationId } });
+  if (!existing || !(existing.description ?? "").startsWith("PROXY_BANKING:")) {
+    return NextResponse.json({ error: "Opération proxy banking introuvable." }, { status: 404 });
+  }
+
+  // Ici, appliquer la modification selon les besoins métier (exemple: montant, description, etc.)
+  // Pour la démo, on autorise juste la modification de la description
+  const newDescription = typeof body?.description === "string" ? body.description.trim() : existing.description;
+  await prisma.cashOperation.update({
+    where: { id: cashOperationId },
+    data: { description: newDescription },
+  });
+
+  await writeActivityLog({
+    actorId: access.session.user.id,
+    action: "PROXY_BANKING_UPDATED",
+    entityType: "CASH_OPERATION",
+    entityId: cashOperationId,
+    summary: `Opération proxy banking modifiée: ${newDescription}`,
+    payload: { cashOperationId, newDescription },
+  });
+
+  return NextResponse.json({ success: true });
+}
+
+export async function DELETE(request: NextRequest) {
+  const access = await requireApiModuleAccess("payments", ["ADMIN"]);
+  if (access.error) return access.error;
+
+  const cashOperationId = request.nextUrl.searchParams.get("cashOperationId")?.trim() ?? request.nextUrl.searchParams.get("id")?.trim() ?? "";
+  if (!cashOperationId) {
+    return NextResponse.json({ error: "Opération proxy banking introuvable." }, { status: 400 });
+  }
+
+  const existing = await prisma.cashOperation.findUnique({ where: { id: cashOperationId } });
+  if (!existing || !(existing.description ?? "").startsWith("PROXY_BANKING:")) {
+    return NextResponse.json({ error: "Opération proxy banking introuvable." }, { status: 404 });
+  }
+
+  await prisma.cashOperation.delete({ where: { id: cashOperationId } });
+
+  await writeActivityLog({
+    actorId: access.session.user.id,
+    action: "PROXY_BANKING_DELETED",
+    entityType: "CASH_OPERATION",
+    entityId: cashOperationId,
+    summary: `Opération proxy banking supprimée: ${existing.amount?.toFixed(2) ?? "-"} ${existing.currency ?? "-"} (${existing.description})`,
+    payload: { cashOperationId },
+  });
+
+  return NextResponse.json({ success: true });
+}
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { isCashierJobTitle } from "@/lib/assignment";
