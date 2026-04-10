@@ -1,6 +1,6 @@
 
 import { NextRequest, NextResponse } from "next/server";
-import { PDFDocument, rgb } from "pdf-lib";
+import { PDFDocument, rgb, StandardFonts } from "pdf-lib";
 import { prisma } from "@/lib/prisma";
 
 type Params = { params: Promise<{ id: string }> };
@@ -23,36 +23,75 @@ export async function GET(
       return NextResponse.json({ error: "État de besoin introuvable." }, { status: 404 });
     }
 
-    // Parse les articles demandés
-    let articles: any[] = [];
+    // Parse les articles demandés (format QUOTE_V1)
+    let articles = [];
     try {
       const details = typeof need.details === "string" ? JSON.parse(need.details) : need.details;
-      articles = Array.isArray(details?.items) ? details.items : [];
-    } catch {
-      articles = [];
-    }
+      if (details && Array.isArray(details.items)) {
+        articles = details.items;
+      }
+    } catch {}
 
     const pdf = await PDFDocument.create();
     const page = pdf.addPage([595, 842]);
+    const font = await pdf.embedFont(StandardFonts.Helvetica);
     let y = 800;
-    page.drawText(need.title || "État de besoin", { x: 50, y, size: 18, color: rgb(0, 0, 0) });
-    y -= 24;
-    page.drawText(`Demandeur: ${need.requester?.name ?? "-"} (${need.requester?.jobTitle ?? "-"})`, { x: 50, y, size: 12, color: rgb(0.2, 0.2, 0.2) });
+
+    // En-tête société
+    page.drawText("THE BEST SARL", { x: 220, y, size: 14, font, color: rgb(0,0,0) });
     y -= 18;
-    page.drawText(`Montant estimatif: ${need.estimatedAmount?.toLocaleString() ?? "-"} ${need.currency ?? ""}`, { x: 50, y, size: 12, color: rgb(0.2, 0.2, 0.2) });
+    page.drawText("ÉTAT DE BESOIN - APPROVISIONNEMENT", { x: 170, y, size: 11, font, color: rgb(0.3,0.3,0.3) });
     y -= 18;
-    page.drawText(`Articles demandés :`, { x: 50, y, size: 12, color: rgb(0, 0, 0) });
-    y -= 16;
+    page.drawLine({ start: { x: 50, y }, end: { x: 545, y }, thickness: 0.5, color: rgb(0.7,0.7,0.7) });
+    y -= 18;
+
+    // Infos principales
+    page.drawText(`Réf: ${need.code ?? need.id}`, { x: 50, y, size: 10, font, color: rgb(0.2,0.2,0.2) });
+    page.drawText(`Statut: ${need.status}`, { x: 400, y, size: 10, font, color: rgb(0.2,0.2,0.2) });
+    y -= 14;
+    page.drawText(`Objet: ${need.title ?? "-"}`, { x: 50, y, size: 10, font });
+    y -= 12;
+    page.drawText(`Quantité: ${need.quantity ?? "-"} ${need.unit ?? ""}`, { x: 50, y, size: 10, font });
+    page.drawText(`Montant estimatif: ${need.estimatedAmount?.toLocaleString() ?? "-"} ${need.currency ?? ""}`, { x: 220, y, size: 10, font });
+    y -= 12;
+    page.drawText(`Demandeur: ${need.requester?.name ?? "-"} (${need.requester?.jobTitle ?? "-"})`, { x: 50, y, size: 10, font });
+    y -= 12;
+    page.drawText(`Soumis le: ${need.submittedAt ? new Date(need.submittedAt).toLocaleString() : "-"}`, { x: 50, y, size: 10, font });
+    page.drawText(`Validé par: ${need.reviewedBy?.name ?? "-"}`, { x: 300, y, size: 10, font });
+    y -= 12;
+    page.drawText(`Date validation: ${need.approvedAt ? new Date(need.approvedAt).toLocaleString() : "-"}`, { x: 50, y, size: 10, font });
+    page.drawText(`Exécution: En attente d'exécution`, { x: 300, y, size: 10, font });
+    y -= 12;
+    page.drawText(`Niveau d'urgence: -`, { x: 50, y, size: 10, font });
+    page.drawText(`Équipe bénéficiaire: -`, { x: 300, y, size: 10, font });
+    y -= 18;
+
+    // Tableau des articles
+    page.drawText("Articles demandés:", { x: 50, y, size: 11, font, color: rgb(0.2,0.2,0.2) });
+    y -= 14;
+    // En-tête du tableau
+    page.drawText("N°", { x: 50, y, size: 10, font });
+    page.drawText("Désignation", { x: 80, y, size: 10, font });
+    page.drawText("Description", { x: 180, y, size: 10, font });
+    page.drawText("Qté", { x: 340, y, size: 10, font });
+    page.drawText("P.U", { x: 380, y, size: 10, font });
+    page.drawText("P.T", { x: 440, y, size: 10, font });
+    y -= 10;
+    page.drawLine({ start: { x: 50, y }, end: { x: 545, y }, thickness: 0.5, color: rgb(0.7,0.7,0.7) });
+    y -= 12;
     if (articles.length === 0) {
-      page.drawText("Aucun article trouvé.", { x: 60, y, size: 11, color: rgb(0.4, 0.2, 0.2) });
+      page.drawText("Aucun article trouvé.", { x: 80, y, size: 10, font, color: rgb(0.5,0.2,0.2) });
     } else {
-      for (const item of articles) {
+      for (let i = 0; i < articles.length; i++) {
+        const item = articles[i];
         if (y < 60) break;
-        page.drawText(
-          `- ${item.designation ?? "?"} | Qté: ${item.quantity ?? "?"} | PU: ${item.unitPrice?.toLocaleString() ?? "?"} | Total: ${item.lineTotal?.toLocaleString() ?? "?"}`,
-          { x: 60, y, size: 11, color: rgb(0.1, 0.1, 0.1) }
-        );
-        y -= 14;
+        page.drawText(`${i+1}`, { x: 50, y, size: 10, font });
+        page.drawText(`${item.designation ?? "-"}`.slice(0,30), { x: 80, y, size: 10, font });
+        page.drawText(`${item.description ?? "-"}`.slice(0,40), { x: 180, y, size: 10, font });
+        page.drawText(`${item.quantity ?? "-"}`, { x: 340, y, size: 10, font });
+        page.drawText(`${item.unitPrice?.toLocaleString() ?? "-"}`, { x: 380, y, size: 10, font });
+        page.drawText(`${item.lineTotal?.toLocaleString() ?? "-"}`, { x: 440, y, size: 10, font });
+        y -= 12;
       }
     }
 
