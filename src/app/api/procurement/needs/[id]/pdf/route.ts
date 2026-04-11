@@ -1,6 +1,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
-import { PDFDocument, rgb, StandardFonts } from "pdf-lib";
+import { PDFDocument, rgb } from "pdf-lib";
+import fs from "fs";
 import fs from "fs";
 import { prisma } from "@/lib/prisma";
 
@@ -35,8 +36,10 @@ export async function GET(
 
     const pdf = await PDFDocument.create();
     const page = pdf.addPage([595, 842]);
-    const font = await pdf.embedFont(StandardFonts.Helvetica);
-    const fontBold = await pdf.embedFont(StandardFonts.HelveticaBold);
+    const montserratRegular = fs.readFileSync("public/fonts/Montserrat-Regular.ttf");
+    const montserratBold = fs.readFileSync("public/fonts/Montserrat-Bold.ttf");
+    const font = await pdf.embedFont(montserratRegular);
+    const fontBold = await pdf.embedFont(montserratBold);
     let y = 800;
 
     // Logo
