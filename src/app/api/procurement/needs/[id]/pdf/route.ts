@@ -1,6 +1,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { PDFDocument, rgb } from "pdf-lib";
+import fontkit from "@pdf-lib/fontkit";
 // import fs from "fs"; (doublon supprimé)
 import fs from "fs";
 import { prisma } from "@/lib/prisma";
@@ -35,6 +36,7 @@ export async function GET(
     } catch {}
 
     const pdf = await PDFDocument.create();
+    pdf.registerFontkit(fontkit);
     const page = pdf.addPage([595, 842]);
     const montserratRegular = fs.readFileSync("public/fonts/Montserrat-Regular.ttf");
     const montserratBold = fs.readFileSync("public/fonts/Montserrat-Bold.ttf");
