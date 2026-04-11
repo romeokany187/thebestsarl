@@ -55,7 +55,7 @@ export async function GET(
 
     // Bloc infos principales
     page.drawText(`Réf: ${need.code ?? need.id}`, { x: 50, y, size: 10, font });
-    page.drawText(`Statut: ${need.status === "APPROVED_EXECUTED" ? "APPROUVÉ ET EXÉCUTÉ" : need.status}`, { x: 400, y, size: 10, font });
+    page.drawText(`Statut: ${need.status}`, { x: 400, y, size: 10, font });
     y -= 14;
     page.drawText(`Objet: ${need.title ?? "-"}`, { x: 50, y, size: 10, font });
     page.drawText(`Quantité: ${need.quantity ?? "-"} ${need.unit ?? ""}`, { x: 400, y, size: 10, font });
@@ -68,10 +68,10 @@ export async function GET(
     page.drawText(`Validé par: ${need.reviewedBy?.name ?? "-"}`, { x: 50, y, size: 10, font });
     page.drawText(`Date validation: ${need.approvedAt ? new Date(need.approvedAt).toLocaleString() : "-"}`, { x: 320, y, size: 10, font });
     y -= 14;
-    page.drawText(`Exécution: ${need.status === "APPROVED_EXECUTED" ? "Exécuté (validation caisse enregistrée)" : "En attente d'exécution"}`, { x: 50, y, size: 10, font });
-    page.drawText(`Niveau d'urgence: ${need.urgency ?? "-"}`, { x: 320, y, size: 10, font });
+    page.drawText(`Exécution: ${need.status === "APPROVED" ? "Exécuté (validation caisse enregistrée)" : "En attente d'exécution"}`, { x: 50, y, size: 10, font });
+    page.drawText(`Niveau d'urgence: -`, { x: 320, y, size: 10, font });
     y -= 14;
-    page.drawText(`Équipe bénéficiaire: ${need.beneficiaryTeam ?? "-"}`, { x: 50, y, size: 10, font });
+    page.drawText(`Équipe bénéficiaire: -`, { x: 50, y, size: 10, font });
     y -= 18;
 
     // Tableau des articles
@@ -120,7 +120,7 @@ export async function GET(
     y -= 12;
     page.drawText(`Document scellé le ${new Date().toLocaleString("fr-FR")} `, { x: 50, y, size: 8, font });
     y -= 10;
-    page.drawText(`Mention finale: ${need.status === "APPROVED_EXECUTED" ? "APPROUVÉ ET EXÉCUTÉ" : need.status} (${new Date().toLocaleString("fr-FR")})`, { x: 50, y, size: 8, font });
+    page.drawText(`Mention finale: ${need.status} (${new Date().toLocaleString("fr-FR")})`, { x: 50, y, size: 8, font });
     page.drawText(`Page 1/1 - Imprimé le ${new Date().toLocaleString("fr-FR")}`, { x: 340, y, size: 8, font });
 
     // Signature et cachet
