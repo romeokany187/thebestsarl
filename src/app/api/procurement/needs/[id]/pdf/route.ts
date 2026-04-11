@@ -1,25 +1,18 @@
-
-import { NextRequest, NextResponse } from "next/server";
+import { NextResponse, NextRequest } from "next/server";
 import { PDFDocument, rgb } from "pdf-lib";
 import fontkit from "@pdf-lib/fontkit";
-// import fs from "fs"; (doublon supprimé)
 import fs from "fs";
 import { prisma } from "@/lib/prisma";
 
-type Params = { params: Promise<{ id: string }> };
-
-// Route PDF EDB minimaliste, compatible Next.js
-export async function GET(
-  request: NextRequest,
-  { params }: Params
-) {
+export async function GET(req: NextRequest, context: { params: any }) {
+  const { params } = context;
   try {
-    const { id } = await params;
+    const { id } = params;
     const need = await prisma.needRequest.findUnique({
-      where: { id },
+      where: { id: id },
       include: {
-        requester: { select: { name: true, jobTitle: true } },
-        reviewedBy: { select: { name: true } },
+        requester: true,
+        reviewedBy: true,
       },
     });
     if (!need) {
@@ -83,42 +76,7 @@ export async function GET(
     page.drawText("Articles demandés:", { x: 50, y, size: 11, font: fontBold, color: rgb(0.2,0.2,0.2) });
     y -= 14;
     // En-tête du tableau
-    page.drawText("N°", { x: 50, y, size: 10, font: fontBold });
-    page.drawText("Désignation", { x: 90, y, size: 10, font: fontBold });
-    page.drawText("Description", { x: 200, y, size: 10, font: fontBold });
-    page.drawText("Qté", { x: 340, y, size: 10, font: fontBold });
-    page.drawText("P.U", { x: 400, y, size: 10, font: fontBold });
-    page.drawText("P.T", { x: 480, y, size: 10, font: fontBold });
-    y -= 10;
-    page.drawLine({ start: { x: 50, y }, end: { x: 545, y }, thickness: 0.5, color: rgb(0.7,0.7,0.7) });
-    y -= 12;
-    let total = 0;
-    if (articles.length === 0) {
-      page.drawText("Aucun article trouvé.", { x: 90, y, size: 10, font, color: rgb(0.8,0.1,0.1) });
-    } else {
-      for (let i = 0; i < articles.length; i++) {
-        const item = articles[i];
-        if (y < 100) break;
-        page.drawText(`${i+1}`, { x: 50, y, size: 10, font });
-        page.drawText(`${item.designation ?? "-"}`.slice(0,30), { x: 90, y, size: 10, font });
-        page.drawText(`${item.description ?? "-"}`.slice(0,40), { x: 200, y, size: 10, font });
-        page.drawText(`${item.quantity ?? "-"}`, { x: 340, y, size: 10, font });
-        page.drawText(`${item.unitPrice?.toLocaleString() ?? "-"}`, { x: 400, y, size: 10, font });
-        page.drawText(`${item.lineTotal?.toLocaleString() ?? "-"}`, { x: 480, y, size: 10, font });
-        total += Number(item.lineTotal) || 0;
-        y -= 12;
-      }
-    }
-    y -= 8;
-    page.drawLine({ start: { x: 50, y }, end: { x: 545, y }, thickness: 0.5, color: rgb(0.7,0.7,0.7) });
-    y -= 14;
-    page.drawText(`Total général: ${total ? total.toLocaleString() : (need.estimatedAmount?.toLocaleString() ?? "0")} ${need.currency ?? "CDF"}`,
-      { x: 340, y, size: 11, font: fontBold });
 
-    // Pied de page
-    y = 110;
-    page.drawLine({ start: { x: 50, y }, end: { x: 545, y }, thickness: 0.5, color: rgb(0.7,0.7,0.7) });
-    y -= 18;
     page.drawText("Validation Direction / Finance", { x: 50, y, size: 9, font: fontBold });
     y -= 12;
     page.drawText(`Commentaire: ${need.reviewComment ?? "-"}`, { x: 50, y, size: 9, font });
