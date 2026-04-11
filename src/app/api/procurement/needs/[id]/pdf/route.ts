@@ -1,7 +1,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { PDFDocument, rgb } from "pdf-lib";
-import fs from "fs";
+// import fs from "fs"; (doublon supprimé)
 import fs from "fs";
 import { prisma } from "@/lib/prisma";
 
