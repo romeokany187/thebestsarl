@@ -1007,6 +1007,7 @@ export default async function PaymentsPage({
                     <th className="px-4 py-3 text-left font-semibold">Sens</th>
                     <th className="px-4 py-3 text-left font-semibold">Montant</th>
                     <th className="px-4 py-3 text-left font-semibold">Référence</th>
+                    {role === "ADMIN" ? <th className="px-4 py-3 text-left font-semibold">Actions</th> : null}
                   </tr>
                 </thead>
                 <tbody>
@@ -1018,6 +1019,22 @@ export default async function PaymentsPage({
                       <td className="px-4 py-3">{row.direction === "INFLOW" ? "Entrée" : "Sortie"}</td>
                       <td className="px-4 py-3">{row.amount.toFixed(2)} {normalizeMoneyCurrency(row.currency)}</td>
                       <td className="px-4 py-3">{row.reference ?? "-"}</td>
+                      {role === "ADMIN" ? (
+                        <td className="px-4 py-3">
+                          <button
+                            className="rounded bg-red-600 text-white px-2 py-1 text-xs hover:bg-red-700"
+                            title="Supprimer cette opération"
+                            onClick={async (e) => {
+                              e.preventDefault();
+                              if (!window.confirm("Confirmer la suppression de cette opération proxy banking ?")) return;
+                              await fetch(`/api/payments/proxy-banking?id=${row.id}`, { method: "DELETE" });
+                              window.location.reload();
+                            }}
+                          >
+                            Supprimer
+                          </button>
+                        </td>
+                      ) : null}
                     </tr>
                   ))}
                   {proxyHistoryRows.length === 0 ? (
