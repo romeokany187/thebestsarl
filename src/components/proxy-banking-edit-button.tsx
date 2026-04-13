@@ -21,53 +21,19 @@ export function ProxyBankingEditButton({
 }) {
   async function handleEdit(e: React.MouseEvent) {
     e.preventDefault();
-    try {
-      const newAmountRaw = window.prompt("Montant:", amount?.toString() ?? "");
-      if (newAmountRaw === null) return; // cancel
-      const newAmount = Number(newAmountRaw.trim());
-      if (!Number.isFinite(newAmount) || newAmount <= 0) {
-        alert("Montant invalide.");
-        return;
-      }
+    // Dispatch an edit event to prefill the central cash operation form.
+    const payload = {
+      id,
+      amount: amount ?? 0,
+      currency: currency ?? "USD",
+      method: method ?? "CASH",
+      reference: reference ?? "",
+      description: description ?? "",
+      occurredAt: occurredAt ? (occurredAt instanceof Date ? occurredAt.toISOString() : String(occurredAt)) : new Date().toISOString(),
+    } as const;
 
-      const newCurrency = window.prompt("Devise (USD/CDF):", (currency ?? "USD") as string)?.trim().toUpperCase();
-      if (!newCurrency || (newCurrency !== "USD" && newCurrency !== "CDF")) {
-        alert("Devise invalide. Utilisez USD ou CDF.");
-        return;
-      }
-
-      const newReference = window.prompt("Référence:", reference ?? "") ?? "";
-      const newDescription = window.prompt("Libellé:", description ?? "") ?? "";
-      const defaultOccurredAt = occurredAt ? (occurredAt instanceof Date ? occurredAt.toISOString() : String(occurredAt)) : new Date().toISOString();
-      const newOccurredAtRaw = window.prompt("Date ISO (laisser vide pour conserver):", defaultOccurredAt);
-      const newOccurredAt = newOccurredAtRaw ? newOccurredAtRaw.trim() : undefined;
-
-      const payload: any = { cashOperationId: id };
-      payload.amount = newAmount;
-      payload.currency = newCurrency;
-      payload.reference = newReference.trim();
-      payload.description = newDescription.trim();
-      if (newOccurredAt) payload.occurredAt = newOccurredAt;
-      if (method) payload.method = method;
-
-      const resp = await fetch("/api/payments/proxy-banking", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-
-      const json = await resp.json().catch(() => null);
-      if (!resp.ok) {
-        alert(json?.error ?? "Échec de la modification.");
-        return;
-      }
-
-      window.location.reload();
-    } catch (err) {
-      // eslint-disable-next-line no-console
-      console.error(err);
-      alert("Erreur lors de la modification.");
-    }
+    window.dispatchEvent(new CustomEvent("cashOperation:edit", { detail: payload }));
+    window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
   return (
