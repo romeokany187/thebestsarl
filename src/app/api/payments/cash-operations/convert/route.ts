@@ -119,6 +119,14 @@ export async function POST(request: NextRequest) {
   const ref = data.reference.trim();
   const label = data.description?.trim() || `Conversion caisse ${sourceCurrency} -> ${targetCurrency}`;
 
+  const desc = (data.description ?? "").trim();
+  let cashDeskForOp = "THE_BEST";
+  if (desc.startsWith("PROXY_BANKING:")) cashDeskForOp = "PROXY_BANKING";
+  else if (desc.startsWith("CAISSE_SAFETY:")) cashDeskForOp = "CAISSE_SAFETY";
+  else if (desc.startsWith("CAISSE_VISAS:")) cashDeskForOp = "CAISSE_VISAS";
+  else if (desc.startsWith("CAISSE_TSL:")) cashDeskForOp = "CAISSE_TSL";
+  else if (desc.startsWith("CAISSE_AGENCE:")) cashDeskForOp = "CAISSE_AGENCE";
+
   const created = await prisma.$transaction(async (tx) => {
     const outflow = await (tx as unknown as { cashOperation: any }).cashOperation.create({
       data: {
@@ -134,6 +142,7 @@ export async function POST(request: NextRequest) {
         method: "CASH",
         reference: ref,
         description: `${label} - Débit ${sourceCurrency}`,
+        cashDesk: cashDeskForOp,
         createdById: access.session.user.id,
       },
       select: { id: true },
@@ -153,6 +162,7 @@ export async function POST(request: NextRequest) {
         method: "CASH",
         reference: ref,
         description: `${label} - Crédit ${targetCurrency}`,
+        cashDesk: cashDeskForOp,
         createdById: access.session.user.id,
       },
       select: { id: true },
