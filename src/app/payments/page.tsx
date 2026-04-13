@@ -8,6 +8,7 @@ import { PaymentEntryForm } from "@/components/payment-entry-form";
 import { PaymentOrderCashExecutionActions } from "@/components/payment-order-cash-execution-actions";
 import { PaymentRowAdminActions } from "@/components/payment-row-admin-actions";
 import { ProxyBankingForm } from "@/components/proxy-banking-form";
+import { ProxyBankingDeleteButton } from "@/components/proxy-banking-delete-button";
 import { PaymentsWritingWorkspace } from "@/components/payments-writing-workspace";
 import { ProcurementCashExecutionActions } from "@/components/procurement-cash-execution-actions";
 import { invoiceNumberFromChronology } from "@/lib/invoice";
@@ -1021,18 +1022,7 @@ export default async function PaymentsPage({
                       <td className="px-4 py-3">{row.reference ?? "-"}</td>
                       {role === "ADMIN" ? (
                         <td className="px-4 py-3">
-                          <button
-                            className="rounded bg-red-600 text-white px-2 py-1 text-xs hover:bg-red-700"
-                            title="Supprimer cette opération"
-                            onClick={async (e) => {
-                              e.preventDefault();
-                              if (!window.confirm("Confirmer la suppression de cette opération proxy banking ?")) return;
-                              await fetch(`/api/payments/proxy-banking?id=${row.id}`, { method: "DELETE" });
-                              window.location.reload();
-                            }}
-                          >
-                            Supprimer
-                          </button>
+                          <ProxyBankingDeleteButton id={row.id} />
                         </td>
                       ) : null}
                     </tr>
