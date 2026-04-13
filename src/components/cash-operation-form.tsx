@@ -96,7 +96,6 @@ export function CashOperationForm({
       setOccurredAt(payload.occurredAt ? new Date(payload.occurredAt).toISOString().slice(0, 16) : toLocalDateTimeInputValue(new Date()));
       if (usesFreeTextCategory && payload.categoryLabel) setCategoryLabel(payload.categoryLabel);
 
-      setMessage("Édition : les champs sont pré-remplis, modifiez puis validez.");
       window.scrollTo({ top: 0, behavior: "smooth" });
     }
 

@@ -43,7 +43,6 @@ export function CashOperationRowActions({
     } as const;
 
     window.dispatchEvent(new CustomEvent("cashOperation:edit", { detail: payload }));
-    setMessage("Les champs d'encodage ont été pré-remplis pour édition.");
     // smooth scroll to top where the form usually is
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
