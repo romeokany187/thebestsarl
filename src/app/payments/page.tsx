@@ -456,20 +456,22 @@ export default async function PaymentsPage({
       })
       : Promise.resolve([]),
     // cashPayments: ticket payments for cash journal (THE_BEST only)
-    paymentClient.findMany({
-      where: selectedDeskKey === "THE_BEST" ? { paidAt: { gte: cashRange.start, lt: cashRange.end } } : undefined,
-      include: selectedDeskKey === "THE_BEST" ? {
-        ticket: {
-          select: {
-            ticketNumber: true,
-            customerName: true,
-            currency: true,
+    selectedDeskKey === "THE_BEST"
+      ? paymentClient.findMany({
+        where: { paidAt: { gte: cashRange.start, lt: cashRange.end } },
+        include: {
+          ticket: {
+            select: {
+              ticketNumber: true,
+              customerName: true,
+              currency: true,
+            },
           },
         },
-      } : undefined,
-      orderBy: selectedDeskKey === "THE_BEST" ? { paidAt: "desc" } : undefined,
-      take: selectedDeskKey === "THE_BEST" ? 5000 : undefined,
-    }),
+        orderBy: { paidAt: "desc" },
+        take: 5000,
+      })
+      : Promise.resolve([]),
     // cash operations: filter by desk prefixes when possible
     cashOperationClient.findMany({
       where: {
@@ -485,19 +487,21 @@ export default async function PaymentsPage({
       orderBy: { occurredAt: "desc" },
       take: 250,
     }),
-    paymentClient.findMany({
-      where: selectedDeskKey === "THE_BEST" ? { paidAt: { lt: cashRange.start } } : undefined,
-      select: selectedDeskKey === "THE_BEST" ? {
-        paidAt: true,
-        amount: true,
-        currency: true,
-        amountUsd: true,
-        amountCdf: true,
-        fxRateUsdToCdf: true,
-        method: true,
-      } : undefined,
-      take: selectedDeskKey === "THE_BEST" ? 5000 : undefined,
-    }),
+    selectedDeskKey === "THE_BEST"
+      ? paymentClient.findMany({
+        where: { paidAt: { lt: cashRange.start } },
+        select: {
+          paidAt: true,
+          amount: true,
+          currency: true,
+          amountUsd: true,
+          amountCdf: true,
+          fxRateUsdToCdf: true,
+          method: true,
+        },
+        take: 5000,
+      })
+      : Promise.resolve([]),
     cashOperationClient.findMany({
       where: {
         occurredAt: { lt: cashRange.start },
