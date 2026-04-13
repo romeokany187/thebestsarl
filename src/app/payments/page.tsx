@@ -472,21 +472,34 @@ export default async function PaymentsPage({
         take: 5000,
       })
       : Promise.resolve([]),
-    // cash operations: filter by desk prefixes when possible
-    cashOperationClient.findMany({
-      where: {
-        occurredAt: { gte: cashRange.start, lt: cashRange.end },
-        // include operations explicitly tagged with known desk prefixes OR (for THE_BEST) operations not tagged as proxy
-        OR: KNOWN_DESK_PREFIXES.map((p) => ({ description: { startsWith: p } })).concat(
-          selectedDeskKey === "THE_BEST" ? [{ description: { not: { startsWith: "PROXY_BANKING:" } } }] : [] as any
-        ),
-      },
-      include: {
-        createdBy: { select: { name: true, jobTitle: true } },
-      },
-      orderBy: { occurredAt: "desc" },
-      take: 250,
-    }),
+    // cash operations: return only operations for the selected desk
+    selectedDeskKey === "THE_BEST"
+      ? cashOperationClient.findMany({
+        where: {
+          occurredAt: { gte: cashRange.start, lt: cashRange.end },
+          // include operations explicitly tagged with known desk prefixes OR operations not tagged as proxy (THE_BEST default)
+          OR: KNOWN_DESK_PREFIXES.map((p) => ({ description: { startsWith: p } })).concat({ description: { not: { startsWith: "PROXY_BANKING:" } } } as any),
+        },
+        include: {
+          createdBy: { select: { name: true, jobTitle: true } },
+        },
+        orderBy: { occurredAt: "desc" },
+        take: 250,
+      })
+      : cashOperationClient.findMany({
+        where: {
+          occurredAt: { gte: cashRange.start, lt: cashRange.end },
+          OR: [
+            { cashDesk: selectedDeskKey },
+            { description: { startsWith: `${selectedDeskKey}:` } },
+          ],
+        },
+        include: {
+          createdBy: { select: { name: true, jobTitle: true } },
+        },
+        orderBy: { occurredAt: "desc" },
+        take: 250,
+      }),
     selectedDeskKey === "THE_BEST"
       ? paymentClient.findMany({
         where: { paidAt: { lt: cashRange.start } },
@@ -502,25 +515,48 @@ export default async function PaymentsPage({
         take: 5000,
       })
       : Promise.resolve([]),
-    cashOperationClient.findMany({
-      where: {
-        occurredAt: { lt: cashRange.start },
-        OR: KNOWN_DESK_PREFIXES.map((p) => ({ description: { startsWith: p } })),
-      },
-      select: {
-        occurredAt: true,
-        category: true,
-        amount: true,
-        direction: true,
-        method: true,
-        currency: true,
-        amountUsd: true,
-        fxRateToUsd: true,
-        fxRateUsdToCdf: true,
-        description: true,
-      },
-      take: 5000,
-    }),
+    selectedDeskKey === "THE_BEST"
+      ? cashOperationClient.findMany({
+        where: {
+          occurredAt: { lt: cashRange.start },
+          OR: KNOWN_DESK_PREFIXES.map((p) => ({ description: { startsWith: p } })),
+        },
+        select: {
+          occurredAt: true,
+          category: true,
+          amount: true,
+          direction: true,
+          method: true,
+          currency: true,
+          amountUsd: true,
+          fxRateToUsd: true,
+          fxRateUsdToCdf: true,
+          description: true,
+        },
+        take: 5000,
+      })
+      : cashOperationClient.findMany({
+        where: {
+          occurredAt: { lt: cashRange.start },
+          OR: [
+            { cashDesk: selectedDeskKey },
+            { description: { startsWith: `${selectedDeskKey}:` } },
+          ],
+        },
+        select: {
+          occurredAt: true,
+          category: true,
+          amount: true,
+          direction: true,
+          method: true,
+          currency: true,
+          amountUsd: true,
+          fxRateToUsd: true,
+          fxRateUsdToCdf: true,
+          description: true,
+        },
+        take: 5000,
+      }),
     canWrite
       ? paymentOrderClient.findMany({
           where: { status: "APPROVED" },
