@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 
 type WritingMode = "none" | "tickets" | "cash" | "virtual" | "billetage" | "payment-orders" | "needs";
 type CashDeskValue = "PROXY_BANKING" | "THE_BEST" | "CAISSE_SAFETY" | "CAISSE_VISAS" | "CAISSE_TSL" | "CAISSE_AGENCE";
@@ -200,6 +201,23 @@ export function PaymentsWritingWorkspace({
   const [adminScope, setAdminScope] = useState<AdminCashRoleScope>(() => getDefaultCashRoleScope(jobTitle, role));
   const deskOptions = useMemo(() => getManagedCashDesks(jobTitle, role, adminScope), [jobTitle, role, adminScope]);
   const [selectedDesk, setSelectedDesk] = useState<CashDeskValue | "">(deskOptions[0]?.value ?? "");
+
+  const router = useRouter();
+
+  useEffect(() => {
+    // reflect selected desk in URL so server can render desk-specific data
+    try {
+      const url = new URL(window.location.href);
+      if (selectedDesk) {
+        url.searchParams.set("desk", selectedDesk);
+      } else {
+        url.searchParams.delete("desk");
+      }
+      router.replace(url.pathname + url.search);
+    } catch (e) {
+      // ignore
+    }
+  }, [selectedDesk, router]);
 
   useEffect(() => {
     if (!scopeOptions.some((option) => option.value === adminScope) && scopeOptions.length > 0) {

@@ -253,6 +253,14 @@ export async function POST(request: NextRequest) {
         }
       }
 
+      const desc = (data.description ?? "").trim();
+      let cashDeskForOp = "THE_BEST";
+      if (desc.startsWith("PROXY_BANKING:")) cashDeskForOp = "PROXY_BANKING";
+      else if (desc.startsWith("CAISSE_SAFETY:")) cashDeskForOp = "CAISSE_SAFETY";
+      else if (desc.startsWith("CAISSE_VISAS:")) cashDeskForOp = "CAISSE_VISAS";
+      else if (desc.startsWith("CAISSE_TSL:")) cashDeskForOp = "CAISSE_TSL";
+      else if (desc.startsWith("CAISSE_AGENCE:")) cashDeskForOp = "CAISSE_AGENCE";
+
       return (tx as unknown as { cashOperation: any }).cashOperation.create({
         data: {
           occurredAt,
@@ -267,6 +275,7 @@ export async function POST(request: NextRequest) {
           method: normalizedMethod,
           reference: data.reference,
           description: data.description,
+          cashDesk: cashDeskForOp,
           createdById: access.session.user.id,
         },
         select: {

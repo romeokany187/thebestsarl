@@ -374,6 +374,9 @@ export default async function PaymentsPage({
   const canWrite = isCashier || isAdmin || isComptable;
   const canManageLedger = isAdmin || isComptable;
   const resolvedSearchParams = (await searchParams) ?? {};
+  const selectedDeskParam = ((resolvedSearchParams as any).desk ?? "THE_BEST") as string;
+  const selectedDeskKey = String(selectedDeskParam).trim().toUpperCase();
+  const KNOWN_DESK_PREFIXES = ["PROXY_BANKING:", "THE_BEST:", "CAISSE_SAFETY:", "CAISSE_VISAS:", "CAISSE_TSL:", "CAISSE_AGENCE:"];
   const range = dateRangeFromParams(resolvedSearchParams);
   const cashRange = monthRangeFromValue(resolvedSearchParams.cashMonth);
 
@@ -429,30 +432,32 @@ export default async function PaymentsPage({
       orderBy: [{ soldAt: "asc" }, { id: "asc" }],
       take: 10000,
     }),
-    prisma.payment.findMany({
-      where: {
-        paidAt: { gte: range.start, lt: range.end },
-        ...(selectedAirlineId ? { ticket: { airlineId: selectedAirlineId } } : {}),
-      },
-      include: {
-        ticket: {
-          select: {
-            ticketNumber: true,
-            customerName: true,
-            amount: true,
-            paymentStatus: true,
-            currency: true,
+    // Ticket payments only belong to THE_BEST desk; for other desks we skip ticket payments
+    selectedDeskKey === "THE_BEST"
+      ? prisma.payment.findMany({
+        where: {
+          paidAt: { gte: range.start, lt: range.end },
+          ...(selectedAirlineId ? { ticket: { airlineId: selectedAirlineId } } : {}),
+        },
+        include: {
+          ticket: {
+            select: {
+              ticketNumber: true,
+              customerName: true,
+              amount: true,
+              paymentStatus: true,
+              currency: true,
+            },
           },
         },
-      },
-      orderBy: { paidAt: "desc" },
-      take: 250,
-    }),
+        orderBy: { paidAt: "desc" },
+        take: 250,
+      })
+      : Promise.resolve([]),
+    // cashPayments: ticket payments for cash journal (THE_BEST only)
     paymentClient.findMany({
-      where: {
-        paidAt: { gte: cashRange.start, lt: cashRange.end },
-      },
-      include: {
+      where: selectedDeskKey === "THE_BEST" ? { paidAt: { gte: cashRange.start, lt: cashRange.end } } : undefined,
+      include: selectedDeskKey === "THE_BEST" ? {
         ticket: {
           select: {
             ticketNumber: true,
@@ -460,13 +465,18 @@ export default async function PaymentsPage({
             currency: true,
           },
         },
-      },
-      orderBy: { paidAt: "desc" },
-      take: 5000,
+      } : undefined,
+      orderBy: selectedDeskKey === "THE_BEST" ? { paidAt: "desc" } : undefined,
+      take: selectedDeskKey === "THE_BEST" ? 5000 : undefined,
     }),
+    // cash operations: filter by desk prefixes when possible
     cashOperationClient.findMany({
       where: {
         occurredAt: { gte: cashRange.start, lt: cashRange.end },
+        // include operations explicitly tagged with known desk prefixes OR (for THE_BEST) operations not tagged as proxy
+        OR: KNOWN_DESK_PREFIXES.map((p) => ({ description: { startsWith: p } })).concat(
+          selectedDeskKey === "THE_BEST" ? [{ description: { not: { startsWith: "PROXY_BANKING:" } } }] : [] as any
+        ),
       },
       include: {
         createdBy: { select: { name: true, jobTitle: true } },
@@ -475,10 +485,8 @@ export default async function PaymentsPage({
       take: 250,
     }),
     paymentClient.findMany({
-      where: {
-        paidAt: { lt: cashRange.start },
-      },
-      select: {
+      where: selectedDeskKey === "THE_BEST" ? { paidAt: { lt: cashRange.start } } : undefined,
+      select: selectedDeskKey === "THE_BEST" ? {
         paidAt: true,
         amount: true,
         currency: true,
@@ -486,12 +494,13 @@ export default async function PaymentsPage({
         amountCdf: true,
         fxRateUsdToCdf: true,
         method: true,
-      },
-      take: 5000,
+      } : undefined,
+      take: selectedDeskKey === "THE_BEST" ? 5000 : undefined,
     }),
     cashOperationClient.findMany({
       where: {
         occurredAt: { lt: cashRange.start },
+        OR: KNOWN_DESK_PREFIXES.map((p) => ({ description: { startsWith: p } })),
       },
       select: {
         occurredAt: true,
@@ -1369,7 +1378,7 @@ export default async function PaymentsPage({
             </section>
 
             {canWrite ? (
-              <CashOperationForm hasInitialOpening={hasInitialOpeningRecorded} />
+                    <CashOperationForm hasInitialOpening={hasInitialOpeningRecorded} descriptionPrefix={`${selectedDeskKey}:`} />
             ) : (
               <section className="rounded-2xl border border-dashed border-black/20 bg-white/80 p-4 text-xs text-black/65 dark:border-white/20 dark:bg-zinc-900/70 dark:text-white/65">
                 Profil en lecture seule sur les autres écritures de caisse. Les encodages restent réservés aux profils autorisés.

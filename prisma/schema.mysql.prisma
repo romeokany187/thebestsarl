@@ -399,6 +399,7 @@ model CashOperation {
   method           String
   reference        String?
   description      String
+  cashDesk         String                // Identifiant de la caisse (THE_BEST, CAISSE_SAFETY, etc.)
   createdById      String
   createdBy        User                  @relation("CashOperationCreator", fields: [createdById], references: [id])
   createdAt        DateTime              @default(now())
@@ -408,6 +409,7 @@ model CashOperation {
   @@index([direction])
   @@index([category])
   @@index([createdById])
+  @@index([cashDesk])
 }
 
 model AirlineDepositMovement {
