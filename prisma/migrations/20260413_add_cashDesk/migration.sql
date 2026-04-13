@@ -1,6 +1,7 @@
--- Migration: add cashDesk column to CashOperation
 
-ALTER TABLE "CashOperation"
-ADD COLUMN "cashDesk" TEXT NOT NULL DEFAULT 'THE_BEST';
+-- Migration: add cashDesk column to CashOperation (MySQL)
 
-CREATE INDEX IF NOT EXISTS "CashOperation_cashDesk_idx" ON "CashOperation" ("cashDesk");
+ALTER TABLE `CashOperation`
+	ADD COLUMN `cashDesk` VARCHAR(191) NOT NULL DEFAULT 'THE_BEST';
+
+CREATE INDEX `CashOperation_cashDesk_idx` ON `CashOperation` (`cashDesk`);
