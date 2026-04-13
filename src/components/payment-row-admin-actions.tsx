@@ -18,60 +18,17 @@ export function PaymentRowAdminActions({ paymentId, amount, currency, method, re
   const [message, setMessage] = useState("");
 
   async function editPayment() {
-    const nextAmountRaw = window.prompt("Montant du paiement", amount.toString());
-    if (nextAmountRaw === null) return;
+    const payload = {
+      paymentId,
+      amount,
+      currency,
+      method,
+      reference,
+      paidAt,
+    } as const;
 
-    const nextAmount = Number.parseFloat(nextAmountRaw);
-    if (!Number.isFinite(nextAmount) || nextAmount <= 0) {
-      setMessage("Montant invalide.");
-      return;
-    }
-
-    const nextCurrencyRaw = window.prompt("Devise (USD ou CDF)", currency.toUpperCase());
-    if (nextCurrencyRaw === null) return;
-    const nextCurrency = nextCurrencyRaw.trim().toUpperCase();
-    if (nextCurrency !== "USD" && nextCurrency !== "CDF") {
-      setMessage("Devise invalide.");
-      return;
-    }
-
-    const nextMethod = window.prompt("Méthode de paiement", method)?.trim();
-    if (!nextMethod) return;
-
-    const currentPaidAt = paidAt.slice(0, 16);
-    const nextPaidAt = window.prompt("Date/heure (AAAA-MM-JJTHH:MM)", currentPaidAt);
-    if (!nextPaidAt) return;
-
-    setBusy(true);
-    setMessage("");
-
-    try {
-      const response = await fetch("/api/payments", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          paymentId,
-          amount: nextAmount,
-          currency: nextCurrency,
-          method: nextMethod,
-          reference: reference ?? "",
-          paidAt: new Date(nextPaidAt).toISOString(),
-        }),
-      });
-
-      const payload = await response.json().catch(() => null);
-      if (!response.ok) {
-        setMessage(payload?.error ?? "Impossible de modifier ce paiement.");
-        return;
-      }
-
-      setMessage("Paiement modifié.");
-      router.refresh();
-    } catch {
-      setMessage("Erreur réseau pendant la modification.");
-    } finally {
-      setBusy(false);
-    }
+    window.dispatchEvent(new CustomEvent("payment:edit", { detail: payload }));
+    window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
   async function deletePayment() {

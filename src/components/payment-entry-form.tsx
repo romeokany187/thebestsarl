@@ -3,6 +3,8 @@
 import { useRouter } from "next/navigation";
 import { FormEvent, useEffect, useMemo, useState } from "react";
 
+// Listen for external payment edit requests
+
 function toLocalDateTimeInputValue(date: Date): string {
   const year = date.getFullYear();
   const month = String(date.getMonth() + 1).padStart(2, "0");
@@ -39,6 +41,31 @@ export function PaymentEntryForm({ tickets }: { tickets: TicketOption[] }) {
   const [loading, setLoading] = useState<boolean>(false);
   const [message, setMessage] = useState<string>("");
   const [error, setError] = useState<string>("");
+
+  useEffect(() => {
+    function handlePaymentEdit(ev: Event) {
+      const e = ev as CustomEvent<any>;
+      const payload = e.detail;
+      if (!payload) return;
+
+      // Try to find ticket by invoice/reference
+      const ticketMatch = tickets.find((t) => (t.invoiceNumber ?? "") === (payload.reference ?? ""));
+      if (ticketMatch) {
+        setTicketId(ticketMatch.id);
+      }
+
+      if (payload.amount !== undefined) setAmount(String(payload.amount));
+      if (payload.currency) setCurrency(normalizeCurrency(payload.currency));
+      if (payload.method) setMethod(payload.method);
+      if (payload.reference) setReference(payload.reference);
+      if (payload.paidAt) setPaidAt(payload.paidAt.slice(0, 16));
+
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    }
+
+    window.addEventListener("payment:edit", handlePaymentEdit as EventListener);
+    return () => window.removeEventListener("payment:edit", handlePaymentEdit as EventListener);
+  }, [tickets]);
 
   const selected = useMemo(() => tickets.find((ticket) => ticket.id === ticketId) ?? null, [ticketId, tickets]);
   const selectedInvoiceNumber = (selected?.invoiceNumber ?? "").trim();
