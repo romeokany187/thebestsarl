@@ -718,11 +718,11 @@ export default async function PaymentsPage({
 
   const caisseRows = [
     ...cashPayments.map((payment) => {
-      const currency = normalizeMoneyCurrency(payment.currency ?? payment.ticket.currency);
+      const currency = normalizeMoneyCurrency(payment.currency ?? payment.ticket?.currency);
       return {
         occurredAt: new Date(payment.paidAt),
         typeOperation: "Entrée en caisse",
-        libelle: `Paiement billet ${payment.ticket.ticketNumber} - ${payment.ticket.customerName}`,
+        libelle: `Paiement billet ${payment.ticket?.ticketNumber ?? "N/A"} - ${payment.ticket?.customerName ?? "Client"}`,
         reference: payment.reference ?? "-",
         usdIn: currency === "USD" ? payment.amount : 0,
         usdOut: 0,
@@ -1305,18 +1305,18 @@ export default async function PaymentsPage({
                     {payments.map((payment) => (
                       <tr key={payment.id} className="border-t border-black/5 dark:border-white/10">
                         <td className="px-4 py-3">{new Date(payment.paidAt).toLocaleDateString("fr-FR")}</td>
-                        <td className="px-4 py-3 font-medium">{payment.ticket.ticketNumber}</td>
-                        <td className="px-4 py-3">{payment.ticket.customerName}</td>
-                        <td className="px-4 py-3">{payment.amount.toFixed(2)} {normalizeMoneyCurrency(payment.currency ?? payment.ticket.currency)}</td>
+                        <td className="px-4 py-3 font-medium">{payment.ticket?.ticketNumber ?? "-"}</td>
+                        <td className="px-4 py-3">{payment.ticket?.customerName ?? "-"}</td>
+                        <td className="px-4 py-3">{payment.amount.toFixed(2)} {normalizeMoneyCurrency(payment.currency ?? payment.ticket?.currency)}</td>
                         <td className="px-4 py-3">{payment.method}</td>
                         <td className="px-4 py-3">{payment.reference ?? "-"}</td>
-                        <td className="px-4 py-3">{payment.ticket.paymentStatus}</td>
+                        <td className="px-4 py-3">{payment.ticket?.paymentStatus ?? "-"}</td>
                         {canManageLedger ? (
                           <td className="px-4 py-3">
                             <PaymentRowAdminActions
                               paymentId={payment.id}
                               amount={payment.amount}
-                              currency={normalizeMoneyCurrency(payment.currency ?? payment.ticket.currency)}
+                              currency={normalizeMoneyCurrency(payment.currency ?? payment.ticket?.currency)}
                               method={payment.method ?? "CASH"}
                               reference={payment.reference ?? null}
                               paidAt={new Date(payment.paidAt).toISOString()}
