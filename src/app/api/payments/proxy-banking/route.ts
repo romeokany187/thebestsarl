@@ -14,12 +14,50 @@ export async function PATCH(request: NextRequest) {
     return NextResponse.json({ error: "Opération proxy banking introuvable." }, { status: 404 });
   }
 
-  // Ici, appliquer la modification selon les besoins métier (exemple: montant, description, etc.)
-  // Pour la démo, on autorise juste la modification de la description
-  const newDescription = typeof body?.description === "string" ? body.description.trim() : existing.description;
-  await prisma.cashOperation.update({
+  // Accept several editable fields: amount, currency, reference, description, occurredAt, method
+  const fieldsToUpdate: any = {};
+  if (typeof body?.amount === "number") {
+    if (!Number.isFinite(body.amount) || body.amount <= 0) {
+      return NextResponse.json({ error: "Montant invalide." }, { status: 400 });
+    }
+    fieldsToUpdate.amount = body.amount;
+  }
+
+  if (typeof body?.currency === "string") {
+    const cur = body.currency.trim().toUpperCase();
+    if (cur !== "USD" && cur !== "CDF") {
+      return NextResponse.json({ error: "Devise invalide. Utilisez USD ou CDF." }, { status: 400 });
+    }
+    fieldsToUpdate.currency = cur;
+  }
+
+  if (typeof body?.reference === "string") {
+    fieldsToUpdate.reference = body.reference.trim();
+  }
+
+  if (typeof body?.description === "string") {
+    fieldsToUpdate.description = body.description.trim();
+  }
+
+  if (typeof body?.method === "string") {
+    fieldsToUpdate.method = body.method.trim();
+  }
+
+  if (typeof body?.occurredAt === "string") {
+    const d = new Date(body.occurredAt);
+    if (Number.isNaN(d.getTime())) {
+      return NextResponse.json({ error: "Date invalide." }, { status: 400 });
+    }
+    fieldsToUpdate.occurredAt = d;
+  }
+
+  if (Object.keys(fieldsToUpdate).length === 0) {
+    return NextResponse.json({ error: "Aucun champ modifiable fourni." }, { status: 400 });
+  }
+
+  const updated = await prisma.cashOperation.update({
     where: { id: cashOperationId },
-    data: { description: newDescription },
+    data: fieldsToUpdate,
   });
 
   await writeActivityLog({
@@ -27,11 +65,11 @@ export async function PATCH(request: NextRequest) {
     action: "PROXY_BANKING_UPDATED",
     entityType: "CASH_OPERATION",
     entityId: cashOperationId,
-    summary: `Opération proxy banking modifiée: ${newDescription}`,
-    payload: { cashOperationId, newDescription },
+    summary: `Opération proxy banking modifiée: ${updated.description ?? updated.id}`,
+    payload: { cashOperationId, updated },
   });
 
-  return NextResponse.json({ success: true });
+  return NextResponse.json({ success: true, data: updated });
 }
 
 export async function DELETE(request: NextRequest) {

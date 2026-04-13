@@ -9,6 +9,7 @@ import { PaymentOrderCashExecutionActions } from "@/components/payment-order-cas
 import { PaymentRowAdminActions } from "@/components/payment-row-admin-actions";
 import { ProxyBankingForm } from "@/components/proxy-banking-form";
 import { ProxyBankingDeleteButton } from "@/components/proxy-banking-delete-button";
+import { ProxyBankingEditButton } from "@/components/proxy-banking-edit-button";
 import { PaymentsWritingWorkspace } from "@/components/payments-writing-workspace";
 import { ProcurementCashExecutionActions } from "@/components/procurement-cash-execution-actions";
 import { invoiceNumberFromChronology } from "@/lib/invoice";
@@ -1031,7 +1032,18 @@ export default async function PaymentsPage({
                       <td className="px-4 py-3">{row.reference ?? "-"}</td>
                       {role === "ADMIN" ? (
                         <td className="px-4 py-3">
-                          <ProxyBankingDeleteButton id={row.id} />
+                          <div className="flex items-center">
+                            <ProxyBankingEditButton
+                              id={row.id}
+                              amount={row.amount}
+                              currency={row.currency}
+                              reference={row.reference}
+                              description={row.description}
+                              occurredAt={row.occurredAt}
+                              method={row.method}
+                            />
+                            <ProxyBankingDeleteButton id={row.id} />
+                          </div>
                         </td>
                       ) : null}
                     </tr>
