@@ -795,6 +795,8 @@ export default async function PaymentsPage({
         cashMethod: operation.method ?? "CASH",
         cashDescription: operation.description,
         cashOccurredAt: new Date(operation.occurredAt).toISOString(),
+        cashDirection: operation.direction,
+        cashCategory: operation.category ?? null,
       };
     }),
   ].sort((a, b) => a.occurredAt.getTime() - b.occurredAt.getTime());
@@ -1509,6 +1511,8 @@ export default async function PaymentsPage({
                                 reference={row.reference === "-" ? null : row.reference}
                                 description={row.cashDescription}
                                 occurredAt={row.cashOccurredAt}
+                                direction={row.cashDirection}
+                                category={row.cashCategory}
                               />
                             )}
                           </td>

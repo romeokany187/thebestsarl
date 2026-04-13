@@ -71,6 +71,8 @@ export function AdminOpeningBalances({ entries }: { entries: OpeningBalanceRow[]
                     reference={entry.reference}
                     description={entry.description}
                     occurredAt={entry.occurredAt}
+                    direction={"INFLOW"}
+                    category={"OPENING_BALANCE"}
                   />
                 </td>
               </tr>

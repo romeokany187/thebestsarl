@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useState } from "react";
+import { FormEvent, useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 
 function toLocalDateTimeInputValue(date: Date): string {
@@ -75,8 +75,49 @@ export function CashOperationForm({
   const [conversionLoading, setConversionLoading] = useState<boolean>(false);
   const [message, setMessage] = useState<string>("");
   const [error, setError] = useState<string>("");
+  const [editCashOperationId, setEditCashOperationId] = useState<string | null>(null);
 
   const usesFreeTextCategory = categoryInputMode === "text";
+
+  useEffect(() => {
+    function handleEdit(ev: Event) {
+      const e = ev as CustomEvent<any>;
+      const payload = e.detail;
+      if (!payload) return;
+
+      setEditCashOperationId(payload.id ?? null);
+      setDirection(payload.direction === "OUTFLOW" ? "OUTFLOW" : "INFLOW");
+      setCategory(payload.category ?? "OTHER_SALE");
+      setAmount(payload.amount != null ? String(payload.amount) : "");
+      setCurrency(payload.currency === "CDF" ? "CDF" : "USD");
+      setMethod(payload.method ?? methodOptions[0]?.value ?? "CASH");
+      setReference(payload.reference ?? "");
+      setDescription(payload.description ?? "");
+      setOccurredAt(payload.occurredAt ? new Date(payload.occurredAt).toISOString().slice(0, 16) : toLocalDateTimeInputValue(new Date()));
+      if (usesFreeTextCategory && payload.categoryLabel) setCategoryLabel(payload.categoryLabel);
+
+      setMessage("Édition : les champs sont pré-remplis, modifiez puis validez.");
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    }
+
+    window.addEventListener("cashOperation:edit", handleEdit as EventListener);
+    return () => window.removeEventListener("cashOperation:edit", handleEdit as EventListener);
+  }, [methodOptions, usesFreeTextCategory]);
+
+  function cancelEdit() {
+    setEditCashOperationId(null);
+    setMessage("");
+    setAmount("");
+    setReference("");
+    setDescription("");
+    setOccurredAt(toLocalDateTimeInputValue(new Date()));
+    setCategoryLabel("");
+    setCategory("OTHER_SALE");
+    setDirection("INFLOW");
+    setCurrency("USD");
+    setMethod(methodOptions[0]?.value ?? "CASH");
+  }
+
   const isOpeningBalance = !usesFreeTextCategory && category === "OPENING_BALANCE";
   const referenceLabel = isOpeningBalance
     ? "Référence report initial"
@@ -152,19 +193,21 @@ export function CashOperationForm({
       return;
     }
 
+    const payloadBody = {
+      direction,
+      category: normalizedCategory,
+      amount: numericAmount,
+      currency: normalizedCurrency,
+      method: method.trim(),
+      reference: reference.trim(),
+      description: `${descriptionPrefix}${usesFreeTextCategory ? `[${categoryLabel.trim()}] ` : ""}${description.trim()}`,
+      occurredAt: new Date(occurredAt).toISOString(),
+    };
+
     const response = await fetch("/api/payments/cash-operations", {
-      method: "POST",
+      method: editCashOperationId ? "PATCH" : "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        direction,
-        category: normalizedCategory,
-        amount: numericAmount,
-        currency: normalizedCurrency,
-        method: method.trim(),
-        reference: reference.trim(),
-        description: `${descriptionPrefix}${usesFreeTextCategory ? `[${categoryLabel.trim()}] ` : ""}${description.trim()}`,
-        occurredAt: new Date(occurredAt).toISOString(),
-      }),
+      body: JSON.stringify(editCashOperationId ? { cashOperationId: editCashOperationId, ...payloadBody } : payloadBody),
     });
 
     const payload = await response.json().catch(() => null);
@@ -176,11 +219,18 @@ export function CashOperationForm({
     }
 
     const thresholdAlert = typeof payload?.thresholdAlert === "string" ? payload.thresholdAlert : null;
-    setMessage(
-      thresholdAlert
-        ? `Opération enregistrée. ${thresholdAlert}`
-        : "Opération de caisse enregistrée et notifiée à la comptabilité.",
-    );
+
+    if (editCashOperationId) {
+      setMessage("Opération mise à jour.");
+      setEditCashOperationId(null);
+    } else {
+      setMessage(
+        thresholdAlert
+          ? `Opération enregistrée. ${thresholdAlert}`
+          : "Opération de caisse enregistrée et notifiée à la comptabilité.",
+      );
+    }
+
     setAmount("");
     setReference("");
     setDescription("");
@@ -254,7 +304,18 @@ export function CashOperationForm({
 
   return (
     <section className="mb-6 rounded-2xl border border-black/10 bg-white p-4 dark:border-white/10 dark:bg-zinc-900">
-      <h2 className="mb-3 text-sm font-semibold">{title}</h2>
+      <div className="mb-3 flex items-center justify-between">
+        <h2 className="text-sm font-semibold">{editCashOperationId ? "Modifier une opération" : title}</h2>
+        {editCashOperationId ? (
+          <button
+            type="button"
+            onClick={cancelEdit}
+            className="rounded-md border border-black/15 px-2 py-1 text-xs hover:bg-black/5 dark:border-white/20 dark:hover:bg-white/10"
+          >
+            Annuler l'édition
+          </button>
+        ) : null}
+      </div>
       <p className="mb-3 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-xs text-blue-900 dark:border-blue-800/60 dark:bg-blue-950/30 dark:text-blue-100">
         Le <strong>solde d&apos;ouverture</strong> correspond au <strong>report à nouveau initial</strong>. Il ne s&apos;encode qu&apos;une seule fois au démarrage pour une caisse/canal donné, puis le dernier solde du jour devient automatiquement le report à nouveau du lendemain.
       </p>

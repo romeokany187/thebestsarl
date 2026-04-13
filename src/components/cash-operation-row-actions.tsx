@@ -11,6 +11,8 @@ type Props = {
   reference: string | null;
   description: string;
   occurredAt: string;
+  direction?: string | null;
+  category?: string | null;
 };
 
 export function CashOperationRowActions({
@@ -21,83 +23,29 @@ export function CashOperationRowActions({
   reference,
   description,
   occurredAt,
+  direction,
+  category,
 }: Props) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
-  const [isEditing, setIsEditing] = useState(false);
-  const [editAmount, setEditAmount] = useState<string>(String(amount));
-  const [editCurrency, setEditCurrency] = useState<string>(currency ?? "USD");
-  const [editMethod, setEditMethod] = useState<string>(method ?? "CASH");
-  const [editReference, setEditReference] = useState<string>(reference ?? "");
-  const [editDescription, setEditDescription] = useState<string>(description ?? "");
-  const [editOccurredAt, setEditOccurredAt] = useState<string>(occurredAt.slice(0, 16));
+  function editOperation() {
+    const payload = {
+      id: cashOperationId,
+      direction: direction ?? null,
+      category: category ?? null,
+      amount,
+      currency,
+      method,
+      reference,
+      description,
+      occurredAt,
+    } as const;
 
-  async function editOperation() {
-    // Open edit modal
-    setIsEditing(true);
-  }
-
-  async function submitEdit() {
-    const nextAmount = Number.parseFloat(editAmount);
-    if (!Number.isFinite(nextAmount) || nextAmount <= 0) {
-      setMessage("Montant invalide.");
-      return;
-    }
-    const nextCurrency = (editCurrency ?? "USD").trim().toUpperCase();
-    if (nextCurrency !== "USD" && nextCurrency !== "CDF") {
-      setMessage("Devise invalide.");
-      return;
-    }
-    if (!editMethod?.trim()) {
-      setMessage("Méthode invalide.");
-      return;
-    }
-    if (!editReference?.trim()) {
-      setMessage("Référence obligatoire.");
-      return;
-    }
-    if (!editDescription?.trim()) {
-      setMessage("Libellé obligatoire.");
-      return;
-    }
-    if (!editOccurredAt) {
-      setMessage("Date/heure invalide.");
-      return;
-    }
-
-    setBusy(true);
-    setMessage("");
-
-    try {
-      const response = await fetch("/api/payments/cash-operations", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          cashOperationId,
-          amount: nextAmount,
-          currency: nextCurrency,
-          method: editMethod.trim(),
-          reference: editReference.trim(),
-          description: editDescription.trim(),
-          occurredAt: new Date(editOccurredAt).toISOString(),
-        }),
-      });
-
-      const payload = await response.json().catch(() => null);
-      if (!response.ok) {
-        setMessage(payload?.error ?? "Impossible de modifier cette écriture.");
-        return;
-      }
-
-      setMessage("Écriture modifiée.");
-      setIsEditing(false);
-      router.refresh();
-    } catch {
-      setMessage("Erreur réseau pendant la modification.");
-    } finally {
-      setBusy(false);
-    }
+    window.dispatchEvent(new CustomEvent("cashOperation:edit", { detail: payload }));
+    setMessage("Les champs d'encodage ont été pré-remplis pour édition.");
+    // smooth scroll to top where the form usually is
+    window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
   async function deleteOperation() {
@@ -149,44 +97,7 @@ export function CashOperationRowActions({
       </div>
       {message ? <p className="text-[10px] text-black/60 dark:text-white/60">{message}</p> : null}
 
-      {isEditing ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center">
-          <div className="absolute inset-0 bg-black/40" onClick={() => setIsEditing(false)} />
-          <form
-            onSubmit={(e) => { e.preventDefault(); void submitEdit(); }}
-            className="relative z-10 w-full max-w-xl rounded-lg bg-white p-4 shadow-lg dark:bg-zinc-900"
-          >
-            <h3 className="mb-3 text-sm font-semibold">Modifier l'opération</h3>
-            <div className="grid gap-2 sm:grid-cols-2">
-              <label className="text-xs">Montant
-                <input className="w-full rounded-md border px-2 py-1" value={editAmount} onChange={(e) => setEditAmount(e.target.value)} />
-              </label>
-              <label className="text-xs">Devise
-                <select className="w-full rounded-md border px-2 py-1" value={editCurrency} onChange={(e) => setEditCurrency(e.target.value)}>
-                  <option value="USD">USD</option>
-                  <option value="CDF">CDF</option>
-                </select>
-              </label>
-              <label className="text-xs">Méthode
-                <input className="w-full rounded-md border px-2 py-1" value={editMethod} onChange={(e) => setEditMethod(e.target.value)} />
-              </label>
-              <label className="text-xs">Référence
-                <input className="w-full rounded-md border px-2 py-1" value={editReference} onChange={(e) => setEditReference(e.target.value)} />
-              </label>
-              <label className="text-xs sm:col-span-2">Libellé
-                <input className="w-full rounded-md border px-2 py-1" value={editDescription} onChange={(e) => setEditDescription(e.target.value)} />
-              </label>
-              <label className="text-xs sm:col-span-2">Date/heure
-                <input type="datetime-local" className="w-full rounded-md border px-2 py-1" value={editOccurredAt} onChange={(e) => setEditOccurredAt(e.target.value)} />
-              </label>
-            </div>
-            <div className="mt-3 flex justify-end gap-2">
-              <button type="button" onClick={() => setIsEditing(false)} className="rounded-md border px-3 py-1">Annuler</button>
-              <button type="submit" disabled={busy} className="rounded-md bg-black px-3 py-1 text-white">{busy ? "Enregistrement..." : "Enregistrer"}</button>
-            </div>
-          </form>
-        </div>
-      ) : null}
+      {/* editing is done in the main CashOperationForm via dispatching an event */}
     </div>
   );
 }
