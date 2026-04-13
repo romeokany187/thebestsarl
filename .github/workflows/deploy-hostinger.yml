@@ -14,8 +14,8 @@ env:
   HOSTINGER_HOST: 82.29.194.219
   HOSTINGER_PORT: 65002
   HOSTINGER_USER: u697417861
-  HOSTINGER_APP_DIR: /home/u697417861/domains/blue-spider-738233.hostingersite.com/nodejs
-  HOSTINGER_BUNDLE_DIR: /home/u697417861/domains/blue-spider-738233.hostingersite.com/.deploy
+  HOSTINGER_APP_DIR: /home/u697417861/domains/thebestsarlworkspace.com/nodejs
+  HOSTINGER_BUNDLE_DIR: /home/u697417861/domains/thebestsarlworkspace.com/.deploy
   PRISMA_SCHEMA_FILE: prisma/schema.mysql.prisma
 
 jobs:
