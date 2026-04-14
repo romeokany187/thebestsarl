@@ -4,8 +4,8 @@ set -euo pipefail
 
 echo "Running pre-push build..."
 
-# try to run the project's build script
-if npm run build --silent; then
+# try to run the project's MySQL-targeted build script
+if npm run build:mysql --silent; then
   echo "Build succeeded — continuing push."
   exit 0
 else
