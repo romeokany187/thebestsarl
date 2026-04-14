@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 
-type WritingMode = "none" | "tickets" | "cash" | "virtual" | "billetage" | "payment-orders" | "needs";
+type WritingMode = "none" | "tickets" | "cash" | "virtual" | "billetage" | "payment-orders" | "needs" | "float";
 type CashDeskValue = "PROXY_BANKING" | "THE_BEST" | "CAISSE_SAFETY" | "CAISSE_VISAS" | "CAISSE_TSL" | "CAISSE_AGENCE";
 type CashDeskOption = { value: CashDeskValue; label: string; description: string };
 type AdminCashRoleScope = "CAISSIER" | "CAISSE_2_SIEGE" | "CAISSE_AGENCE";
@@ -163,7 +163,7 @@ function getAllowedActionsForDesk(deskValue: CashDeskValue | string): Array<Excl
   }
 
   if (deskValue === "PROXY_BANKING") {
-    return ["cash", "virtual", "billetage"];
+    return ["cash", "virtual", "billetage", "float"];
   }
 
   return ["cash", "payment-orders", "billetage", "virtual", "needs"];
@@ -174,6 +174,7 @@ export function PaymentsWritingWorkspace({
   cashWorkspace,
   virtualWorkspace,
   billetageWorkspace,
+  floatWorkspace,
   paymentOrdersWorkspace,
   paymentOrdersLabel,
   needsWorkspace,
@@ -187,6 +188,7 @@ export function PaymentsWritingWorkspace({
   cashWorkspace?: React.ReactNode;
   virtualWorkspace?: React.ReactNode;
   billetageWorkspace?: React.ReactNode;
+  floatWorkspace?: React.ReactNode;
   paymentOrdersWorkspace?: React.ReactNode;
   paymentOrdersLabel?: string;
   needsWorkspace?: React.ReactNode;
@@ -238,6 +240,7 @@ export function PaymentsWritingWorkspace({
   const resolvedCashWorkspace = deskOverride?.cash ?? cashWorkspace;
   const resolvedVirtualWorkspace = deskOverride?.virtual ?? virtualWorkspace;
   const resolvedBilletageWorkspace = deskOverride?.billetage ?? billetageWorkspace;
+  const resolvedFloatWorkspace = deskOverride?.float ?? floatWorkspace;
   const resolvedPaymentOrdersWorkspace = deskOverride?.["payment-orders"] ?? paymentOrdersWorkspace;
   const resolvedNeedsWorkspace = deskOverride?.needs ?? needsWorkspace;
   const resolvedClosedSummary = deskOverride?.summary ?? closedSummary;
@@ -260,6 +263,7 @@ export function PaymentsWritingWorkspace({
           tone: "cyan",
         }
       : null,
+    resolvedFloatWorkspace ? { key: "float" as const, label: "Gestion du float", tone: "cyan" } : null,
     resolvedNeedsWorkspace ? { key: "needs" as const, label: needsLabel ?? "EDB à exécuter", tone: "violet" } : null,
   ].filter(Boolean) as Array<{ key: Exclude<WritingMode, "none">; label: string; tone: string }>;
   const allowedActionKeys = getAllowedActionsForDesk(selectedDesk);
@@ -374,6 +378,7 @@ export function PaymentsWritingWorkspace({
             {mode === "billetage" ? resolvedBilletageWorkspace : null}
             {mode === "payment-orders" ? resolvedPaymentOrdersWorkspace : null}
             {mode === "needs" ? resolvedNeedsWorkspace : null}
+              {mode === "float" ? resolvedFloatWorkspace : null}
           </div>
         </div>
       </section>
