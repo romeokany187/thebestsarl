@@ -147,6 +147,17 @@ enum StockMovementType {
   OUT
 }
 
+enum FloatAccountKind {
+  VIRTUAL
+  CASH
+}
+
+enum FloatTransferStatus {
+  PENDING
+  COMPLETED
+  FAILED
+}
+
 enum ArchiveFolder {
   DGI
   CNSS_ONEM
@@ -410,6 +421,28 @@ model CashOperation {
   @@index([category])
   @@index([createdById])
   @@index([cashDesk])
+}
+
+model FloatTransfer {
+  id            String             @id @default(cuid())
+  fromKind      FloatAccountKind
+  fromAccount   String             // identifier: cashDesk name or virtual account key
+  toKind        FloatAccountKind
+  toAccount     String
+  amount        Float
+  currency      String             @default("USD")
+  status        FloatTransferStatus @default(PENDING)
+  reference     String?
+  note          String?
+  initiatedById String
+  initiatedBy   User               @relation(fields: [initiatedById], references: [id])
+  executedAt    DateTime?
+  createdAt     DateTime           @default(now())
+  updatedAt     DateTime           @updatedAt
+
+  @@index([status])
+  @@index([fromAccount])
+  @@index([toAccount])
 }
 
 model AirlineDepositMovement {
