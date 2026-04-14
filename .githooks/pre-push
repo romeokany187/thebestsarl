@@ -1,0 +1,11 @@
+#!/bin/sh
+# Vérifie le build MySQL avant chaque git push
+echo "▶  Vérification du build avant push…"
+npm run build:mysql
+status=$?
+if [ $status -ne 0 ]; then
+  echo "✗  Le build a échoué. Push annulé."
+  exit 1
+fi
+echo "✓  Build OK. Push autorisé."
+exit 0
