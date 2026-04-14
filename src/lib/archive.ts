@@ -124,7 +124,7 @@ export async function createArchiveDocumentWithGlobalReference(
         originalFileName: input.originalFileName,
         mimeType: input.mimeType,
         fileSize: input.fileSize,
-        fileData: input.fileData,
+        fileData: input.fileData ? new Uint8Array(input.fileData as any) : undefined,
         externalUrl: input.externalUrl,
         origin: input.origin,
         sourceKey: input.sourceKey,
