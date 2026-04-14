@@ -1,6 +1,5 @@
 "use client"
 import React, { useEffect, useMemo, useState } from 'react'
-import { toast } from 'react-hot-toast'
 
 type Account = {
   id: string
@@ -241,7 +240,6 @@ function AccountFormModal({
       })
       const payload = await res.json().catch(() => null)
       if (!res.ok) { setError(payload?.error ?? 'Erreur lors de l\'enregistrement.'); setLoading(false); return }
-      toast.success(editing.id ? 'Compte modifié.' : 'Compte créé.')
       onSaved()
     } catch {
       setError('Erreur réseau.')
@@ -327,6 +325,12 @@ export default function AccountsManager() {
   const [editing, setEditing] = useState<Partial<Account> | null>(null)
   const [search, setSearch] = useState('')
   const [expandAll, setExpandAll] = useState(false)
+  const [notify, setNotify] = useState<{ type: 'success' | 'error'; message: string } | null>(null)
+
+  function showNotify(type: 'success' | 'error', message: string) {
+    setNotify({ type, message })
+    setTimeout(() => setNotify(null), 3500)
+  }
 
   async function fetchAccounts() {
     setLoading(true)
@@ -359,11 +363,11 @@ export default function AccountsManager() {
     if (!confirm('Supprimer ce compte ?')) return
     const res = await fetch(`/api/comptabilite/accounts?id=${encodeURIComponent(id)}`, { method: 'DELETE' })
     if (res.ok) {
-      toast.success('Compte supprimé.')
+      showNotify('success', 'Compte supprimé.')
       await fetchAccounts()
     } else {
       const payload = await res.json().catch(() => null)
-      toast.error(payload?.error ?? 'Impossible de supprimer ce compte.')
+      showNotify('error', payload?.error ?? 'Impossible de supprimer ce compte.')
     }
   }
 
@@ -387,7 +391,7 @@ export default function AccountsManager() {
       })).filter(a => a.code && a.label)
     }
 
-    if (!accountsParsed.length) { toast.error('Aucun compte trouvé.'); return }
+    if (!accountsParsed.length) { showNotify('error', 'Aucun compte trouvé.'); return }
 
     const codesSet = new Set(accountsParsed.map((a: any) => String(a.code)))
     function inferParent(code: string): string | null {
@@ -414,11 +418,11 @@ export default function AccountsManager() {
     setLoading(false)
     if (res.ok) {
       const j = await res.json()
-      toast.success(`${j.count ?? withParents.length} comptes importés.`)
+      showNotify('success', `${j.count ?? withParents.length} comptes importés.`)
       await fetchAccounts()
     } else {
       const err = await res.json().catch(() => ({ error: 'Erreur inconnue' }))
-      toast.error(err.error || 'Erreur lors de l\'import.')
+      showNotify('error', err.error || 'Erreur lors de l\'import.')
     }
   }
 
@@ -431,6 +435,12 @@ export default function AccountsManager() {
 
   return (
     <div className="space-y-4">
+      {/* Notification banner */}
+      {notify && (
+        <div className={`rounded-md px-4 py-2.5 text-sm font-medium ${notify.type === 'success' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200 dark:bg-emerald-950/30 dark:text-emerald-300 dark:border-emerald-800' : 'bg-red-50 text-red-700 border border-red-200 dark:bg-red-950/30 dark:text-red-300 dark:border-red-800'}`}>
+          {notify.message}
+        </div>
+      )}
       {/* Header */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-3">
