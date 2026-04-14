@@ -1,5 +1,5 @@
 "use client"
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useMemo, useState } from 'react'
 import { toast } from 'react-hot-toast'
 
 type Account = {
@@ -8,53 +8,363 @@ type Account = {
   label: string
   parentCode?: string | null
   level?: number | null
+  normalBalance?: string | null
 }
 
+type AccountNode = Account & { children: AccountNode[] }
+
+const CLASS_LABELS: Record<string, string> = {
+  '1': 'Classe 1 — Comptes de capitaux',
+  '2': 'Classe 2 — Comptes d\'immobilisations',
+  '3': 'Classe 3 — Comptes de stocks',
+  '4': 'Classe 4 — Comptes de tiers',
+  '5': 'Classe 5 — Comptes de trésorerie',
+  '6': 'Classe 6 — Comptes de charges',
+  '7': 'Classe 7 — Comptes de produits',
+  '8': 'Classe 8 — Comptes des résultats',
+  '9': 'Classe 9 — Comptes analytiques',
+}
+
+const CLASS_COLORS: Record<string, string> = {
+  '1': 'bg-violet-50 border-violet-200 dark:bg-violet-950/30 dark:border-violet-800',
+  '2': 'bg-blue-50 border-blue-200 dark:bg-blue-950/30 dark:border-blue-800',
+  '3': 'bg-amber-50 border-amber-200 dark:bg-amber-950/30 dark:border-amber-800',
+  '4': 'bg-rose-50 border-rose-200 dark:bg-rose-950/30 dark:border-rose-800',
+  '5': 'bg-emerald-50 border-emerald-200 dark:bg-emerald-950/30 dark:border-emerald-800',
+  '6': 'bg-red-50 border-red-200 dark:bg-red-950/30 dark:border-red-800',
+  '7': 'bg-green-50 border-green-200 dark:bg-green-950/30 dark:border-green-800',
+  '8': 'bg-sky-50 border-sky-200 dark:bg-sky-950/30 dark:border-sky-800',
+  '9': 'bg-zinc-50 border-zinc-200 dark:bg-zinc-900/30 dark:border-zinc-700',
+}
+
+const CLASS_BADGE: Record<string, string> = {
+  '1': 'bg-violet-100 text-violet-700 dark:bg-violet-900/50 dark:text-violet-300',
+  '2': 'bg-blue-100 text-blue-700 dark:bg-blue-900/50 dark:text-blue-300',
+  '3': 'bg-amber-100 text-amber-700 dark:bg-amber-900/50 dark:text-amber-300',
+  '4': 'bg-rose-100 text-rose-700 dark:bg-rose-900/50 dark:text-rose-300',
+  '5': 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/50 dark:text-emerald-300',
+  '6': 'bg-red-100 text-red-700 dark:bg-red-900/50 dark:text-red-300',
+  '7': 'bg-green-100 text-green-700 dark:bg-green-900/50 dark:text-green-300',
+  '8': 'bg-sky-100 text-sky-700 dark:bg-sky-900/50 dark:text-sky-300',
+  '9': 'bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300',
+}
+
+function buildTree(accounts: Account[]): AccountNode[] {
+  const map = new Map<string, AccountNode>()
+  for (const a of accounts) map.set(a.code, { ...a, children: [] })
+  const roots: AccountNode[] = []
+  for (const node of map.values()) {
+    if (node.parentCode && map.has(node.parentCode)) {
+      map.get(node.parentCode)!.children.push(node)
+    } else {
+      roots.push(node)
+    }
+  }
+  // Sort children by code at every level
+  function sortNode(n: AccountNode) {
+    n.children.sort((a, b) => a.code.localeCompare(b.code))
+    n.children.forEach(sortNode)
+  }
+  roots.sort((a, b) => a.code.localeCompare(b.code))
+  roots.forEach(sortNode)
+  return roots
+}
+
+function flattenTree(nodes: AccountNode[]): Account[] {
+  const result: Account[] = []
+  function walk(n: AccountNode) {
+    result.push(n)
+    n.children.forEach(walk)
+  }
+  nodes.forEach(walk)
+  return result
+}
+
+function matchesSearch(node: AccountNode, q: string): boolean {
+  const lq = q.toLowerCase()
+  if (node.code.toLowerCase().includes(lq) || node.label.toLowerCase().includes(lq)) return true
+  return node.children.some(c => matchesSearch(c, lq))
+}
+
+function filterTree(nodes: AccountNode[], q: string): AccountNode[] {
+  if (!q) return nodes
+  return nodes
+    .map(node => {
+      if (node.code.toLowerCase().includes(q.toLowerCase()) || node.label.toLowerCase().includes(q.toLowerCase())) {
+        return node
+      }
+      const filteredChildren = filterTree(node.children, q)
+      if (filteredChildren.length > 0) return { ...node, children: filteredChildren }
+      return null
+    })
+    .filter(Boolean) as AccountNode[]
+}
+
+// ─── AccountRow ───────────────────────────────────────────────────────────────
+function AccountRow({
+  node,
+  depth,
+  onEdit,
+  onDelete,
+  forceOpen,
+}: {
+  node: AccountNode
+  depth: number
+  onEdit: (a: Account) => void
+  onDelete: (id: string) => void
+  forceOpen: boolean
+}) {
+  const [open, setOpen] = useState(forceOpen)
+  const hasChildren = node.children.length > 0
+  const isGroup = depth === 0
+  const isSubGroup = depth === 1
+  const cls = node.code[0]
+
+  useEffect(() => { setOpen(forceOpen) }, [forceOpen])
+
+  return (
+    <>
+      <div
+        className={[
+          'flex items-center gap-2 py-1.5 px-2 rounded-md group',
+          isGroup ? `font-semibold text-sm ${CLASS_COLORS[cls] ?? ''} border` : '',
+          isSubGroup ? 'font-medium text-sm' : '',
+          !isGroup && !isSubGroup ? 'text-xs text-black/70 dark:text-white/60' : '',
+          hasChildren ? 'cursor-pointer hover:bg-black/5 dark:hover:bg-white/5' : '',
+        ].join(' ')}
+        style={{ paddingLeft: `${(depth * 20) + 8}px` }}
+        onClick={() => hasChildren && setOpen(o => !o)}
+      >
+        {hasChildren ? (
+          <span className="text-black/40 dark:text-white/30 w-3 shrink-0">
+            {open ? '▾' : '▸'}
+          </span>
+        ) : (
+          <span className="w-3 shrink-0" />
+        )}
+
+        <span className={[
+          'font-mono shrink-0 px-1.5 py-0.5 rounded text-xs',
+          CLASS_BADGE[cls] ?? 'bg-zinc-100 text-zinc-600',
+        ].join(' ')}>
+          {node.code}
+        </span>
+
+        <span className="flex-1 truncate">{node.label}</span>
+
+        {node.normalBalance && (
+          <span className="hidden group-hover:inline text-[10px] text-black/40 dark:text-white/30 shrink-0">
+            {node.normalBalance === 'DEBIT' ? 'D' : 'C'}
+          </span>
+        )}
+
+        <span className="hidden group-hover:flex items-center gap-1 shrink-0">
+          <button
+            onClick={e => { e.stopPropagation(); onEdit(node) }}
+            className="px-1.5 py-0.5 text-[10px] rounded border border-black/20 hover:bg-black/10 dark:border-white/20 dark:hover:bg-white/10"
+          >
+            Éditer
+          </button>
+          <button
+            onClick={e => { e.stopPropagation(); onDelete(node.id) }}
+            className="px-1.5 py-0.5 text-[10px] rounded border border-red-200 text-red-600 hover:bg-red-50 dark:border-red-800 dark:text-red-400 dark:hover:bg-red-950/30"
+          >
+            ✕
+          </button>
+        </span>
+      </div>
+
+      {hasChildren && open && node.children.map(child => (
+        <AccountRow
+          key={child.id}
+          node={child}
+          depth={depth + 1}
+          onEdit={onEdit}
+          onDelete={onDelete}
+          forceOpen={forceOpen}
+        />
+      ))}
+    </>
+  )
+}
+
+// ─── AccountFormModal ─────────────────────────────────────────────────────────
+function AccountFormModal({
+  editing,
+  onClose,
+  onSaved,
+  allAccounts,
+}: {
+  editing: Partial<Account>
+  onClose: () => void
+  onSaved: () => void
+  allAccounts: Account[]
+}) {
+  const [code, setCode] = useState(editing.code ?? '')
+  const [label, setLabel] = useState(editing.label ?? '')
+  const [parentCode, setParentCode] = useState(editing.parentCode ?? '')
+  const [normalBalance, setNormalBalance] = useState(editing.normalBalance ?? 'DEBIT')
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState('')
+
+  // When code changes, auto-infer parent
+  function handleCodeChange(val: string) {
+    setCode(val)
+    if (!editing.id) {
+      // try to infer parent
+      const codes = new Set(allAccounts.map(a => a.code))
+      for (let len = val.length - 1; len >= 1; len--) {
+        const candidate = val.slice(0, len)
+        if (codes.has(candidate)) { setParentCode(candidate); break }
+      }
+    }
+  }
+
+  async function save() {
+    if (!code.trim() || !label.trim()) { setError('Code et intitulé obligatoires.'); return }
+    setLoading(true)
+    setError('')
+    try {
+      const body = {
+        id: editing.id,
+        code: code.trim(),
+        label: label.trim(),
+        parentCode: parentCode.trim() || null,
+        level: code.trim().length,
+        normalBalance,
+      }
+      const method = editing.id ? 'PUT' : 'POST'
+      const res = await fetch('/api/comptabilite/accounts', {
+        method,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      })
+      const payload = await res.json().catch(() => null)
+      if (!res.ok) { setError(payload?.error ?? 'Erreur lors de l\'enregistrement.'); setLoading(false); return }
+      toast.success(editing.id ? 'Compte modifié.' : 'Compte créé.')
+      onSaved()
+    } catch {
+      setError('Erreur réseau.')
+    }
+    setLoading(false)
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm" onClick={onClose}>
+      <div
+        className="w-full max-w-md rounded-2xl border border-black/10 bg-white p-6 shadow-xl dark:border-white/10 dark:bg-zinc-900"
+        onClick={e => e.stopPropagation()}
+      >
+        <h3 className="text-base font-semibold mb-4">{editing.id ? 'Modifier le compte' : 'Nouveau compte'}</h3>
+
+        <div className="grid gap-3">
+          <div>
+            <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-black/50 dark:text-white/50">Code</label>
+            <input
+              value={code}
+              onChange={e => handleCodeChange(e.target.value)}
+              placeholder="ex: 5711"
+              className="w-full rounded-md border border-black/15 bg-white px-3 py-2 text-sm font-mono dark:border-white/15 dark:bg-zinc-800"
+            />
+          </div>
+          <div>
+            <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-black/50 dark:text-white/50">Intitulé</label>
+            <input
+              value={label}
+              onChange={e => setLabel(e.target.value)}
+              placeholder="ex: Caisse en francs congolais"
+              className="w-full rounded-md border border-black/15 bg-white px-3 py-2 text-sm dark:border-white/15 dark:bg-zinc-800"
+            />
+          </div>
+          <div>
+            <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-black/50 dark:text-white/50">Compte parent (code)</label>
+            <input
+              value={parentCode}
+              onChange={e => setParentCode(e.target.value)}
+              placeholder="ex: 571"
+              className="w-full rounded-md border border-black/15 bg-white px-3 py-2 text-sm font-mono dark:border-white/15 dark:bg-zinc-800"
+            />
+          </div>
+          <div>
+            <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-black/50 dark:text-white/50">Solde normal</label>
+            <select
+              value={normalBalance}
+              onChange={e => setNormalBalance(e.target.value)}
+              className="w-full rounded-md border border-black/15 bg-white px-3 py-2 text-sm dark:border-white/15 dark:bg-zinc-800"
+            >
+              <option value="DEBIT">Débit</option>
+              <option value="CREDIT">Crédit</option>
+            </select>
+          </div>
+        </div>
+
+        {error && <p className="mt-3 text-xs text-red-600">{error}</p>}
+
+        <div className="mt-5 flex justify-end gap-2">
+          <button
+            onClick={onClose}
+            className="rounded-md border border-black/15 px-4 py-2 text-sm hover:bg-black/5 dark:border-white/15 dark:hover:bg-white/5"
+          >
+            Annuler
+          </button>
+          <button
+            onClick={save}
+            disabled={loading}
+            className="rounded-md bg-black px-4 py-2 text-sm font-semibold text-white disabled:opacity-50 dark:bg-white dark:text-black"
+          >
+            {loading ? 'Enregistrement…' : 'Enregistrer'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ─── Main ─────────────────────────────────────────────────────────────────────
 export default function AccountsManager() {
   const [accounts, setAccounts] = useState<Account[]>([])
   const [loading, setLoading] = useState(false)
-  const [editing, setEditing] = useState<Account | null>(null)
-  const [showForm, setShowForm] = useState(false)
+  const [editing, setEditing] = useState<Partial<Account> | null>(null)
+  const [search, setSearch] = useState('')
+  const [expandAll, setExpandAll] = useState(false)
 
   async function fetchAccounts() {
     setLoading(true)
     const res = await fetch('/api/comptabilite/accounts')
-    if (res.ok) {
-      const data = await res.json()
-      setAccounts(data)
-    }
+    if (res.ok) setAccounts(await res.json())
     setLoading(false)
   }
 
   useEffect(() => { fetchAccounts() }, [])
 
-  function startCreate() {
-    setEditing({ id: '', code: '', label: '', parentCode: null, level: null })
-    setShowForm(true)
-  }
+  const tree = useMemo(() => buildTree(accounts), [accounts])
+  const filtered = useMemo(() => filterTree(tree, search), [tree, search])
 
-  function startEdit(a: Account) {
-    setEditing(a)
-    setShowForm(true)
-  }
-
-  async function save() {
-    if (!editing) return
-    const payload = { id: editing.id, code: editing.code, label: editing.label, parentCode: editing.parentCode, level: editing.level }
-    if (!editing.id) {
-      const res = await fetch('/api/comptabilite/accounts', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
-      if (res.ok) { await fetchAccounts(); setShowForm(false); setEditing(null) }
-    } else {
-      const res = await fetch('/api/comptabilite/accounts', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
-      if (res.ok) { await fetchAccounts(); setShowForm(false); setEditing(null) }
+  // Group filtered by class
+  const byClass = useMemo(() => {
+    const map: Record<string, AccountNode[]> = {}
+    for (const node of filtered) {
+      const cls = node.code[0]
+      if (!map[cls]) map[cls] = []
+      map[cls].push(node)
     }
-  }
+    return map
+  }, [filtered])
 
-  async function remove(id?: string) {
-    if (!id) return
+  const classKeys = Object.keys(byClass).sort()
+
+  const totalAccounts = useMemo(() => flattenTree(tree).length, [tree])
+
+  async function handleDelete(id: string) {
     if (!confirm('Supprimer ce compte ?')) return
     const res = await fetch(`/api/comptabilite/accounts?id=${encodeURIComponent(id)}`, { method: 'DELETE' })
-    if (res.ok) await fetchAccounts()
+    if (res.ok) {
+      toast.success('Compte supprimé.')
+      await fetchAccounts()
+    } else {
+      const payload = await res.json().catch(() => null)
+      toast.error(payload?.error ?? 'Impossible de supprimer ce compte.')
+    }
   }
 
   async function handleFile(file: File) {
@@ -66,119 +376,135 @@ export default function AccountsManager() {
       if (Array.isArray(data)) accountsParsed = data
       else if (data.accounts && Array.isArray(data.accounts)) accountsParsed = data.accounts
     } else {
-      // assume excel
       const XLSX = await import('xlsx')
-      const arrayBuffer = await file.arrayBuffer()
-      const wb = XLSX.read(arrayBuffer, { type: 'array' })
+      const ab = await file.arrayBuffer()
+      const wb = XLSX.read(ab, { type: 'array' })
       const sheetName = wb.SheetNames.find(n => /plan comptable/i.test(n)) || wb.SheetNames[0]
-      const sheet = wb.Sheets[sheetName]
-      const rows = XLSX.utils.sheet_to_json(sheet, { defval: '' }) as Record<string, any>[]
-      accountsParsed = rows.map(r => {
-        const code = String(r['CODE'] || r['Code'] || r['Compte'] || r['N°'] || r['Numero'] || '').trim()
-        const label = String(r['COMPTE'] || r['Compte'] || r['Intitulé'] || r['Intitule'] || '').trim()
-        return { code, label }
-      }).filter(a => a.code && a.label)
+      const rows = XLSX.utils.sheet_to_json(wb.Sheets[sheetName], { defval: '' }) as Record<string, any>[]
+      accountsParsed = rows.map(r => ({
+        code: String(r['CODE'] || r['Code'] || r['Compte'] || r['N°'] || '').trim().replace(/\s+/g, ''),
+        label: String(r['COMPTE'] || r['Libellé'] || r['Intitulé'] || r['Label'] || '').trim(),
+      })).filter(a => a.code && a.label)
     }
 
-    if (!accountsParsed.length) { toast.error('Aucun compte trouvé dans le fichier'); return }
+    if (!accountsParsed.length) { toast.error('Aucun compte trouvé.'); return }
 
-    // normalize codes as strings without spaces
-    accountsParsed = accountsParsed.map(a => ({ code: String(a.code).replace(/\s+/g, ''), label: String(a.label).trim() }))
-
-    const codesSet = new Set(accountsParsed.map(a => a.code))
-    // infer parent by trimming rightmost digit until found
-    function inferParent(code: string) {
+    const codesSet = new Set(accountsParsed.map((a: any) => String(a.code)))
+    function inferParent(code: string): string | null {
       for (let len = code.length - 1; len >= 1; len--) {
-        const candidate = code.slice(0, len)
-        if (codesSet.has(candidate)) return candidate
+        const c = code.slice(0, len)
+        if (codesSet.has(c)) return c
       }
       return null
     }
 
-    const withParents = accountsParsed.map(a => ({
-      code: a.code,
-      label: a.label,
-      parentCode: inferParent(a.code),
-      level: a.code.length,
+    const withParents = accountsParsed.map((a: any) => ({
+      code: String(a.code),
+      label: String(a.label),
+      parentCode: a.parentCode ?? inferParent(String(a.code)),
+      level: String(a.code).length,
     }))
 
-    // send to backend
     setLoading(true)
-    const res = await fetch('/api/comptabilite/accounts/bulk', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ accounts: withParents }) })
+    const res = await fetch('/api/comptabilite/accounts/bulk', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ accounts: withParents }),
+    })
     setLoading(false)
     if (res.ok) {
       const j = await res.json()
-      toast.success(`Importé ${j.count} comptes`)
+      toast.success(`${j.count ?? withParents.length} comptes importés.`)
       await fetchAccounts()
     } else {
       const err = await res.json().catch(() => ({ error: 'Erreur inconnue' }))
-      toast.error(err.error || 'Erreur lors de limport')
+      toast.error(err.error || 'Erreur lors de l\'import.')
     }
   }
 
   function onFileChange(e: React.ChangeEvent<HTMLInputElement>) {
-    const f = e.target.files && e.target.files[0]
+    const f = e.target.files?.[0]
     if (!f) return
     handleFile(f)
     e.currentTarget.value = ''
   }
 
   return (
-    <div className="p-4">
-      <div className="flex justify-between items-center mb-4">
-        <h2 className="text-lg font-medium">Plan comptable</h2>
-        <div>
-          <button onClick={startCreate} className="btn">Ajouter un compte</button>
-          <label className="ml-2 btn">
+    <div className="space-y-4">
+      {/* Header */}
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex items-center gap-3">
+          <input
+            type="search"
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            placeholder="Rechercher par code ou intitulé…"
+            className="w-72 rounded-md border border-black/15 bg-white px-3 py-2 text-sm dark:border-white/15 dark:bg-zinc-900"
+          />
+          <button
+            onClick={() => setExpandAll(v => !v)}
+            className="rounded-md border border-black/15 px-3 py-2 text-sm hover:bg-black/5 dark:border-white/15 dark:hover:bg-white/5"
+          >
+            {expandAll ? 'Réduire tout' : 'Développer tout'}
+          </button>
+          {loading && <span className="text-xs text-black/40 dark:text-white/40">Chargement…</span>}
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="text-xs text-black/40 dark:text-white/40">{totalAccounts} comptes</span>
+          <label className="cursor-pointer rounded-md border border-black/15 px-3 py-2 text-sm hover:bg-black/5 dark:border-white/15 dark:hover:bg-white/5">
             Importer
-            <input type="file" accept=".xlsx,.xls,.csv,.json" onChange={onFileChange} style={{ display: 'none' }} />
+            <input type="file" accept=".xlsx,.xls,.csv,.json" onChange={onFileChange} className="hidden" />
           </label>
+          <button
+            onClick={() => setEditing({})}
+            className="rounded-md bg-black px-3 py-2 text-sm font-semibold text-white dark:bg-white dark:text-black"
+          >
+            + Ajouter
+          </button>
         </div>
       </div>
 
-      {loading ? <div>Chargement...</div> : (
-        <div className="grid gap-2">
-          {accounts.map((a) => (
-            <div key={a.id} className="flex justify-between items-center border p-2 rounded">
-              <div>
-                <div className="font-medium">{a.code} — {a.label}</div>
-                {a.parentCode ? <div className="text-xs text-muted-foreground">Parent: {a.parentCode}</div> : null}
-              </div>
-              <div className="flex gap-2">
-                <button onClick={() => startEdit(a)} className="btn">Éditer</button>
-                <button onClick={() => remove(a.id)} className="btn btn-danger">Supprimer</button>
-              </div>
-            </div>
-          ))}
+      {/* Plan comptable by class */}
+      {classKeys.length === 0 && !loading && (
+        <div className="rounded-xl border border-dashed border-black/20 px-6 py-10 text-center text-sm text-black/50 dark:border-white/20 dark:text-white/50">
+          {accounts.length === 0
+            ? 'Aucun compte dans la base. Importez le plan comptable via le bouton ci-dessus.'
+            : 'Aucun résultat pour cette recherche.'}
         </div>
       )}
 
-      {showForm && editing && (
-        <div className="mt-4 border p-4 rounded">
-          <h3 className="font-semibold mb-2">{editing.id ? 'Modifier' : 'Créer'} compte</h3>
-          <div className="grid grid-cols-2 gap-2">
-            <div>
-              <label>Code</label>
-              <input value={editing.code} onChange={(e) => setEditing({ ...editing, code: e.target.value })} className="input" />
-            </div>
-            <div>
-              <label>Intitulé</label>
-              <input value={editing.label} onChange={(e) => setEditing({ ...editing, label: e.target.value })} className="input" />
-            </div>
-            <div>
-              <label>Parent (code)</label>
-              <input value={editing.parentCode ?? ''} onChange={(e) => setEditing({ ...editing, parentCode: e.target.value || null })} className="input" />
-            </div>
-            <div>
-              <label>Niveau</label>
-              <input type="number" value={editing.level ?? ''} onChange={(e) => setEditing({ ...editing, level: e.target.value ? Number(e.target.value) : null })} className="input" />
-            </div>
+      {classKeys.map(cls => (
+        <div key={cls} className={`rounded-xl border overflow-hidden ${CLASS_COLORS[cls] ?? 'border-black/10'}`}>
+          <div className="flex items-center gap-2 px-4 py-2.5">
+            <span className={`rounded px-2 py-0.5 text-xs font-bold ${CLASS_BADGE[cls] ?? ''}`}>Classe {cls}</span>
+            <span className="text-sm font-semibold">{CLASS_LABELS[cls]?.replace(`Classe ${cls} — `, '') ?? ''}</span>
+            <span className="ml-auto text-xs text-black/40 dark:text-white/30">
+              {byClass[cls].length} groupes
+            </span>
           </div>
-          <div className="mt-4 flex gap-2">
-            <button onClick={save} className="btn btn-primary">Enregistrer</button>
-            <button onClick={() => { setShowForm(false); setEditing(null) }} className="btn">Annuler</button>
+          <div className="border-t border-black/10 dark:border-white/10 bg-white dark:bg-zinc-950 px-2 py-2 space-y-0.5">
+            {byClass[cls].map(node => (
+              <AccountRow
+                key={node.id}
+                node={node}
+                depth={0}
+                onEdit={setEditing}
+                onDelete={handleDelete}
+                forceOpen={expandAll || search.length > 0}
+              />
+            ))}
           </div>
         </div>
+      ))}
+
+      {/* Modal */}
+      {editing !== null && (
+        <AccountFormModal
+          editing={editing}
+          allAccounts={accounts}
+          onClose={() => setEditing(null)}
+          onSaved={async () => { setEditing(null); await fetchAccounts() }}
+        />
       )}
     </div>
   )
