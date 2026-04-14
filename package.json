@@ -18,6 +18,8 @@
     "db:clone:prod-to-local": "bash scripts/clone-prod-to-local.sh",
     "deploy:hostinger": "bash scripts/deploy-hostinger.sh",
     "db:seed": "tsx prisma/seed.ts",
+    "db:seed:accounts": "node scripts/seed-plan-comptable.js",
+    "export:plan-comptable": "node scripts/export-plan-comptable.js",
     "db:import:tickets:excel": "tsx scripts/import-tickets-excel.ts",
     "db:reset:airline-deposits": "tsx scripts/reset-airline-deposits.ts",
     "db:allow:pnr-duplicates": "tsx scripts/ensure-ticket-number-duplicates.ts",

@@ -527,3 +527,21 @@ model StockMovement {
   needRequest   NeedRequest?      @relation(fields: [needRequestId], references: [id])
   createdAt     DateTime          @default(now())
 }
+
+enum AccountNormalBalance {
+  DEBIT
+  CREDIT
+}
+
+model Account {
+  id            String               @id @default(cuid())
+  code          String               @unique
+  label         String
+  parentCode    String?
+  level         Int?
+  normalBalance AccountNormalBalance @default(DEBIT)
+  createdAt     DateTime             @default(now())
+  updatedAt     DateTime             @updatedAt
+
+  @@index([code])
+}
