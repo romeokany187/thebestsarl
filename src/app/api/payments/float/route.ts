@@ -46,13 +46,13 @@ export async function PUT(req: Request) {
         // outflow from fromAccount if it's CASH
         if (tr.fromKind === 'CASH') {
           await prismaTx.cashOperation.create({ data: {
-            occurredAt: new Date(), direction: 'OUTFLOW', category: 'OTHER_EXPENSE', amount: tr.amount, currency: tr.currency, description: `Float transfer to ${tr.toAccount}`, cashDesk: tr.fromAccount, createdById: access.session.user.id
+            occurredAt: new Date(), direction: 'OUTFLOW', category: 'OTHER_EXPENSE', amount: tr.amount, currency: tr.currency, description: `Float transfer to ${tr.toAccount}`, cashDesk: tr.fromAccount, createdById: access.session.user.id, method: 'CASH'
           } })
         }
         // inflow to toAccount if it's CASH
         if (tr.toKind === 'CASH') {
           await prismaTx.cashOperation.create({ data: {
-            occurredAt: new Date(), direction: 'INFLOW', category: 'OTHER_SALE', amount: tr.amount, currency: tr.currency, description: `Float transfer from ${tr.fromAccount}`, cashDesk: tr.toAccount, createdById: access.session.user.id
+            occurredAt: new Date(), direction: 'INFLOW', category: 'OTHER_SALE', amount: tr.amount, currency: tr.currency, description: `Float transfer from ${tr.fromAccount}`, cashDesk: tr.toAccount, createdById: access.session.user.id, method: 'CASH'
           } })
         }
 
