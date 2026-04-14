@@ -326,10 +326,29 @@ export default function AccountsManager() {
   const [search, setSearch] = useState('')
   const [expandAll, setExpandAll] = useState(false)
   const [notify, setNotify] = useState<{ type: 'success' | 'error'; message: string } | null>(null)
+  const [seeding, setSeeding] = useState(false)
 
   function showNotify(type: 'success' | 'error', message: string) {
     setNotify({ type, message })
     setTimeout(() => setNotify(null), 3500)
+  }
+
+  async function seedPlanComptable() {
+    if (!confirm('Charger le plan comptable SYSCOHADA (452 comptes) ? Les comptes existants seront mis à jour.')) return
+    setSeeding(true)
+    try {
+      const res = await fetch('/api/admin/seed-plan-comptable', { method: 'POST' })
+      const payload = await res.json().catch(() => null)
+      if (!res.ok) {
+        showNotify('error', payload?.error ?? 'Erreur lors du chargement.')
+      } else {
+        showNotify('success', `${payload.count} comptes chargés avec succès.`)
+        await fetchAccounts()
+      }
+    } catch {
+      showNotify('error', 'Erreur réseau.')
+    }
+    setSeeding(false)
   }
 
   async function fetchAccounts() {
@@ -465,6 +484,13 @@ export default function AccountsManager() {
             Importer
             <input type="file" accept=".xlsx,.xls,.csv,.json" onChange={onFileChange} className="hidden" />
           </label>
+          <button
+            onClick={seedPlanComptable}
+            disabled={seeding}
+            className="rounded-md border border-indigo-300 bg-indigo-50 px-3 py-2 text-sm font-medium text-indigo-700 hover:bg-indigo-100 disabled:opacity-50 dark:border-indigo-700 dark:bg-indigo-950/30 dark:text-indigo-300 dark:hover:bg-indigo-900/40"
+          >
+            {seeding ? 'Chargement…' : '↓ Charger plan SYSCOHADA'}
+          </button>
           <button
             onClick={() => setEditing({})}
             className="rounded-md bg-black px-3 py-2 text-sm font-semibold text-white dark:bg-white dark:text-black"
