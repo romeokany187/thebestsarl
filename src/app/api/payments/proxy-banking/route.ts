@@ -107,7 +107,7 @@ import { requireApiModuleAccess } from "@/lib/rbac";
 import { writeActivityLog } from "@/lib/activity-log";
 
 const proxyBankingSchema = z.object({
-  operationType: z.enum(["OPENING_BALANCE", "DEPOSIT", "WITHDRAWAL"]),
+  operationType: z.enum(["OPENING_BALANCE", "DEPOSIT", "WITHDRAWAL", "FLOAT_TO_VIRTUAL", "FLOAT_TO_CASH"]),
   channel: z.enum(["CASH", "AIRTEL_MONEY", "ORANGE_MONEY", "MPESA", "EQUITY", "RAWBANK_ILLICOCASH"]),
   amount: z.number().positive(),
   currency: z.enum(["USD", "CDF"]),
@@ -122,7 +122,7 @@ function canWriteProxyBanking(role: string, jobTitle: string | null | undefined)
   return role === "ADMIN" || role === "ACCOUNTANT" || isCashierJobTitle(jobTitle) || jobTitle === "COMPTABLE";
 }
 
-function proxyDescriptionPrefix(operationType: "OPENING_BALANCE" | "DEPOSIT" | "WITHDRAWAL", channel: ProxyChannel) {
+function proxyDescriptionPrefix(operationType: "OPENING_BALANCE" | "DEPOSIT" | "WITHDRAWAL" | "FLOAT_TO_VIRTUAL" | "FLOAT_TO_CASH", channel: ProxyChannel) {
   return `PROXY_BANKING:${operationType}:${channel}`;
 }
 
@@ -347,6 +347,165 @@ export async function POST(request: NextRequest) {
       reference: data.reference,
       description: label,
     },
+  });
+
+  return NextResponse.json({ success: true }, { status: 201 });
+}
+
+// ─── FLOAT: Cash → Virtuel ──────────────────────────────────────────────────
+// La caissière dépose du cash pour approvisionner un compte virtuel
+// (va à la banque / super-agent avec du cash, le virtuel est crédité)
+
+export async function PUT(request: NextRequest) {
+  const access = await requireApiModuleAccess("payments", ["ADMIN", "DIRECTEUR_GENERAL", "MANAGER", "ACCOUNTANT", "EMPLOYEE"]);
+  if (access.error) return access.error;
+
+  if (!canWriteProxyBanking(access.role, access.session.user.jobTitle)) {
+    return NextResponse.json({ error: "Seuls les profils caisse autorisés peuvent enregistrer un transfert float." }, { status: 403 });
+  }
+
+  const body = await request.json();
+  const floatSchema = z.object({
+    direction: z.enum(["FLOAT_TO_VIRTUAL", "FLOAT_TO_CASH"]),
+    channel: z.enum(["AIRTEL_MONEY", "ORANGE_MONEY", "MPESA", "EQUITY", "RAWBANK_ILLICOCASH"]),
+    amount: z.number().positive(),
+    currency: z.enum(["USD", "CDF"]),
+    reference: z.string().trim().min(2).max(180),
+    description: z.string().trim().max(500).optional(),
+    occurredAt: z.coerce.date().optional(),
+  });
+
+  const parsed = floatSchema.safeParse(body);
+  if (!parsed.success) {
+    return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
+  }
+
+  const data = parsed.data;
+  const occurredAt = data.occurredAt ?? new Date();
+
+  const existingOps = await prisma.cashOperation.findMany({
+    where: {
+      occurredAt: { lte: occurredAt },
+      description: { startsWith: "PROXY_BANKING:" },
+    },
+    select: { direction: true, amount: true, currency: true, method: true },
+    orderBy: { occurredAt: "asc" },
+    take: 100000,
+  });
+
+  const balances = computeProxyBalances(existingOps);
+  const label = data.description?.trim() || (data.direction === "FLOAT_TO_VIRTUAL" ? "Approvisionnement virtuel" : "Retrait vers cash");
+
+  if (data.direction === "FLOAT_TO_VIRTUAL") {
+    // Cash sort → virtuel entre
+    const availableCash = balances.CASH[data.currency];
+    if (data.amount > availableCash + 0.0001) {
+      return NextResponse.json(
+        { error: `Solde cash insuffisant : disponible ${availableCash.toFixed(2)} ${data.currency}.` },
+        { status: 400 },
+      );
+    }
+
+    const created = await prisma.$transaction(async (tx) => {
+      const cashOut = await tx.cashOperation.create({
+        data: {
+          occurredAt,
+          direction: "OUTFLOW",
+          category: "OTHER_EXPENSE",
+          amount: data.amount,
+          currency: data.currency,
+          method: "CASH",
+          reference: data.reference,
+          description: `${proxyDescriptionPrefix("FLOAT_TO_VIRTUAL", data.channel)}:${label}:CASH_OUT`,
+          cashDesk: "PROXY_BANKING",
+          createdById: access.session.user.id,
+        },
+        select: { id: true },
+      });
+
+      const virtualIn = await tx.cashOperation.create({
+        data: {
+          occurredAt,
+          direction: "INFLOW",
+          category: "OTHER_SALE",
+          amount: data.amount,
+          currency: data.currency,
+          method: data.channel,
+          reference: data.reference,
+          description: `${proxyDescriptionPrefix("FLOAT_TO_VIRTUAL", data.channel)}:${label}:VIRTUAL_IN`,
+          cashDesk: "PROXY_BANKING",
+          createdById: access.session.user.id,
+        },
+        select: { id: true },
+      });
+
+      return { cashOutId: cashOut.id, virtualInId: virtualIn.id };
+    });
+
+    await writeActivityLog({
+      actorId: access.session.user.id,
+      action: "PROXY_BANKING_FLOAT_RECORDED",
+      entityType: "CASH_OPERATION",
+      entityId: created.virtualInId,
+      summary: `Float Cash→${data.channel} : ${data.amount.toFixed(2)} ${data.currency} transféré du cash vers le virtuel.`,
+      payload: { direction: data.direction, channel: data.channel, amount: data.amount, currency: data.currency, reference: data.reference },
+    });
+
+    return NextResponse.json({ success: true }, { status: 201 });
+  }
+
+  // FLOAT_TO_CASH : virtuel sort → cash entre
+  const availableVirtual = balances[data.channel][data.currency];
+  if (data.amount > availableVirtual + 0.0001) {
+    return NextResponse.json(
+      { error: `Solde ${data.channel} insuffisant : disponible ${availableVirtual.toFixed(2)} ${data.currency}.` },
+      { status: 400 },
+    );
+  }
+
+  const created = await prisma.$transaction(async (tx) => {
+    const virtualOut = await tx.cashOperation.create({
+      data: {
+        occurredAt,
+        direction: "OUTFLOW",
+        category: "OTHER_EXPENSE",
+        amount: data.amount,
+        currency: data.currency,
+        method: data.channel,
+        reference: data.reference,
+        description: `${proxyDescriptionPrefix("FLOAT_TO_CASH", data.channel)}:${label}:VIRTUAL_OUT`,
+        cashDesk: "PROXY_BANKING",
+        createdById: access.session.user.id,
+      },
+      select: { id: true },
+    });
+
+    const cashIn = await tx.cashOperation.create({
+      data: {
+        occurredAt,
+        direction: "INFLOW",
+        category: "OTHER_SALE",
+        amount: data.amount,
+        currency: data.currency,
+        method: "CASH",
+        reference: data.reference,
+        description: `${proxyDescriptionPrefix("FLOAT_TO_CASH", data.channel)}:${label}:CASH_IN`,
+        cashDesk: "PROXY_BANKING",
+        createdById: access.session.user.id,
+      },
+      select: { id: true },
+    });
+
+    return { virtualOutId: virtualOut.id, cashInId: cashIn.id };
+  });
+
+  await writeActivityLog({
+    actorId: access.session.user.id,
+    action: "PROXY_BANKING_FLOAT_RECORDED",
+    entityType: "CASH_OPERATION",
+    entityId: created.cashInId,
+    summary: `Float ${data.channel}→Cash : ${data.amount.toFixed(2)} ${data.currency} transféré du virtuel vers le cash.`,
+    payload: { direction: data.direction, channel: data.channel, amount: data.amount, currency: data.currency, reference: data.reference },
   });
 
   return NextResponse.json({ success: true }, { status: 201 });

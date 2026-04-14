@@ -13,6 +13,7 @@ function toLocalDateTimeInputValue(date: Date): string {
 }
 
 type ProxyOperationType = "OPENING_BALANCE" | "DEPOSIT" | "WITHDRAWAL";
+type FloatDirection = "FLOAT_TO_VIRTUAL" | "FLOAT_TO_CASH";
 type ProxyChannel = "CASH" | "AIRTEL_MONEY" | "ORANGE_MONEY" | "MPESA" | "EQUITY" | "RAWBANK_ILLICOCASH";
 
 const channelOptions: Array<{ value: ProxyChannel; label: string }> = [
@@ -43,6 +44,16 @@ export function ProxyBankingForm() {
   const [changeLoading, setChangeLoading] = useState(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
+
+  // Float state
+  const [floatDirection, setFloatDirection] = useState<FloatDirection>("FLOAT_TO_VIRTUAL");
+  const [floatChannel, setFloatChannel] = useState<ProxyChannel>("AIRTEL_MONEY");
+  const [floatAmount, setFloatAmount] = useState("");
+  const [floatCurrency, setFloatCurrency] = useState<"USD" | "CDF">("USD");
+  const [floatReference, setFloatReference] = useState("");
+  const [floatDescription, setFloatDescription] = useState("");
+  const [floatOccurredAt, setFloatOccurredAt] = useState(toLocalDateTimeInputValue(new Date()));
+  const [floatLoading, setFloatLoading] = useState(false);
 
   const isOpening = operationType === "OPENING_BALANCE";
   const isDeposit = operationType === "DEPOSIT";
@@ -199,6 +210,70 @@ export function ProxyBankingForm() {
     } catch {
       setError("Erreur réseau pendant l'opération de change.");
       setChangeLoading(false);
+    }
+  }
+
+  async function onFloatSubmit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setFloatLoading(true);
+    setMessage("");
+    setError("");
+
+    const numericAmount = Number.parseFloat(floatAmount);
+    if (!Number.isFinite(numericAmount) || numericAmount <= 0) {
+      setError("Saisissez un montant valide.");
+      setFloatLoading(false);
+      return;
+    }
+
+    if (!floatReference.trim()) {
+      setError("La référence justificative est obligatoire.");
+      setFloatLoading(false);
+      return;
+    }
+
+    if (!floatOccurredAt) {
+      setError("Sélectionnez la date et l'heure de l'opération.");
+      setFloatLoading(false);
+      return;
+    }
+
+    try {
+      const response = await fetch("/api/payments/proxy-banking", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          direction: floatDirection,
+          channel: floatChannel,
+          amount: numericAmount,
+          currency: floatCurrency,
+          reference: floatReference.trim(),
+          description: floatDescription.trim() || undefined,
+          occurredAt: new Date(floatOccurredAt).toISOString(),
+        }),
+      });
+
+      const payload = await response.json().catch(() => null);
+      if (!response.ok) {
+        setError(payload?.error ?? "Impossible d'enregistrer le transfert float.");
+        setFloatLoading(false);
+        return;
+      }
+
+      if (floatDirection === "FLOAT_TO_VIRTUAL") {
+        setMessage(`Float enregistré : cash débité et ${floatChannel.replace("_", " ")} crédité de ${numericAmount.toFixed(2)} ${floatCurrency}.`);
+      } else {
+        setMessage(`Float enregistré : ${floatChannel.replace("_", " ")} débité et cash crédité de ${numericAmount.toFixed(2)} ${floatCurrency}.`);
+      }
+
+      setFloatAmount("");
+      setFloatReference("");
+      setFloatDescription("");
+      setFloatLoading(false);
+      router.refresh();
+    } catch {
+      setError("Erreur réseau pendant le transfert float.");
+      setFloatLoading(false);
     }
   }
 
@@ -401,6 +476,107 @@ export function ProxyBankingForm() {
           <div className="lg:col-span-2 rounded-md border border-dashed border-black/15 px-3 py-2 text-xs text-black/70 dark:border-white/15 dark:text-white/70">
             Remise au client estimée : <strong>{changePaidAmountPreview.toFixed(2)} {changePaidCurrency}</strong>
           </div>
+        </form>
+      </div>
+
+      <div className="mt-4 border-t border-black/10 pt-4 dark:border-white/10">
+        <h3 className="text-xs font-semibold uppercase tracking-wide text-black/60 dark:text-white/60">Gestion du float (transferts internes)</h3>
+        <p className="mt-1 text-xs text-black/60 dark:text-white/60">
+          <strong>Cash → Virtuel</strong> : la caissière dépose du cash pour approvisionner un compte virtuel (banque / super-agent).{" "}
+          <strong>Virtuel → Cash</strong> : retrait d&apos;un compte virtuel pour obtenir du cash physique.
+        </p>
+
+        <form onSubmit={onFloatSubmit} className="mt-3 grid gap-3 lg:grid-cols-4 lg:items-end">
+          <div>
+            <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-black/60 dark:text-white/60">Direction</label>
+            <select
+              value={floatDirection}
+              onChange={(event) => setFloatDirection(event.target.value as FloatDirection)}
+              className="w-full rounded-md border border-black/15 bg-white px-3 py-2 text-sm dark:border-white/15 dark:bg-zinc-900"
+            >
+              <option value="FLOAT_TO_VIRTUAL">Cash → Virtuel (approvisionner)</option>
+              <option value="FLOAT_TO_CASH">Virtuel → Cash (retirer)</option>
+            </select>
+          </div>
+
+          <div>
+            <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-black/60 dark:text-white/60">Canal virtuel</label>
+            <select
+              value={floatChannel}
+              onChange={(event) => setFloatChannel(event.target.value as ProxyChannel)}
+              className="w-full rounded-md border border-black/15 bg-white px-3 py-2 text-sm dark:border-white/15 dark:bg-zinc-900"
+            >
+              {channelOptions
+                .filter((option) => option.value !== "CASH")
+                .map((option) => (
+                  <option key={option.value} value={option.value}>{option.label}</option>
+                ))}
+            </select>
+          </div>
+
+          <div>
+            <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-black/60 dark:text-white/60">Montant</label>
+            <input
+              type="number"
+              step="0.01"
+              min="0"
+              value={floatAmount}
+              onChange={(event) => setFloatAmount(event.target.value)}
+              className="w-full rounded-md border border-black/15 bg-white px-3 py-2 text-sm dark:border-white/15 dark:bg-zinc-900"
+              placeholder="0.00"
+            />
+          </div>
+
+          <div>
+            <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-black/60 dark:text-white/60">Devise</label>
+            <select
+              value={floatCurrency}
+              onChange={(event) => setFloatCurrency(event.target.value as "USD" | "CDF")}
+              className="w-full rounded-md border border-black/15 bg-white px-3 py-2 text-sm dark:border-white/15 dark:bg-zinc-900"
+            >
+              <option value="USD">USD</option>
+              <option value="CDF">CDF</option>
+            </select>
+          </div>
+
+          <div>
+            <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-black/60 dark:text-white/60">Date opération</label>
+            <input
+              type="datetime-local"
+              value={floatOccurredAt}
+              onChange={(event) => setFloatOccurredAt(event.target.value)}
+              className="w-full rounded-md border border-black/15 bg-white px-3 py-2 text-sm dark:border-white/15 dark:bg-zinc-900"
+            />
+          </div>
+
+          <div>
+            <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-black/60 dark:text-white/60">Référence</label>
+            <input
+              value={floatReference}
+              onChange={(event) => setFloatReference(event.target.value)}
+              required
+              className="w-full rounded-md border border-black/15 bg-white px-3 py-2 text-sm dark:border-white/15 dark:bg-zinc-900"
+              placeholder="N° reçu / bordereau / pièce"
+            />
+          </div>
+
+          <div>
+            <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-black/60 dark:text-white/60">Libellé</label>
+            <input
+              value={floatDescription}
+              onChange={(event) => setFloatDescription(event.target.value)}
+              className="w-full rounded-md border border-black/15 bg-white px-3 py-2 text-sm dark:border-white/15 dark:bg-zinc-900"
+              placeholder={floatDirection === "FLOAT_TO_VIRTUAL" ? "Approv. Airtel Money" : "Retrait vers cash"}
+            />
+          </div>
+
+          <button
+            type="submit"
+            disabled={floatLoading}
+            className="rounded-md bg-indigo-600 px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50 hover:bg-indigo-700"
+          >
+            {floatLoading ? "Enregistrement..." : floatDirection === "FLOAT_TO_VIRTUAL" ? "Cash → Virtuel" : "Virtuel → Cash"}
+          </button>
         </form>
       </div>
 
