@@ -196,6 +196,7 @@ model User {
   airlineDepositMovements AirlineDepositMovement[] @relation("AirlineDepositMovementCreator")
   stockMovements          StockMovement[]         @relation("StockMovementActor")
   archiveUploads          ArchiveDocument[]       @relation("ArchiveUploader")
+  accountingEntries       AccountingEntry[]       @relation("AccountingEntryCreator")
   createdAt               DateTime                @default(now())
   updatedAt               DateTime                @updatedAt
 }
@@ -402,6 +403,7 @@ model CashOperation {
   cashDesk         String                // Identifiant de la caisse (THE_BEST, CAISSE_SAFETY, etc.)
   createdById      String
   createdBy        User                  @relation("CashOperationCreator", fields: [createdById], references: [id])
+  accountingEntry  AccountingEntry?
   createdAt        DateTime              @default(now())
   updatedAt        DateTime              @updatedAt
 
@@ -533,6 +535,11 @@ enum AccountNormalBalance {
   CREDIT
 }
 
+enum AccountingEntrySide {
+  DEBIT
+  CREDIT
+}
+
 model Account {
   id            String               @id @default(cuid())
   code          String               @unique
@@ -544,4 +551,40 @@ model Account {
   updatedAt     DateTime             @updatedAt
 
   @@index([code])
+}
+
+model AccountingEntry {
+  id                  String                @id @default(cuid())
+  sequence            Int                   @unique @default(autoincrement())
+  entryDate           DateTime
+  pole                String?
+  libelle             String
+  pieceJustificative  String?
+  exchangeRate        Float?
+  sourceCashOperationId String?             @unique
+  sourceCashOperation CashOperation?        @relation(fields: [sourceCashOperationId], references: [id], onDelete: SetNull)
+  createdById         String
+  createdBy           User                  @relation("AccountingEntryCreator", fields: [createdById], references: [id])
+  lines               AccountingEntryLine[]
+  createdAt           DateTime              @default(now())
+  updatedAt           DateTime              @updatedAt
+
+  @@index([entryDate])
+  @@index([createdById])
+}
+
+model AccountingEntryLine {
+  id           String              @id @default(cuid())
+  entryId       String
+  entry         AccountingEntry    @relation(fields: [entryId], references: [id], onDelete: Cascade)
+  side          AccountingEntrySide
+  orderIndex    Int                 @default(0)
+  accountCode   String
+  accountLabel  String
+  amountUsd     Float?
+  amountCdf     Float?
+  createdAt     DateTime            @default(now())
+
+  @@index([entryId, side])
+  @@index([accountCode])
 }

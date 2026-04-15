@@ -342,3 +342,71 @@ export const cashConversionSchema = z.object({
   reference: z.string().trim().min(2, "La référence de conversion est obligatoire.").max(180),
   description: z.string().trim().min(5).max(500).optional(),
 });
+
+export const accountingEntryLineSchema = z.object({
+  side: z.enum(["DEBIT", "CREDIT"]),
+  accountCode: z.string().trim().min(1).max(50),
+  amountUsd: z.number().nonnegative().optional(),
+  amountCdf: z.number().nonnegative().optional(),
+}).superRefine((value, ctx) => {
+  const amountUsd = value.amountUsd ?? 0;
+  const amountCdf = value.amountCdf ?? 0;
+
+  if (amountUsd <= 0 && amountCdf <= 0) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "Chaque ligne doit contenir un montant USD ou CDF positif.",
+      path: ["amountUsd"],
+    });
+  }
+});
+
+export const accountingEntryCreateSchema = z.object({
+  entryDate: z.coerce.date(),
+  pole: z.string().trim().max(120).optional(),
+  libelle: z.string().trim().min(3).max(500),
+  pieceJustificative: z.string().trim().max(180).optional(),
+  exchangeRate: z.number().positive().optional(),
+  sourceCashOperationId: z.string().trim().min(1).optional(),
+  lines: z.array(accountingEntryLineSchema).min(2),
+}).superRefine((value, ctx) => {
+  const debitLines = value.lines.filter((line) => line.side === "DEBIT");
+  const creditLines = value.lines.filter((line) => line.side === "CREDIT");
+
+  if (debitLines.length === 0) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "Au moins un compte débité est obligatoire.",
+      path: ["lines"],
+    });
+  }
+
+  if (creditLines.length === 0) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "Au moins un compte crédité est obligatoire.",
+      path: ["lines"],
+    });
+  }
+
+  const totalDebitUsd = debitLines.reduce((sum, line) => sum + (line.amountUsd ?? 0), 0);
+  const totalCreditUsd = creditLines.reduce((sum, line) => sum + (line.amountUsd ?? 0), 0);
+  const totalDebitCdf = debitLines.reduce((sum, line) => sum + (line.amountCdf ?? 0), 0);
+  const totalCreditCdf = creditLines.reduce((sum, line) => sum + (line.amountCdf ?? 0), 0);
+
+  if (Math.abs(totalDebitUsd - totalCreditUsd) > 0.0001) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "Le total USD au débit doit égaler le total USD au crédit.",
+      path: ["lines"],
+    });
+  }
+
+  if (Math.abs(totalDebitCdf - totalCreditCdf) > 0.0001) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "Le total CDF au débit doit égaler le total CDF au crédit.",
+      path: ["lines"],
+    });
+  }
+});

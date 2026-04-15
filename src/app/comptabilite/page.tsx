@@ -28,6 +28,7 @@ export default async function Page() {
   })
 
   const AccountsManager = (await import('@/components/accounts-manager')).default
+  const AccountingJournalWorkspace = (await import('@/components/accounting-journal-workspace')).AccountingJournalWorkspace
   const totalAccounts = accounts.length
   const rootAccounts = accounts.filter((account) => !account.parentCode).length
   const detailAccounts = accounts.filter((account) => !accounts.some((candidate) => candidate.parentCode === account.code)).length
@@ -105,6 +106,7 @@ export default async function Page() {
             <div className="mt-3 flex flex-wrap gap-2">
               <Link href="#overview" className="rounded-full border border-black/15 px-3 py-2 text-xs font-semibold hover:bg-black/5 dark:border-white/15 dark:hover:bg-white/10">Vue d'ensemble</Link>
               <Link href="#pilotage" className="rounded-full border border-black/15 px-3 py-2 text-xs font-semibold hover:bg-black/5 dark:border-white/15 dark:hover:bg-white/10">Pilotage</Link>
+              <Link href="#journal" className="rounded-full border border-black/15 px-3 py-2 text-xs font-semibold hover:bg-black/5 dark:border-white/15 dark:hover:bg-white/10">Livre journal</Link>
               <Link href="#plan-comptable" className="rounded-full border border-black/15 px-3 py-2 text-xs font-semibold hover:bg-black/5 dark:border-white/15 dark:hover:bg-white/10">Plan détaillé</Link>
             </div>
             <p className="mt-4 text-sm text-black/60 dark:text-white/60">
@@ -135,6 +137,18 @@ export default async function Page() {
               </div>
             </div>
           </div>
+        </section>
+
+        <section id="journal" className="mb-6">
+          <div className="mb-4 rounded-2xl border border-black/10 bg-white p-4 shadow-sm dark:border-white/10 dark:bg-zinc-900">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-black/50 dark:text-white/50">Livre journal</p>
+            <h2 className="mt-1 text-lg font-semibold tracking-tight">Passation des opérations comptables</h2>
+            <p className="mt-2 text-sm text-black/60 dark:text-white/60">
+              Le comptable peut rattacher une opération de caisse au livre journal et saisir une écriture équilibrée en partie double, avec un ou plusieurs comptes au débit et au crédit selon le modèle de votre fichier Excel.
+            </p>
+          </div>
+
+          <AccountingJournalWorkspace />
         </section>
 
         <section id="plan-comptable">

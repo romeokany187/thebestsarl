@@ -80,7 +80,7 @@ function notificationTarget(notification: WorkflowNotification) {
   }
 
   if (notification.type === "PAYMENT_ENTRY" || notification.type.startsWith("CASH_OPERATION")) {
-    return { href: "/payments", label: "Ouvrir le module Paiements" };
+    return { href: "/comptabilite#journal", label: "Ouvrir le livre journal comptable" };
   }
 
   if (notification.type === "ASSIGNMENT") {
@@ -111,7 +111,7 @@ export function NotificationCenter({
             const target = notificationTarget(notification);
 
             return (
-              <Link key={notification.id} href={target.href} className="block px-4 py-3 transition hover:bg-black/[0.03] dark:hover:bg-white/[0.03]">
+              <Link key={notification.id} href={target.href} className="block px-4 py-3 transition hover:bg-black/3 dark:hover:bg-white/3">
                 <div className="flex flex-wrap items-start justify-between gap-2">
                   <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-center gap-2">
