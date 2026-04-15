@@ -1,6 +1,7 @@
 import React from 'react'
 import { AppShell } from '@/components/app-shell'
 import { AccountingPlanWorkspace } from '@/components/accounting-plan-workspace'
+import { AccountingReportsWorkspace } from '@/components/accounting-reports-workspace'
 import { AccountingWritingWorkspace } from '@/components/accounting-writing-workspace'
 import { KpiCard } from '@/components/kpi-card'
 import { prisma } from '@/lib/prisma'
@@ -21,6 +22,7 @@ export default async function Page() {
   const accounts = await prisma.account.findMany({
     select: {
       code: true,
+      label: true,
       parentCode: true,
     },
     orderBy: {
@@ -144,6 +146,7 @@ export default async function Page() {
               <AccountingJournalWorkspace />
             </div>
           )}
+          reportsWorkspace={<AccountingReportsWorkspace accounts={accounts.map((account) => ({ code: account.code, label: account.label }))} />}
           planWorkspace={(
             <AccountingPlanWorkspace
               totalAccounts={totalAccounts}

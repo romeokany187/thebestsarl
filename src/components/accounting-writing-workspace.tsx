@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 
-type AccountingView = "overview" | "pilotage" | "journal" | "plan";
+type AccountingView = "overview" | "pilotage" | "journal" | "reports" | "plan";
 
 type AccountingViewItem = {
   key: AccountingView;
@@ -14,6 +14,7 @@ const VIEW_ITEMS: AccountingViewItem[] = [
   { key: "overview", label: "Vue d'ensemble", tone: "emerald" },
   { key: "pilotage", label: "Pilotage", tone: "amber" },
   { key: "journal", label: "Livre journal", tone: "blue" },
+  { key: "reports", label: "Rapports", tone: "blue" },
   { key: "plan", label: "Plan comptable", tone: "violet" },
 ];
 
@@ -32,11 +33,13 @@ export function AccountingWritingWorkspace({
   overviewWorkspace,
   pilotageWorkspace,
   journalWorkspace,
+  reportsWorkspace,
   planWorkspace,
 }: {
   overviewWorkspace: React.ReactNode;
   pilotageWorkspace: React.ReactNode;
   journalWorkspace: React.ReactNode;
+  reportsWorkspace: React.ReactNode;
   planWorkspace: React.ReactNode;
 }) {
   const [view, setView] = useState<AccountingView>("overview");
@@ -83,6 +86,7 @@ export function AccountingWritingWorkspace({
           {view === "overview" ? overviewWorkspace : null}
           {view === "pilotage" ? pilotageWorkspace : null}
           {view === "journal" ? journalWorkspace : null}
+          {view === "reports" ? reportsWorkspace : null}
           {view === "plan" ? planWorkspace : null}
         </div>
       </div>
