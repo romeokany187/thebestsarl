@@ -141,19 +141,7 @@ export default async function Page() {
                 </p>
               </section>
 
-              <section className="grid gap-4 xl:grid-cols-[220px_minmax(0,1fr)]">
-                <div className="rounded-2xl border border-black/10 bg-white p-4 shadow-sm dark:border-white/10 dark:bg-zinc-900">
-                  <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-black/50 dark:text-white/50">Sous-menu journal</p>
-                  <div className="mt-3 space-y-2 text-xs text-black/60 dark:text-white/60">
-                    <p>Nouvelle ecriture: saisie manuelle complete.</p>
-                    <p>Historique: lecture des ecritures recentes deja passees.</p>
-                  </div>
-                </div>
-                <div className="space-y-4">
-                  <AccountingJournalWorkspace showHistory={false} />
-                  <AccountingJournalWorkspace showComposer={false} />
-                </div>
-              </section>
+              <AccountingJournalWorkspace />
             </div>
           )}
           planWorkspace={(
