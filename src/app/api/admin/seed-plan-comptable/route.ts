@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { requireApiRoles } from "@/lib/rbac";
 import { prisma } from "@/lib/prisma";
-import structuredPlan from "../../../../../imports/plan-comptable-structured.json";
+import structuredPlan from "@/lib/plan-comptable-structured.json";
 
 type PlanNode = {
   code: string;

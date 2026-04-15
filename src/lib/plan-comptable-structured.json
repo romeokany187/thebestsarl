@@ -1,0 +1,2373 @@
+[
+  {
+    "code": "10",
+    "label": "Capital",
+    "children": [
+      {
+        "code": "101",
+        "label": "Capital social",
+        "children": []
+      },
+      {
+        "code": "104",
+        "label": "Primes liées au capital",
+        "children": []
+      }
+    ]
+  },
+  {
+    "code": "11",
+    "label": "Réserves",
+    "children": [
+      {
+        "code": "111",
+        "label": "Réserve légale",
+        "children": []
+      },
+      {
+        "code": "112",
+        "label": "Réserves statutaires",
+        "children": []
+      },
+      {
+        "code": "118",
+        "label": "Autres réserves",
+        "children": []
+      }
+    ]
+  },
+  {
+    "code": "12",
+    "label": "Report à nouveau",
+    "children": [
+      {
+        "code": "121",
+        "label": "Report à nouveau créditeur",
+        "children": []
+      },
+      {
+        "code": "129",
+        "label": "Report à nouveau débiteur",
+        "children": []
+      }
+    ]
+  },
+  {
+    "code": "13",
+    "label": "Résultat net de l'exercice",
+    "children": [
+      {
+        "code": "131",
+        "label": "Résultat net : Bénéfice",
+        "children": []
+      },
+      {
+        "code": "139",
+        "label": "Résultat net : Perte",
+        "children": []
+      }
+    ]
+  },
+  {
+    "code": "14",
+    "label": "Subventions d'investissement",
+    "children": []
+  },
+  {
+    "code": "16",
+    "label": "Emprunts et dettes assimilées",
+    "children": [
+      {
+        "code": "162",
+        "label": "Emprunts auprès des établissements de crédit",
+        "children": []
+      },
+      {
+        "code": "166",
+        "label": "Comptes courants d'associés bloqués",
+        "children": []
+      }
+    ]
+  },
+  {
+    "code": "18",
+    "label": "Comptes de liaisons internes",
+    "children": [
+      {
+        "code": "181",
+        "label": "Comptes de liaison Siège / Mbujimayi",
+        "children": []
+      },
+      {
+        "code": "182",
+        "label": "Comptes de liaison Siège / Lubumbashi",
+        "children": []
+      },
+      {
+        "code": "183",
+        "label": "Comptes de liaison Siège / Agence",
+        "children": []
+      }
+    ]
+  },
+  {
+    "code": "19",
+    "label": "Provisions financières pour risques et charges",
+    "children": [
+      {
+        "code": "191",
+        "label": "Provisions pour litiges",
+        "children": []
+      },
+      {
+        "code": "192",
+        "label": "Provisions pour garanties données aux clients",
+        "children": []
+      },
+      {
+        "code": "193",
+        "label": "Provisions pour pertes sur marchés à terme",
+        "children": []
+      },
+      {
+        "code": "194",
+        "label": "Provisions pour amendes et pénalités",
+        "children": []
+      },
+      {
+        "code": "198",
+        "label": "Autres provisions pour charges à répartir sur plusieurs exercices.",
+        "children": []
+      }
+    ]
+  },
+  {
+    "code": "21",
+    "label": "Immobilisations Incorporelles",
+    "children": [
+      {
+        "code": "211",
+        "label": "Frais de développement",
+        "children": []
+      },
+      {
+        "code": "212",
+        "label": "Brevets, licences, marques",
+        "children": []
+      },
+      {
+        "code": "213",
+        "label": "Logiciels et Application",
+        "children": []
+      },
+      {
+        "code": "215",
+        "label": "Fonds de commerce",
+        "children": []
+      },
+      {
+        "code": "218",
+        "label": "Autres droits et valeurs incorporelles",
+        "children": []
+      },
+      {
+        "code": "219",
+        "label": "Immobilisations Incorporelles en cours",
+        "children": []
+      }
+    ]
+  },
+  {
+    "code": "22",
+    "label": "Terrains",
+    "children": [
+      {
+        "code": "221",
+        "label": "Terrains nus",
+        "children": []
+      },
+      {
+        "code": "228",
+        "label": "Aménagements de terrains",
+        "children": []
+      }
+    ]
+  },
+  {
+    "code": "23",
+    "label": "Bâtiments / Constructions",
+    "children": [
+      {
+        "code": "231",
+        "label": "Bâtiments industriels et commerciaux",
+        "children": []
+      },
+      {
+        "code": "234",
+        "label": "Installations Techniques",
+        "children": []
+      },
+      {
+        "code": "235",
+        "label": "Aménagements de bureaux",
+        "children": []
+      },
+      {
+        "code": "238",
+        "label": "Installations fixes",
+        "children": []
+      }
+    ]
+  },
+  {
+    "code": "24",
+    "label": "Matériel, Mobilier et Actifs Biologiques",
+    "children": [
+      {
+        "code": "241",
+        "label": "Matériel Industriel et Agricole",
+        "children": []
+      },
+      {
+        "code": "243",
+        "label": "Matériel d’emballage récupérable et identifiable",
+        "children": []
+      },
+      {
+        "code": "244",
+        "label": "Matériel et Mobilier",
+        "children": [
+          {
+            "code": "2441",
+            "label": "Matériel de bureau",
+            "children": []
+          },
+          {
+            "code": "2442",
+            "label": "Matériel informatique",
+            "children": []
+          },
+          {
+            "code": "2443",
+            "label": "Matériel bureautique",
+            "children": []
+          },
+          {
+            "code": "2444",
+            "label": "Mobilier de bureau",
+            "children": []
+          },
+          {
+            "code": "2446",
+            "label": "Matériel et mobilier des immeubles de rapport",
+            "children": []
+          },
+          {
+            "code": "2447",
+            "label": "Matériel et mobilier des logements du personnel",
+            "children": []
+          }
+        ]
+      },
+      {
+        "code": "245",
+        "label": "Matériel de Transport",
+        "children": [
+          {
+            "code": "2452",
+            "label": "Matériel automobile",
+            "children": []
+          },
+          {
+            "code": "2453",
+            "label": "Matériel ferroviaire",
+            "children": []
+          },
+          {
+            "code": "2454",
+            "label": "Matériel fluvial, lagunaire",
+            "children": []
+          },
+          {
+            "code": "2455",
+            "label": "Matériel naval",
+            "children": []
+          },
+          {
+            "code": "2456",
+            "label": "Matériel aérien",
+            "children": []
+          },
+          {
+            "code": "2458",
+            "label": "Autres matériels de transport",
+            "children": []
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "code": "25",
+    "label": "Avances et Acomptes versés sur Immobilisations",
+    "children": []
+  },
+  {
+    "code": "27",
+    "label": "Immobilisations Financières",
+    "children": [
+      {
+        "code": "271",
+        "label": "Prêts au personnel (Prêts à plus d'un an)",
+        "children": []
+      },
+      {
+        "code": "274",
+        "label": "Titres de participation",
+        "children": []
+      },
+      {
+        "code": "275",
+        "label": "Dépôts et cautionnements versés",
+        "children": []
+      }
+    ]
+  },
+  {
+    "code": "28",
+    "label": "Amortissements",
+    "children": [
+      {
+        "code": "281",
+        "label": "Amortissements des immobilisations incorporelles",
+        "children": []
+      },
+      {
+        "code": "283",
+        "label": "Amortissement des bâtiments",
+        "children": [
+          {
+            "code": "2835",
+            "label": "Amortissement des aménagements",
+            "children": []
+          }
+        ]
+      },
+      {
+        "code": "284",
+        "label": "Amortissements du matériel et mobilier",
+        "children": [
+          {
+            "code": "2841",
+            "label": "Amortissement Matériel Roulant",
+            "children": []
+          },
+          {
+            "code": "2844",
+            "label": "Amortissement Matériel Safety",
+            "children": []
+          },
+          {
+            "code": "2845",
+            "label": "Amortissement Informatique",
+            "children": []
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "code": "31",
+    "label": "Crédits Compagnies",
+    "children": [
+      {
+        "code": "311",
+        "label": "Crédits Compagnie CAA",
+        "children": []
+      },
+      {
+        "code": "312",
+        "label": "Crédits Compagnie Air Congo",
+        "children": []
+      },
+      {
+        "code": "313",
+        "label": "Crédits Compagnie Ethiopian Airlines",
+        "children": []
+      },
+      {
+        "code": "314",
+        "label": "Crédits Compagnie Kenya Airways",
+        "children": []
+      },
+      {
+        "code": "315",
+        "label": "Crédits Compagnie Mont Gabaon",
+        "children": []
+      },
+      {
+        "code": "316",
+        "label": "Crédits Compagnie Airfast",
+        "children": []
+      },
+      {
+        "code": "317",
+        "label": "Crédits autres Compagnies",
+        "children": []
+      },
+      {
+        "code": "318",
+        "label": "Crédits en cours de transfert",
+        "children": []
+      }
+    ]
+  },
+  {
+    "code": "32",
+    "label": "Matières Premières et Fournitures Consommables",
+    "children": [
+      {
+        "code": "321",
+        "label": "Matières premières : Composants de base",
+        "children": []
+      },
+      {
+        "code": "322",
+        "label": "Fournitures consommables : Intrants de Nettoyage",
+        "children": [
+          {
+            "code": "3221",
+            "label": "Matériel de calage et emballage",
+            "children": []
+          },
+          {
+            "code": "3222",
+            "label": "Scellés et étiquettes de sécurité Cargo",
+            "children": []
+          },
+          {
+            "code": "3223",
+            "label": "Équipements de Protection Individuelle",
+            "children": []
+          }
+        ]
+      },
+      {
+        "code": "324",
+        "label": "Fournitures d'exploitation",
+        "children": []
+      },
+      {
+        "code": "325",
+        "label": "Fournitures de bureau",
+        "children": [
+          {
+            "code": "3251",
+            "label": "Imprimés techniques",
+            "children": []
+          },
+          {
+            "code": "3252",
+            "label": "Papeterie et consommables informatiques",
+            "children": []
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "code": "33",
+    "label": "Autres Approvisionnements",
+    "children": [
+      {
+        "code": "332",
+        "label": "Emballages",
+        "children": []
+      },
+      {
+        "code": "333",
+        "label": "Pièces de rechange Flotte",
+        "children": [
+          {
+            "code": "3331",
+            "label": "Imprimés spécifiques",
+            "children": []
+          },
+          {
+            "code": "3332",
+            "label": "Papeterie générale et Toners",
+            "children": []
+          }
+        ]
+      },
+      {
+        "code": "335",
+        "label": "Fournitures de bureau et Imprimés",
+        "children": []
+      },
+      {
+        "code": "336",
+        "label": "Fournitures d'entretien",
+        "children": []
+      }
+    ]
+  },
+  {
+    "code": "34",
+    "label": "Services en cours",
+    "children": [
+      {
+        "code": "341",
+        "label": "Travaux en cours",
+        "children": []
+      },
+      {
+        "code": "345",
+        "label": "Services en cours",
+        "children": []
+      }
+    ]
+  },
+  {
+    "code": "35",
+    "label": "Produits finis",
+    "children": [
+      {
+        "code": "351",
+        "label": "Produits finis",
+        "children": []
+      }
+    ]
+  },
+  {
+    "code": "36",
+    "label": "Produits Intermédiaires et Résiduels",
+    "children": [
+      {
+        "code": "361",
+        "label": "Produits intermédiaires",
+        "children": []
+      },
+      {
+        "code": "365",
+        "label": "Déchets et rebuts",
+        "children": []
+      }
+    ]
+  },
+  {
+    "code": "37",
+    "label": "Stocks provenant d'immobilisations",
+    "children": [
+      {
+        "code": "371",
+        "label": "Pièces récupérées sur immobilisations",
+        "children": []
+      }
+    ]
+  },
+  {
+    "code": "38",
+    "label": "Stocks achetés",
+    "children": [
+      {
+        "code": "381",
+        "label": "Crédits compagnies",
+        "children": []
+      },
+      {
+        "code": "382",
+        "label": "Matières premières et fournitures consommables",
+        "children": []
+      },
+      {
+        "code": "383",
+        "label": "Autres approvisionnements",
+        "children": []
+      }
+    ]
+  },
+  {
+    "code": "39",
+    "label": "Dépréciations des stocks",
+    "children": [
+      {
+        "code": "391",
+        "label": "Dépréciation des crédits compagnies",
+        "children": []
+      },
+      {
+        "code": "392",
+        "label": "Dépréciation des stocks de matières premières et fournitures",
+        "children": []
+      },
+      {
+        "code": "398",
+        "label": "Dépréciation des autres approvisionnements",
+        "children": []
+      }
+    ]
+  },
+  {
+    "code": "40",
+    "label": "Fournisseurs et Comptes Rattachés",
+    "children": [
+      {
+        "code": "401",
+        "label": "Fournisseurs d'exploitation",
+        "children": [
+          {
+            "code": "4011",
+            "label": "Compagnies Aériennes",
+            "children": [
+              {
+                "code": "40111",
+                "label": "CAA",
+                "children": []
+              },
+              {
+                "code": "40112",
+                "label": "Air Congo",
+                "children": []
+              },
+              {
+                "code": "40113",
+                "label": "Ethiopian Airlines",
+                "children": []
+              },
+              {
+                "code": "40114",
+                "label": "Kenya Airways",
+                "children": []
+              },
+              {
+                "code": "40115",
+                "label": "Mont Gabaon",
+                "children": []
+              },
+              {
+                "code": "40116",
+                "label": "Airfast",
+                "children": []
+              },
+              {
+                "code": "40117",
+                "label": "Autres compagnies partenaires",
+                "children": []
+              }
+            ]
+          },
+          {
+            "code": "4012",
+            "label": "Partenaires et Agences Confrères",
+            "children": [
+              {
+                "code": "40122",
+                "label": "Dream",
+                "children": []
+              },
+              {
+                "code": "40123",
+                "label": "Partenaire X",
+                "children": []
+              }
+            ]
+          },
+          {
+            "code": "4013",
+            "label": "Prestataires Visa & Consulats",
+            "children": [
+              {
+                "code": "40131",
+                "label": "Ambassades / Centres de capture",
+                "children": []
+              }
+            ]
+          },
+          {
+            "code": "4014",
+            "label": "Fournisseurs Intrants Safety",
+            "children": []
+          },
+          {
+            "code": "4015",
+            "label": "Prestataires de services et loyers",
+            "children": [
+              {
+                "code": "40151",
+                "label": "Bailleur Agence centrale",
+                "children": []
+              },
+              {
+                "code": "40152",
+                "label": "Bailleur Agence de Lubumbashi",
+                "children": []
+              },
+              {
+                "code": "40153",
+                "label": "Bailleur Agence de Mbujimayi",
+                "children": []
+              },
+              {
+                "code": "40154",
+                "label": "Bailleur Agence X",
+                "children": []
+              },
+              {
+                "code": "40158",
+                "label": "Fournisseur internet",
+                "children": []
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "code": "402",
+        "label": "Fournisseurs, effets à payer",
+        "children": []
+      },
+      {
+        "code": "406",
+        "label": "Fournisseurs d'investissements",
+        "children": []
+      },
+      {
+        "code": "408",
+        "label": "Fournisseurs, factures non parvenues",
+        "children": []
+      },
+      {
+        "code": "409",
+        "label": "Fournisseurs débiteurs",
+        "children": []
+      }
+    ]
+  },
+  {
+    "code": "41",
+    "label": "Clients et Comptes Rattachés",
+    "children": [
+      {
+        "code": "411",
+        "label": "Clients",
+        "children": [
+          {
+            "code": "4111",
+            "label": "Clients - Billetterie",
+            "children": []
+          },
+          {
+            "code": "4112",
+            "label": "Clients - Cargo / TSL",
+            "children": []
+          },
+          {
+            "code": "4113",
+            "label": "Clients - Safety",
+            "children": []
+          },
+          {
+            "code": "4114",
+            "label": "Clients - Visa / Transit",
+            "children": []
+          }
+        ]
+      },
+      {
+        "code": "412",
+        "label": "Clients, effets à recevoir",
+        "children": []
+      },
+      {
+        "code": "414",
+        "label": "Créances sur clients",
+        "children": []
+      },
+      {
+        "code": "416",
+        "label": "Clients douteux ou litigieux",
+        "children": []
+      },
+      {
+        "code": "418",
+        "label": "Clients, produits à recevoir",
+        "children": []
+      },
+      {
+        "code": "419",
+        "label": "Clientts créditeurs",
+        "children": [
+          {
+            "code": "4191",
+            "label": "Clients avances et acomptes reçus",
+            "children": []
+          },
+          {
+            "code": "4198",
+            "label": "Clients plus-values de change",
+            "children": []
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "code": "42",
+    "label": "Personnel",
+    "children": [
+      {
+        "code": "421",
+        "label": "Personnel - Rémunérations dues",
+        "children": [
+          {
+            "code": "4211",
+            "label": "Personnel Billetterie",
+            "children": []
+          },
+          {
+            "code": "4212",
+            "label": "Personnel Cargo / TSL",
+            "children": []
+          },
+          {
+            "code": "4213",
+            "label": "Personnel Safety",
+            "children": []
+          },
+          {
+            "code": "4214",
+            "label": "Personnel Administratif / Siège",
+            "children": []
+          }
+        ]
+      },
+      {
+        "code": "422",
+        "label": "Personnel - Avances et Acomptes",
+        "children": [
+          {
+            "code": "4221",
+            "label": "Personnel Billetterie",
+            "children": []
+          },
+          {
+            "code": "4222",
+            "label": "Personnel Cargo / TSL",
+            "children": []
+          },
+          {
+            "code": "4223",
+            "label": "Personnel Safety",
+            "children": []
+          },
+          {
+            "code": "4224",
+            "label": "Personnel Administratif / Siège",
+            "children": []
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "code": "43",
+    "label": "Organismes sociaux",
+    "children": [
+      {
+        "code": "431",
+        "label": "Sécurité sociale (CNSS)",
+        "children": []
+      },
+      {
+        "code": "432",
+        "label": "Autres organismes sociaux (INPP, ONEM)",
+        "children": []
+      }
+    ]
+  },
+  {
+    "code": "44",
+    "label": "État et Collectivités publiques",
+    "children": [
+      {
+        "code": "441",
+        "label": "État, subventions à recevoir",
+        "children": []
+      },
+      {
+        "code": "442",
+        "label": "État, impôts et taxes recouvrables sur des tiers (IPR)",
+        "children": []
+      },
+      {
+        "code": "443",
+        "label": "État, TVA facturée",
+        "children": []
+      },
+      {
+        "code": "444",
+        "label": "État, impôts sur les bénéfices (IBP)",
+        "children": []
+      },
+      {
+        "code": "445",
+        "label": "État, TVA récupérable",
+        "children": []
+      },
+      {
+        "code": "447",
+        "label": "État, impôts retenus à la source",
+        "children": [
+          {
+            "code": "4471",
+            "label": "Impôt général sur le revenu",
+            "children": []
+          },
+          {
+            "code": "4472",
+            "label": "Impôts sur salaires",
+            "children": []
+          },
+          {
+            "code": "4473",
+            "label": "Contribution nationale",
+            "children": []
+          },
+          {
+            "code": "4474",
+            "label": "Contribution nationale de solidarité",
+            "children": []
+          },
+          {
+            "code": "4478",
+            "label": "Autres impôts et contributions (dont l’IRL)",
+            "children": []
+          }
+        ]
+      },
+      {
+        "code": "448",
+        "label": "Etat charge à payer et produits à recevoir",
+        "children": [
+          {
+            "code": "4481",
+            "label": "Charge et produit",
+            "children": []
+          },
+          {
+            "code": "4482",
+            "label": "Produits à recevoir",
+            "children": []
+          }
+        ]
+      },
+      {
+        "code": "449",
+        "label": "Etat , créances et dettes diverses",
+        "children": []
+      }
+    ]
+  },
+  {
+    "code": "45",
+    "label": "Organismes internationaux",
+    "children": []
+  },
+  {
+    "code": "46",
+    "label": "Associés et Groupe",
+    "children": [
+      {
+        "code": "461",
+        "label": "Opérations entre associé",
+        "children": []
+      },
+      {
+        "code": "462",
+        "label": "Associés, comptes courants",
+        "children": []
+      },
+      {
+        "code": "467",
+        "label": "Associés, dividendes à payer",
+        "children": []
+      }
+    ]
+  },
+  {
+    "code": "47",
+    "label": "Débiteurs divers et Créditeurs divers",
+    "children": [
+      {
+        "code": "471",
+        "label": "Comptes d’attente",
+        "children": [
+          {
+            "code": "4711",
+            "label": "Partenaire HK",
+            "children": []
+          },
+          {
+            "code": "4712",
+            "label": "Partenaire Dream",
+            "children": []
+          },
+          {
+            "code": "4713",
+            "label": "Débiteurs/Créditeurs divers",
+            "children": []
+          }
+        ]
+      },
+      {
+        "code": "474",
+        "label": "Répartition périodique des charges et des produits",
+        "children": [
+          {
+            "code": "4746",
+            "label": "Charges",
+            "children": []
+          },
+          {
+            "code": "4747",
+            "label": "Produits",
+            "children": []
+          }
+        ]
+      },
+      {
+        "code": "475",
+        "label": "Créances sur travaux non encore facturables",
+        "children": []
+      },
+      {
+        "code": "476",
+        "label": "Charges constatées d'avance",
+        "children": []
+      },
+      {
+        "code": "477",
+        "label": "Produits constatés d'avance",
+        "children": []
+      },
+      {
+        "code": "478",
+        "label": "Écarts de conversion-Actif",
+        "children": [
+          {
+            "code": "4781",
+            "label": "Diminution des créances",
+            "children": []
+          },
+          {
+            "code": "4782",
+            "label": "Augmentation des dettes",
+            "children": []
+          },
+          {
+            "code": "4788",
+            "label": "Différences compensées par couverture de change",
+            "children": []
+          }
+        ]
+      },
+      {
+        "code": "479",
+        "label": "Écarts de conversion-Passif",
+        "children": [
+          {
+            "code": "4792",
+            "label": "Diminution des dettes",
+            "children": []
+          },
+          {
+            "code": "4798",
+            "label": "Différences compensées par couverture.",
+            "children": []
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "code": "48",
+    "label": "Créances et dettes hors activités ordinaires (H.A.O.)",
+    "children": [
+      {
+        "code": "481",
+        "label": "Fournisseurs d'investissements",
+        "children": [
+          {
+            "code": "4811",
+            "label": "Immobilisations incorporelles",
+            "children": []
+          },
+          {
+            "code": "4812",
+            "label": "Immobilisations corporelles",
+            "children": []
+          },
+          {
+            "code": "4817",
+            "label": "Fournisseurs d'investissements",
+            "children": []
+          },
+          {
+            "code": "4818",
+            "label": "Factures non parvenues",
+            "children": []
+          }
+        ]
+      },
+      {
+        "code": "482",
+        "label": "Fournisseurs d'investissements, Effets à recevoir",
+        "children": []
+      },
+      {
+        "code": "483",
+        "label": "Dettes sur acquisitions de titres de placement",
+        "children": []
+      },
+      {
+        "code": "484",
+        "label": "Autres dettes hors activités ordinaires (H.A.O.)",
+        "children": []
+      },
+      {
+        "code": "485",
+        "label": "Créances sur cessions d'immobilisations",
+        "children": [
+          {
+            "code": "4852",
+            "label": "Effets à recevoir",
+            "children": []
+          },
+          {
+            "code": "4857",
+            "label": "Créances sur cessions d'immobilisations, retenues de garantie",
+            "children": []
+          },
+          {
+            "code": "4858",
+            "label": "Factures à établir",
+            "children": []
+          }
+        ]
+      },
+      {
+        "code": "486",
+        "label": "Créances sur cessions de titres de placement",
+        "children": []
+      },
+      {
+        "code": "488",
+        "label": "Autres créances hors activités ordinaires (H.A.O.)",
+        "children": []
+      }
+    ]
+  },
+  {
+    "code": "49",
+    "label": "Dépréciation et risques provisionnés",
+    "children": [
+      {
+        "code": "490",
+        "label": "Dépréciations des comptes fournisseurs",
+        "children": []
+      },
+      {
+        "code": "491",
+        "label": "Dépréciations des comptes clients",
+        "children": [
+          {
+            "code": "4911",
+            "label": "Créances litigieuses",
+            "children": []
+          },
+          {
+            "code": "4912",
+            "label": "Créances douteuses",
+            "children": []
+          }
+        ]
+      },
+      {
+        "code": "492",
+        "label": "Dépréciations des comptes personnel",
+        "children": []
+      },
+      {
+        "code": "493",
+        "label": "Dépréciations des comptes organismes sociaux",
+        "children": []
+      },
+      {
+        "code": "494",
+        "label": "Dépréciations des comptes État et collectivités publiques",
+        "children": []
+      },
+      {
+        "code": "495",
+        "label": "Dépréciations des comptes organismes internationaux",
+        "children": []
+      },
+      {
+        "code": "496",
+        "label": "Dépréciations des comptes associés et groupe",
+        "children": [
+          {
+            "code": "4962",
+            "label": "Associés, comptes courants",
+            "children": []
+          },
+          {
+            "code": "4963",
+            "label": "Associés, opérations faites en commun",
+            "children": []
+          },
+          {
+            "code": "4966",
+            "label": "Groupe, comptes courants",
+            "children": []
+          }
+        ]
+      },
+      {
+        "code": "497",
+        "label": "Dépréciations des comptes débiteurs divers",
+        "children": []
+      },
+      {
+        "code": "498",
+        "label": "Dépréciations des comptes de créance HAO",
+        "children": [
+          {
+            "code": "4981",
+            "label": "Créances sur cessions d'immobilisations",
+            "children": []
+          },
+          {
+            "code": "4982",
+            "label": "Créances sur cessions de titres de placement",
+            "children": []
+          },
+          {
+            "code": "4983",
+            "label": "Autres créances HAO",
+            "children": []
+          }
+        ]
+      },
+      {
+        "code": "499",
+        "label": "Risques provisionnés",
+        "children": [
+          {
+            "code": "4991",
+            "label": "Risques provisionnés sur opérations d'exploitation",
+            "children": []
+          },
+          {
+            "code": "4998",
+            "label": "Risques provisionnés HAO",
+            "children": []
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "code": "50",
+    "label": "Valeurs Mobilières de Placement (VMP)",
+    "children": [
+      {
+        "code": "501",
+        "label": "Actions",
+        "children": []
+      },
+      {
+        "code": "502",
+        "label": "Obligations",
+        "children": []
+      }
+    ]
+  },
+  {
+    "code": "51",
+    "label": "Valeurs à Encaisser",
+    "children": [
+      {
+        "code": "511",
+        "label": "Chèques à encaisser",
+        "children": []
+      },
+      {
+        "code": "512",
+        "label": "Effets à encaisser",
+        "children": []
+      },
+      {
+        "code": "513",
+        "label": "Coupons à encaisser",
+        "children": []
+      },
+      {
+        "code": "514",
+        "label": "Chèques postaux à encaisser",
+        "children": []
+      },
+      {
+        "code": "517",
+        "label": "Monnaie électronique",
+        "children": [
+          {
+            "code": "5171",
+            "label": "M-Pesa (Vodacom)",
+            "children": [
+              {
+                "code": "51711",
+                "label": "M-Pesa USD",
+                "children": []
+              },
+              {
+                "code": "51712",
+                "label": "M-Pesa CDF",
+                "children": []
+              }
+            ]
+          },
+          {
+            "code": "5172",
+            "label": "Orange Money",
+            "children": [
+              {
+                "code": "51721",
+                "label": "Orange Money USD",
+                "children": []
+              },
+              {
+                "code": "51722",
+                "label": "Orange Money CDF",
+                "children": []
+              }
+            ]
+          },
+          {
+            "code": "5173",
+            "label": "Airtel Money",
+            "children": [
+              {
+                "code": "51731",
+                "label": "Airtel Money USD",
+                "children": []
+              },
+              {
+                "code": "51732",
+                "label": "Airtel Money CDF",
+                "children": []
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "code": "52",
+    "label": "Banques",
+    "children": [
+      {
+        "code": "521",
+        "label": "Banques Locales",
+        "children": [
+          {
+            "code": "5211",
+            "label": "Rawbank USD",
+            "children": []
+          },
+          {
+            "code": "5212",
+            "label": "Rawbank CDF",
+            "children": []
+          },
+          {
+            "code": "5213",
+            "label": "Equity BCDC USD",
+            "children": []
+          },
+          {
+            "code": "5214",
+            "label": "Equity BCDC CDF",
+            "children": []
+          },
+          {
+            "code": "5215",
+            "label": "TMB USD",
+            "children": []
+          },
+          {
+            "code": "5216",
+            "label": "TMB CDF",
+            "children": []
+          },
+          {
+            "code": "5217",
+            "label": "FBN USD",
+            "children": []
+          },
+          {
+            "code": "5218",
+            "label": "FBN CDF",
+            "children": []
+          },
+          {
+            "code": "5219",
+            "label": "Autre IF USD",
+            "children": []
+          }
+        ]
+      },
+      {
+        "code": "522",
+        "label": "Banques à l'étranger",
+        "children": [
+          {
+            "code": "5220",
+            "label": "Autre IF CDF",
+            "children": []
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "code": "57",
+    "label": "Caisse",
+    "children": [
+      {
+        "code": "571",
+        "label": "Caisse Siège (Kinshasa)",
+        "children": [
+          {
+            "code": "5711",
+            "label": "Caisse C1 Lubumbashi (Ventes locales)",
+            "children": []
+          },
+          {
+            "code": "5712",
+            "label": "Caisse C2 Lubumbashi (Coffre agence)",
+            "children": []
+          },
+          {
+            "code": "5713",
+            "label": "Caisse TSL (Cargo)",
+            "children": []
+          },
+          {
+            "code": "5714",
+            "label": "Caisse Safety",
+            "children": []
+          },
+          {
+            "code": "5715",
+            "label": "Caisse Proxy Banking",
+            "children": []
+          },
+          {
+            "code": "5716",
+            "label": "Caisse Privée des Actionnaires et autres partenaires",
+            "children": []
+          },
+          {
+            "code": "5718",
+            "label": "Caisse centrale COFFRE-FORT",
+            "children": []
+          }
+        ]
+      },
+      {
+        "code": "572",
+        "label": "Caisse Agence Mbujimayi",
+        "children": []
+      },
+      {
+        "code": "573",
+        "label": "Caisse Agence Lubumbashi",
+        "children": []
+      },
+      {
+        "code": "574",
+        "label": "Caisse autre agence",
+        "children": [
+          {
+            "code": "5741",
+            "label": "Caisse C1 Autre agence",
+            "children": []
+          },
+          {
+            "code": "5742",
+            "label": "Caisse C2 Autre agence",
+            "children": []
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "code": "58",
+    "label": "Virements Internes",
+    "children": [
+      {
+        "code": "581",
+        "label": "Virements de fonds",
+        "children": []
+      },
+      {
+        "code": "582",
+        "label": "Transferts entre agences (Liaison)",
+        "children": []
+      },
+      {
+        "code": "585",
+        "label": "Transferts de devises",
+        "children": []
+      }
+    ]
+  },
+  {
+    "code": "60",
+    "label": "ACHATS ET VARIATIONS DE STOCKS",
+    "children": [
+      {
+        "code": "601",
+        "label": "Achats de Droits de Tirage",
+        "children": [
+          {
+            "code": "6011",
+            "label": "Achats Droits - CAA",
+            "children": []
+          },
+          {
+            "code": "6012",
+            "label": "Achats Droits - Air Congo",
+            "children": []
+          },
+          {
+            "code": "6013",
+            "label": "Achats Droits - Ethiopian Aiirlines",
+            "children": []
+          },
+          {
+            "code": "6014",
+            "label": "Achats Droits - Kenya Airways",
+            "children": []
+          },
+          {
+            "code": "6015",
+            "label": "Achats Droits - Mont Gabaon",
+            "children": []
+          },
+          {
+            "code": "6016",
+            "label": "Achats Droits - Airfast",
+            "children": []
+          },
+          {
+            "code": "6017",
+            "label": "Achats Droits - Autres compagnies",
+            "children": []
+          }
+        ]
+      },
+      {
+        "code": "602",
+        "label": "Achats de matières et fournitures liées",
+        "children": [
+          {
+            "code": "6021",
+            "label": "Pièces de rechange",
+            "children": []
+          },
+          {
+            "code": "6022",
+            "label": "Fournitures d'entretien",
+            "children": []
+          },
+          {
+            "code": "6023",
+            "label": "Fournitures de bureau et papeterie",
+            "children": []
+          },
+          {
+            "code": "6024",
+            "label": "Prooduits d'emballage",
+            "children": []
+          },
+          {
+            "code": "6025",
+            "label": "Carburants et lubrifiants",
+            "children": []
+          }
+        ]
+      },
+      {
+        "code": "604",
+        "label": "Achats d'études et prestations de services (Sous-traitance)",
+        "children": []
+      },
+      {
+        "code": "6031",
+        "label": "Variation des Stocks de Droits",
+        "children": [
+          {
+            "code": "60311",
+            "label": "Variation Crédits - CAA",
+            "children": []
+          },
+          {
+            "code": "60312",
+            "label": "Variation Crédits - Air Congo",
+            "children": []
+          },
+          {
+            "code": "60313",
+            "label": "Variation Crédits - Ethiopian Airways",
+            "children": []
+          },
+          {
+            "code": "60314",
+            "label": "Variation Crédits - Kenya airways",
+            "children": []
+          },
+          {
+            "code": "60315",
+            "label": "Variation Crédits - Mont Gabaon",
+            "children": []
+          },
+          {
+            "code": "60316",
+            "label": "Variation Crédits - Airfast",
+            "children": []
+          },
+          {
+            "code": "60317",
+            "label": "Variation Crédits - Autres compagnies",
+            "children": []
+          }
+        ]
+      },
+      {
+        "code": "6032",
+        "label": "Variation des stocks de Fournitures",
+        "children": [
+          {
+            "code": "60321",
+            "label": "Variation Stock Produits Safety",
+            "children": []
+          },
+          {
+            "code": "60322",
+            "label": "Variation Stock Emballages",
+            "children": []
+          },
+          {
+            "code": "60323",
+            "label": "Variation Stock Fournitures Bureau",
+            "children": []
+          }
+        ]
+      },
+      {
+        "code": "6033",
+        "label": "Variation des Stocks de Pièces",
+        "children": [
+          {
+            "code": "60331",
+            "label": "Variation Stock Pièces de Rechange",
+            "children": []
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "code": "61",
+    "label": "TRANSPORT",
+    "children": [
+      {
+        "code": "611",
+        "label": "Transports sur achats",
+        "children": []
+      },
+      {
+        "code": "612",
+        "label": "Transports sur ventes",
+        "children": []
+      },
+      {
+        "code": "613",
+        "label": "Transports pour compte de tiers",
+        "children": []
+      },
+      {
+        "code": "614",
+        "label": "Transports du personnel",
+        "children": []
+      },
+      {
+        "code": "616",
+        "label": "Primes d'assurances",
+        "children": [
+          {
+            "code": "6161",
+            "label": "Assurances Multirisques",
+            "children": []
+          },
+          {
+            "code": "6162",
+            "label": "Assurances Responsabilité Civile",
+            "children": []
+          },
+          {
+            "code": "6163",
+            "label": "Assurances Matériel de transport",
+            "children": []
+          },
+          {
+            "code": "6164",
+            "label": "Autres assurances",
+            "children": []
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "code": "62",
+    "label": "SERVICES EXTERIEURS A",
+    "children": [
+      {
+        "code": "621",
+        "label": "Personnel extérieur à l'entreprise",
+        "children": []
+      },
+      {
+        "code": "622",
+        "label": "Locations et charges locatives",
+        "children": [
+          {
+            "code": "6221",
+            "label": "Locations immobilières",
+            "children": []
+          },
+          {
+            "code": "6222",
+            "label": "Locations de matériel et outillage",
+            "children": []
+          },
+          {
+            "code": "6223",
+            "label": "Locations de mobilier et matériel de bureau",
+            "children": []
+          }
+        ]
+      },
+      {
+        "code": "624",
+        "label": "Entretien, réparations et maintenance",
+        "children": [
+          {
+            "code": "6241",
+            "label": "Entretien des locaux",
+            "children": []
+          },
+          {
+            "code": "6242",
+            "label": "Maintenance du matériel de bureau et informatique",
+            "children": []
+          },
+          {
+            "code": "6243",
+            "label": "Entretien du matériel roulant",
+            "children": []
+          },
+          {
+            "code": "6244",
+            "label": "Maintenance du matériel informatique et terminaux",
+            "children": []
+          }
+        ]
+      },
+      {
+        "code": "625",
+        "label": "Déplacements, missions et réceptions",
+        "children": []
+      },
+      {
+        "code": "626",
+        "label": "Frais postaux et de télécommunications",
+        "children": [
+          {
+            "code": "6261",
+            "label": "Frais postaux",
+            "children": []
+          },
+          {
+            "code": "6262",
+            "label": "Internet et Crédit téléphone",
+            "children": []
+          },
+          {
+            "code": "6265",
+            "label": "Fraiis de localisation d'espace serveur/cloud",
+            "children": []
+          }
+        ]
+      },
+      {
+        "code": "628",
+        "label": "Autres services externes",
+        "children": [
+          {
+            "code": "6281",
+            "label": "Maintenance et entretien",
+            "children": []
+          },
+          {
+            "code": "6288",
+            "label": "Autres prestations de services",
+            "children": []
+          }
+        ]
+      },
+      {
+        "code": "629",
+        "label": "Frais sur annulations de billets",
+        "children": []
+      }
+    ]
+  },
+  {
+    "code": "63",
+    "label": "SERVICES EXTERIEURS B",
+    "children": [
+      {
+        "code": "631",
+        "label": "Frais bancaires et de monnaie électronique",
+        "children": [
+          {
+            "code": "6311",
+            "label": "Frais de tenue de compte.",
+            "children": []
+          },
+          {
+            "code": "6312",
+            "label": "Commissions sur opérations",
+            "children": []
+          },
+          {
+            "code": "6313",
+            "label": "Frais Mobile Money",
+            "children": [
+              {
+                "code": "63131",
+                "label": "Commissions de retrait",
+                "children": []
+              },
+              {
+                "code": "63132",
+                "label": "Commissions de dépôt/transfert",
+                "children": []
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "code": "632",
+        "label": "Rémunérations d'intermédiaires et honoraires",
+        "children": [
+          {
+            "code": "6321",
+            "label": "Commissions versées",
+            "children": [
+              {
+                "code": "63211",
+                "label": "Partenaire HK.",
+                "children": []
+              },
+              {
+                "code": "63212",
+                "label": "Partenaire Dream",
+                "children": []
+              },
+              {
+                "code": "63213",
+                "label": "Autres partenaires",
+                "children": []
+              }
+            ]
+          },
+          {
+            "code": "6322",
+            "label": "Honoraires d'avocat ou de conseil fiscal.",
+            "children": []
+          }
+        ]
+      },
+      {
+        "code": "633",
+        "label": "Publicité, publications et relations publiques",
+        "children": []
+      },
+      {
+        "code": "634",
+        "label": "Redevances pour concessions, brevets, licences",
+        "children": []
+      },
+      {
+        "code": "637",
+        "label": "Rémunération du personnel extérieur à l'entreprise",
+        "children": []
+      },
+      {
+        "code": "638",
+        "label": "Autres charges externes",
+        "children": [
+          {
+            "code": "6381",
+            "label": "frais de recrutement du personnel",
+            "children": []
+          },
+          {
+            "code": "6382",
+            "label": "Frais de deménagement",
+            "children": []
+          },
+          {
+            "code": "6383",
+            "label": "Réceptions",
+            "children": []
+          },
+          {
+            "code": "6384",
+            "label": "Missions",
+            "children": []
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "code": "64",
+    "label": "IMPÔTS, TAXES ET VERSEMENTS ASSIMILÉS",
+    "children": [
+      {
+        "code": "641",
+        "label": "Impôts directs :",
+        "children": [
+          {
+            "code": "6411",
+            "label": "IBP",
+            "children": []
+          },
+          {
+            "code": "6412",
+            "label": "IERE",
+            "children": []
+          }
+        ]
+      },
+      {
+        "code": "645",
+        "label": "Impôts et taxes indirects",
+        "children": [
+          {
+            "code": "6451",
+            "label": "Taxes de superficie/Taxe foncière",
+            "children": []
+          },
+          {
+            "code": "6452",
+            "label": "Vignettes et taxes sur véhicules",
+            "children": []
+          },
+          {
+            "code": "6453",
+            "label": "Taxes de voirie/Assainissement",
+            "children": []
+          }
+        ]
+      },
+      {
+        "code": "646",
+        "label": "Droits d'enregistrement et de timbre",
+        "children": []
+      },
+      {
+        "code": "647",
+        "label": "Pénalités et amendes",
+        "children": []
+      },
+      {
+        "code": "648",
+        "label": "Autres impôts et taxes",
+        "children": []
+      }
+    ]
+  },
+  {
+    "code": "65",
+    "label": "EXPLOITATION",
+    "children": [
+      {
+        "code": "654",
+        "label": "Pertes sur créances irrécouvrables",
+        "children": []
+      },
+      {
+        "code": "658",
+        "label": "Charges diverses de gestion courante",
+        "children": [
+          {
+            "code": "6581",
+            "label": "Jetons de présence",
+            "children": []
+          },
+          {
+            "code": "6582",
+            "label": "Dons et libéralités",
+            "children": []
+          },
+          {
+            "code": "6583",
+            "label": "Sommes payées en \"trop\"",
+            "children": []
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "code": "66",
+    "label": "CHARGES DE PERSONNEL",
+    "children": [
+      {
+        "code": "661",
+        "label": "Rémunéraions directes personnnel national",
+        "children": []
+      },
+      {
+        "code": "662",
+        "label": "Rémunération directes personnel non national",
+        "children": []
+      },
+      {
+        "code": "663",
+        "label": "Indemnités forfaitaires",
+        "children": []
+      },
+      {
+        "code": "664",
+        "label": "Charges sociales",
+        "children": []
+      },
+      {
+        "code": "666",
+        "label": "Pertes de change",
+        "children": []
+      }
+    ]
+  },
+  {
+    "code": "67",
+    "label": "CHARGES HORS ACTIVITES ORDINAIRES",
+    "children": [
+      {
+        "code": "671",
+        "label": "Valeur Comptable des Immobilisations Cédées (V.C.E)",
+        "children": []
+      },
+      {
+        "code": "678",
+        "label": "Autres charges HAO",
+        "children": [
+          {
+            "code": "6781",
+            "label": "Vols ou Détournements",
+            "children": []
+          },
+          {
+            "code": "6783",
+            "label": "Amendes administratives lourdes",
+            "children": []
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "code": "68",
+    "label": "DOTATIONS AUX AMORTISSEMENTS",
+    "children": [
+      {
+        "code": "681",
+        "label": "Dotations aux amortissements",
+        "children": []
+      },
+      {
+        "code": "682",
+        "label": "Dotations aux provisions",
+        "children": []
+      }
+    ]
+  },
+  {
+    "code": "69",
+    "label": "DOTATIONS AUX PROVISIONS",
+    "children": []
+  },
+  {
+    "code": "70",
+    "label": "VENTES ET PRESTATIONS DE SERVICES",
+    "children": [
+      {
+        "code": "701",
+        "label": "Ventes de produits",
+        "children": [
+          {
+            "code": "7011",
+            "label": "Ventes Billets - CAA.",
+            "children": []
+          },
+          {
+            "code": "7012",
+            "label": "Ventes Billets - Air Congo",
+            "children": []
+          },
+          {
+            "code": "7013",
+            "label": "Ventes Billets - Ethiopian Airlines",
+            "children": []
+          },
+          {
+            "code": "7014",
+            "label": "Ventes Billets - Kenya Airways",
+            "children": []
+          },
+          {
+            "code": "7015",
+            "label": "Ventes Billets  Mont Gabaon",
+            "children": []
+          },
+          {
+            "code": "7016",
+            "label": "Ventes Billets AFC",
+            "children": []
+          },
+          {
+            "code": "7017",
+            "label": "Ventes billets autres compagnies",
+            "children": []
+          },
+          {
+            "code": "7018",
+            "label": "Ventes Droits visa (Frais consulaires collectés)",
+            "children": []
+          }
+        ]
+      },
+      {
+        "code": "706",
+        "label": "Prestataires de services",
+        "children": [
+          {
+            "code": "7061",
+            "label": "Commissions HK",
+            "children": []
+          },
+          {
+            "code": "7062",
+            "label": "Frais de dossier / Services THE BEST",
+            "children": []
+          },
+          {
+            "code": "7063",
+            "label": "Prestations Safety",
+            "children": []
+          },
+          {
+            "code": "7064",
+            "label": "Prestations Cargo (TSL)",
+            "children": []
+          },
+          {
+            "code": "7065",
+            "label": "Commissions Proxy Banking",
+            "children": []
+          },
+          {
+            "code": "7066",
+            "label": "Revenus Safety - Maintenance préventive",
+            "children": []
+          },
+          {
+            "code": "7067",
+            "label": "Revenus Cargo - Frais de stockage",
+            "children": []
+          }
+        ]
+      },
+      {
+        "code": "707",
+        "label": "Produits accessoires",
+        "children": [
+          {
+            "code": "7071",
+            "label": "Port, emballages et frais de livraison refacturés (Cargo)",
+            "children": []
+          },
+          {
+            "code": "7072",
+            "label": "Commissions sur assurances voyage",
+            "children": []
+          },
+          {
+            "code": "7073",
+            "label": "Locations de matériel",
+            "children": []
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "code": "71",
+    "label": "SUBVENTIONS D’EXPLOITATION",
+    "children": []
+  },
+  {
+    "code": "72",
+    "label": "PRODUCTION IMMOBILISÉE ET INCORPORELLE",
+    "children": [
+      {
+        "code": "722",
+        "label": "Production de services pour elle-même",
+        "children": []
+      },
+      {
+        "code": "726",
+        "label": "Prestations de services internes",
+        "children": []
+      }
+    ]
+  },
+  {
+    "code": "75",
+    "label": "AUTRES PRODUITS D'EXPLOITATION",
+    "children": [
+      {
+        "code": "752",
+        "label": "Revenus des immeubles",
+        "children": []
+      },
+      {
+        "code": "754",
+        "label": "Ristournes, Rabais et Remises obtenus",
+        "children": []
+      },
+      {
+        "code": "758",
+        "label": "Produits divers de gestion courante",
+        "children": [
+          {
+            "code": "7581",
+            "label": "Indemnités d'assurances d'exploitation",
+            "children": []
+          },
+          {
+            "code": "7582",
+            "label": "Revenus des immeubles non affectés",
+            "children": []
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "code": "76",
+    "label": "PRODUITS FINANCIERS",
+    "children": [
+      {
+        "code": "761",
+        "label": "Revenus de participations",
+        "children": []
+      },
+      {
+        "code": "766",
+        "label": "Gains de change",
+        "children": []
+      },
+      {
+        "code": "767",
+        "label": "Revenus de créances",
+        "children": []
+      }
+    ]
+  },
+  {
+    "code": "77",
+    "label": "PRODUITS HORS ACTIVITÉS ORDINAIRES (HAO)",
+    "children": [
+      {
+        "code": "771",
+        "label": "Produits de cession d'immobilisations",
+        "children": []
+      },
+      {
+        "code": "778",
+        "label": "Autres produits HAO",
+        "children": []
+      }
+    ]
+  },
+  {
+    "code": "78",
+    "label": "TRANFERT DE CHARGES",
+    "children": [
+      {
+        "code": "781",
+        "label": "Transfert  des charges d'exploitation",
+        "children": []
+      },
+      {
+        "code": "787",
+        "label": "Transfert des charges financières",
+        "children": []
+      }
+    ]
+  },
+  {
+    "code": "79",
+    "label": "Reprises d'exploitation",
+    "children": [
+      {
+        "code": "791",
+        "label": "Reprise des provision d'exploitation",
+        "children": []
+      },
+      {
+        "code": "797",
+        "label": "Reprise de provisions fincières",
+        "children": []
+      }
+    ]
+  },
+  {
+    "code": "9782",
+    "label": "Sinistres non assurés",
+    "children": []
+  }
+]
