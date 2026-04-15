@@ -1,5 +1,6 @@
 import React from 'react'
 import { AppShell } from '@/components/app-shell'
+import { AccountingPlanWorkspace } from '@/components/accounting-plan-workspace'
 import { AccountingWritingWorkspace } from '@/components/accounting-writing-workspace'
 import { KpiCard } from '@/components/kpi-card'
 import { prisma } from '@/lib/prisma'
@@ -140,10 +141,32 @@ export default async function Page() {
                 </p>
               </section>
 
-              <AccountingJournalWorkspace />
+              <section className="grid gap-4 xl:grid-cols-[220px_minmax(0,1fr)]">
+                <div className="rounded-2xl border border-black/10 bg-white p-4 shadow-sm dark:border-white/10 dark:bg-zinc-900">
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-black/50 dark:text-white/50">Sous-menu journal</p>
+                  <div className="mt-3 space-y-2 text-xs text-black/60 dark:text-white/60">
+                    <p>Nouvelle ecriture: saisie manuelle complete.</p>
+                    <p>Historique: lecture des ecritures recentes deja passees.</p>
+                  </div>
+                </div>
+                <div className="space-y-4">
+                  <AccountingJournalWorkspace showHistory={false} />
+                  <AccountingJournalWorkspace showComposer={false} />
+                </div>
+              </section>
             </div>
           )}
-          planWorkspace={<AccountsManager />}
+          planWorkspace={(
+            <AccountingPlanWorkspace
+              totalAccounts={totalAccounts}
+              activeClasses={activeClasses.length}
+              rootAccounts={rootAccounts}
+              detailAccounts={detailAccounts}
+              densestClassLabel={densestClass ? `${formatClassLabel(densestClass.cls)} • ${densestClass.count} comptes` : 'Aucune donnee'}
+              topClasses={topClasses.map((entry) => ({ label: formatClassLabel(entry.cls), count: entry.count }))}
+              manager={<AccountsManager />}
+            />
+          )}
         />
       </div>
     </AppShell>
