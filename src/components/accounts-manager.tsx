@@ -25,15 +25,27 @@ const CLASS_LABELS: Record<string, string> = {
 }
 
 const CLASS_COLORS: Record<string, string> = {
-  '1': 'bg-violet-50 border-violet-200 dark:bg-violet-950/30 dark:border-violet-800',
-  '2': 'bg-blue-50 border-blue-200 dark:bg-blue-950/30 dark:border-blue-800',
-  '3': 'bg-amber-50 border-amber-200 dark:bg-amber-950/30 dark:border-amber-800',
-  '4': 'bg-rose-50 border-rose-200 dark:bg-rose-950/30 dark:border-rose-800',
-  '5': 'bg-emerald-50 border-emerald-200 dark:bg-emerald-950/30 dark:border-emerald-800',
-  '6': 'bg-red-50 border-red-200 dark:bg-red-950/30 dark:border-red-800',
-  '7': 'bg-green-50 border-green-200 dark:bg-green-950/30 dark:border-green-800',
-  '8': 'bg-sky-50 border-sky-200 dark:bg-sky-950/30 dark:border-sky-800',
-  '9': 'bg-zinc-50 border-zinc-200 dark:bg-zinc-900/30 dark:border-zinc-700',
+  '1': 'border-violet-200/70 dark:border-violet-800/60',
+  '2': 'border-blue-200/70 dark:border-blue-800/60',
+  '3': 'border-amber-200/70 dark:border-amber-800/60',
+  '4': 'border-rose-200/70 dark:border-rose-800/60',
+  '5': 'border-emerald-200/70 dark:border-emerald-800/60',
+  '6': 'border-red-200/70 dark:border-red-800/60',
+  '7': 'border-green-200/70 dark:border-green-800/60',
+  '8': 'border-sky-200/70 dark:border-sky-800/60',
+  '9': 'border-zinc-200/70 dark:border-zinc-700/60',
+}
+
+const CLASS_HEADER: Record<string, string> = {
+  '1': 'bg-violet-50/80 dark:bg-violet-950/20',
+  '2': 'bg-blue-50/80 dark:bg-blue-950/20',
+  '3': 'bg-amber-50/80 dark:bg-amber-950/20',
+  '4': 'bg-rose-50/80 dark:bg-rose-950/20',
+  '5': 'bg-emerald-50/80 dark:bg-emerald-950/20',
+  '6': 'bg-red-50/80 dark:bg-red-950/20',
+  '7': 'bg-green-50/80 dark:bg-green-950/20',
+  '8': 'bg-sky-50/80 dark:bg-sky-950/20',
+  '9': 'bg-zinc-50/80 dark:bg-zinc-900/40',
 }
 
 const CLASS_BADGE: Record<string, string> = {
@@ -77,6 +89,10 @@ function flattenTree(nodes: AccountNode[]): Account[] {
   }
   nodes.forEach(walk)
   return result
+}
+
+function countNodes(nodes: AccountNode[]): number {
+  return nodes.reduce((total, node) => total + 1 + countNodes(node.children), 0)
 }
 
 function matchesSearch(node: AccountNode, q: string): boolean {
@@ -126,7 +142,7 @@ function AccountRow({
       <div
         className={[
           'flex items-center gap-2 py-1.5 px-2 rounded-md group',
-          isGroup ? `font-semibold text-sm ${CLASS_COLORS[cls] ?? ''} border` : '',
+          isGroup ? `border bg-black/2 font-semibold text-sm dark:bg-white/3 ${CLASS_COLORS[cls] ?? 'border-black/10 dark:border-white/10'}` : '',
           isSubGroup ? 'font-medium text-sm' : '',
           !isGroup && !isSubGroup ? 'text-xs text-black/70 dark:text-white/60' : '',
           hasChildren ? 'cursor-pointer hover:bg-black/5 dark:hover:bg-white/5' : '',
@@ -460,8 +476,8 @@ export default function AccountsManager() {
           {notify.message}
         </div>
       )}
-      {/* Header */}
-      <div className="flex flex-wrap items-center justify-between gap-3">
+      <section className="rounded-2xl border border-black/10 bg-white p-4 shadow-sm dark:border-white/10 dark:bg-zinc-900">
+        <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-3">
           <input
             type="search"
@@ -479,7 +495,7 @@ export default function AccountsManager() {
           {loading && <span className="text-xs text-black/40 dark:text-white/40">Chargement…</span>}
         </div>
         <div className="flex items-center gap-2">
-          <span className="text-xs text-black/40 dark:text-white/40">{totalAccounts} comptes</span>
+          <span className="rounded-full border border-black/10 px-2.5 py-1 text-xs font-medium text-black/55 dark:border-white/10 dark:text-white/55">{totalAccounts} comptes</span>
           <label className="cursor-pointer rounded-md border border-black/15 px-3 py-2 text-sm hover:bg-black/5 dark:border-white/15 dark:hover:bg-white/5">
             Importer
             <input type="file" accept=".xlsx,.xls,.csv,.json" onChange={onFileChange} className="hidden" />
@@ -498,7 +514,8 @@ export default function AccountsManager() {
             + Ajouter
           </button>
         </div>
-      </div>
+        </div>
+      </section>
 
       {/* Plan comptable by class */}
       {classKeys.length === 0 && !loading && (
@@ -510,15 +527,15 @@ export default function AccountsManager() {
       )}
 
       {classKeys.map(cls => (
-        <div key={cls} className={`rounded-xl border overflow-hidden ${CLASS_COLORS[cls] ?? 'border-black/10'}`}>
-          <div className="flex items-center gap-2 px-4 py-2.5">
+        <section key={cls} className={`overflow-hidden rounded-2xl border bg-white shadow-sm dark:bg-zinc-900 ${CLASS_COLORS[cls] ?? 'border-black/10 dark:border-white/10'}`}>
+          <div className={`flex items-center gap-2 px-4 py-3 ${CLASS_HEADER[cls] ?? 'bg-black/2 dark:bg-white/3'}`}>
             <span className={`rounded px-2 py-0.5 text-xs font-bold ${CLASS_BADGE[cls] ?? ''}`}>Classe {cls}</span>
             <span className="text-sm font-semibold">{CLASS_LABELS[cls]?.replace(`Classe ${cls} — `, '') ?? ''}</span>
             <span className="ml-auto text-xs text-black/40 dark:text-white/30">
-              {byClass[cls].length} groupes
+              {countNodes(byClass[cls])} comptes
             </span>
           </div>
-          <div className="border-t border-black/10 dark:border-white/10 bg-white dark:bg-zinc-950 px-2 py-2 space-y-0.5">
+          <div className="space-y-0.5 border-t border-black/10 px-2 py-2 dark:border-white/10 dark:bg-zinc-950/30">
             {byClass[cls].map(node => (
               <AccountRow
                 key={node.id}
@@ -530,7 +547,7 @@ export default function AccountsManager() {
               />
             ))}
           </div>
-        </div>
+        </section>
       ))}
 
       {/* Modal */}
