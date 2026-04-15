@@ -144,7 +144,7 @@ export default async function Page() {
             <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-black/50 dark:text-white/50">Livre journal</p>
             <h2 className="mt-1 text-lg font-semibold tracking-tight">Passation des opérations comptables</h2>
             <p className="mt-2 text-sm text-black/60 dark:text-white/60">
-              Le comptable peut rattacher une opération de caisse au livre journal et saisir une écriture équilibrée en partie double, avec un ou plusieurs comptes au débit et au crédit selon le modèle de votre fichier Excel.
+              Le comptable saisit manuellement ses écritures équilibrées en partie double, avec un ou plusieurs comptes au débit et au crédit selon le modèle du livre journal de votre fichier Excel. Les opérations de caisse ne servent qu'à notifier qu'une passation comptable est attendue.
             </p>
           </div>
 

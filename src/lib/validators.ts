@@ -367,7 +367,6 @@ export const accountingEntryCreateSchema = z.object({
   libelle: z.string().trim().min(3).max(500),
   pieceJustificative: z.string().trim().max(180).optional(),
   exchangeRate: z.number().positive().optional(),
-  sourceCashOperationId: z.string().trim().min(1).optional(),
   lines: z.array(accountingEntryLineSchema).min(2),
 }).superRefine((value, ctx) => {
   const debitLines = value.lines.filter((line) => line.side === "DEBIT");
