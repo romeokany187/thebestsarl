@@ -4,12 +4,25 @@ import fontkit from "@pdf-lib/fontkit";
 import fs from "fs";
 import { prisma } from "@/lib/prisma";
 
-export async function GET(req: NextRequest, context: { params: any }) {
-  const { params } = context;
+type RouteContext = {
+  params: Promise<{ id: string }>;
+};
+
+export async function GET(req: NextRequest, context: RouteContext) {
   try {
-    const { id } = params;
+    const { id: routeId } = await context.params;
+    const code = req.nextUrl.searchParams.get("code")?.trim() || undefined;
+    const id = routeId?.trim() || req.nextUrl.searchParams.get("id")?.trim() || undefined;
+
+    if (!id && !code) {
+      return NextResponse.json(
+        { error: "Identifiant EDB manquant." },
+        { status: 400 },
+      );
+    }
+
     const need = await prisma.needRequest.findUnique({
-      where: { id: id },
+      where: id ? { id } : { code },
       include: {
         requester: true,
         reviewedBy: true,
@@ -105,7 +118,7 @@ export async function GET(req: NextRequest, context: { params: any }) {
       status: 200,
       headers: {
         "Content-Type": "application/pdf",
-        "Content-Disposition": `inline; filename=etat-besoin-${id ?? "-"}.pdf`,
+        "Content-Disposition": `${req.nextUrl.searchParams.get("download") === "1" ? "attachment" : "inline"}; filename=etat-besoin-${need.code ?? id ?? "-"}.pdf`,
         "Cache-Control": "no-store",
       },
     });
