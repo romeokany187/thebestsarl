@@ -236,7 +236,7 @@ export function AccountingJournalWorkspace({
           </div>
           <div>
             <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-black/60 dark:text-white/60">Pôle</label>
-            <input value={pole} onChange={(event) => setPole(event.target.value)} placeholder="Ex: BILLETTERIE, ADMIN, CAISSE" className="w-full rounded-md border border-black/15 bg-white px-3 py-2 text-sm dark:border-white/15 dark:bg-zinc-900" />
+            <input value={pole} onChange={(event) => setPole(event.target.value)} placeholder="Ex: THE BEST, ADMIN, CAISSE" className="w-full rounded-md border border-black/15 bg-white px-3 py-2 text-sm dark:border-white/15 dark:bg-zinc-900" />
           </div>
           <div>
             <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-black/60 dark:text-white/60">Pièce justificative</label>

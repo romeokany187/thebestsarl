@@ -25,7 +25,7 @@ function paymentOrderAssignmentLabel(value: string | null | undefined) {
   const normalized = normalizePaymentOrderAssignment(value);
   if (normalized === "VISAS") return "Visas";
   if (normalized === "SAFETY") return "Safety";
-  if (normalized === "BILLETTERIE") return "Billetterie";
+  if (normalized === "BILLETTERIE") return "THE BEST";
   if (normalized === "TSL") return "TSL";
   return "À mon compte";
 }

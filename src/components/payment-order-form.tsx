@@ -10,7 +10,7 @@ const ASSIGNMENT_LABELS: Record<PaymentOrderAssignment, string> = {
   A_MON_COMPTE: "À mon compte",
   VISAS: "Visas",
   SAFETY: "Safety",
-  BILLETTERIE: "Billetterie",
+  BILLETTERIE: "THE BEST",
   TSL: "TSL",
 };
 
