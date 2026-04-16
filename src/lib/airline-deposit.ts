@@ -458,21 +458,6 @@ export async function getAirlineDepositBalance(
     );
 }
 
-async function getFirstAirlineDepositCreditDate(client: Prisma.TransactionClient, accountKey: string) {
-  const movementClient = (client as unknown as { airlineDepositMovement: { findMany: (args?: any) => Promise<Array<{ createdAt: Date; amount: number; reference?: string | null; description?: string | null; ticketSaleId?: string | null }>> } }).airlineDepositMovement;
-  const credits = await movementClient.findMany({
-    where: {
-      accountKey: { in: accountKeysForLookup(accountKey) },
-      movementType: "CREDIT",
-    },
-    orderBy: [{ createdAt: "asc" }, { id: "asc" }],
-    select: { createdAt: true, amount: true, reference: true, description: true, ticketSaleId: true },
-  });
-
-  const firstCredit = credits.find((movement) => movement.amount > 0 && !shouldIgnoreAirlineDepositMovement(movement));
-  return firstCredit?.createdAt ?? null;
-}
-
 export async function recordAirlineDepositMovement(
   client: Prisma.TransactionClient,
   input: {
@@ -536,20 +521,7 @@ export async function recordAirlineDepositMovement(
   });
 
   const effectiveCreatedAt = input.createdAt ?? new Date();
-  const [balanceBefore, firstCreditAt] = await Promise.all([
-    getAirlineDepositBalance(client, account.key),
-    getFirstAirlineDepositCreditDate(client, account.key),
-  ]);
-
-  const allowHistoricalPreDepositDebit = input.movementType === "DEBIT"
-    && (
-      !firstCreditAt
-      || startOfUtcDay(effectiveCreatedAt).getTime() < startOfUtcDay(firstCreditAt).getTime()
-    );
-
-  if (!allowHistoricalPreDepositDebit && input.movementType === "DEBIT" && amount > balanceBefore + 0.0001) {
-    throw new Error(`INSUFFICIENT_AIRLINE_DEPOSIT:${account.label}:${balanceBefore.toFixed(2)}:${amount.toFixed(2)}`);
-  }
+  const balanceBefore = await getAirlineDepositBalance(client, account.key);
 
   const balanceAfter = balanceBefore + movementSignedAmount(input.movementType, amount);
 
