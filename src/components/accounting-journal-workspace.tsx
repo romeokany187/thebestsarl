@@ -8,6 +8,14 @@ type AccountOption = {
   normalBalance?: string | null;
 };
 
+type TicketInvoiceOption = {
+  id: string;
+  ticketNumber: string;
+  customerName: string;
+  soldAt: string;
+  invoiceNumber: string;
+};
+
 type RecentEntry = {
   id: string;
   sequence: number;
@@ -70,6 +78,7 @@ export function AccountingJournalWorkspace({
 }) {
   const [accounts, setAccounts] = useState<AccountOption[]>([]);
   const [recentEntries, setRecentEntries] = useState<RecentEntry[]>([]);
+  const [ticketInvoiceOptions, setTicketInvoiceOptions] = useState<TicketInvoiceOption[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
@@ -78,6 +87,7 @@ export function AccountingJournalWorkspace({
   const [pole, setPole] = useState("");
   const [libelle, setLibelle] = useState("");
   const [pieceJustificative, setPieceJustificative] = useState("");
+  const [ticketInvoiceSelection, setTicketInvoiceSelection] = useState("");
   const [exchangeRate, setExchangeRate] = useState("");
   const [lines, setLines] = useState<EntryLineForm[]>([lineFactory("DEBIT"), lineFactory("CREDIT")]);
 
@@ -97,6 +107,7 @@ export function AccountingJournalWorkspace({
 
       setAccounts(payload.accounts ?? []);
       setRecentEntries(payload.recentEntries ?? []);
+      setTicketInvoiceOptions(payload.ticketInvoiceOptions ?? []);
     } catch {
       setError("Erreur réseau lors du chargement du journal comptable.");
     }
@@ -111,6 +122,10 @@ export function AccountingJournalWorkspace({
   const accountMap = useMemo(
     () => new Map(accounts.map((account) => [account.code, account])),
     [accounts],
+  );
+  const ticketInvoiceMap = useMemo(
+    () => new Map(ticketInvoiceOptions.map((ticket) => [ticket.invoiceNumber, ticket])),
+    [ticketInvoiceOptions],
   );
 
   const totalDebitUsd = useMemo(
@@ -135,8 +150,24 @@ export function AccountingJournalWorkspace({
     setPole("");
     setLibelle("");
     setPieceJustificative("");
+    setTicketInvoiceSelection("");
     setExchangeRate("");
     setLines([lineFactory("DEBIT"), lineFactory("CREDIT")]);
+  }
+
+  function buildTicketSaleLabel(ticket: TicketInvoiceOption) {
+    return `Vente billet ${ticket.customerName}`;
+  }
+
+  function applyTicketInvoiceSuggestion(invoiceNumber: string) {
+    const ticket = ticketInvoiceMap.get(invoiceNumber);
+    if (!ticket) {
+      return;
+    }
+
+    setTicketInvoiceSelection(ticket.id);
+    setPieceJustificative(ticket.invoiceNumber);
+    setLibelle(buildTicketSaleLabel(ticket));
   }
 
   function updateLine(id: string, patch: Partial<EntryLineForm>) {
@@ -220,7 +251,7 @@ export function AccountingJournalWorkspace({
             <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-black/50 dark:text-white/50">Passation</p>
             <h2 className="mt-1 text-sm font-semibold">Nouvelle écriture de journal</h2>
             <p className="mt-2 text-sm text-black/60 dark:text-white/60">
-              Les opérations comptables sont saisies manuellement par le comptable. Les notifications de caisse restent un rappel, sans préremplissage ni rattachement automatique.
+              Les opérations comptables restent saisies manuellement. Pour les billets vendus depuis le 1er avril, une aide rapide permet de choisir la facture et de proposer automatiquement la pièce justificative et le libellé, tout en laissant ces champs modifiables.
             </p>
           </div>
           <div className="rounded-xl border border-black/10 px-3 py-2 text-xs dark:border-white/10">
@@ -239,8 +270,45 @@ export function AccountingJournalWorkspace({
             <input value={pole} onChange={(event) => setPole(event.target.value)} placeholder="Ex: THE BEST, ADMIN, CAISSE" className="w-full rounded-md border border-black/15 bg-white px-3 py-2 text-sm dark:border-white/15 dark:bg-zinc-900" />
           </div>
           <div>
+            <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-black/60 dark:text-white/60">Facture billet depuis le 1er avril</label>
+            <select
+              value={ticketInvoiceSelection}
+              onChange={(event) => {
+                const nextSelection = event.target.value;
+                setTicketInvoiceSelection(nextSelection);
+                const ticket = ticketInvoiceOptions.find((option) => option.id === nextSelection);
+                if (!ticket) return;
+                applyTicketInvoiceSuggestion(ticket.invoiceNumber);
+              }}
+              className="w-full rounded-md border border-black/15 bg-white px-3 py-2 text-sm dark:border-white/15 dark:bg-zinc-900"
+            >
+              <option value="">Choisir une facture pour préremplir</option>
+              {ticketInvoiceOptions.map((ticket) => (
+                <option key={ticket.id} value={ticket.id}>
+                  {ticket.invoiceNumber} • {ticket.customerName}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div>
             <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-black/60 dark:text-white/60">Pièce justificative</label>
-            <input value={pieceJustificative} onChange={(event) => setPieceJustificative(event.target.value)} placeholder="BEC, OP, reçu..." className="w-full rounded-md border border-black/15 bg-white px-3 py-2 text-sm dark:border-white/15 dark:bg-zinc-900" />
+            <input
+              list="accounting-ticket-invoices"
+              value={pieceJustificative}
+              onChange={(event) => {
+                const nextValue = event.target.value;
+                setPieceJustificative(nextValue);
+                const matchedTicket = ticketInvoiceMap.get(nextValue);
+                if (matchedTicket) {
+                  setTicketInvoiceSelection(matchedTicket.id);
+                  setLibelle(buildTicketSaleLabel(matchedTicket));
+                } else {
+                  setTicketInvoiceSelection("");
+                }
+              }}
+              placeholder="BEC, OP, reçu ou facture billet..."
+              className="w-full rounded-md border border-black/15 bg-white px-3 py-2 text-sm dark:border-white/15 dark:bg-zinc-900"
+            />
           </div>
           <div>
             <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-black/60 dark:text-white/60">Taux du jour</label>
@@ -251,6 +319,9 @@ export function AccountingJournalWorkspace({
         <div className="mt-3">
           <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-black/60 dark:text-white/60">Libellé</label>
           <input value={libelle} onChange={(event) => setLibelle(event.target.value)} placeholder="Libellé de l'écriture comptable" className="w-full rounded-md border border-black/15 bg-white px-3 py-2 text-sm dark:border-white/15 dark:bg-zinc-900" />
+          <p className="mt-1 text-[11px] text-black/50 dark:text-white/50">
+            Si tu choisis une facture billet, le libellé se propose automatiquement sous la forme vente billet + nom client, puis reste modifiable.
+          </p>
         </div>
 
         <div className="mt-4 grid gap-4 xl:grid-cols-2">
@@ -301,6 +372,11 @@ export function AccountingJournalWorkspace({
         <datalist id="accounting-account-codes">
           {accounts.map((account) => (
             <option key={account.code} value={account.code}>{account.label}</option>
+          ))}
+        </datalist>
+        <datalist id="accounting-ticket-invoices">
+          {ticketInvoiceOptions.map((ticket) => (
+            <option key={ticket.id} value={ticket.invoiceNumber}>{ticket.customerName}</option>
           ))}
         </datalist>
 

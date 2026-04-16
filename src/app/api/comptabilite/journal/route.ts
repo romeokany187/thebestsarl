@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { invoiceNumberFromChronology } from "@/lib/invoice";
 import { prisma } from "@/lib/prisma";
 import { requireApiModuleAccess } from "@/lib/rbac";
 import { accountingEntryCreateSchema } from "@/lib/validators";
@@ -49,6 +50,11 @@ async function ensureAccountingTables() {
   `);
 }
 
+function ticketSupportRangeStart() {
+  const now = new Date();
+  return new Date(Date.UTC(now.getUTCFullYear(), 3, 1, 0, 0, 0, 0));
+}
+
 export async function GET() {
   const access = await requireApiModuleAccess("payments", ["ADMIN", "DIRECTEUR_GENERAL", "ACCOUNTANT", "EMPLOYEE"]);
   if (access.error) return access.error;
@@ -59,7 +65,10 @@ export async function GET() {
 
   await ensureAccountingTables();
 
-  const [accounts, recentEntries] = await Promise.all([
+  const supportStart = ticketSupportRangeStart();
+  const yearStart = new Date(Date.UTC(supportStart.getUTCFullYear(), 0, 1, 0, 0, 0, 0));
+
+  const [accounts, recentEntries, yearlyTickets] = await Promise.all([
     prisma.account.findMany({
       select: { code: true, label: true, normalBalance: true },
       orderBy: { code: "asc" },
@@ -74,11 +83,46 @@ export async function GET() {
         },
       },
     }),
+    prisma.ticketSale.findMany({
+      where: {
+        soldAt: { gte: yearStart },
+      },
+      select: {
+        id: true,
+        ticketNumber: true,
+        customerName: true,
+        soldAt: true,
+        seller: {
+          select: {
+            team: {
+              select: { name: true },
+            },
+          },
+        },
+      },
+      orderBy: [{ soldAt: "asc" }, { id: "asc" }],
+    }),
   ]);
+
+  const ticketInvoiceOptions = yearlyTickets
+    .map((ticket, index) => ({
+      id: ticket.id,
+      ticketNumber: ticket.ticketNumber,
+      customerName: ticket.customerName,
+      soldAt: ticket.soldAt,
+      invoiceNumber: invoiceNumberFromChronology({
+        soldAt: ticket.soldAt,
+        sellerTeamName: ticket.seller?.team?.name ?? null,
+        sequence: index + 1,
+      }),
+    }))
+    .filter((ticket) => ticket.soldAt >= supportStart)
+    .sort((left, right) => right.soldAt.getTime() - left.soldAt.getTime());
 
   return NextResponse.json({
     accounts,
     recentEntries,
+    ticketInvoiceOptions,
   });
 }
 
