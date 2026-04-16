@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { Prisma } from "@prisma/client";
 import { isCashierJobTitle } from "@/lib/assignment";
+import { resolveExecutionCashDesk } from "@/lib/payments-desk";
 import { prisma } from "@/lib/prisma";
 import { requireApiRoles } from "@/lib/rbac";
 import { needExecutionSchema } from "@/lib/validators";
@@ -71,6 +72,11 @@ export async function POST(request: NextRequest) {
     );
   }
   const executionAmount = need.estimatedAmount;
+  const executionCashDesk = resolveExecutionCashDesk({
+    requestedDesk: parsed.data.cashDesk,
+    jobTitle: me.jobTitle,
+    role: access.role,
+  });
 
   const now = new Date();
   const needCurrency = normalizeCashCurrency(need.currency);
@@ -159,6 +165,7 @@ export async function POST(request: NextRequest) {
         reference: parsed.data.referenceDoc,
         description: `Exécution EDB ${need.code ?? need.id} - ${need.title}`,
         createdById: me.id,
+        cashDesk: executionCashDesk,
       },
       select: { id: true },
     });
@@ -215,6 +222,7 @@ export async function POST(request: NextRequest) {
           executedByUserId: me.id,
           cashOperationId: updated.cashOperationId,
           referenceDoc: parsed.data.referenceDoc,
+          cashDesk: executionCashDesk,
         } as Prisma.InputJsonValue,
       })),
     });
@@ -234,6 +242,7 @@ export async function POST(request: NextRequest) {
       referenceDoc: parsed.data.referenceDoc,
       cashOperationId: updated.cashOperationId,
       executionComment: parsed.data.executionComment ?? null,
+      cashDesk: executionCashDesk,
     } as Prisma.InputJsonValue,
   });
 

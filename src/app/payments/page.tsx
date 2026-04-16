@@ -1214,7 +1214,7 @@ export default async function PaymentsPage({
                     <p className="mt-2 text-xs text-black/70 dark:text-white/70">
                       Montant: {order.amount.toFixed(2)} {normalizeMoneyCurrency(order.currency)} • Approuvé le {order.approvedAt ? new Date(order.approvedAt).toLocaleString("fr-FR") : "-"}
                     </p>
-                    <PaymentOrderCashExecutionActions paymentOrderId={order.id} />
+                    <PaymentOrderCashExecutionActions paymentOrderId={order.id} cashDesk={selectedDeskKey} />
                   </article>
                 ))}
               </div>
@@ -1248,7 +1248,7 @@ export default async function PaymentsPage({
                     <p className="mt-2 text-xs text-black/70 dark:text-white/70">
                       Montant estimé: {typeof need.estimatedAmount === "number" ? `${need.estimatedAmount.toFixed(2)} ${normalizeMoneyCurrency(need.currency)}` : "-"} • Approuvé le {need.approvedAt ? new Date(need.approvedAt).toLocaleString("fr-FR") : "-"}
                     </p>
-                    <ProcurementCashExecutionActions needRequestId={need.id} />
+                    <ProcurementCashExecutionActions needRequestId={need.id} cashDesk={selectedDeskKey} />
                   </article>
                 ))}
               </div>

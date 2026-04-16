@@ -256,6 +256,7 @@ export const needExecutionSchema = z.object({
   needRequestId: z.string().min(1),
   referenceDoc: z.string().min(2).max(180),
   executionComment: z.string().max(500).optional(),
+  cashDesk: z.enum(["PROXY_BANKING", "THE_BEST", "CAISSE_SAFETY", "CAISSE_VISAS", "CAISSE_TSL", "CAISSE_AGENCE"]).optional(),
 });
 
 export const stockItemCreateSchema = z.object({
@@ -296,6 +297,7 @@ export const paymentOrderExecutionSchema = z.object({
   paymentOrderId: z.string().min(1),
   referenceDoc: z.string().min(2).max(180),
   executionComment: z.string().max(500).optional(),
+  cashDesk: z.enum(["PROXY_BANKING", "THE_BEST", "CAISSE_SAFETY", "CAISSE_VISAS", "CAISSE_TSL", "CAISSE_AGENCE"]).optional(),
 });
 
 export const airlineDepositTopUpSchema = z.object({

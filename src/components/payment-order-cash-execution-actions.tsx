@@ -3,8 +3,9 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { PaymentOrderDeleteButton } from "@/components/payment-order-delete-button";
+import type { CashDeskValue } from "@/lib/payments-desk";
 
-export function PaymentOrderCashExecutionActions({ paymentOrderId }: { paymentOrderId: string }) {
+export function PaymentOrderCashExecutionActions({ paymentOrderId, cashDesk }: { paymentOrderId: string; cashDesk?: CashDeskValue }) {
   const router = useRouter();
   const [state, setState] = useState<"idle" | "loading" | "success" | "error">("idle");
   const [message, setMessage] = useState("");
@@ -29,6 +30,7 @@ export function PaymentOrderCashExecutionActions({ paymentOrderId }: { paymentOr
           paymentOrderId,
           referenceDoc: referenceDoc.trim(),
           executionComment: executionComment.trim() || undefined,
+          cashDesk,
         }),
       });
 

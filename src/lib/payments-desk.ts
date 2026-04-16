@@ -150,6 +150,13 @@ export function getManagedCashDesks(
   return getManagedCashDesksForScope(normalizedJobTitle);
 }
 
+export function normalizeCashDeskValue(value?: string | null): CashDeskValue | null {
+  const normalized = (value ?? "").trim().toUpperCase();
+  return ALL_CASH_DESKS.some((desk) => desk.value === normalized as CashDeskValue)
+    ? normalized as CashDeskValue
+    : null;
+}
+
 export function inferScopeFromDesk(desk?: string | null): AdminCashRoleScope | null {
   const normalizedDesk = (desk ?? "").trim().toUpperCase();
 
@@ -197,4 +204,29 @@ export function resolvePaymentsDeskState({
     deskOptions,
     desk,
   };
+}
+
+export function resolveExecutionCashDesk({
+  requestedDesk,
+  jobTitle,
+  role,
+}: {
+  requestedDesk?: string | null;
+  jobTitle?: string | null;
+  role?: AppRoleLike | string | null;
+}): CashDeskValue {
+  const normalizedRequestedDesk = normalizeCashDeskValue(requestedDesk);
+  if (normalizedRequestedDesk) {
+    const inferredScope = inferScopeFromDesk(normalizedRequestedDesk);
+    const fallbackScope = getDefaultCashRoleScope(jobTitle, role);
+    const visibleDesks = getManagedCashDesks(jobTitle, role, inferredScope ?? fallbackScope);
+    if (visibleDesks.some((desk) => desk.value === normalizedRequestedDesk)) {
+      return normalizedRequestedDesk;
+    }
+  }
+
+  const normalizedJobTitle = (jobTitle ?? "").trim().toUpperCase();
+  if (normalizedJobTitle === "CAISSIER") return "PROXY_BANKING";
+  if (normalizedJobTitle === "CAISSE_AGENCE") return "CAISSE_AGENCE";
+  return "THE_BEST";
 }

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { isCashierJobTitle } from "@/lib/assignment";
+import { resolveExecutionCashDesk } from "@/lib/payments-desk";
 import { prisma } from "@/lib/prisma";
 import { requireApiRoles } from "@/lib/rbac";
 import { paymentOrderExecutionSchema } from "@/lib/validators";
@@ -143,6 +144,11 @@ export async function PATCH(request: NextRequest) {
   const reviewComment = [previousComment, ...executionMemoParts]
     .filter((part): part is string => Boolean(part && part.length > 0))
     .join("\n\n");
+  const executionCashDesk = resolveExecutionCashDesk({
+    requestedDesk: parsed.data.cashDesk,
+    jobTitle: me.jobTitle,
+    role: access.role,
+  });
 
   const updated = await prisma.$transaction(async (tx) => {
     const operation = await (tx as unknown as { cashOperation: any }).cashOperation.create({
@@ -160,6 +166,7 @@ export async function PATCH(request: NextRequest) {
         reference: parsed.data.referenceDoc,
         description: `Exécution OP ${paymentOrder.code ?? paymentOrder.id} - ${paymentOrder.beneficiary} - ${paymentOrder.description}`,
         createdById: me.id,
+        cashDesk: executionCashDesk,
       },
       select: { id: true },
     });
@@ -218,6 +225,7 @@ export async function PATCH(request: NextRequest) {
           amount: paymentOrder.amount,
           currency: paymentOrder.currency,
           source: "INBOX_NOTIFICATION",
+          cashDesk: executionCashDesk,
         },
       })),
     });
