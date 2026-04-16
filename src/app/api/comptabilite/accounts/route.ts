@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import { syncStructuredPlanAccounts } from '@/lib/plan-comptable-sync'
 import { requireApiRoles } from '@/lib/rbac'
 import { prisma } from '@/lib/prisma'
 
@@ -6,6 +7,7 @@ export async function GET() {
   const access = await requireApiRoles(['ADMIN', 'ACCOUNTANT'])
   if (access.error) return access.error
 
+  await syncStructuredPlanAccounts()
   const accounts = await prisma.account.findMany({ orderBy: { code: 'asc' } })
   return NextResponse.json(accounts)
 }

@@ -5,6 +5,7 @@ import { AccountingPlanWorkspace } from '@/components/accounting-plan-workspace'
 import { AccountingReportsWorkspace } from '@/components/accounting-reports-workspace'
 import { AccountingWritingWorkspace } from '@/components/accounting-writing-workspace'
 import { KpiCard } from '@/components/kpi-card'
+import { syncStructuredPlanAccounts } from '@/lib/plan-comptable-sync'
 import { prisma } from '@/lib/prisma'
 import { requirePageRoles } from '@/lib/rbac'
 
@@ -25,6 +26,8 @@ export default async function Page() {
   if (role !== 'ADMIN' && role !== 'ACCOUNTANT' && normalizedJobTitle !== 'COMPTABLE') {
     redirect('/')
   }
+
+  await syncStructuredPlanAccounts()
 
   const accounts = await prisma.account.findMany({
     select: {

@@ -1,27 +1,7 @@
 import { NextResponse } from "next/server";
-import { requireApiRoles } from "@/lib/rbac";
+import { flattenStructuredPlan } from "@/lib/plan-comptable-sync";
 import { prisma } from "@/lib/prisma";
-import structuredPlan from "@/lib/plan-comptable-structured.json";
-
-type PlanNode = {
-  code: string;
-  label: string;
-  children?: PlanNode[];
-};
-
-const PLAN_COMPTABLE_STRUCTURED = structuredPlan as PlanNode[];
-
-function flatten(
-  nodes: PlanNode[],
-  parentCode: string | null = null,
-): Array<{ code: string; label: string; parentCode: string | null; level: number }> {
-  const result: Array<{ code: string; label: string; parentCode: string | null; level: number }> = [];
-  for (const node of nodes) {
-    result.push({ code: node.code, label: node.label, parentCode, level: node.code.length });
-    result.push(...flatten(node.children ?? [], node.code));
-  }
-  return result;
-}
+import { requireApiRoles } from "@/lib/rbac";
 
 export async function POST() {
   const access = await requireApiRoles(["ADMIN"]);
@@ -48,7 +28,7 @@ export async function POST() {
     return NextResponse.json({ success: false, error: `Impossible de créer la table: ${e.message}` }, { status: 500 });
   }
 
-  const accounts = flatten(PLAN_COMPTABLE_STRUCTURED);
+  const accounts = flattenStructuredPlan();
   let count = 0;
   const errors: string[] = [];
 
