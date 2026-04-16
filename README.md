@@ -221,6 +221,8 @@ npm run db:push
 npm run db:seed
 ```
 
+`prisma/schema.mysql.prisma` force le client Prisma en mode `binary` pour la cible Hostinger, afin d'éviter les crashes du moteur `library` observés sur certains environnements Node.js/OpenSSL du fournisseur.
+
 5. Pour lancer/build l'app avec MySQL :
 
 ```bash
