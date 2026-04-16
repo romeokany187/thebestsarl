@@ -16,6 +16,7 @@ import { invoiceNumberFromChronology } from "@/lib/invoice";
 import { isCashierJobTitle } from "@/lib/assignment";
 import { requirePageModuleAccess } from "@/lib/rbac";
 import { prisma } from "@/lib/prisma";
+import { resolvePaymentsDeskState } from "@/lib/payments-desk";
 import { getTicketTotalAmount } from "@/lib/ticket-pricing";
 
 type AirlineRow = { id: string; code: string; name: string };
@@ -375,8 +376,14 @@ export default async function PaymentsPage({
   const canWrite = isCashier || isAdmin || isComptable;
   const canManageLedger = isAdmin || isComptable;
   const resolvedSearchParams = (await searchParams) ?? {};
-  const selectedDeskParam = ((resolvedSearchParams as any).desk ?? "THE_BEST") as string;
-  const selectedDeskKey = String(selectedDeskParam).trim().toUpperCase();
+  const deskState = resolvePaymentsDeskState({
+    jobTitle: session.user.jobTitle,
+    role,
+    requestedDesk: typeof (resolvedSearchParams as { desk?: unknown }).desk === "string"
+      ? (resolvedSearchParams as { desk?: string }).desk
+      : null,
+  });
+  const selectedDeskKey = deskState.desk;
   const KNOWN_DESK_PREFIXES = ["PROXY_BANKING:", "THE_BEST:", "CAISSE_SAFETY:", "CAISSE_VISAS:", "CAISSE_TSL:", "CAISSE_AGENCE:"];
   const range = dateRangeFromParams(resolvedSearchParams);
   const cashRange = monthRangeFromValue(resolvedSearchParams.cashMonth);
@@ -1178,6 +1185,8 @@ export default async function PaymentsPage({
       <PaymentsWritingWorkspace
         jobTitle={session.user.jobTitle ?? null}
         role={role}
+        initialDesk={deskState.desk}
+        initialScope={deskState.scope}
         workspaceOverrides={workspaceOverrides}
         paymentOrdersWorkspace={canWrite ? (
           <section className="space-y-4 rounded-2xl border border-black/10 bg-white p-4 dark:border-white/10 dark:bg-zinc-900">
@@ -1192,7 +1201,7 @@ export default async function PaymentsPage({
             ) : (
               <div className="grid gap-3 lg:grid-cols-2">
                 {paymentOrdersReadyForExecution.map((order) => (
-                  <article key={order.id} className="rounded-xl border border-black/10 bg-black/[0.02] p-3 dark:border-white/10 dark:bg-white/[0.03]">
+                  <article key={order.id} className="rounded-xl border border-black/10 bg-black/2 p-3 dark:border-white/10 dark:bg-white/3">
                     <div className="flex flex-wrap items-start justify-between gap-2">
                       <div>
                         <p className="font-semibold">{order.code ?? `OP-${order.id.slice(0, 8).toUpperCase()}`}</p>
@@ -1226,7 +1235,7 @@ export default async function PaymentsPage({
             ) : (
               <div className="grid gap-3 lg:grid-cols-2">
                 {needsReadyForExecution.map((need) => (
-                  <article key={need.id} className="rounded-xl border border-black/10 bg-black/[0.02] p-3 dark:border-white/10 dark:bg-white/[0.03]">
+                  <article key={need.id} className="rounded-xl border border-black/10 bg-black/2 p-3 dark:border-white/10 dark:bg-white/3">
                     <div className="flex flex-wrap items-start justify-between gap-2">
                       <div>
                         <p className="font-semibold">{need.code ?? `EDB-${need.id.slice(0, 8).toUpperCase()}`}</p>

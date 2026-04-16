@@ -2,160 +2,17 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import {
+  getDefaultCashRoleScope,
+  getManagedCashDesks,
+  getVisibleCashRoleOptions,
+  type AdminCashRoleScope,
+  type AppRoleLike,
+  type CashDeskValue,
+} from "@/lib/payments-desk";
 
 type WritingMode = "none" | "tickets" | "cash" | "virtual" | "billetage" | "payment-orders" | "needs" | "float";
-type CashDeskValue = "PROXY_BANKING" | "THE_BEST" | "CAISSE_SAFETY" | "CAISSE_VISAS" | "CAISSE_TSL" | "CAISSE_AGENCE";
-type CashDeskOption = { value: CashDeskValue; label: string; description: string };
-type AdminCashRoleScope = "CAISSIER" | "CAISSE_2_SIEGE" | "CAISSE_AGENCE";
 type DeskWorkspaceOverride = Partial<Record<Exclude<WritingMode, "none"> | "summary", React.ReactNode>>;
-
-type AppRoleLike = "ADMIN" | "DIRECTEUR_GENERAL" | "MANAGER" | "EMPLOYEE" | "ACCOUNTANT";
-
-const ALL_CASH_DESKS: CashDeskOption[] = [
-  {
-    value: "PROXY_BANKING",
-    label: "Proxy Banking",
-    description: "Airtel Money, Orange Money, M-Pesa, Equity et Illicocash : dépôts, retraits, virtuel et billetage.",
-  },
-  {
-    value: "THE_BEST",
-    label: "THE BEST",
-    description: "Caisse principale THE BEST : paiements billets + autres opérations de caisse.",
-  },
-  {
-    value: "CAISSE_SAFETY",
-    label: "Caisse Safety",
-    description: "Compte Safety : opérations de caisse, billetage, virtuel, OP et EDB.",
-  },
-  {
-    value: "CAISSE_VISAS",
-    label: "Caisse Visas",
-    description: "Compte Visas : opérations de caisse, billetage, virtuel, OP et EDB.",
-  },
-  {
-    value: "CAISSE_TSL",
-    label: "Caisse TSL",
-    description: "Compte TSL : opérations de caisse, billetage, virtuel, OP et EDB.",
-  },
-  {
-    value: "CAISSE_AGENCE",
-    label: "Caisse agence",
-    description: "Caisse locale de l'agence : opérations de caisse, billetage, virtuel, OP et EDB.",
-  },
-];
-
-const ADMIN_CASH_ROLE_OPTIONS: Array<{ value: AdminCashRoleScope; label: string; description: string }> = [
-  {
-    value: "CAISSIER",
-    label: "Caisse 1 Siège",
-    description: "Vue admin du proxy banking, du billetage et des OP/EDB de la caisse 1 siège.",
-  },
-  {
-    value: "CAISSE_2_SIEGE",
-    label: "Caisse 2 Siège",
-    description: "Vue admin du caissier 2 siège et des comptes qu'il gère.",
-  },
-  {
-    value: "CAISSE_AGENCE",
-    label: "Caisse agence",
-    description: "Vue admin de la caisse agence et de ses opérations.",
-  },
-];
-
-function getManagedCashDesksForScope(scope?: string | null) {
-  const normalizedScope = (scope ?? "").trim().toUpperCase();
-
-  if (normalizedScope === "CAISSIER") {
-    return ALL_CASH_DESKS.filter((desk) => desk.value === "PROXY_BANKING");
-  }
-
-  if (normalizedScope === "CAISSE_2_SIEGE") {
-    return ALL_CASH_DESKS.filter((desk) => [
-      "THE_BEST",
-      "CAISSE_SAFETY",
-      "CAISSE_VISAS",
-      "CAISSE_TSL",
-    ].includes(desk.value));
-  }
-
-  if (normalizedScope === "CAISSE_AGENCE") {
-    return ALL_CASH_DESKS.filter((desk) => desk.value === "CAISSE_AGENCE");
-  }
-
-  return ALL_CASH_DESKS.filter((desk) => desk.value === "PROXY_BANKING");
-}
-
-function getDefaultCashRoleScope(
-  jobTitle?: string | null,
-  role?: AppRoleLike | string | null,
-): AdminCashRoleScope {
-  const normalizedJobTitle = (jobTitle ?? "").trim().toUpperCase();
-  const normalizedRole = (role ?? "").trim().toUpperCase();
-
-  if (normalizedJobTitle === "CAISSE_2_SIEGE") return "CAISSE_2_SIEGE";
-  if (normalizedJobTitle === "CAISSE_AGENCE") return "CAISSE_AGENCE";
-  if (
-    normalizedRole === "ADMIN"
-    || normalizedRole === "DIRECTEUR_GENERAL"
-    || normalizedRole === "ACCOUNTANT"
-    || normalizedJobTitle === "COMPTABLE"
-  ) {
-    return "CAISSIER";
-  }
-
-  return "CAISSIER";
-}
-
-function getVisibleCashRoleOptions(
-  jobTitle?: string | null,
-  role?: AppRoleLike | string | null,
-) {
-  const normalizedJobTitle = (jobTitle ?? "").trim().toUpperCase();
-  const normalizedRole = (role ?? "").trim().toUpperCase();
-
-  if (
-    normalizedRole === "ADMIN"
-    || normalizedRole === "DIRECTEUR_GENERAL"
-    || normalizedRole === "ACCOUNTANT"
-    || normalizedJobTitle === "COMPTABLE"
-  ) {
-    return ADMIN_CASH_ROLE_OPTIONS;
-  }
-
-  if (normalizedJobTitle === "CAISSE_2_SIEGE") {
-    return ADMIN_CASH_ROLE_OPTIONS.filter((option) => option.value === "CAISSE_2_SIEGE");
-  }
-
-  if (normalizedJobTitle === "CAISSE_AGENCE") {
-    return ADMIN_CASH_ROLE_OPTIONS.filter((option) => option.value === "CAISSE_AGENCE");
-  }
-
-  if (normalizedJobTitle === "CAISSIER") {
-    return ADMIN_CASH_ROLE_OPTIONS.filter((option) => option.value === "CAISSIER");
-  }
-
-  return [];
-}
-
-function getManagedCashDesks(
-  jobTitle?: string | null,
-  role?: AppRoleLike | string | null,
-  scope?: AdminCashRoleScope | null,
-) {
-  const normalizedJobTitle = (jobTitle ?? "").trim().toUpperCase();
-  const visibleScopeOptions = getVisibleCashRoleOptions(jobTitle, role);
-
-  if (visibleScopeOptions.length > 0) {
-    const fallbackScope = visibleScopeOptions[0]?.value ?? getDefaultCashRoleScope(jobTitle, role);
-    const selectedScope = visibleScopeOptions.some((option) => option.value === scope)
-      ? (scope ?? fallbackScope)
-      : fallbackScope;
-
-    return getManagedCashDesksForScope(selectedScope);
-  }
-
-  return getManagedCashDesksForScope(normalizedJobTitle);
-}
 
 function getAllowedActionsForDesk(deskValue: CashDeskValue | string): Array<Exclude<WritingMode, "none">> {
   if (deskValue === "THE_BEST") {
@@ -183,6 +40,8 @@ export function PaymentsWritingWorkspace({
   workspaceOverrides,
   jobTitle,
   role,
+  initialDesk,
+  initialScope,
 }: {
   ticketWorkspace?: React.ReactNode;
   cashWorkspace?: React.ReactNode;
@@ -197,14 +56,30 @@ export function PaymentsWritingWorkspace({
   workspaceOverrides?: Partial<Record<CashDeskValue, DeskWorkspaceOverride>>;
   jobTitle?: string | null;
   role?: AppRoleLike | string | null;
+  initialDesk?: CashDeskValue;
+  initialScope?: AdminCashRoleScope;
 }) {
   const [mode, setMode] = useState<WritingMode>("none");
   const scopeOptions = useMemo(() => getVisibleCashRoleOptions(jobTitle, role), [jobTitle, role]);
-  const [adminScope, setAdminScope] = useState<AdminCashRoleScope>(() => getDefaultCashRoleScope(jobTitle, role));
+  const [adminScope, setAdminScope] = useState<AdminCashRoleScope>(() => initialScope ?? getDefaultCashRoleScope(jobTitle, role));
   const deskOptions = useMemo(() => getManagedCashDesks(jobTitle, role, adminScope), [jobTitle, role, adminScope]);
-  const [selectedDesk, setSelectedDesk] = useState<CashDeskValue | "">(deskOptions[0]?.value ?? "");
+  const [selectedDesk, setSelectedDesk] = useState<CashDeskValue | "">(initialDesk ?? deskOptions[0]?.value ?? "");
 
   const router = useRouter();
+
+  useEffect(() => {
+    if (initialScope && initialScope !== adminScope) {
+      setAdminScope(initialScope);
+      setMode("none");
+    }
+  }, [adminScope, initialScope]);
+
+  useEffect(() => {
+    if (initialDesk && initialDesk !== selectedDesk) {
+      setSelectedDesk(initialDesk);
+      setMode("none");
+    }
+  }, [initialDesk, selectedDesk]);
 
   useEffect(() => {
     // reflect selected desk in URL so server can render desk-specific data
