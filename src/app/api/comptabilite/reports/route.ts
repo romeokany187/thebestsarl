@@ -1,11 +1,20 @@
 import { NextRequest, NextResponse } from "next/server";
-import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
+import { PDFDocument, rgb } from "pdf-lib";
+import fontkit from "@pdf-lib/fontkit";
+import { readFile } from "node:fs/promises";
+import path from "node:path";
 import { prisma } from "@/lib/prisma";
 import { requireApiModuleAccess } from "@/lib/rbac";
 
 const accountingEntryClient = (prisma as unknown as { accountingEntry: any }).accountingEntry;
 
-type ReportType = "journal" | "ledger";
+type ReportType = "journal" | "ledger" | "trial-balance" | "general-balance";
+
+type JournalPayload = ReturnType<typeof buildJournalPayload>;
+type LedgerPayload = ReturnType<typeof buildLedgerPayload>;
+type TrialBalancePayload = ReturnType<typeof buildTrialBalancePayload>;
+type GeneralBalancePayload = ReturnType<typeof buildGeneralBalancePayload>;
+type ReportPayload = JournalPayload | LedgerPayload | TrialBalancePayload | GeneralBalancePayload;
 
 function canManageAccounting(role: string, jobTitle: string | null | undefined) {
   return role === "ADMIN" || role === "ACCOUNTANT" || (jobTitle ?? "") === "COMPTABLE";
@@ -97,7 +106,10 @@ function formatMoney(value: number) {
 
 function reportTypeFromSearch(searchParams: URLSearchParams): ReportType {
   const raw = searchParams.get("reportType");
-  return raw === "ledger" ? "ledger" : "journal";
+  if (raw === "ledger") return "ledger";
+  if (raw === "trial-balance") return "trial-balance";
+  if (raw === "general-balance") return "general-balance";
+  return "journal";
 }
 
 function matchesAccount(lineCode: string, selectedAccountCode: string, includeSubaccounts: boolean) {
@@ -130,6 +142,63 @@ function buildJournalPayload(entries: any[], label: string) {
     totals,
     entries,
   };
+}
+
+type BalanceRow = {
+  accountCode: string;
+  accountLabel: string;
+  debitUsd: number;
+  creditUsd: number;
+  debitCdf: number;
+  creditCdf: number;
+  balanceUsd: number;
+  balanceCdf: number;
+  balanceUsdSide: "DEBIT" | "CREDIT" | "ZERO";
+  balanceCdfSide: "DEBIT" | "CREDIT" | "ZERO";
+};
+
+function balanceSide(value: number): "DEBIT" | "CREDIT" | "ZERO" {
+  if (value > 0) return "DEBIT";
+  if (value < 0) return "CREDIT";
+  return "ZERO";
+}
+
+function buildBalanceRows(entries: any[], selectedAccountCode: string, includeSubaccounts: boolean) {
+  const rows = new Map<string, BalanceRow>();
+
+  for (const entry of entries) {
+    for (const line of entry.lines) {
+      if (!matchesAccount(line.accountCode, selectedAccountCode, includeSubaccounts)) continue;
+      const current = rows.get(line.accountCode) ?? {
+        accountCode: line.accountCode,
+        accountLabel: line.accountLabel,
+        debitUsd: 0,
+        creditUsd: 0,
+        debitCdf: 0,
+        creditCdf: 0,
+        balanceUsd: 0,
+        balanceCdf: 0,
+        balanceUsdSide: "ZERO",
+        balanceCdfSide: "ZERO",
+      };
+
+      if (line.side === "DEBIT") {
+        current.debitUsd += numberValue(line.amountUsd);
+        current.debitCdf += numberValue(line.amountCdf);
+      } else {
+        current.creditUsd += numberValue(line.amountUsd);
+        current.creditCdf += numberValue(line.amountCdf);
+      }
+
+      current.balanceUsd = current.debitUsd - current.creditUsd;
+      current.balanceCdf = current.debitCdf - current.creditCdf;
+      current.balanceUsdSide = balanceSide(current.balanceUsd);
+      current.balanceCdfSide = balanceSide(current.balanceCdf);
+      rows.set(line.accountCode, current);
+    }
+  }
+
+  return [...rows.values()].sort((left, right) => left.accountCode.localeCompare(right.accountCode));
 }
 
 function buildLedgerPayload(entries: any[], label: string, selectedAccountCode: string, includeSubaccounts: boolean) {
@@ -228,19 +297,123 @@ function buildLedgerPayload(entries: any[], label: string, selectedAccountCode: 
   };
 }
 
-async function buildPdf(report: ReturnType<typeof buildJournalPayload> | ReturnType<typeof buildLedgerPayload>) {
+function buildTrialBalancePayload(entries: any[], label: string, selectedAccountCode: string, includeSubaccounts: boolean) {
+  const rows = buildBalanceRows(entries, selectedAccountCode, includeSubaccounts);
+  const totals = rows.reduce(
+    (sum, row) => {
+      sum.debitUsd += row.debitUsd;
+      sum.creditUsd += row.creditUsd;
+      sum.debitCdf += row.debitCdf;
+      sum.creditCdf += row.creditCdf;
+      return sum;
+    },
+    { debitUsd: 0, creditUsd: 0, debitCdf: 0, creditCdf: 0 },
+  );
+
+  return {
+    reportType: "trial-balance" as const,
+    periodLabel: label,
+    accountCode: selectedAccountCode || null,
+    includeSubaccounts,
+    rowCount: rows.length,
+    totals,
+    rows,
+  };
+}
+
+function buildGeneralBalancePayload(entries: any[], label: string, selectedAccountCode: string, includeSubaccounts: boolean) {
+  const baseRows = buildBalanceRows(entries, selectedAccountCode, includeSubaccounts);
+  const groups = new Map<string, {
+    classCode: string;
+    classLabel: string;
+    debitUsd: number;
+    creditUsd: number;
+    debitCdf: number;
+    creditCdf: number;
+    balanceUsd: number;
+    balanceCdf: number;
+    accountCount: number;
+  }>();
+
+  for (const row of baseRows) {
+    const classCode = row.accountCode.slice(0, 1) || "?";
+    const current = groups.get(classCode) ?? {
+      classCode,
+      classLabel: `Classe ${classCode}`,
+      debitUsd: 0,
+      creditUsd: 0,
+      debitCdf: 0,
+      creditCdf: 0,
+      balanceUsd: 0,
+      balanceCdf: 0,
+      accountCount: 0,
+    };
+
+    current.debitUsd += row.debitUsd;
+    current.creditUsd += row.creditUsd;
+    current.debitCdf += row.debitCdf;
+    current.creditCdf += row.creditCdf;
+    current.balanceUsd = current.debitUsd - current.creditUsd;
+    current.balanceCdf = current.debitCdf - current.creditCdf;
+    current.accountCount += 1;
+    groups.set(classCode, current);
+  }
+
+  const rows = [...groups.values()].sort((left, right) => left.classCode.localeCompare(right.classCode));
+  const totals = rows.reduce(
+    (sum, row) => {
+      sum.debitUsd += row.debitUsd;
+      sum.creditUsd += row.creditUsd;
+      sum.debitCdf += row.debitCdf;
+      sum.creditCdf += row.creditCdf;
+      return sum;
+    },
+    { debitUsd: 0, creditUsd: 0, debitCdf: 0, creditCdf: 0 },
+  );
+
+  return {
+    reportType: "general-balance" as const,
+    periodLabel: label,
+    accountCode: selectedAccountCode || null,
+    includeSubaccounts,
+    rowCount: rows.length,
+    totals,
+    rows,
+  };
+}
+
+async function buildPdf(report: ReportPayload) {
   const pdf = await PDFDocument.create();
-  const font = await pdf.embedFont(StandardFonts.Helvetica);
-  const bold = await pdf.embedFont(StandardFonts.HelveticaBold);
+  pdf.registerFontkit(fontkit);
+  const regularBytes = await readFile(path.join(process.cwd(), "public", "fonts", "Montserrat-Regular.ttf"));
+  const boldBytes = await readFile(path.join(process.cwd(), "public", "fonts", "Montserrat-Bold.ttf"));
+  const font = await pdf.embedFont(regularBytes);
+  const bold = await pdf.embedFont(boldBytes);
   const pageWidth = 842;
   const pageHeight = 595;
-  const margin = 32;
+  const margin = 28;
   let page = pdf.addPage([pageWidth, pageHeight]);
   let y = pageHeight - margin;
 
+  function drawHeader(title: string, subtitle: string) {
+    page.drawRectangle({ x: 0, y: pageHeight - 90, width: pageWidth, height: 90, color: rgb(0.08, 0.1, 0.14) });
+    page.drawText("THEBEST SARL", { x: margin, y: pageHeight - 34, size: 18, font: bold, color: rgb(1, 1, 1) });
+    page.drawText(title, { x: margin, y: pageHeight - 56, size: 13, font: bold, color: rgb(0.92, 0.94, 0.99) });
+    page.drawText(subtitle, { x: margin, y: pageHeight - 74, size: 9, font, color: rgb(0.75, 0.79, 0.86) });
+    y = pageHeight - 110;
+  }
+
+  function drawSummaryBox(text: string, offsetX: number, width: number) {
+    page.drawRectangle({ x: offsetX, y, width, height: 38, borderWidth: 1, borderColor: rgb(0.85, 0.87, 0.91) });
+    page.drawText(text, { x: offsetX + 10, y: y + 14, size: 9, font: bold, color: rgb(0.14, 0.16, 0.2), maxWidth: width - 18 });
+  }
+
   function addPage() {
     page = pdf.addPage([pageWidth, pageHeight]);
-    y = pageHeight - margin;
+    drawHeader(
+      report.reportType === "journal" ? "Livre journal comptable" : report.reportType === "ledger" ? "Grand livre comptable" : report.reportType === "trial-balance" ? "Balance des comptes" : "Balance generale",
+      report.periodLabel,
+    );
   }
 
   function line(text: string, options?: { size?: number; bold?: boolean; color?: [number, number, number] }) {
@@ -259,13 +432,35 @@ async function buildPdf(report: ReturnType<typeof buildJournalPayload> | ReturnT
     y -= size + 6;
   }
 
-  line(report.reportType === "journal" ? "Livre journal comptable" : "Grand livre comptable", { size: 16, bold: true });
-  line(report.periodLabel, { size: 10, color: [0.35, 0.35, 0.35] });
-  y -= 4;
+  drawHeader(
+    report.reportType === "journal" ? "Livre journal comptable" : report.reportType === "ledger" ? "Grand livre comptable" : report.reportType === "trial-balance" ? "Balance des comptes" : "Balance generale",
+    report.periodLabel,
+  );
 
   if (report.reportType === "journal") {
-    line(`Ecritures: ${report.entryCount} | USD debit ${formatMoney(report.totals.debitUsd)} / credit ${formatMoney(report.totals.creditUsd)} | CDF debit ${formatMoney(report.totals.debitCdf)} / credit ${formatMoney(report.totals.creditCdf)}`, { size: 10, bold: true });
-    y -= 4;
+    drawSummaryBox(`Ecritures: ${report.entryCount}`, margin, 160);
+    drawSummaryBox(`USD D ${formatMoney(report.totals.debitUsd)} | C ${formatMoney(report.totals.creditUsd)}`, margin + 172, 260);
+    drawSummaryBox(`CDF D ${formatMoney(report.totals.debitCdf)} | C ${formatMoney(report.totals.creditCdf)}`, margin + 444, 260);
+    y -= 56;
+  } else if (report.reportType === "ledger") {
+    drawSummaryBox(`Comptes mouvementes: ${report.groupCount}`, margin, 180);
+    drawSummaryBox(`Filtre: ${report.accountCode ?? "Tous les comptes"}`, margin + 192, 220);
+    drawSummaryBox(`Sous-comptes: ${report.includeSubaccounts ? "Oui" : "Non"}`, margin + 424, 160);
+    drawSummaryBox(`USD D ${formatMoney(report.totals.debitUsd)} | C ${formatMoney(report.totals.creditUsd)}`, margin + 596, 218);
+    y -= 56;
+  } else if (report.reportType === "trial-balance") {
+    drawSummaryBox(`Comptes: ${report.rowCount}`, margin, 160);
+    drawSummaryBox(`USD D ${formatMoney(report.totals.debitUsd)} | C ${formatMoney(report.totals.creditUsd)}`, margin + 172, 260);
+    drawSummaryBox(`CDF D ${formatMoney(report.totals.debitCdf)} | C ${formatMoney(report.totals.creditCdf)}`, margin + 444, 260);
+    y -= 56;
+  } else {
+    drawSummaryBox(`Classes: ${report.rowCount}`, margin, 160);
+    drawSummaryBox(`USD D ${formatMoney(report.totals.debitUsd)} | C ${formatMoney(report.totals.creditUsd)}`, margin + 172, 260);
+    drawSummaryBox(`CDF D ${formatMoney(report.totals.debitCdf)} | C ${formatMoney(report.totals.creditCdf)}`, margin + 444, 260);
+    y -= 56;
+  }
+
+  if (report.reportType === "journal") {
     for (const entry of report.entries) {
       line(`Ecriture #${entry.sequence} - ${new Date(entry.entryDate).toLocaleString("fr-FR")} - ${entry.libelle}`, { bold: true });
       line(`Pole: ${entry.pole ?? "-"} | Piece: ${entry.pieceJustificative ?? "-"} | Taux: ${entry.exchangeRate ? `1 USD = ${Number(entry.exchangeRate).toFixed(2)} CDF` : "-"}`, { size: 8, color: [0.35, 0.35, 0.35] });
@@ -274,10 +469,7 @@ async function buildPdf(report: ReturnType<typeof buildJournalPayload> | ReturnT
       }
       y -= 4;
     }
-  } else {
-    line(`Comptes mouvementes: ${report.groupCount} | USD debit ${formatMoney(report.totals.debitUsd)} / credit ${formatMoney(report.totals.creditUsd)} | CDF debit ${formatMoney(report.totals.debitCdf)} / credit ${formatMoney(report.totals.creditCdf)}`, { size: 10, bold: true });
-    line(`Filtre compte: ${report.accountCode ?? "Tous les comptes mouvementes"} | Sous-comptes: ${report.includeSubaccounts ? "Oui" : "Non"}`, { size: 9, color: [0.35, 0.35, 0.35] });
-    y -= 4;
+  } else if (report.reportType === "ledger") {
     for (const group of report.groups) {
       line(`${group.accountCode} - ${group.accountLabel}`, { bold: true });
       line(`Totaux | USD debit ${formatMoney(group.totals.debitUsd)} / credit ${formatMoney(group.totals.creditUsd)} | CDF debit ${formatMoney(group.totals.debitCdf)} / credit ${formatMoney(group.totals.creditCdf)}`, { size: 8, color: [0.35, 0.35, 0.35] });
@@ -286,6 +478,16 @@ async function buildPdf(report: ReturnType<typeof buildJournalPayload> | ReturnT
         if (row.counterparts) line(`    Contreparties: ${row.counterparts}`, { size: 7, color: [0.4, 0.4, 0.4] });
       }
       y -= 4;
+    }
+  } else if (report.reportType === "trial-balance") {
+    line("Compte | Intitule | Debit USD | Credit USD | Solde USD | Debit CDF | Credit CDF | Solde CDF", { size: 9, bold: true });
+    for (const row of report.rows) {
+      line(`${row.accountCode} | ${row.accountLabel} | ${formatMoney(row.debitUsd)} | ${formatMoney(row.creditUsd)} | ${formatMoney(Math.abs(row.balanceUsd))} ${row.balanceUsdSide === "ZERO" ? "" : row.balanceUsdSide === "DEBIT" ? "D" : "C"} | ${formatMoney(row.debitCdf)} | ${formatMoney(row.creditCdf)} | ${formatMoney(Math.abs(row.balanceCdf))} ${row.balanceCdfSide === "ZERO" ? "" : row.balanceCdfSide === "DEBIT" ? "D" : "C"}`, { size: 8 });
+    }
+  } else {
+    line("Classe | Comptes | Debit USD | Credit USD | Solde USD | Debit CDF | Credit CDF | Solde CDF", { size: 9, bold: true });
+    for (const row of report.rows) {
+      line(`${row.classLabel} | ${row.accountCount} | ${formatMoney(row.debitUsd)} | ${formatMoney(row.creditUsd)} | ${formatMoney(Math.abs(row.balanceUsd))} ${balanceSide(row.balanceUsd) === "ZERO" ? "" : balanceSide(row.balanceUsd) === "DEBIT" ? "D" : "C"} | ${formatMoney(row.debitCdf)} | ${formatMoney(row.creditCdf)} | ${formatMoney(Math.abs(row.balanceCdf))} ${balanceSide(row.balanceCdf) === "ZERO" ? "" : balanceSide(row.balanceCdf) === "DEBIT" ? "D" : "C"}`, { size: 8 });
     }
   }
 
@@ -327,7 +529,11 @@ export async function GET(request: NextRequest) {
 
   const payload = reportType === "journal"
     ? buildJournalPayload(entries, range.label)
-    : buildLedgerPayload(entries, range.label, selectedAccountCode, includeSubaccounts);
+    : reportType === "ledger"
+      ? buildLedgerPayload(entries, range.label, selectedAccountCode, includeSubaccounts)
+      : reportType === "trial-balance"
+        ? buildTrialBalancePayload(entries, range.label, selectedAccountCode, includeSubaccounts)
+        : buildGeneralBalancePayload(entries, range.label, selectedAccountCode, includeSubaccounts);
 
   if (format === "json") {
     return NextResponse.json(payload);
@@ -336,7 +542,11 @@ export async function GET(request: NextRequest) {
   const pdfBytes = await buildPdf(payload);
   const filename = reportType === "journal"
     ? `livre-journal-${range.startRaw}-${range.endRaw}.pdf`
-    : `grand-livre-${selectedAccountCode || "general"}-${range.startRaw}-${range.endRaw}.pdf`;
+    : reportType === "ledger"
+      ? `grand-livre-${selectedAccountCode || "general"}-${range.startRaw}-${range.endRaw}.pdf`
+      : reportType === "trial-balance"
+        ? `balance-comptes-${selectedAccountCode || "general"}-${range.startRaw}-${range.endRaw}.pdf`
+        : `balance-generale-${selectedAccountCode || "general"}-${range.startRaw}-${range.endRaw}.pdf`;
   const disposition = searchParams.get("download") === "1" ? "attachment" : "inline";
 
   return new NextResponse(Buffer.from(pdfBytes), {
