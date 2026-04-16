@@ -1,11 +1,12 @@
 import React from 'react'
+import { redirect } from 'next/navigation'
 import { AppShell } from '@/components/app-shell'
 import { AccountingPlanWorkspace } from '@/components/accounting-plan-workspace'
 import { AccountingReportsWorkspace } from '@/components/accounting-reports-workspace'
 import { AccountingWritingWorkspace } from '@/components/accounting-writing-workspace'
 import { KpiCard } from '@/components/kpi-card'
 import { prisma } from '@/lib/prisma'
-import { requirePageModuleAccess } from '@/lib/rbac'
+import { requirePageRoles } from '@/lib/rbac'
 
 export const metadata = {
   title: 'Comptabilité — Plan comptable',
@@ -18,7 +19,13 @@ function formatClassLabel(cls: string) {
 }
 
 export default async function Page() {
-  const { role } = await requirePageModuleAccess('payments', ['ADMIN', 'ACCOUNTANT'])
+  const { role, session } = await requirePageRoles(['ADMIN', 'ACCOUNTANT', 'EMPLOYEE'])
+  const normalizedJobTitle = (session.user.jobTitle ?? '').trim().toUpperCase()
+
+  if (role !== 'ADMIN' && role !== 'ACCOUNTANT' && normalizedJobTitle !== 'COMPTABLE') {
+    redirect('/')
+  }
+
   const accounts = await prisma.account.findMany({
     select: {
       code: true,

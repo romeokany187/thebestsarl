@@ -2,6 +2,7 @@ import Link from "next/link";
 import { type AppModule, type AppRole, hasModuleAccess } from "@/lib/rbac";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/auth";
+import { jobTitleLabel } from "@/lib/assignment";
 import { InboxRealtimeLink } from "@/components/inbox-realtime-link";
 import { LogoutButton } from "@/components/logout-button";
 import { ThemeToggle } from "@/components/theme-toggle";
@@ -61,7 +62,11 @@ const links = [
     href: "/comptabilite",
     label: "Comptabilité",
     module: "payments" as AppModule,
-    roles: ["ADMIN", "ACCOUNTANT"] as AppRole[],
+    roles: ["ADMIN", "ACCOUNTANT", "EMPLOYEE"] as AppRole[],
+    show: ({ role, jobTitle }: { role: AppRole; jobTitle?: string | null }) => {
+      const normalizedJobTitle = (jobTitle ?? "").trim().toUpperCase();
+      return role === "ADMIN" || role === "ACCOUNTANT" || normalizedJobTitle === "COMPTABLE";
+    },
   },
   {
     href: "/deposit",
@@ -132,7 +137,11 @@ const links = [
   { href: "/admin", label: "Admin", module: "admin" as AppModule, roles: ["ADMIN", "DIRECTEUR_GENERAL"] as AppRole[] },
 ];
 
-function displayRoleLabel(role: AppRole) {
+function displayRoleLabel(role: AppRole, jobTitle?: string | null) {
+  const normalizedJobTitle = (jobTitle ?? "").trim().toUpperCase();
+  if (role === "EMPLOYEE" && normalizedJobTitle && normalizedJobTitle !== "AGENT_TERRAIN") {
+    return jobTitleLabel(normalizedJobTitle);
+  }
   if (role === "ADMIN") return "Admin";
   if (role === "DIRECTEUR_GENERAL") return "Directeur Général";
   if (role === "MANAGER") return "Chef d'agence";
@@ -170,14 +179,20 @@ export async function AppShell({
       return false;
     }
 
-    return hasModuleAccess({
+    if (!hasModuleAccess({
       role,
       jobTitle: session?.user?.jobTitle,
       teamName: session?.user?.teamName,
       module: link.module,
-    });
+    })) {
+      return false;
+    }
+
+    return typeof link.show === "function"
+      ? link.show({ role, jobTitle: session?.user?.jobTitle })
+      : true;
   });
-  const roleLabel = role ? `Rôle ${displayRoleLabel(role)}` : null;
+  const roleLabel = role ? `Rôle ${displayRoleLabel(role, session?.user?.jobTitle)}` : null;
 
   return (
     <div className="min-h-screen w-full bg-background text-foreground">
