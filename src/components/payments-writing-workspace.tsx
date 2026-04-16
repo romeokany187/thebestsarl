@@ -68,20 +68,6 @@ export function PaymentsWritingWorkspace({
   const router = useRouter();
 
   useEffect(() => {
-    if (initialScope && initialScope !== adminScope) {
-      setAdminScope(initialScope);
-      setMode("none");
-    }
-  }, [adminScope, initialScope]);
-
-  useEffect(() => {
-    if (initialDesk && initialDesk !== selectedDesk) {
-      setSelectedDesk(initialDesk);
-      setMode("none");
-    }
-  }, [initialDesk, selectedDesk]);
-
-  useEffect(() => {
     // reflect selected desk in URL so server can render desk-specific data
     try {
       const url = new URL(window.location.href);
