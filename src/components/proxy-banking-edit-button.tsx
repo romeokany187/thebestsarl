@@ -3,35 +3,15 @@
 import React from "react";
 
 export function ProxyBankingEditButton({
-  id,
-  amount,
-  currency,
-  reference,
-  description,
-  occurredAt,
-  method,
+  eventName,
+  payload,
 }: {
-  id: string;
-  amount?: number | null;
-  currency?: string | null;
-  reference?: string | null;
-  description?: string | null;
-  occurredAt?: string | Date | null;
-  method?: string | null;
+  eventName: "proxyBanking:edit" | "cashOperation:edit";
+  payload: Record<string, unknown>;
 }) {
   async function handleEdit(e: React.MouseEvent) {
     e.preventDefault();
-    const payload = {
-      id,
-      amount: amount ?? 0,
-      currency: currency ?? "USD",
-      method: method ?? "CASH",
-      reference: reference ?? "",
-      description: description ?? "",
-      occurredAt: occurredAt ? (occurredAt instanceof Date ? occurredAt.toISOString() : String(occurredAt)) : new Date().toISOString(),
-    } as const;
-
-    window.dispatchEvent(new CustomEvent("proxyBanking:edit", { detail: payload }));
+    window.dispatchEvent(new CustomEvent(eventName, { detail: payload }));
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
 

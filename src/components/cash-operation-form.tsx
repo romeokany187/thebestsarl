@@ -79,11 +79,39 @@ export function CashOperationForm({
 
   const usesFreeTextCategory = categoryInputMode === "text";
 
+  function parseEditableDescription(rawDescription: string | null | undefined) {
+    const incomingDescription = rawDescription ?? "";
+
+    if (!usesFreeTextCategory || !descriptionPrefix || !incomingDescription.startsWith(descriptionPrefix)) {
+      return {
+        descriptionValue: incomingDescription,
+        categoryLabelValue: "",
+      };
+    }
+
+    const unprefixedDescription = incomingDescription.slice(descriptionPrefix.length).trim();
+    const freeTextCategoryMatch = unprefixedDescription.match(/^\[(.+?)\]\s+(.*)$/);
+
+    if (!freeTextCategoryMatch) {
+      return {
+        descriptionValue: unprefixedDescription,
+        categoryLabelValue: "",
+      };
+    }
+
+    return {
+      categoryLabelValue: freeTextCategoryMatch[1] ?? "",
+      descriptionValue: freeTextCategoryMatch[2] ?? "",
+    };
+  }
+
   useEffect(() => {
     function handleEdit(ev: Event) {
       const e = ev as CustomEvent<any>;
       const payload = e.detail;
       if (!payload) return;
+
+      const parsedDescription = parseEditableDescription(payload.description);
 
       setEditCashOperationId(payload.id ?? null);
       setDirection(payload.direction === "OUTFLOW" ? "OUTFLOW" : "INFLOW");
@@ -92,16 +120,18 @@ export function CashOperationForm({
       setCurrency(payload.currency === "CDF" ? "CDF" : "USD");
       setMethod(payload.method ?? methodOptions[0]?.value ?? "CASH");
       setReference(payload.reference ?? "");
-      setDescription(payload.description ?? "");
-      setOccurredAt(payload.occurredAt ? new Date(payload.occurredAt).toISOString().slice(0, 16) : toLocalDateTimeInputValue(new Date()));
-      if (usesFreeTextCategory && payload.categoryLabel) setCategoryLabel(payload.categoryLabel);
+      setDescription(parsedDescription.descriptionValue);
+      setOccurredAt(payload.occurredAt ? toLocalDateTimeInputValue(new Date(payload.occurredAt)) : toLocalDateTimeInputValue(new Date()));
+      if (usesFreeTextCategory) {
+        setCategoryLabel(payload.categoryLabel ?? parsedDescription.categoryLabelValue);
+      }
 
       window.scrollTo({ top: 0, behavior: "smooth" });
     }
 
     window.addEventListener("cashOperation:edit", handleEdit as EventListener);
     return () => window.removeEventListener("cashOperation:edit", handleEdit as EventListener);
-  }, [methodOptions, usesFreeTextCategory]);
+  }, [descriptionPrefix, methodOptions, usesFreeTextCategory]);
 
   function cancelEdit() {
     setEditCashOperationId(null);

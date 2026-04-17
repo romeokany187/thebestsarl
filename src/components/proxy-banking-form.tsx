@@ -16,15 +16,39 @@ type ProxyOperationType = "OPENING_BALANCE" | "DEPOSIT" | "WITHDRAWAL";
 type FloatDirection = "FLOAT_TO_VIRTUAL" | "FLOAT_TO_CASH";
 type ProxyChannel = "CASH" | "AIRTEL_MONEY" | "ORANGE_MONEY" | "MPESA" | "EQUITY" | "RAWBANK_ILLICOCASH";
 
-type EditableProxyOperation = {
-  id: string;
-  amount?: number | null;
-  currency?: string | null;
-  reference?: string | null;
-  description?: string | null;
-  occurredAt?: string | Date | null;
-  method?: string | null;
-};
+type EditableProxyOperation =
+  | {
+    kind: "STANDARD";
+    id: string;
+    operationType: ProxyOperationType;
+    channel: ProxyChannel;
+    amount?: number | null;
+    currency?: string | null;
+    reference?: string | null;
+    description?: string | null;
+    occurredAt?: string | Date | null;
+  }
+  | {
+    kind: "CHANGE";
+    id: string;
+    receivedCurrency: "USD" | "CDF";
+    receivedAmount: number;
+    fxRateUsdToCdf: number;
+    reference?: string | null;
+    description?: string | null;
+    occurredAt?: string | Date | null;
+  }
+  | {
+    kind: "FLOAT";
+    id: string;
+    floatDirection: FloatDirection;
+    channel: Exclude<ProxyChannel, "CASH">;
+    amount?: number | null;
+    currency?: string | null;
+    reference?: string | null;
+    description?: string | null;
+    occurredAt?: string | Date | null;
+  };
 
 const PROXY_BANKING_ROW_SUFFIXES = new Set(["CASH_IN", "CASH_OUT", "VIRTUAL_IN", "VIRTUAL_OUT"]);
 
@@ -85,6 +109,7 @@ export function ProxyBankingForm() {
   const [changeRateUsdToCdf, setChangeRateUsdToCdf] = useState("2800");
   const [loading, setLoading] = useState(false);
   const [changeLoading, setChangeLoading] = useState(false);
+  const [changeEditingOperationId, setChangeEditingOperationId] = useState<string | null>(null);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
 
@@ -97,29 +122,79 @@ export function ProxyBankingForm() {
   const [floatDescription, setFloatDescription] = useState("");
   const [floatOccurredAt, setFloatOccurredAt] = useState(toLocalDateTimeInputValue(new Date()));
   const [floatLoading, setFloatLoading] = useState(false);
+  const [floatEditingOperationId, setFloatEditingOperationId] = useState<string | null>(null);
+
+  function resetChangeForm() {
+    setChangeEditingOperationId(null);
+    setChangeReceivedCurrency("CDF");
+    setChangeReceivedAmount("");
+    setChangeReference("");
+    setChangeDescription("");
+    setChangeOccurredAt(toLocalDateTimeInputValue(new Date()));
+    setChangeRateUsdToCdf("2800");
+  }
+
+  function resetFloatForm() {
+    setFloatEditingOperationId(null);
+    setFloatDirection("FLOAT_TO_VIRTUAL");
+    setFloatChannel("AIRTEL_MONEY");
+    setFloatAmount("");
+    setFloatCurrency("USD");
+    setFloatReference("");
+    setFloatDescription("");
+    setFloatOccurredAt(toLocalDateTimeInputValue(new Date()));
+  }
 
   useEffect(() => {
     function handleEdit(event: Event) {
       const customEvent = event as CustomEvent<EditableProxyOperation>;
       const payload = customEvent.detail;
-      const parsed = parseProxyOperationDescription(payload.description);
+      if (!payload) return;
 
-      if (!parsed) {
-        setError("Cette opération proxy banking n'est pas encore modifiable depuis ce formulaire.");
-        setMessage("");
+      setError("");
+      setMessage("");
+
+      if (payload.kind === "STANDARD") {
+        setChangeEditingOperationId(null);
+        setFloatEditingOperationId(null);
+        setEditingOperationId(payload.id);
+        setOperationType(payload.operationType);
+        setChannel(payload.channel);
+        setAmount(String(payload.amount ?? ""));
+        setCurrency((payload.currency?.toUpperCase() === "CDF" ? "CDF" : "USD") as "USD" | "CDF");
+        setReference(payload.reference ?? "");
+        setDescription(payload.description ?? "");
+        setOccurredAt(toLocalDateTimeInputValue(payload.occurredAt ? new Date(payload.occurredAt) : new Date()));
+        setMessage("Modification de l'opération proxy banking en cours.");
         return;
       }
 
-      setEditingOperationId(payload.id);
-      setOperationType(parsed.operationType);
-      setChannel(parsed.channel);
-      setAmount(String(payload.amount ?? ""));
-      setCurrency((payload.currency?.toUpperCase() === "CDF" ? "CDF" : "USD") as "USD" | "CDF");
-      setReference(payload.reference ?? "");
-      setDescription(parsed.label || "");
-      setOccurredAt(toLocalDateTimeInputValue(payload.occurredAt ? new Date(payload.occurredAt) : new Date()));
+      if (payload.kind === "CHANGE") {
+        setEditingOperationId(null);
+        setFloatEditingOperationId(null);
+        setChangeEditingOperationId(payload.id);
+        setChangeReceivedCurrency(payload.receivedCurrency);
+        setChangeReceivedAmount(String(payload.receivedAmount ?? ""));
+        setChangeRateUsdToCdf(String(payload.fxRateUsdToCdf ?? "2800"));
+        setChangeReference(payload.reference ?? "");
+        setChangeDescription(payload.description ?? "");
+        setChangeOccurredAt(toLocalDateTimeInputValue(payload.occurredAt ? new Date(payload.occurredAt) : new Date()));
+        setMessage("Modification du change proxy banking en cours.");
+        return;
+      }
+
+      setEditingOperationId(null);
+      setChangeEditingOperationId(null);
+      setFloatEditingOperationId(payload.id);
+      setFloatDirection(payload.floatDirection);
+      setFloatChannel(payload.channel);
+      setFloatAmount(String(payload.amount ?? ""));
+      setFloatCurrency((payload.currency?.toUpperCase() === "CDF" ? "CDF" : "USD") as "USD" | "CDF");
+      setFloatReference(payload.reference ?? "");
+      setFloatDescription(payload.description ?? "");
+      setFloatOccurredAt(toLocalDateTimeInputValue(payload.occurredAt ? new Date(payload.occurredAt) : new Date()));
       setError("");
-      setMessage(`Modification de l'opération proxy banking en cours.`);
+      setMessage("Modification du transfert float en cours.");
     }
 
     window.addEventListener("proxyBanking:edit", handleEdit as EventListener);
@@ -262,13 +337,22 @@ export function ProxyBankingForm() {
       : receivedAmount / rate;
 
     try {
-      const response = await fetch("/api/payments/cash-operations/convert", {
-        method: "POST",
+      const response = await fetch(changeEditingOperationId ? "/api/payments/proxy-banking" : "/api/payments/cash-operations/convert", {
+        method: changeEditingOperationId ? "PATCH" : "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          sourceCurrency: changePaidCurrency,
-          sourceAmount: paidAmount,
-          fxRateUsdToCdf: rate,
+          ...(changeEditingOperationId ? { cashOperationId: changeEditingOperationId } : {}),
+          ...(changeEditingOperationId
+            ? {
+              receivedCurrency: changeReceivedCurrency,
+              receivedAmount,
+              fxRateUsdToCdf: rate,
+            }
+            : {
+              sourceCurrency: changePaidCurrency,
+              sourceAmount: paidAmount,
+              fxRateUsdToCdf: rate,
+            }),
           reference: changeReference.trim(),
           description: `PROXY_BANKING:EXCHANGE:${changeDescription.trim() || `Change client ${changeReceivedCurrency} vers ${changePaidCurrency}`}`,
           occurredAt: new Date(changeOccurredAt).toISOString(),
@@ -282,12 +366,10 @@ export function ProxyBankingForm() {
         return;
       }
 
-      setMessage(
-        `Change enregistré : caisse créditée de ${receivedAmount.toFixed(2)} ${changeReceivedCurrency} et débitée de ${paidAmount.toFixed(2)} ${changePaidCurrency}.`,
-      );
-      setChangeReceivedAmount("");
-      setChangeReference("");
-      setChangeDescription("");
+      setMessage(changeEditingOperationId
+        ? "Change proxy banking modifié."
+        : `Change enregistré : caisse créditée de ${receivedAmount.toFixed(2)} ${changeReceivedCurrency} et débitée de ${paidAmount.toFixed(2)} ${changePaidCurrency}.`);
+      resetChangeForm();
       setChangeLoading(false);
       router.refresh();
     } catch {
@@ -323,9 +405,10 @@ export function ProxyBankingForm() {
 
     try {
       const response = await fetch("/api/payments/proxy-banking", {
-        method: "PUT",
+        method: floatEditingOperationId ? "PATCH" : "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          ...(floatEditingOperationId ? { cashOperationId: floatEditingOperationId } : {}),
           direction: floatDirection,
           channel: floatChannel,
           amount: numericAmount,
@@ -343,15 +426,15 @@ export function ProxyBankingForm() {
         return;
       }
 
-      if (floatDirection === "FLOAT_TO_VIRTUAL") {
+      if (floatEditingOperationId) {
+        setMessage("Transfert float modifié.");
+      } else if (floatDirection === "FLOAT_TO_VIRTUAL") {
         setMessage(`Float enregistré : cash débité et ${floatChannel.replace("_", " ")} crédité de ${numericAmount.toFixed(2)} ${floatCurrency}.`);
       } else {
         setMessage(`Float enregistré : ${floatChannel.replace("_", " ")} débité et cash crédité de ${numericAmount.toFixed(2)} ${floatCurrency}.`);
       }
 
-      setFloatAmount("");
-      setFloatReference("");
-      setFloatDescription("");
+      resetFloatForm();
       setFloatLoading(false);
       router.refresh();
     } catch {
@@ -546,8 +629,21 @@ export function ProxyBankingForm() {
             disabled={changeLoading}
             className="rounded-md border border-black/20 px-4 py-2 text-sm font-semibold hover:bg-black/5 disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/20 dark:hover:bg-white/10"
           >
-            {changeLoading ? "Enregistrement..." : `Valider le change (${changePaidCurrency})`}
+            {changeLoading ? "Enregistrement..." : changeEditingOperationId ? "Mettre à jour" : `Valider le change (${changePaidCurrency})`}
           </button>
+          {changeEditingOperationId ? (
+            <button
+              type="button"
+              onClick={() => {
+                resetChangeForm();
+                setError("");
+                setMessage("");
+              }}
+              className="rounded-md border border-black/20 px-4 py-2 text-sm font-semibold hover:bg-black/5 dark:border-white/20 dark:hover:bg-white/10"
+            >
+              Annuler
+            </button>
+          ) : null}
 
           <div>
             <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-black/60 dark:text-white/60">Référence change</label>
@@ -672,8 +768,21 @@ export function ProxyBankingForm() {
             disabled={floatLoading}
             className="rounded-md bg-indigo-600 px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50 hover:bg-indigo-700"
           >
-            {floatLoading ? "Enregistrement..." : floatDirection === "FLOAT_TO_VIRTUAL" ? "Cash → Virtuel" : "Virtuel → Cash"}
+            {floatLoading ? "Enregistrement..." : floatEditingOperationId ? "Mettre à jour" : floatDirection === "FLOAT_TO_VIRTUAL" ? "Cash → Virtuel" : "Virtuel → Cash"}
           </button>
+          {floatEditingOperationId ? (
+            <button
+              type="button"
+              onClick={() => {
+                resetFloatForm();
+                setError("");
+                setMessage("");
+              }}
+              className="rounded-md border border-black/20 px-4 py-2 text-sm font-semibold hover:bg-black/5 dark:border-white/20 dark:hover:bg-white/10"
+            >
+              Annuler
+            </button>
+          ) : null}
         </form>
       </div>
 

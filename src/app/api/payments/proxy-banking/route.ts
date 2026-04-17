@@ -19,10 +19,6 @@ export async function PATCH(request: NextRequest) {
     return NextResponse.json({ error: "Métadonnées proxy banking invalides." }, { status: 400 });
   }
 
-  if (!["OPENING_BALANCE", "DEPOSIT", "WITHDRAWAL"].includes(parsedExisting.operationType)) {
-    return NextResponse.json({ error: "Cette opération proxy banking n'est pas encore modifiable depuis ce formulaire." }, { status: 400 });
-  }
-
   const amount = typeof body?.amount === "number" ? body.amount : existing.amount;
   if (!Number.isFinite(amount) || amount <= 0) {
     return NextResponse.json({ error: "Montant invalide." }, { status: 400 });
@@ -54,7 +50,95 @@ export async function PATCH(request: NextRequest) {
 
   let updated: unknown;
 
-  if (parsedExisting.operationType === "OPENING_BALANCE") {
+  if (parsedExisting.operationType === "OTHER") {
+    return NextResponse.json({ error: "Les autres opérations proxy banking se modifient depuis le formulaire de caisse dédié." }, { status: 400 });
+  }
+
+  if (parsedExisting.operationType === "EXCHANGE") {
+    const sibling = await prisma.cashOperation.findFirst({
+      where: {
+        id: { not: existing.id },
+        cashDesk: "PROXY_BANKING",
+        occurredAt: existing.occurredAt,
+        reference: existing.reference,
+        category: "FX_CONVERSION",
+        description: { startsWith: "PROXY_BANKING:EXCHANGE:" },
+      },
+    });
+
+    if (!sibling) {
+      return NextResponse.json({ error: "Impossible de retrouver l'opération de change liée à modifier." }, { status: 409 });
+    }
+
+    const receivedCurrency = typeof body?.receivedCurrency === "string" ? body.receivedCurrency.trim().toUpperCase() : "";
+    if (receivedCurrency !== "USD" && receivedCurrency !== "CDF") {
+      return NextResponse.json({ error: "Devise reçue invalide. Utilisez USD ou CDF." }, { status: 400 });
+    }
+
+    const receivedAmount = typeof body?.receivedAmount === "number" ? body.receivedAmount : NaN;
+    if (!Number.isFinite(receivedAmount) || receivedAmount <= 0) {
+      return NextResponse.json({ error: "Montant reçu invalide." }, { status: 400 });
+    }
+
+    const fxRateUsdToCdf = typeof body?.fxRateUsdToCdf === "number" ? body.fxRateUsdToCdf : NaN;
+    if (!Number.isFinite(fxRateUsdToCdf) || fxRateUsdToCdf <= 0) {
+      return NextResponse.json({ error: "Taux USD/CDF invalide." }, { status: 400 });
+    }
+
+    const paidCurrency = receivedCurrency === "USD" ? "CDF" : "USD";
+    const paidAmount = receivedCurrency === "USD"
+      ? receivedAmount * fxRateUsdToCdf
+      : receivedAmount / fxRateUsdToCdf;
+    const exchangeLabel = nextLabel.startsWith("PROXY_BANKING:EXCHANGE:")
+      ? nextLabel.replace(/^PROXY_BANKING:EXCHANGE:/, "").trim()
+      : nextLabel;
+
+    const inflowDescription = `PROXY_BANKING:EXCHANGE:${exchangeLabel} - Crédit ${receivedCurrency}`;
+    const outflowDescription = `PROXY_BANKING:EXCHANGE:${exchangeLabel} - Débit ${paidCurrency}`;
+
+    updated = await prisma.$transaction(async (tx) => {
+      const inflowId = existing.direction === "INFLOW" ? existing.id : sibling.id;
+      const outflowId = existing.direction === "OUTFLOW" ? existing.id : sibling.id;
+
+      const updatedInflow = await tx.cashOperation.update({
+        where: { id: inflowId },
+        data: {
+          occurredAt,
+          direction: "INFLOW",
+          category: "FX_CONVERSION",
+          amount: receivedAmount,
+          currency: receivedCurrency,
+          fxRateToUsd: 1 / fxRateUsdToCdf,
+          fxRateUsdToCdf,
+          amountUsd: receivedCurrency === "USD" ? receivedAmount : receivedAmount / fxRateUsdToCdf,
+          amountCdf: receivedCurrency === "CDF" ? receivedAmount : receivedAmount * fxRateUsdToCdf,
+          method: "CASH",
+          reference,
+          description: inflowDescription,
+        },
+      });
+
+      await tx.cashOperation.update({
+        where: { id: outflowId },
+        data: {
+          occurredAt,
+          direction: "OUTFLOW",
+          category: "FX_CONVERSION",
+          amount: paidAmount,
+          currency: paidCurrency,
+          fxRateToUsd: 1 / fxRateUsdToCdf,
+          fxRateUsdToCdf,
+          amountUsd: paidCurrency === "USD" ? paidAmount : paidAmount / fxRateUsdToCdf,
+          amountCdf: paidCurrency === "CDF" ? paidAmount : paidAmount * fxRateUsdToCdf,
+          method: "CASH",
+          reference,
+          description: outflowDescription,
+        },
+      });
+
+      return updatedInflow;
+    });
+  } else if (parsedExisting.operationType === "OPENING_BALANCE") {
     updated = await prisma.cashOperation.update({
       where: { id: existing.id },
       data: {
@@ -68,10 +152,10 @@ export async function PATCH(request: NextRequest) {
     });
   } else {
     if (nextChannel === "CASH") {
-      return NextResponse.json({ error: "Choisissez un canal virtuel pour un dépôt ou un retrait client." }, { status: 400 });
+      return NextResponse.json({ error: "Choisissez un canal virtuel pour cette opération proxy banking." }, { status: 400 });
     }
 
-    const operationType = parsedExisting.operationType as "DEPOSIT" | "WITHDRAWAL";
+    const operationType = parsedExisting.operationType as "DEPOSIT" | "WITHDRAWAL" | "FLOAT_TO_VIRTUAL" | "FLOAT_TO_CASH";
     const sibling = await prisma.cashOperation.findFirst({
       where: {
         id: { not: existing.id },
@@ -96,7 +180,15 @@ export async function PATCH(request: NextRequest) {
     const primarySuffix = parsedExisting.suffix;
     const siblingSuffix = parsedSibling.suffix;
 
-    const finalLabel = nextLabel || (operationType === "DEPOSIT" ? "Dépôt client" : "Retrait client");
+    const finalLabel = nextLabel || (
+      operationType === "DEPOSIT"
+        ? "Dépôt client"
+        : operationType === "WITHDRAWAL"
+          ? "Retrait client"
+          : operationType === "FLOAT_TO_VIRTUAL"
+            ? "Approvisionnement virtuel"
+            : "Retrait vers cash"
+    );
 
     const shapesBySuffix: Record<typeof PROXY_BANKING_ROW_SUFFIXES[number], {
       direction: "INFLOW" | "OUTFLOW";
@@ -130,32 +222,86 @@ export async function PATCH(request: NextRequest) {
           description: buildProxyOperationDescription(operationType, nextChannel, finalLabel, "VIRTUAL_OUT"),
         },
       }
-      : {
-        CASH_IN: {
-          direction: "OUTFLOW",
-          category: "OTHER_EXPENSE",
-          method: "CASH",
-          description: buildProxyOperationDescription(operationType, nextChannel, finalLabel, "CASH_OUT"),
-        },
-        CASH_OUT: {
-          direction: "OUTFLOW",
-          category: "OTHER_EXPENSE",
-          method: "CASH",
-          description: buildProxyOperationDescription(operationType, nextChannel, finalLabel, "CASH_OUT"),
-        },
-        VIRTUAL_IN: {
-          direction: "INFLOW",
-          category: "OTHER_SALE",
-          method: nextChannel,
-          description: buildProxyOperationDescription(operationType, nextChannel, finalLabel, "VIRTUAL_IN"),
-        },
-        VIRTUAL_OUT: {
-          direction: "INFLOW",
-          category: "OTHER_SALE",
-          method: nextChannel,
-          description: buildProxyOperationDescription(operationType, nextChannel, finalLabel, "VIRTUAL_IN"),
-        },
-      };
+      : operationType === "WITHDRAWAL"
+        ? {
+          CASH_IN: {
+            direction: "OUTFLOW",
+            category: "OTHER_EXPENSE",
+            method: "CASH",
+            description: buildProxyOperationDescription(operationType, nextChannel, finalLabel, "CASH_OUT"),
+          },
+          CASH_OUT: {
+            direction: "OUTFLOW",
+            category: "OTHER_EXPENSE",
+            method: "CASH",
+            description: buildProxyOperationDescription(operationType, nextChannel, finalLabel, "CASH_OUT"),
+          },
+          VIRTUAL_IN: {
+            direction: "INFLOW",
+            category: "OTHER_SALE",
+            method: nextChannel,
+            description: buildProxyOperationDescription(operationType, nextChannel, finalLabel, "VIRTUAL_IN"),
+          },
+          VIRTUAL_OUT: {
+            direction: "INFLOW",
+            category: "OTHER_SALE",
+            method: nextChannel,
+            description: buildProxyOperationDescription(operationType, nextChannel, finalLabel, "VIRTUAL_IN"),
+          },
+        }
+        : operationType === "FLOAT_TO_VIRTUAL"
+          ? {
+            CASH_IN: {
+              direction: "OUTFLOW",
+              category: "OTHER_EXPENSE",
+              method: "CASH",
+              description: buildProxyOperationDescription(operationType, nextChannel, finalLabel, "CASH_OUT"),
+            },
+            CASH_OUT: {
+              direction: "OUTFLOW",
+              category: "OTHER_EXPENSE",
+              method: "CASH",
+              description: buildProxyOperationDescription(operationType, nextChannel, finalLabel, "CASH_OUT"),
+            },
+            VIRTUAL_IN: {
+              direction: "INFLOW",
+              category: "OTHER_SALE",
+              method: nextChannel,
+              description: buildProxyOperationDescription(operationType, nextChannel, finalLabel, "VIRTUAL_IN"),
+            },
+            VIRTUAL_OUT: {
+              direction: "INFLOW",
+              category: "OTHER_SALE",
+              method: nextChannel,
+              description: buildProxyOperationDescription(operationType, nextChannel, finalLabel, "VIRTUAL_IN"),
+            },
+          }
+          : {
+            CASH_IN: {
+              direction: "INFLOW",
+              category: "OTHER_SALE",
+              method: "CASH",
+              description: buildProxyOperationDescription(operationType, nextChannel, finalLabel, "CASH_IN"),
+            },
+            CASH_OUT: {
+              direction: "INFLOW",
+              category: "OTHER_SALE",
+              method: "CASH",
+              description: buildProxyOperationDescription(operationType, nextChannel, finalLabel, "CASH_IN"),
+            },
+            VIRTUAL_IN: {
+              direction: "OUTFLOW",
+              category: "OTHER_EXPENSE",
+              method: nextChannel,
+              description: buildProxyOperationDescription(operationType, nextChannel, finalLabel, "VIRTUAL_OUT"),
+            },
+            VIRTUAL_OUT: {
+              direction: "OUTFLOW",
+              category: "OTHER_EXPENSE",
+              method: nextChannel,
+              description: buildProxyOperationDescription(operationType, nextChannel, finalLabel, "VIRTUAL_OUT"),
+            },
+          };
 
     updated = await prisma.$transaction(async (tx) => {
       const updatedPrimary = await tx.cashOperation.update({

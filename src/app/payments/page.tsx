@@ -234,9 +234,68 @@ function proxyOperationLabel(descriptionRaw: string | null | undefined) {
   if (description.includes(":DEPOSIT:")) return "Dépôt client";
   if (description.includes(":WITHDRAWAL:")) return "Retrait client";
   if (description.includes(":EXCHANGE:")) return "Change client";
+  if (description.includes(":FLOAT_TO_VIRTUAL:")) return "Float cash → virtuel";
+  if (description.includes(":FLOAT_TO_CASH:")) return "Float virtuel → cash";
   if (description.includes(":OTHER:")) return "Autre opération cash";
   if (description.includes(":OPENING_BALANCE:")) return "Solde initial";
   return "Opération proxy";
+}
+
+const PROXY_HISTORY_SUFFIXES = new Set(["CASH_IN", "CASH_OUT", "VIRTUAL_IN", "VIRTUAL_OUT"]);
+
+function parseProxyHistoryDescription(descriptionRaw: string | null | undefined) {
+  const description = (descriptionRaw ?? "").trim();
+  if (!description.startsWith("PROXY_BANKING:")) return null;
+
+  if (description.startsWith("PROXY_BANKING:EXCHANGE:")) {
+    return {
+      operationType: "EXCHANGE",
+      channel: "CASH",
+      label: description.replace(/^PROXY_BANKING:EXCHANGE:/, "").replace(/ - (Débit|Crédit) (USD|CDF)$/, "").trim(),
+      suffix: null,
+    };
+  }
+
+  if (description.startsWith("PROXY_BANKING:OTHER:")) {
+    return {
+      operationType: "OTHER",
+      channel: "CASH",
+      label: description.replace(/^PROXY_BANKING:OTHER:/, "").trim(),
+      suffix: null,
+    };
+  }
+
+  const parts = description.split(":");
+  const operationType = parts[1] ?? "";
+  const channel = parts[2] ?? "CASH";
+  const remainder = parts.slice(3);
+  const lastPart = remainder[remainder.length - 1] ?? null;
+  const suffix = lastPart && PROXY_HISTORY_SUFFIXES.has(lastPart) ? lastPart : null;
+  const label = (suffix ? remainder.slice(0, -1) : remainder).join(":").trim();
+
+  return {
+    operationType,
+    channel,
+    label,
+    suffix,
+  };
+}
+
+function proxyHistoryGroupKey(operation: CashOperationRow) {
+  const parsed = parseProxyHistoryDescription(operation.description);
+  const occurredAt = new Date(operation.occurredAt).toISOString();
+
+  if (!parsed) {
+    return `${operation.id}:${occurredAt}`;
+  }
+
+  return [
+    parsed.operationType,
+    parsed.channel,
+    parsed.label,
+    operation.reference ?? "-",
+    occurredAt,
+  ].join(":");
 }
 
 type BalanceBucket = "CASH" | VirtualChannel;
@@ -985,12 +1044,99 @@ export default async function PaymentsPage({
   const proxyHistoryRows = proxyCashOperations
     .slice()
     .sort((a, b) => new Date(b.occurredAt).getTime() - new Date(a.occurredAt).getTime())
-    .map((operation) => ({
-      ...operation,
-      channelLabel: proxyChannelLabel((bucketFromMethod(operation.method) === "CASH" ? "CASH" : bucketFromMethod(operation.method)) as string),
-      operationLabel: proxyOperationLabel(operation.description),
-      isEditable: /:OPENING_BALANCE:|:DEPOSIT:|:WITHDRAWAL:/.test(operation.description ?? ""),
-    }));
+    .map((operation) => {
+      const parsedDescription = parseProxyHistoryDescription(operation.description);
+      const groupedOperations = proxyCashOperations.filter((candidate) => proxyHistoryGroupKey(candidate) === proxyHistoryGroupKey(operation));
+      const sibling = groupedOperations.find((candidate) => candidate.id !== operation.id) ?? null;
+
+      if (parsedDescription?.operationType === "OTHER") {
+        return {
+          ...operation,
+          channelLabel: proxyChannelLabel((bucketFromMethod(operation.method) === "CASH" ? "CASH" : bucketFromMethod(operation.method)) as string),
+          operationLabel: proxyOperationLabel(operation.description),
+          isEditable: true,
+          editEventName: "cashOperation:edit" as const,
+          editPayload: {
+            id: operation.id,
+            direction: operation.direction,
+            category: operation.category ?? null,
+            amount: operation.amount,
+            currency: normalizeMoneyCurrency(operation.currency),
+            method: operation.method ?? "CASH",
+            reference: operation.reference ?? "",
+            description: operation.description ?? "",
+            occurredAt: new Date(operation.occurredAt).toISOString(),
+          },
+        };
+      }
+
+      if (parsedDescription?.operationType === "EXCHANGE") {
+        const inflow = groupedOperations.find((candidate) => candidate.direction === "INFLOW") ?? operation;
+        const outflow = groupedOperations.find((candidate) => candidate.direction === "OUTFLOW") ?? sibling ?? operation;
+        const receivedCurrency = normalizeMoneyCurrency(inflow.currency);
+        const fxRateUsdToCdf = receivedCurrency === "USD"
+          ? (inflow.amount > 0 ? outflow.amount / inflow.amount : 2800)
+          : (outflow.amount > 0 ? inflow.amount / outflow.amount : 2800);
+
+        return {
+          ...operation,
+          channelLabel: proxyChannelLabel((bucketFromMethod(operation.method) === "CASH" ? "CASH" : bucketFromMethod(operation.method)) as string),
+          operationLabel: proxyOperationLabel(operation.description),
+          isEditable: true,
+          editEventName: "proxyBanking:edit" as const,
+          editPayload: {
+            kind: "CHANGE" as const,
+            id: operation.id,
+            receivedCurrency,
+            receivedAmount: inflow.amount,
+            fxRateUsdToCdf,
+            reference: operation.reference ?? "",
+            description: parsedDescription.label,
+            occurredAt: new Date(operation.occurredAt).toISOString(),
+          },
+        };
+      }
+
+      if (parsedDescription?.operationType === "FLOAT_TO_VIRTUAL" || parsedDescription?.operationType === "FLOAT_TO_CASH") {
+        return {
+          ...operation,
+          channelLabel: proxyChannelLabel((bucketFromMethod(operation.method) === "CASH" ? "CASH" : bucketFromMethod(operation.method)) as string),
+          operationLabel: proxyOperationLabel(operation.description),
+          isEditable: true,
+          editEventName: "proxyBanking:edit" as const,
+          editPayload: {
+            kind: "FLOAT" as const,
+            id: operation.id,
+            floatDirection: parsedDescription.operationType,
+            channel: parsedDescription.channel,
+            amount: operation.amount,
+            currency: normalizeMoneyCurrency(operation.currency),
+            reference: operation.reference ?? "",
+            description: parsedDescription.label,
+            occurredAt: new Date(operation.occurredAt).toISOString(),
+          },
+        };
+      }
+
+      return {
+        ...operation,
+        channelLabel: proxyChannelLabel((bucketFromMethod(operation.method) === "CASH" ? "CASH" : bucketFromMethod(operation.method)) as string),
+        operationLabel: proxyOperationLabel(operation.description),
+        isEditable: true,
+        editEventName: "proxyBanking:edit" as const,
+        editPayload: {
+          kind: "STANDARD" as const,
+          id: operation.id,
+          operationType: (parsedDescription?.operationType ?? "DEPOSIT") as "OPENING_BALANCE" | "DEPOSIT" | "WITHDRAWAL",
+          channel: (parsedDescription?.channel ?? "CASH") as "CASH" | "AIRTEL_MONEY" | "ORANGE_MONEY" | "MPESA" | "EQUITY" | "RAWBANK_ILLICOCASH",
+          amount: operation.amount,
+          currency: normalizeMoneyCurrency(operation.currency),
+          reference: operation.reference ?? "",
+          description: parsedDescription?.label ?? operation.description ?? "",
+          occurredAt: new Date(operation.occurredAt).toISOString(),
+        },
+      };
+    });
 
   const proxyEventCount = new Set(
     proxyCashOperationsWithoutOpeningBalance.map((operation) => `${operation.reference ?? "-"}:${proxyOperationLabel(operation.description)}`),
@@ -1085,13 +1231,8 @@ export default async function PaymentsPage({
                           <div className="flex flex-wrap items-center gap-2">
                             {row.isEditable ? (
                               <ProxyBankingEditButton
-                                id={row.id}
-                                amount={row.amount}
-                                currency={row.currency}
-                                reference={row.reference}
-                                description={row.description}
-                                occurredAt={row.occurredAt}
-                                method={row.method}
+                                eventName={row.editEventName}
+                                payload={row.editPayload}
                               />
                             ) : null}
                             <ProxyBankingDeleteButton id={row.id} />
