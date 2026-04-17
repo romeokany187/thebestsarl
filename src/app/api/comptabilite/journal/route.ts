@@ -5,16 +5,22 @@ import { requireApiModuleAccess } from "@/lib/rbac";
 import { accountingEntryCreateSchema } from "@/lib/validators";
 
 const accountingEntryClient = (prisma as unknown as { accountingEntry: any }).accountingEntry;
-const accountingDailyRateClient = (prisma as unknown as { accountingDailyRate: any }).accountingDailyRate;
 
 type AccountingTxClient = PrismaLikeTransactionClient & {
   accountingEntry: any;
-  accountingDailyRate: any;
 };
 
 type PrismaLikeTransactionClient = {
   account: typeof prisma.account;
   $executeRawUnsafe?: typeof prisma.$executeRawUnsafe;
+  $queryRawUnsafe?: <T = unknown>(query: string) => Promise<T>;
+};
+
+type DailyRateRow = {
+  id: string;
+  rateDate: Date | string;
+  exchangeRate: number;
+  createdByName?: string | null;
 };
 
 function canManageAccounting(role: string, jobTitle: string | null | undefined) {
@@ -25,18 +31,58 @@ function toUtcDay(date: Date) {
   return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate(), 0, 0, 0, 0));
 }
 
-async function resolveDailyRate(client: { accountingDailyRate: any }, entryDate: Date) {
+function toSqlDateTime(date: Date) {
+  return date.toISOString().slice(0, 23).replace("T", " ");
+}
+
+function normalizeDailyRateRow(row: DailyRateRow) {
+  return {
+    id: row.id,
+    rateDate: new Date(row.rateDate).toISOString(),
+    exchangeRate: Number(row.exchangeRate),
+    createdBy: row.createdByName ? { name: row.createdByName } : null,
+  };
+}
+
+async function resolveDailyRate(client: { $queryRawUnsafe?: <T = unknown>(query: string) => Promise<T> }, entryDate: Date) {
+  if (typeof client.$queryRawUnsafe !== "function") {
+    throw new Error("ACCOUNTING_DAILY_RATE_QUERY_UNAVAILABLE");
+  }
+
   const rateDate = toUtcDay(entryDate);
-  const dailyRate = await client.accountingDailyRate.findUnique({
-    where: { rateDate },
-    select: { id: true, exchangeRate: true, rateDate: true },
-  });
+  const rows = await client.$queryRawUnsafe<DailyRateRow[]>(`
+    SELECT id, rateDate, exchangeRate
+    FROM \`AccountingDailyRate\`
+    WHERE rateDate = '${toSqlDateTime(rateDate)}'
+    LIMIT 1
+  `);
+  const dailyRate = rows[0] ?? null;
 
   if (!dailyRate) {
     throw new Error(`MISSING_ACCOUNTING_DAILY_RATE:${rateDate.toISOString()}`);
   }
 
-  return dailyRate;
+  return {
+    id: dailyRate.id,
+    rateDate,
+    exchangeRate: Number(dailyRate.exchangeRate),
+  };
+}
+
+async function listDailyRates(client: { $queryRawUnsafe?: <T = unknown>(query: string) => Promise<T> }, limit = 60) {
+  if (typeof client.$queryRawUnsafe !== "function") {
+    return [];
+  }
+
+  const rows = await client.$queryRawUnsafe<DailyRateRow[]>(`
+    SELECT r.id, r.rateDate, r.exchangeRate, u.name AS createdByName
+    FROM \`AccountingDailyRate\` r
+    LEFT JOIN \`User\` u ON u.id = r.createdById
+    ORDER BY r.rateDate DESC
+    LIMIT ${Math.max(1, Math.min(limit, 365))}
+  `);
+
+  return rows.map(normalizeDailyRateRow);
 }
 
 async function buildEntryPayload(client: PrismaLikeTransactionClient, body: unknown) {
@@ -174,13 +220,7 @@ export async function GET() {
       },
       orderBy: [{ soldAt: "asc" }, { id: "asc" }],
     }),
-    accountingDailyRateClient.findMany({
-      orderBy: [{ rateDate: "desc" }],
-      take: 60,
-      include: {
-        createdBy: { select: { name: true } },
-      },
-    }),
+    listDailyRates(prisma, 60),
   ]);
 
   const ticketInvoiceOptions = yearlyTickets

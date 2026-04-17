@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { randomUUID } from "crypto";
 import { prisma } from "@/lib/prisma";
 import { requireApiModuleAccess } from "@/lib/rbac";
 
@@ -8,6 +9,10 @@ function canManageAccounting(role: string, jobTitle: string | null | undefined) 
 
 function toUtcDay(date: Date) {
   return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate(), 0, 0, 0, 0));
+}
+
+function toSqlDateTime(date: Date) {
+  return date.toISOString().slice(0, 23).replace("T", " ");
 }
 
 async function ensureAccountingDailyRateTable() {
@@ -54,21 +59,34 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Date de taux invalide." }, { status: 400 });
   }
 
-  const dailyRate = await (prisma as unknown as { accountingDailyRate: any }).accountingDailyRate.upsert({
-    where: { rateDate },
-    update: {
-      exchangeRate,
-      createdById: access.session.user.id,
-    },
-    create: {
-      rateDate,
-      exchangeRate,
-      createdById: access.session.user.id,
-    },
-    include: {
-      createdBy: { select: { name: true } },
+  await prisma.$executeRawUnsafe(`
+    INSERT INTO \`AccountingDailyRate\` (\`id\`, \`rateDate\`, \`exchangeRate\`, \`createdById\`, \`createdAt\`, \`updatedAt\`)
+    VALUES ('${randomUUID()}', '${toSqlDateTime(rateDate)}', ${exchangeRate}, '${access.session.user.id}', NOW(3), NOW(3))
+    ON DUPLICATE KEY UPDATE
+      \`exchangeRate\` = VALUES(\`exchangeRate\`),
+      \`createdById\` = VALUES(\`createdById\`),
+      \`updatedAt\` = NOW(3)
+  `);
+
+  const rows = await prisma.$queryRawUnsafe<Array<{ id: string; rateDate: Date | string; exchangeRate: number; createdByName?: string | null }>>(`
+    SELECT r.id, r.rateDate, r.exchangeRate, u.name AS createdByName
+    FROM \`AccountingDailyRate\` r
+    LEFT JOIN \`User\` u ON u.id = r.createdById
+    WHERE r.rateDate = '${toSqlDateTime(rateDate)}'
+    LIMIT 1
+  `);
+  const dailyRate = rows[0] ?? null;
+
+  if (!dailyRate) {
+    return NextResponse.json({ error: "Impossible de relire le taux du jour enregistré." }, { status: 500 });
+  }
+
+  return NextResponse.json({
+    data: {
+      id: dailyRate.id,
+      rateDate: new Date(dailyRate.rateDate).toISOString(),
+      exchangeRate: Number(dailyRate.exchangeRate),
+      createdBy: dailyRate.createdByName ? { name: dailyRate.createdByName } : null,
     },
   });
-
-  return NextResponse.json({ data: dailyRate });
 }
