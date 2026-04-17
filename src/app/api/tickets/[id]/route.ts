@@ -21,6 +21,22 @@ function normalizeTicketDate(value: Date) {
   return new Date(Date.UTC(value.getUTCFullYear(), value.getUTCMonth(), value.getUTCDate(), 0, 0, 0, 0));
 }
 
+async function recordAirlineDepositMovementWithoutBlocking(
+  tx: Prisma.TransactionClient,
+  input: Parameters<typeof recordAirlineDepositMovement>[1],
+) {
+  try {
+    await recordAirlineDepositMovement(tx, input);
+  } catch (error) {
+    if (error instanceof Error && error.message.startsWith("INSUFFICIENT_AIRLINE_DEPOSIT:")) {
+      console.warn("Ticket update kept despite airline deposit overdraft", input.reference, error.message);
+      return;
+    }
+
+    throw error;
+  }
+}
+
 async function buildTicketConflictMessage(ticketNumber: string, excludeId?: string) {
   const normalizedTicketNumber = ticketNumber.trim();
   if (!normalizedTicketNumber) {
@@ -320,7 +336,7 @@ export async function PATCH(request: NextRequest, { params }: Params) {
       if (previousDepositAccount && nextDepositAccount && previousDepositAccount.key === nextDepositAccount.key) {
         const deltaAmount = nextDepositAmount - previousDepositAmount;
         if (Math.abs(deltaAmount) > 0.0001) {
-          await recordAirlineDepositMovement(tx, {
+          await recordAirlineDepositMovementWithoutBlocking(tx, {
             accountKey: nextDepositAccount.key,
             movementType: deltaAmount > 0 ? "DEBIT" : "CREDIT",
             amount: Math.abs(deltaAmount),
@@ -336,7 +352,7 @@ export async function PATCH(request: NextRequest, { params }: Params) {
         }
       } else {
         if (previousDepositAccount && previousDepositAmount > 0) {
-          await recordAirlineDepositMovement(tx, {
+          await recordAirlineDepositMovementWithoutBlocking(tx, {
             accountKey: previousDepositAccount.key,
             movementType: "CREDIT",
             amount: previousDepositAmount,
@@ -350,7 +366,7 @@ export async function PATCH(request: NextRequest, { params }: Params) {
         }
 
         if (nextDepositAccount && nextDepositAmount > 0) {
-          await recordAirlineDepositMovement(tx, {
+          await recordAirlineDepositMovementWithoutBlocking(tx, {
             accountKey: nextDepositAccount.key,
             movementType: "DEBIT",
             amount: nextDepositAmount,
@@ -385,19 +401,6 @@ export async function PATCH(request: NextRequest, { params }: Params) {
     return NextResponse.json({ data: updated });
   } catch (error) {
     console.error("PATCH /api/tickets/[id] failed", error);
-
-    if (error instanceof Error && error.message.startsWith("INSUFFICIENT_AIRLINE_DEPOSIT:")) {
-      const [, label, available, requested, balanceDate] = error.message.split(":");
-      const dateLabel = balanceDate
-        ? ` à la date du ${new Date(balanceDate).toLocaleDateString("fr-FR")}`
-        : "";
-      return NextResponse.json(
-        {
-          error: `${label}: solde insuffisant${dateLabel} (${available} USD disponibles pour ${requested} USD demandés). Veuillez d'abord créditer le compte dépôt compagnie.`,
-        },
-        { status: 400 },
-      );
-    }
 
     if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
       return NextResponse.json(

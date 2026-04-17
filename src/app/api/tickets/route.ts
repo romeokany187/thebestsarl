@@ -22,6 +22,22 @@ function normalizeTicketDate(value: Date) {
   return new Date(Date.UTC(value.getUTCFullYear(), value.getUTCMonth(), value.getUTCDate(), 0, 0, 0, 0));
 }
 
+async function recordAirlineDepositMovementWithoutBlocking(
+  tx: Prisma.TransactionClient,
+  input: Parameters<typeof recordAirlineDepositMovement>[1],
+) {
+  try {
+    await recordAirlineDepositMovement(tx, input);
+  } catch (error) {
+    if (error instanceof Error && error.message.startsWith("INSUFFICIENT_AIRLINE_DEPOSIT:")) {
+      console.warn("Ticket sale kept despite airline deposit overdraft", input.reference, error.message);
+      return;
+    }
+
+    throw error;
+  }
+}
+
 async function buildTicketConflictMessage(ticketNumber: string) {
   const normalizedTicketNumber = ticketNumber.trim();
   if (!normalizedTicketNumber) {
@@ -245,7 +261,7 @@ export async function POST(request: NextRequest) {
         });
 
         if (depositDebitAmount > 0) {
-          await recordAirlineDepositMovement(tx, {
+          await recordAirlineDepositMovementWithoutBlocking(tx, {
             accountKey: depositAccount.key,
             movementType: "DEBIT",
             amount: depositDebitAmount,
@@ -307,19 +323,6 @@ export async function POST(request: NextRequest) {
     }, { status: 201 });
   } catch (error) {
     console.error("POST /api/tickets failed", error);
-
-    if (error instanceof Error && error.message.startsWith("INSUFFICIENT_AIRLINE_DEPOSIT:")) {
-      const [, label, available, requested, balanceDate] = error.message.split(":");
-      const dateLabel = balanceDate
-        ? ` à la date du ${new Date(balanceDate).toLocaleDateString("fr-FR")}`
-        : "";
-      return NextResponse.json(
-        {
-          error: `${label}: solde insuffisant${dateLabel} (${available} USD disponibles pour ${requested} USD demandés). Veuillez d'abord créditer le compte dépôt compagnie.`,
-        },
-        { status: 400 },
-      );
-    }
 
     if (error instanceof Prisma.PrismaClientKnownRequestError) {
       if (error.code === "P2002") {
