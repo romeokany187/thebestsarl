@@ -5,9 +5,66 @@ import { requireApiModuleAccess } from "@/lib/rbac";
 import { accountingEntryCreateSchema } from "@/lib/validators";
 
 const accountingEntryClient = (prisma as unknown as { accountingEntry: any }).accountingEntry;
+const accountingDailyRateClient = (prisma as unknown as { accountingDailyRate: any }).accountingDailyRate;
+
+type AccountingTxClient = PrismaLikeTransactionClient & {
+  accountingEntry: any;
+  accountingDailyRate: any;
+};
+
+type PrismaLikeTransactionClient = {
+  account: typeof prisma.account;
+  $executeRawUnsafe?: typeof prisma.$executeRawUnsafe;
+};
 
 function canManageAccounting(role: string, jobTitle: string | null | undefined) {
   return role === "ADMIN" || role === "ACCOUNTANT" || (jobTitle ?? "") === "COMPTABLE";
+}
+
+function toUtcDay(date: Date) {
+  return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate(), 0, 0, 0, 0));
+}
+
+async function resolveDailyRate(client: { accountingDailyRate: any }, entryDate: Date) {
+  const rateDate = toUtcDay(entryDate);
+  const dailyRate = await client.accountingDailyRate.findUnique({
+    where: { rateDate },
+    select: { id: true, exchangeRate: true, rateDate: true },
+  });
+
+  if (!dailyRate) {
+    throw new Error(`MISSING_ACCOUNTING_DAILY_RATE:${rateDate.toISOString()}`);
+  }
+
+  return dailyRate;
+}
+
+async function buildEntryPayload(client: PrismaLikeTransactionClient, body: unknown) {
+  const parsed = accountingEntryCreateSchema.safeParse(body);
+  if (!parsed.success) {
+    return { error: NextResponse.json({ error: parsed.error.flatten() }, { status: 400 }) };
+  }
+
+  const data = parsed.data;
+  const uniqueAccountCodes = [...new Set(data.lines.map((line) => line.accountCode.trim()))];
+  const accounts = await client.account.findMany({
+    where: { code: { in: uniqueAccountCodes } },
+    select: { code: true, label: true },
+  });
+
+  if (accounts.length !== uniqueAccountCodes.length) {
+    const foundCodes = new Set(accounts.map((account) => account.code));
+    const missingCodes = uniqueAccountCodes.filter((code) => !foundCodes.has(code));
+    return {
+      error: NextResponse.json(
+        { error: `Comptes introuvables dans le plan comptable: ${missingCodes.join(", ")}` },
+        { status: 400 },
+      ),
+    };
+  }
+
+  const accountByCode = new Map(accounts.map((account) => [account.code, account.label]));
+  return { data, accountByCode };
 }
 
 async function ensureAccountingTables() {
@@ -48,6 +105,21 @@ async function ensureAccountingTables() {
       INDEX \`AccountingEntryLine_accountCode_idx\` (\`accountCode\`)
     ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
   `);
+
+  await prisma.$executeRawUnsafe(`
+    CREATE TABLE IF NOT EXISTS \
+    \`AccountingDailyRate\` (
+      \`id\` VARCHAR(191) NOT NULL,
+      \`rateDate\` DATETIME(3) NOT NULL,
+      \`exchangeRate\` DOUBLE NOT NULL,
+      \`createdById\` VARCHAR(191) NOT NULL,
+      \`createdAt\` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      \`updatedAt\` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      PRIMARY KEY (\`id\`),
+      UNIQUE INDEX \`AccountingDailyRate_rateDate_key\` (\`rateDate\`),
+      INDEX \`AccountingDailyRate_createdById_idx\` (\`createdById\`)
+    ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+  `);
 }
 
 function ticketSupportRangeStart() {
@@ -68,7 +140,7 @@ export async function GET() {
   const supportStart = ticketSupportRangeStart();
   const yearStart = new Date(Date.UTC(supportStart.getUTCFullYear(), 0, 1, 0, 0, 0, 0));
 
-  const [accounts, recentEntries, yearlyTickets] = await Promise.all([
+  const [accounts, recentEntries, yearlyTickets, dailyRates] = await Promise.all([
     prisma.account.findMany({
       select: { code: true, label: true, normalBalance: true },
       orderBy: { code: "asc" },
@@ -102,6 +174,13 @@ export async function GET() {
       },
       orderBy: [{ soldAt: "asc" }, { id: "asc" }],
     }),
+    accountingDailyRateClient.findMany({
+      orderBy: [{ rateDate: "desc" }],
+      take: 60,
+      include: {
+        createdBy: { select: { name: true } },
+      },
+    }),
   ]);
 
   const ticketInvoiceOptions = yearlyTickets
@@ -123,6 +202,7 @@ export async function GET() {
     accounts,
     recentEntries,
     ticketInvoiceOptions,
+    dailyRates,
   });
 }
 
@@ -137,57 +217,148 @@ export async function POST(request: NextRequest) {
   await ensureAccountingTables();
 
   const body = await request.json();
-  const parsed = accountingEntryCreateSchema.safeParse(body);
-  if (!parsed.success) {
-    return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
-  }
+  const builtPayload = await buildEntryPayload(prisma, body);
+  if ("error" in builtPayload) return builtPayload.error;
 
-  const data = parsed.data;
-  const uniqueAccountCodes = [...new Set(data.lines.map((line) => line.accountCode.trim()))];
-  const accounts = await prisma.account.findMany({
-    where: { code: { in: uniqueAccountCodes } },
-    select: { code: true, label: true },
-  });
+  const { data, accountByCode } = builtPayload;
 
-  if (accounts.length !== uniqueAccountCodes.length) {
-    const foundCodes = new Set(accounts.map((account) => account.code));
-    const missingCodes = uniqueAccountCodes.filter((code) => !foundCodes.has(code));
-    return NextResponse.json(
-      { error: `Comptes introuvables dans le plan comptable: ${missingCodes.join(", ")}` },
-      { status: 400 },
-    );
-  }
-
-  const accountByCode = new Map(accounts.map((account) => [account.code, account.label]));
-
-  const createdEntry = await prisma.$transaction(async (tx) => {
-    const entry = await (tx as unknown as { accountingEntry: any }).accountingEntry.create({
-      data: {
-        entryDate: data.entryDate,
-        pole: data.pole?.trim() || null,
-        libelle: data.libelle.trim(),
-        pieceJustificative: data.pieceJustificative?.trim() || null,
-        exchangeRate: data.exchangeRate ?? null,
-        createdById: access.session.user.id,
-        lines: {
-          create: data.lines.map((line, index) => ({
-            side: line.side,
-            orderIndex: index,
-            accountCode: line.accountCode.trim(),
-            accountLabel: accountByCode.get(line.accountCode.trim()) ?? line.accountCode.trim(),
-            amountUsd: line.amountUsd ?? null,
-            amountCdf: line.amountCdf ?? null,
-          })),
+  try {
+    const createdEntry = await prisma.$transaction(async (tx) => {
+      const dailyRate = await resolveDailyRate(tx as unknown as AccountingTxClient, data.entryDate);
+      const entry = await (tx as unknown as AccountingTxClient).accountingEntry.create({
+        data: {
+          entryDate: data.entryDate,
+          pole: data.pole?.trim() || null,
+          libelle: data.libelle.trim(),
+          pieceJustificative: data.pieceJustificative?.trim() || null,
+          exchangeRate: dailyRate.exchangeRate,
+          createdById: access.session.user.id,
+          lines: {
+            create: data.lines.map((line, index) => ({
+              side: line.side,
+              orderIndex: index,
+              accountCode: line.accountCode.trim(),
+              accountLabel: accountByCode.get(line.accountCode.trim()) ?? line.accountCode.trim(),
+              amountUsd: line.amountUsd ?? null,
+              amountCdf: line.amountCdf ?? null,
+            })),
+          },
         },
-      },
-      include: {
-        createdBy: { select: { name: true } },
-        lines: { orderBy: [{ side: "asc" }, { orderIndex: "asc" }] },
-      },
+        include: {
+          createdBy: { select: { name: true } },
+          lines: { orderBy: [{ side: "asc" }, { orderIndex: "asc" }] },
+        },
+      });
+
+      return entry;
     });
 
-    return entry;
+    return NextResponse.json({ data: createdEntry }, { status: 201 });
+  } catch (error) {
+    if (error instanceof Error && error.message.startsWith("MISSING_ACCOUNTING_DAILY_RATE:")) {
+      const [, isoDate] = error.message.split(":");
+      return NextResponse.json(
+        { error: `Aucun taux du jour n'est enregistré pour le ${new Date(isoDate).toLocaleDateString("fr-FR")}.` },
+        { status: 400 },
+      );
+    }
+
+    throw error;
+  }
+}
+
+export async function PUT(request: NextRequest) {
+  const access = await requireApiModuleAccess("payments", ["ADMIN", "DIRECTEUR_GENERAL", "ACCOUNTANT", "EMPLOYEE"]);
+  if (access.error) return access.error;
+
+  if (!canManageAccounting(access.role, access.session.user.jobTitle)) {
+    return NextResponse.json({ error: "Accès réservé au comptable et à l'administrateur." }, { status: 403 });
+  }
+
+  await ensureAccountingTables();
+
+  const body = await request.json();
+  const entryId = typeof body?.id === "string" ? body.id.trim() : "";
+  if (!entryId) {
+    return NextResponse.json({ error: "Identifiant d'écriture manquant." }, { status: 400 });
+  }
+
+  const builtPayload = await buildEntryPayload(prisma, body);
+  if ("error" in builtPayload) return builtPayload.error;
+
+  const { data, accountByCode } = builtPayload;
+
+  try {
+    const updatedEntry = await prisma.$transaction(async (tx) => {
+      const dailyRate = await resolveDailyRate(tx as unknown as AccountingTxClient, data.entryDate);
+      await (tx as unknown as { accountingEntryLine: any }).accountingEntryLine.deleteMany({
+        where: { entryId },
+      });
+
+      return (tx as unknown as AccountingTxClient).accountingEntry.update({
+        where: { id: entryId },
+        data: {
+          entryDate: data.entryDate,
+          pole: data.pole?.trim() || null,
+          libelle: data.libelle.trim(),
+          pieceJustificative: data.pieceJustificative?.trim() || null,
+          exchangeRate: dailyRate.exchangeRate,
+          lines: {
+            create: data.lines.map((line, index) => ({
+              side: line.side,
+              orderIndex: index,
+              accountCode: line.accountCode.trim(),
+              accountLabel: accountByCode.get(line.accountCode.trim()) ?? line.accountCode.trim(),
+              amountUsd: line.amountUsd ?? null,
+              amountCdf: line.amountCdf ?? null,
+            })),
+          },
+        },
+        include: {
+          createdBy: { select: { name: true } },
+          lines: { orderBy: [{ side: "asc" }, { orderIndex: "asc" }] },
+        },
+      });
+    });
+
+    return NextResponse.json({ data: updatedEntry });
+  } catch (error) {
+    if (error instanceof Error && error.message.startsWith("MISSING_ACCOUNTING_DAILY_RATE:")) {
+      const [, isoDate] = error.message.split(":");
+      return NextResponse.json(
+        { error: `Aucun taux du jour n'est enregistré pour le ${new Date(isoDate).toLocaleDateString("fr-FR")}.` },
+        { status: 400 },
+      );
+    }
+
+    throw error;
+  }
+}
+
+export async function DELETE(request: NextRequest) {
+  const access = await requireApiModuleAccess("payments", ["ADMIN", "DIRECTEUR_GENERAL", "ACCOUNTANT", "EMPLOYEE"]);
+  if (access.error) return access.error;
+
+  if (!canManageAccounting(access.role, access.session.user.jobTitle)) {
+    return NextResponse.json({ error: "Accès réservé au comptable et à l'administrateur." }, { status: 403 });
+  }
+
+  await ensureAccountingTables();
+
+  const { searchParams } = new URL(request.url);
+  const entryId = searchParams.get("id")?.trim() ?? "";
+  if (!entryId) {
+    return NextResponse.json({ error: "Identifiant d'écriture manquant." }, { status: 400 });
+  }
+
+  await prisma.$transaction(async (tx) => {
+    await (tx as unknown as { accountingEntryLine: any }).accountingEntryLine.deleteMany({
+      where: { entryId },
+    });
+    await (tx as unknown as AccountingTxClient).accountingEntry.delete({
+      where: { id: entryId },
+    });
   });
 
-  return NextResponse.json({ data: createdEntry }, { status: 201 });
+  return NextResponse.json({ ok: true });
 }
