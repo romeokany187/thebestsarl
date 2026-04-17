@@ -1,10 +1,17 @@
 import { NextResponse } from 'next/server'
-import { requireApiRoles } from '@/lib/rbac'
+import { requireApiModuleAccess } from '@/lib/rbac'
 import { prisma } from '@/lib/prisma'
 
+function canManageAccounting(role: string, jobTitle: string | null | undefined) {
+  return role === 'ADMIN' || role === 'ACCOUNTANT' || (jobTitle ?? '').trim().toUpperCase() === 'COMPTABLE'
+}
+
 export async function POST(req: Request) {
-  const access = await requireApiRoles(['ADMIN', 'ACCOUNTANT'])
+  const access = await requireApiModuleAccess('payments', ['ADMIN', 'ACCOUNTANT', 'EMPLOYEE'])
   if (access.error) return access.error
+  if (!canManageAccounting(access.role, access.session.user.jobTitle)) {
+    return NextResponse.json({ error: 'Accès réservé au comptable et à l\'administrateur.' }, { status: 403 })
+  }
 
   const body = await req.json()
   const accounts = body.accounts
