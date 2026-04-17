@@ -1,11 +1,18 @@
 import { NextResponse } from "next/server";
 import { flattenStructuredPlan } from "@/lib/plan-comptable-sync";
 import { prisma } from "@/lib/prisma";
-import { requireApiRoles } from "@/lib/rbac";
+import { requireApiModuleAccess } from "@/lib/rbac";
+
+function canManageAccounting(role: string, jobTitle: string | null | undefined) {
+  return role === "ADMIN" || role === "ACCOUNTANT" || (jobTitle ?? "").trim().toUpperCase() === "COMPTABLE";
+}
 
 export async function POST() {
-  const access = await requireApiRoles(["ADMIN"]);
+  const access = await requireApiModuleAccess("payments", ["ADMIN", "ACCOUNTANT", "EMPLOYEE"]);
   if (access.error) return access.error;
+  if (!canManageAccounting(access.role, access.session.user.jobTitle)) {
+    return NextResponse.json({ error: "Accès réservé au comptable et à l'administrateur." }, { status: 403 });
+  }
 
   // Ensure Account table exists (MySQL — migration may not have been applied on Hostinger)
   try {

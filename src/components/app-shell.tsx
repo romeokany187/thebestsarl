@@ -153,30 +153,27 @@ function VerifiedBadge({ tone }: { tone: "gold" | "blue" }) {
   const palette = tone === "gold"
     ? {
         fill: "#F4C542",
-        stroke: "#D5A11E",
-        glow: "rgba(244, 197, 66, 0.24)",
+        stroke: "#D39B17",
+        highlight: "rgba(255, 255, 255, 0.28)",
+        glow: "rgba(244, 197, 66, 0.26)",
       }
     : {
         fill: "#2F9BF4",
         stroke: "#1F7DCC",
+        highlight: "rgba(255, 255, 255, 0.24)",
         glow: "rgba(47, 155, 244, 0.22)",
       };
 
   return (
     <span
-      className="inline-flex h-4.5 w-4.5 items-center justify-center align-middle"
-      style={{ marginLeft: 2, filter: `drop-shadow(0 1px 1px ${palette.glow})` }}
+      className="inline-flex h-5 w-5 items-center justify-center align-middle"
+      style={{ marginLeft: 4, filter: `drop-shadow(0 1px 1px ${palette.glow})` }}
     >
-      <svg aria-hidden="true" viewBox="0 0 24 24" width="18" height="18" className="block">
+      <svg aria-hidden="true" viewBox="0 0 24 24" width="20" height="20" className="block">
+        <rect x="1.75" y="1.75" width="20.5" height="20.5" rx="6" fill={palette.fill} stroke={palette.stroke} strokeWidth="1.5" />
+        <path d="M5.4 7.5c0-1.16.94-2.1 2.1-2.1h9c1.16 0 2.1.94 2.1 2.1v.35c0 .28-.22.5-.5.5H5.9c-.28 0-.5-.22-.5-.5V7.5Z" fill={palette.highlight} />
         <path
-          d="M12 1.9c1.18 0 2.05 1.18 3.11 1.49 1.1.32 2.42-.15 3.34.38.94.54 1.26 1.88 2 2.62.74.74 2.08 1.06 2.62 2 .53.92.06 2.24.38 3.34.31 1.06 1.49 1.93 1.49 3.11s-1.18 2.05-1.49 3.11c-.32 1.1.15 2.42-.38 3.34-.54.94-1.88 1.26-2.62 2-.74.74-1.06 2.08-2 2.62-.92.53-2.24.06-3.34.38-1.06.31-1.93 1.49-3.11 1.49s-2.05-1.18-3.11-1.49c-1.1-.32-2.42.15-3.34-.38-.94-.54-1.26-1.88-2-2.62-.74-.74-2.08-1.06-2.62-2-.53-.92-.06-2.24-.38-3.34C1.18 14.05 0 13.18 0 12s1.18-2.05 1.49-3.11c.32-1.1-.15-2.42.38-3.34.54-.94 1.88-1.26 2.62-2 .74-.74 1.06-2.08 2-2.62.92-.53 2.24-.06 3.34-.38C9.95 3.08 10.82 1.9 12 1.9Z"
-          fill={palette.fill}
-          stroke={palette.stroke}
-          strokeWidth="1.35"
-          strokeLinejoin="round"
-        />
-        <path
-          d="M9.9 15.9 6.95 12.95l1.38-1.38 1.57 1.57 5.78-5.78 1.38 1.38-7.16 7.16Z"
+          d="M9.7 15.7 6.95 12.95l1.52-1.52 1.23 1.23 5.83-5.83 1.52 1.52-7.35 7.35Z"
           fill="#FFFFFF"
         />
       </svg>
