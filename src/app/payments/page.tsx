@@ -1068,7 +1068,7 @@ export default async function PaymentsPage({
                     <th className="px-4 py-3 text-left font-semibold">Sens</th>
                     <th className="px-4 py-3 text-left font-semibold">Montant</th>
                     <th className="px-4 py-3 text-left font-semibold">Référence</th>
-                    {role === "ADMIN" ? <th className="px-4 py-3 text-left font-semibold">Actions</th> : null}
+                    {role === "ADMIN" ? <th className="min-w-45 px-4 py-3 text-left font-semibold">Actions</th> : null}
                   </tr>
                 </thead>
                 <tbody>
@@ -1081,8 +1081,8 @@ export default async function PaymentsPage({
                       <td className="px-4 py-3">{row.amount.toFixed(2)} {normalizeMoneyCurrency(row.currency)}</td>
                       <td className="px-4 py-3">{row.reference ?? "-"}</td>
                       {role === "ADMIN" ? (
-                        <td className="px-4 py-3">
-                          <div className="flex items-center">
+                        <td className="min-w-45 px-4 py-3 align-top">
+                          <div className="flex flex-wrap items-center gap-2">
                             {row.isEditable ? (
                               <ProxyBankingEditButton
                                 id={row.id}
