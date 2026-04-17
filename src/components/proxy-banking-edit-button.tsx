@@ -21,7 +21,6 @@ export function ProxyBankingEditButton({
 }) {
   async function handleEdit(e: React.MouseEvent) {
     e.preventDefault();
-    // Dispatch an edit event to prefill the central cash operation form.
     const payload = {
       id,
       amount: amount ?? 0,
@@ -32,7 +31,7 @@ export function ProxyBankingEditButton({
       occurredAt: occurredAt ? (occurredAt instanceof Date ? occurredAt.toISOString() : String(occurredAt)) : new Date().toISOString(),
     } as const;
 
-    window.dispatchEvent(new CustomEvent("cashOperation:edit", { detail: payload }));
+    window.dispatchEvent(new CustomEvent("proxyBanking:edit", { detail: payload }));
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
 

@@ -989,6 +989,7 @@ export default async function PaymentsPage({
       ...operation,
       channelLabel: proxyChannelLabel((bucketFromMethod(operation.method) === "CASH" ? "CASH" : bucketFromMethod(operation.method)) as string),
       operationLabel: proxyOperationLabel(operation.description),
+      isEditable: /:OPENING_BALANCE:|:DEPOSIT:|:WITHDRAWAL:/.test(operation.description ?? ""),
     }));
 
   const proxyEventCount = new Set(
@@ -1082,15 +1083,17 @@ export default async function PaymentsPage({
                       {role === "ADMIN" ? (
                         <td className="px-4 py-3">
                           <div className="flex items-center">
-                            <ProxyBankingEditButton
-                              id={row.id}
-                              amount={row.amount}
-                              currency={row.currency}
-                              reference={row.reference}
-                              description={row.description}
-                              occurredAt={row.occurredAt}
-                              method={row.method}
-                            />
+                            {row.isEditable ? (
+                              <ProxyBankingEditButton
+                                id={row.id}
+                                amount={row.amount}
+                                currency={row.currency}
+                                reference={row.reference}
+                                description={row.description}
+                                occurredAt={row.occurredAt}
+                                method={row.method}
+                              />
+                            ) : null}
                             <ProxyBankingDeleteButton id={row.id} />
                           </div>
                         </td>

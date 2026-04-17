@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 
 function toLocalDateTimeInputValue(date: Date): string {
@@ -16,6 +16,18 @@ type ProxyOperationType = "OPENING_BALANCE" | "DEPOSIT" | "WITHDRAWAL";
 type FloatDirection = "FLOAT_TO_VIRTUAL" | "FLOAT_TO_CASH";
 type ProxyChannel = "CASH" | "AIRTEL_MONEY" | "ORANGE_MONEY" | "MPESA" | "EQUITY" | "RAWBANK_ILLICOCASH";
 
+type EditableProxyOperation = {
+  id: string;
+  amount?: number | null;
+  currency?: string | null;
+  reference?: string | null;
+  description?: string | null;
+  occurredAt?: string | Date | null;
+  method?: string | null;
+};
+
+const PROXY_BANKING_ROW_SUFFIXES = new Set(["CASH_IN", "CASH_OUT", "VIRTUAL_IN", "VIRTUAL_OUT"]);
+
 const channelOptions: Array<{ value: ProxyChannel; label: string }> = [
   { value: "CASH", label: "Cash" },
   { value: "AIRTEL_MONEY", label: "Airtel Money" },
@@ -25,8 +37,39 @@ const channelOptions: Array<{ value: ProxyChannel; label: string }> = [
   { value: "RAWBANK_ILLICOCASH", label: "Rawbank & Illicocash" },
 ];
 
+function parseProxyOperationDescription(descriptionRaw: string | null | undefined) {
+  const description = (descriptionRaw ?? "").trim();
+  if (!description.startsWith("PROXY_BANKING:")) return null;
+
+  const parts = description.split(":");
+  const operationType = parts[1];
+  const channel = parts[2] as ProxyChannel | undefined;
+
+  if (operationType !== "OPENING_BALANCE" && operationType !== "DEPOSIT" && operationType !== "WITHDRAWAL") {
+    return null;
+  }
+
+  if (!channel) {
+    return null;
+  }
+
+  const remainder = parts.slice(3);
+  const suffix = remainder.length > 0 && PROXY_BANKING_ROW_SUFFIXES.has(remainder[remainder.length - 1])
+    ? remainder[remainder.length - 1]
+    : null;
+  const labelParts = suffix ? remainder.slice(0, -1) : remainder;
+
+  return {
+    operationType: operationType as ProxyOperationType,
+    channel,
+    label: labelParts.join(":").trim(),
+    suffix,
+  };
+}
+
 export function ProxyBankingForm() {
   const router = useRouter();
+  const [editingOperationId, setEditingOperationId] = useState<string | null>(null);
   const [operationType, setOperationType] = useState<ProxyOperationType>("DEPOSIT");
   const [channel, setChannel] = useState<ProxyChannel>("AIRTEL_MONEY");
   const [amount, setAmount] = useState("");
@@ -54,6 +97,45 @@ export function ProxyBankingForm() {
   const [floatDescription, setFloatDescription] = useState("");
   const [floatOccurredAt, setFloatOccurredAt] = useState(toLocalDateTimeInputValue(new Date()));
   const [floatLoading, setFloatLoading] = useState(false);
+
+  useEffect(() => {
+    function handleEdit(event: Event) {
+      const customEvent = event as CustomEvent<EditableProxyOperation>;
+      const payload = customEvent.detail;
+      const parsed = parseProxyOperationDescription(payload.description);
+
+      if (!parsed) {
+        setError("Cette opération proxy banking n'est pas encore modifiable depuis ce formulaire.");
+        setMessage("");
+        return;
+      }
+
+      setEditingOperationId(payload.id);
+      setOperationType(parsed.operationType);
+      setChannel(parsed.channel);
+      setAmount(String(payload.amount ?? ""));
+      setCurrency((payload.currency?.toUpperCase() === "CDF" ? "CDF" : "USD") as "USD" | "CDF");
+      setReference(payload.reference ?? "");
+      setDescription(parsed.label || "");
+      setOccurredAt(toLocalDateTimeInputValue(payload.occurredAt ? new Date(payload.occurredAt) : new Date()));
+      setError("");
+      setMessage(`Modification de l'opération proxy banking en cours.`);
+    }
+
+    window.addEventListener("proxyBanking:edit", handleEdit as EventListener);
+    return () => window.removeEventListener("proxyBanking:edit", handleEdit as EventListener);
+  }, []);
+
+  function resetStandardForm() {
+    setEditingOperationId(null);
+    setOperationType("DEPOSIT");
+    setChannel("AIRTEL_MONEY");
+    setAmount("");
+    setCurrency("USD");
+    setReference("");
+    setDescription("");
+    setOccurredAt(toLocalDateTimeInputValue(new Date()));
+  }
 
   const isOpening = operationType === "OPENING_BALANCE";
   const isDeposit = operationType === "DEPOSIT";
@@ -102,9 +184,10 @@ export function ProxyBankingForm() {
 
     try {
       const response = await fetch("/api/payments/proxy-banking", {
-        method: "POST",
+        method: editingOperationId ? "PATCH" : "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          ...(editingOperationId ? { cashOperationId: editingOperationId } : {}),
           operationType,
           channel,
           amount: numericAmount,
@@ -122,7 +205,9 @@ export function ProxyBankingForm() {
         return;
       }
 
-      if (operationType === "OPENING_BALANCE") {
+      if (editingOperationId) {
+        setMessage("Opération proxy banking modifiée.");
+      } else if (operationType === "OPENING_BALANCE") {
         setMessage("Solde initial proxy banking enregistré.");
       } else if (operationType === "DEPOSIT") {
         setMessage("Dépôt client enregistré : cash reçu et compte virtuel débité.");
@@ -130,9 +215,7 @@ export function ProxyBankingForm() {
         setMessage("Retrait client enregistré : compte virtuel crédité et cash remis.");
       }
 
-      setAmount("");
-      setReference("");
-      setDescription("");
+      resetStandardForm();
       setLoading(false);
       router.refresh();
     } catch {
@@ -299,6 +382,7 @@ export function ProxyBankingForm() {
                 setChannel("AIRTEL_MONEY");
               }
             }}
+            disabled={editingOperationId !== null}
             className="w-full rounded-md border border-black/15 bg-white px-3 py-2 text-sm dark:border-white/15 dark:bg-zinc-900"
           >
             <option value="DEPOSIT">Dépôt client</option>
@@ -385,8 +469,21 @@ export function ProxyBankingForm() {
           disabled={loading}
           className="rounded-md bg-black px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50 dark:bg-white dark:text-black"
         >
-          {loading ? "Enregistrement..." : "Enregistrer"}
+          {loading ? "Enregistrement..." : editingOperationId ? "Mettre à jour" : "Enregistrer"}
         </button>
+        {editingOperationId ? (
+          <button
+            type="button"
+            onClick={() => {
+              resetStandardForm();
+              setError("");
+              setMessage("");
+            }}
+            className="rounded-md border border-black/20 px-4 py-2 text-sm font-semibold hover:bg-black/5 dark:border-white/20 dark:hover:bg-white/10"
+          >
+            Annuler
+          </button>
+        ) : null}
       </form>
 
       <div className="mt-4 border-t border-black/10 pt-4 dark:border-white/10">

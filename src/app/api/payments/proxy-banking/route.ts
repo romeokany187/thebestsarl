@@ -14,59 +14,189 @@ export async function PATCH(request: NextRequest) {
     return NextResponse.json({ error: "Opération proxy banking introuvable." }, { status: 404 });
   }
 
-  // Accept several editable fields: amount, currency, reference, description, occurredAt, method
-  const fieldsToUpdate: any = {};
-  if (typeof body?.amount === "number") {
-    if (!Number.isFinite(body.amount) || body.amount <= 0) {
-      return NextResponse.json({ error: "Montant invalide." }, { status: 400 });
+  const parsedExisting = parseProxyOperationDescription(existing.description);
+  if (!parsedExisting) {
+    return NextResponse.json({ error: "Métadonnées proxy banking invalides." }, { status: 400 });
+  }
+
+  if (!["OPENING_BALANCE", "DEPOSIT", "WITHDRAWAL"].includes(parsedExisting.operationType)) {
+    return NextResponse.json({ error: "Cette opération proxy banking n'est pas encore modifiable depuis ce formulaire." }, { status: 400 });
+  }
+
+  const amount = typeof body?.amount === "number" ? body.amount : existing.amount;
+  if (!Number.isFinite(amount) || amount <= 0) {
+    return NextResponse.json({ error: "Montant invalide." }, { status: 400 });
+  }
+
+  const currency = typeof body?.currency === "string" ? body.currency.trim().toUpperCase() : normalizeCurrency(existing.currency);
+  if (currency !== "USD" && currency !== "CDF") {
+    return NextResponse.json({ error: "Devise invalide. Utilisez USD ou CDF." }, { status: 400 });
+  }
+
+  const reference = typeof body?.reference === "string" && body.reference.trim()
+    ? body.reference.trim()
+    : (existing.reference ?? "").trim();
+  if (!reference) {
+    return NextResponse.json({ error: "La référence justificative est obligatoire." }, { status: 400 });
+  }
+
+  const occurredAt = typeof body?.occurredAt === "string" ? new Date(body.occurredAt) : new Date(existing.occurredAt);
+  if (Number.isNaN(occurredAt.getTime())) {
+    return NextResponse.json({ error: "Date invalide." }, { status: 400 });
+  }
+
+  const nextChannel = typeof body?.channel === "string"
+    ? body.channel.trim().toUpperCase() as ProxyChannel
+    : parsedExisting.channel;
+  const nextLabel = typeof body?.description === "string" && body.description.trim()
+    ? body.description.trim()
+    : parsedExisting.label;
+
+  let updated: unknown;
+
+  if (parsedExisting.operationType === "OPENING_BALANCE") {
+    updated = await prisma.cashOperation.update({
+      where: { id: existing.id },
+      data: {
+        occurredAt,
+        amount,
+        currency,
+        reference,
+        method: nextChannel,
+        description: buildProxyOperationDescription("OPENING_BALANCE", nextChannel, nextLabel || "Solde initial"),
+      },
+    });
+  } else {
+    if (nextChannel === "CASH") {
+      return NextResponse.json({ error: "Choisissez un canal virtuel pour un dépôt ou un retrait client." }, { status: 400 });
     }
-    fieldsToUpdate.amount = body.amount;
-  }
 
-  if (typeof body?.currency === "string") {
-    const cur = body.currency.trim().toUpperCase();
-    if (cur !== "USD" && cur !== "CDF") {
-      return NextResponse.json({ error: "Devise invalide. Utilisez USD ou CDF." }, { status: 400 });
+    const operationType = parsedExisting.operationType as "DEPOSIT" | "WITHDRAWAL";
+    const sibling = await prisma.cashOperation.findFirst({
+      where: {
+        id: { not: existing.id },
+        cashDesk: "PROXY_BANKING",
+        occurredAt: existing.occurredAt,
+        amount: existing.amount,
+        currency: existing.currency,
+        reference: existing.reference,
+        description: { startsWith: proxyDescriptionPrefix(operationType, parsedExisting.channel as ProxyChannel) },
+      },
+    });
+
+    if (!sibling) {
+      return NextResponse.json({ error: "Impossible de retrouver l'opération liée à modifier." }, { status: 409 });
     }
-    fieldsToUpdate.currency = cur;
-  }
 
-  if (typeof body?.reference === "string") {
-    fieldsToUpdate.reference = body.reference.trim();
-  }
-
-  if (typeof body?.description === "string") {
-    fieldsToUpdate.description = body.description.trim();
-  }
-
-  if (typeof body?.method === "string") {
-    fieldsToUpdate.method = body.method.trim();
-  }
-
-  if (typeof body?.occurredAt === "string") {
-    const d = new Date(body.occurredAt);
-    if (Number.isNaN(d.getTime())) {
-      return NextResponse.json({ error: "Date invalide." }, { status: 400 });
+    const parsedSibling = parseProxyOperationDescription(sibling.description);
+    if (!parsedExisting.suffix || !parsedSibling?.suffix) {
+      return NextResponse.json({ error: "Impossible d'identifier les écritures cash et virtuel de cette opération." }, { status: 409 });
     }
-    fieldsToUpdate.occurredAt = d;
-  }
 
-  if (Object.keys(fieldsToUpdate).length === 0) {
-    return NextResponse.json({ error: "Aucun champ modifiable fourni." }, { status: 400 });
-  }
+    const primarySuffix = parsedExisting.suffix;
+    const siblingSuffix = parsedSibling.suffix;
 
-  const updated = await prisma.cashOperation.update({
-    where: { id: cashOperationId },
-    data: fieldsToUpdate,
-  });
+    const finalLabel = nextLabel || (operationType === "DEPOSIT" ? "Dépôt client" : "Retrait client");
+
+    const shapesBySuffix: Record<typeof PROXY_BANKING_ROW_SUFFIXES[number], {
+      direction: "INFLOW" | "OUTFLOW";
+      category: "OTHER_SALE" | "OTHER_EXPENSE";
+      method: string;
+      description: string;
+    }> = operationType === "DEPOSIT"
+      ? {
+        CASH_IN: {
+          direction: "INFLOW",
+          category: "OTHER_SALE",
+          method: "CASH",
+          description: buildProxyOperationDescription(operationType, nextChannel, finalLabel, "CASH_IN"),
+        },
+        CASH_OUT: {
+          direction: "INFLOW",
+          category: "OTHER_SALE",
+          method: "CASH",
+          description: buildProxyOperationDescription(operationType, nextChannel, finalLabel, "CASH_IN"),
+        },
+        VIRTUAL_IN: {
+          direction: "OUTFLOW",
+          category: "OTHER_EXPENSE",
+          method: nextChannel,
+          description: buildProxyOperationDescription(operationType, nextChannel, finalLabel, "VIRTUAL_OUT"),
+        },
+        VIRTUAL_OUT: {
+          direction: "OUTFLOW",
+          category: "OTHER_EXPENSE",
+          method: nextChannel,
+          description: buildProxyOperationDescription(operationType, nextChannel, finalLabel, "VIRTUAL_OUT"),
+        },
+      }
+      : {
+        CASH_IN: {
+          direction: "OUTFLOW",
+          category: "OTHER_EXPENSE",
+          method: "CASH",
+          description: buildProxyOperationDescription(operationType, nextChannel, finalLabel, "CASH_OUT"),
+        },
+        CASH_OUT: {
+          direction: "OUTFLOW",
+          category: "OTHER_EXPENSE",
+          method: "CASH",
+          description: buildProxyOperationDescription(operationType, nextChannel, finalLabel, "CASH_OUT"),
+        },
+        VIRTUAL_IN: {
+          direction: "INFLOW",
+          category: "OTHER_SALE",
+          method: nextChannel,
+          description: buildProxyOperationDescription(operationType, nextChannel, finalLabel, "VIRTUAL_IN"),
+        },
+        VIRTUAL_OUT: {
+          direction: "INFLOW",
+          category: "OTHER_SALE",
+          method: nextChannel,
+          description: buildProxyOperationDescription(operationType, nextChannel, finalLabel, "VIRTUAL_IN"),
+        },
+      };
+
+    updated = await prisma.$transaction(async (tx) => {
+      const updatedPrimary = await tx.cashOperation.update({
+        where: { id: existing.id },
+        data: {
+          occurredAt,
+          amount,
+          currency,
+          reference,
+          direction: shapesBySuffix[primarySuffix].direction,
+          category: shapesBySuffix[primarySuffix].category,
+          method: shapesBySuffix[primarySuffix].method,
+          description: shapesBySuffix[primarySuffix].description,
+        },
+      });
+
+      await tx.cashOperation.update({
+        where: { id: sibling.id },
+        data: {
+          occurredAt,
+          amount,
+          currency,
+          reference,
+          direction: shapesBySuffix[siblingSuffix].direction,
+          category: shapesBySuffix[siblingSuffix].category,
+          method: shapesBySuffix[siblingSuffix].method,
+          description: shapesBySuffix[siblingSuffix].description,
+        },
+      });
+
+      return updatedPrimary;
+    });
+  }
 
   await writeActivityLog({
     actorId: access.session.user.id,
     action: "PROXY_BANKING_UPDATED",
     entityType: "CASH_OPERATION",
     entityId: cashOperationId,
-    summary: `Opération proxy banking modifiée: ${updated.description ?? updated.id}`,
-    payload: { cashOperationId, updated },
+    summary: `Opération proxy banking modifiée: ${reference}`,
+    payload: { cashOperationId, reference },
   });
 
   return NextResponse.json({ success: true, data: updated });
@@ -124,6 +254,74 @@ function canWriteProxyBanking(role: string, jobTitle: string | null | undefined)
 
 function proxyDescriptionPrefix(operationType: "OPENING_BALANCE" | "DEPOSIT" | "WITHDRAWAL" | "FLOAT_TO_VIRTUAL" | "FLOAT_TO_CASH", channel: ProxyChannel) {
   return `PROXY_BANKING:${operationType}:${channel}`;
+}
+
+const PROXY_BANKING_ROW_SUFFIXES = ["CASH_IN", "CASH_OUT", "VIRTUAL_IN", "VIRTUAL_OUT"] as const;
+
+function parseProxyOperationDescription(descriptionRaw: string | null | undefined) {
+  const description = (descriptionRaw ?? "").trim();
+  if (!description.startsWith("PROXY_BANKING:")) return null;
+
+  const parts = description.split(":");
+  const operationType = parts[1] ?? "";
+  const channel = (parts[2] ?? "") as ProxyChannel;
+  const remainder = parts.slice(3);
+  const lastPart = remainder[remainder.length - 1] ?? null;
+  const suffix = lastPart && PROXY_BANKING_ROW_SUFFIXES.includes(lastPart as typeof PROXY_BANKING_ROW_SUFFIXES[number])
+    ? lastPart as typeof PROXY_BANKING_ROW_SUFFIXES[number]
+    : null;
+  const label = (suffix ? remainder.slice(0, -1) : remainder).join(":").trim();
+
+  return {
+    operationType,
+    channel,
+    suffix,
+    label,
+  };
+}
+
+function buildProxyOperationDescription(
+  operationType: "OPENING_BALANCE" | "DEPOSIT" | "WITHDRAWAL" | "FLOAT_TO_VIRTUAL" | "FLOAT_TO_CASH",
+  channel: ProxyChannel,
+  label: string,
+  suffix?: typeof PROXY_BANKING_ROW_SUFFIXES[number] | null,
+) {
+  const base = `${proxyDescriptionPrefix(operationType, channel)}:${label.trim()}`;
+  return suffix ? `${base}:${suffix}` : base;
+}
+
+function standardProxyOperationShape(operationType: "DEPOSIT" | "WITHDRAWAL", channel: ProxyChannel, label: string) {
+  if (operationType === "DEPOSIT") {
+    return {
+      CASH_IN: {
+        direction: "INFLOW" as const,
+        category: "OTHER_SALE" as const,
+        method: "CASH",
+        description: buildProxyOperationDescription(operationType, channel, label, "CASH_IN"),
+      },
+      VIRTUAL_OUT: {
+        direction: "OUTFLOW" as const,
+        category: "OTHER_EXPENSE" as const,
+        method: channel,
+        description: buildProxyOperationDescription(operationType, channel, label, "VIRTUAL_OUT"),
+      },
+    };
+  }
+
+  return {
+    VIRTUAL_IN: {
+      direction: "INFLOW" as const,
+      category: "OTHER_SALE" as const,
+      method: channel,
+      description: buildProxyOperationDescription(operationType, channel, label, "VIRTUAL_IN"),
+    },
+    CASH_OUT: {
+      direction: "OUTFLOW" as const,
+      category: "OTHER_EXPENSE" as const,
+      method: "CASH",
+      description: buildProxyOperationDescription(operationType, channel, label, "CASH_OUT"),
+    },
+  };
 }
 
 function normalizeCurrency(value: string | null | undefined): "USD" | "CDF" {
