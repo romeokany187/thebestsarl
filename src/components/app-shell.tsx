@@ -152,31 +152,32 @@ function displayRoleLabel(role: AppRole, jobTitle?: string | null) {
 function VerifiedBadge({ tone }: { tone: "gold" | "blue" }) {
   const palette = tone === "gold"
     ? {
-        fill: "#F4C542",
-        stroke: "#D39B17",
-        ring: "#F8E39B",
-        glow: "rgba(244, 197, 66, 0.24)",
+        background: "#FCE8A2",
+        border: "#F2D36B",
+        icon: "#E0AA18",
+        glow: "rgba(244, 197, 66, 0.18)",
       }
     : {
-        fill: "#2F9BF4",
-        stroke: "#1F7DCC",
-        ring: "#A7D2FB",
-        glow: "rgba(47, 155, 244, 0.22)",
+        background: "#D6ECFF",
+        border: "#9ACFFD",
+        icon: "#2F86D6",
+        glow: "rgba(47, 155, 244, 0.16)",
       };
 
   return (
     <span
-      className="inline-flex h-5 w-5 items-center justify-center rounded-full align-middle"
-      style={{ marginLeft: 4, filter: `drop-shadow(0 1px 1px ${palette.glow})` }}
+      className="inline-flex h-6 w-6 items-center justify-center rounded-full align-middle"
+      style={{
+        marginLeft: 4,
+        backgroundColor: palette.background,
+        border: `1px solid ${palette.border}`,
+        boxShadow: `0 1px 2px ${palette.glow}`,
+      }}
     >
-      <svg aria-hidden="true" viewBox="0 0 24 24" width="20" height="20" className="block">
-        <circle cx="12" cy="12" r="11" fill={palette.ring} />
+      <svg aria-hidden="true" viewBox="0 -960 960 960" width="14" height="14" className="block">
         <path
-          d="M8.6 1.5 7.08 4.07 4.2 4.7l.28 2.95-1.97 2.22 1.97 2.22-.28 2.95 2.88.64 1.52 2.56 2.72-1.16 2.72 1.16 1.52-2.56 2.88-.64-.28-2.95 1.97-2.22-1.97-2.22.28-2.95-2.88-.64-1.52-2.56-2.72 1.16L8.6 1.5Zm.68 2.04L12 4.7l2.72-1.16 1.16 1.92 2.2.48-.2 2.24 1.48 1.72-1.48 1.68.2 2.28-2.2.48-1.16 1.92L12 15.1l-2.72 1.16-1.12-1.92-2.2-.48.2-2.28-1.48-1.68 1.48-1.72-.2-2.24 2.2-.48 1.12-1.92Zm2.16 8.32 4.52-4.52-1.12-1.16-3.4 3.4-1.72-1.68-1.12 1.12 2.84 2.84Z"
-          fill={palette.fill}
-          stroke={palette.stroke}
-          strokeWidth="0.35"
-          transform="translate(0 0.2)"
+          d="m344-60-76-128-144-32 14-148-98-112 98-112-14-148 144-32 76-128 136 58 136-58 76 128 144 32-14 148 98 112-98 112 14 148-144 32-76 128-136-58-136 58Zm34-102 102-44 104 44 56-96 110-26-10-112 74-84-74-86 10-112-110-24-58-96-102 44-104-44-56 96-110 24 10 112-74 86 74 84-10 114 110 24 58 96Zm60-176 226-226-56-58-170 170-86-84-56 56 142 142Z"
+          fill={palette.icon}
         />
       </svg>
     </span>
