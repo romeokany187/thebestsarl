@@ -48,14 +48,7 @@ export async function syncStructuredPlanAccounts() {
   })
 
   const existingByCode = new Map(existingAccounts.map((account) => [account.code, account]))
-  const pendingSync = STRUCTURED_PLAN_FLAT.filter((account) => {
-    const existing = existingByCode.get(account.code)
-    if (!existing) return true
-
-    return existing.label !== account.label
-      || (existing.parentCode ?? null) !== account.parentCode
-      || existing.level !== account.level
-  })
+  const pendingSync = STRUCTURED_PLAN_FLAT.filter((account) => !existingByCode.has(account.code))
 
   if (pendingSync.length === 0) {
     return { synced: 0, total: existingAccounts.length }
@@ -64,11 +57,7 @@ export async function syncStructuredPlanAccounts() {
   for (const account of pendingSync) {
     await prisma.account.upsert({
       where: { code: account.code },
-      update: {
-        label: account.label,
-        parentCode: account.parentCode,
-        level: account.level,
-      },
+      update: {},
       create: {
         code: account.code,
         label: account.label,

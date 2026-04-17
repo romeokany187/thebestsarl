@@ -27,11 +27,19 @@ export async function POST(req: Request) {
   }
 
   const body = await req.json()
-  const { code, label, parentCode, level } = body
+  const { code, label, parentCode, level, normalBalance } = body
   if (!code || !label) return NextResponse.json({ error: 'code and label required' }, { status: 400 })
 
   try {
-    const created = await prisma.account.create({ data: { code: String(code), label: String(label), parentCode: parentCode || null, level: level ?? null } })
+    const created = await prisma.account.create({
+      data: {
+        code: String(code),
+        label: String(label),
+        parentCode: parentCode || null,
+        level: level ?? null,
+        normalBalance: normalBalance === 'CREDIT' ? 'CREDIT' : 'DEBIT',
+      },
+    })
     return NextResponse.json(created)
   } catch (e: any) {
     return NextResponse.json({ error: e.message }, { status: 500 })
@@ -46,11 +54,20 @@ export async function PUT(req: Request) {
   }
 
   const body = await req.json()
-  const { id, code, label, parentCode, level } = body
+  const { id, code, label, parentCode, level, normalBalance } = body
   if (!id || !code || !label) return NextResponse.json({ error: 'id, code and label required' }, { status: 400 })
 
   try {
-    const updated = await prisma.account.update({ where: { id }, data: { code: String(code), label: String(label), parentCode: parentCode || null, level: level ?? null } })
+    const updated = await prisma.account.update({
+      where: { id },
+      data: {
+        code: String(code),
+        label: String(label),
+        parentCode: parentCode || null,
+        level: level ?? null,
+        normalBalance: normalBalance === 'CREDIT' ? 'CREDIT' : 'DEBIT',
+      },
+    })
     return NextResponse.json(updated)
   } catch (e: any) {
     return NextResponse.json({ error: e.message }, { status: 500 })
