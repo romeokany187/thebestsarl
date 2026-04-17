@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { PDFDocument, rgb } from "pdf-lib";
+import { PDFDocument, PDFFont, PDFImage, PDFPage, rgb } from "pdf-lib";
 import fontkit from "@pdf-lib/fontkit";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
@@ -33,6 +33,103 @@ function parseSearchParams(url: URL): SearchParams {
 
 function fmtNumber(value: number) {
   return value.toFixed(2);
+}
+
+function formatFrenchDate(value: Date) {
+  return value.toLocaleDateString("fr-FR", { timeZone: "UTC" });
+}
+
+function formatFrenchMonthYear(start: Date) {
+  return start.toLocaleDateString("fr-FR", { month: "long", year: "numeric", timeZone: "UTC" }).toUpperCase();
+}
+
+function buildReportTitle(kind: ReportKind, start: Date, endExclusive: Date) {
+  const endInclusive = new Date(endExclusive.getTime() - 1);
+  if (kind === "DAILY") return `RAPPORT VENTE BILLETS ${formatFrenchDate(start)}`;
+  if (kind === "WEEKLY") return `RAPPORT DE LA SEMAINE DU ${formatFrenchDate(start)} AU ${formatFrenchDate(endInclusive)}`;
+  if (kind === "MONTHLY") return `RAPPORT MENSUEL DE VENTE DES BILLETS ${formatFrenchMonthYear(start)}`;
+  if (kind === "ANNUAL") return `RAPPORT ANNUEL DE VENTE DES BILLETS ${start.getUTCFullYear()}`;
+  return `RAPPORT DE VENTE DES BILLETS ${formatFrenchDate(start)} AU ${formatFrenchDate(endInclusive)}`;
+}
+
+function buildTableFirstColumnHeader(kind: ReportKind) {
+  if (kind === "WEEKLY") return "DATE";
+  if (kind === "MONTHLY") return "SEMAINES";
+  if (kind === "ANNUAL") return "PERIODES";
+  return "DATE / PERIODE";
+}
+
+function drawFooter(page: PDFPage, fontRegular: PDFFont, reportTitle: string, generatedBy: string) {
+  const { width } = page.getSize();
+  const textBlack = rgb(0, 0, 0);
+  page.drawText(`Imprimé par: ${generatedBy}`, {
+    x: 26,
+    y: 24,
+    size: 9,
+    font: fontRegular,
+    color: textBlack,
+  });
+
+  const rightTextWidth = fontRegular.widthOfTextAtSize(reportTitle, 9);
+  page.drawText(reportTitle, {
+    x: width - rightTextWidth - 26,
+    y: 24,
+    size: 9,
+    font: fontRegular,
+    color: textBlack,
+  });
+}
+
+function drawTopInfo(
+  page: PDFPage,
+  fontBold: PDFFont,
+  fontRegular: PDFFont,
+  subtitle: string,
+  logoImage: PDFImage | null,
+) {
+  const textBlack = rgb(0, 0, 0);
+  if (logoImage) {
+    const scaled = logoImage.scale(0.14);
+    page.drawImage(logoImage, {
+      x: 26,
+      y: 534,
+      width: scaled.width,
+      height: scaled.height,
+    });
+  }
+
+  const titleX = logoImage ? 106 : 26;
+
+  page.drawText("THE BEST SARL", {
+    x: titleX,
+    y: 560,
+    size: 14,
+    font: fontBold,
+    color: textBlack,
+  });
+
+  page.drawText("RAPPORT DE VENTES BILLETS", {
+    x: titleX,
+    y: 545,
+    size: 9,
+    font: fontBold,
+    color: textBlack,
+  });
+
+  page.drawText(subtitle, {
+    x: titleX,
+    y: 532,
+    size: 8.5,
+    font: fontRegular,
+    color: textBlack,
+  });
+
+  page.drawLine({
+    start: { x: 26, y: 522 },
+    end: { x: 816, y: 522 },
+    thickness: 0.8,
+    color: rgb(0.75, 0.75, 0.75),
+  });
 }
 
 function normalizeStatus(status: string) {
@@ -71,9 +168,7 @@ function inferReportKind(start: Date, endExclusive: Date): ReportKind {
 
 function weekLabel(start: Date, endExclusive: Date) {
   const end = new Date(endExclusive.getTime() - 1);
-  const startShort = start.toISOString().slice(5, 10);
-  const endShort = end.toISOString().slice(5, 10);
-  return `Semaine du ${startShort} au ${endShort}`;
+  return `SEMAINE DU ${formatFrenchDate(start)} AU ${formatFrenchDate(end)}`;
 }
 
 function getWeekStart(baseStart: Date, date: Date) {
@@ -546,30 +641,6 @@ export async function GET(request: NextRequest) {
     comparisonCumulativeCommissions.push(comparisonRunningCommissions);
   });
 
-  const sortedAirlinesForAnalysis = Array.from(airlineTotals.entries())
-    .map(([code, data]) => ({ code, amount: data.amount, count: data.count, commission: data.commission }))
-    .sort((a, b) => b.amount - a.amount);
-  const sortedAgenciesForAnalysis = Array.from(byAgency.entries())
-    .map(([name, data]) => ({ name, amount: data.amount, count: data.count }))
-    .sort((a, b) => b.amount - a.amount);
-
-  const executiveAnalysis = await generateExecutiveAnalysis({
-    reportKind,
-    startRaw: dateRange.startRaw,
-    endRaw: dateRange.endRaw,
-    totalCount,
-    totalAmount,
-    totalCommission,
-    paymentPaid,
-    paymentPartial,
-    paymentUnpaid,
-    previousCount,
-    previousAmount,
-    previousCommission,
-    byAirline: sortedAirlinesForAnalysis,
-    byAgency: sortedAgenciesForAnalysis,
-  });
-
   // ─── Create PDF ────────────────────────────────────────────────────────────
   const pdf = await PDFDocument.create();
   pdf.registerFontkit(fontkit);
@@ -586,6 +657,9 @@ export async function GET(request: NextRequest) {
   const fontBold = await pdf.embedFont(fontBoldFile);
   const logoFile = await readFile(path.join(process.cwd(), "public/logo thebest.png")).catch(() => null);
   const logoImage = logoFile ? await pdf.embedPng(logoFile).catch(() => null) : null;
+  const generatedBy = access.session.user.name ?? access.session.user.email ?? "Compte inconnu";
+  const generatedByWithRole = `${generatedBy} (${access.role})`;
+  const textBlack = rgb(0, 0, 0);
 
   // ─── Portrait constants ─────────────────────────────────────────────────────
   const PW = 595;
@@ -795,113 +869,60 @@ export async function GET(request: NextRequest) {
     pY -= cardH + 22;
   };
 
-  // ─── Report title label ─────────────────────────────────────────────────────
-  const reportTitle = reportKind === "DAILY"
-    ? `RAPPORT DE VENTE DU ${dateRange.startRaw}`
-    : reportKind === "WEEKLY"
-      ? `RAPPORT DE LA SEMAINE DU ${dateRange.startRaw} AU ${dateRange.endRaw}`
-      : reportKind === "MONTHLY"
-        ? `RAPPORT MENSUEL DU ${dateRange.startRaw} AU ${dateRange.endRaw}`
-        : reportKind === "ANNUAL"
-          ? `RAPPORT ANNUEL DU ${dateRange.startRaw} AU ${dateRange.endRaw}`
-          : `RAPPORT DE PERFORMANCE DU ${dateRange.startRaw} AU ${dateRange.endRaw}`;
-
-  // ─── Portrait page 1: header ────────────────────────────────────────────────
-  const logoBox = 74;
-  if (logoImage) {
-    const logoDims = logoImage.scaleToFit(logoBox, logoBox);
-    pPage.drawImage(logoImage, {
-      x: PM,
-      y: pY - logoDims.height + 10,
-      width: logoDims.width,
-      height: logoDims.height,
-    });
-  }
-
-  drawPortraitCentered("THE BEST S.A.R.L", pY - 4, 22, true);
-  pY -= 34;
-
-  drawPortraitCentered(reportTitle, pY, titleSize, true);
-  pY -= titleSize + 10;
-
-  const generatedAt = new Date().toLocaleString("fr-FR", { timeZone: "Africa/Kinshasa" });
-  drawPortraitCentered(`Généré le ${generatedAt}`, pY, 10);
-  pY -= 28;
-
-  // ─── Portrait pages: AI executive analysis ──────────────────────────────────
-  // Analyse executive title
-  pEnsureSpace(titleSize + 20);
-  drawPortraitText("ANALYSE EXECUTIVE", PM, pY, titleSize, true);
-  pY -= titleSize + 16;
-
-  // 1. Synthèse
-  pEnsureSpace(titleSize + 20);
-  drawPortraitText("1. SYNTHESE", PM, pY, titleSize, true);
-  pY -= titleSize + 10;
-  drawPortraitBody(executiveAnalysis.summary);
-
-  drawPerformanceSparkCard({
-    title: "Progression ventes cumulées",
-    currentValue: totalAmount,
-    previousValue: previousAmount,
-    currentSeries: currentCumulativeSales,
-    previousSeries: comparisonCumulativeSales,
-    previousPeriodLabel: `${previousRangeStart.toISOString().slice(0, 10)} → ${new Date(previousRangeEnd.getTime() - 1).toISOString().slice(0, 10)}`,
-    unit: "USD",
-    mainColor: { r: 1, g: 0.34, b: 0.48 },
-  });
-
-  drawPerformanceSparkCard({
-    title: "Progression commissions cumulées",
-    currentValue: totalCommission,
-    previousValue: previousCommission,
-    currentSeries: currentCumulativeCommissions,
-    previousSeries: comparisonCumulativeCommissions,
-    previousPeriodLabel: `${previousRangeStart.toISOString().slice(0, 10)} → ${new Date(previousRangeEnd.getTime() - 1).toISOString().slice(0, 10)}`,
-    unit: "USD",
-    mainColor: { r: 0.95, g: 0.45, b: 0.1 },
-  });
-
-  pY -= 8;
-
-  // 2. Points forts
-  drawPortraitSection("2. Points forts", executiveAnalysis.strengths);
-
-  // 3. Points faibles
-  drawPortraitSection("3. Points faibles", executiveAnalysis.weaknesses);
-
-  // 4. Avancées
-  drawPortraitSection("4. Avancees", executiveAnalysis.advances);
-
-  // 5. Régressions
-  drawPortraitSection("5. Regressions", executiveAnalysis.regressions);
-
-  // 6. Recommandations
-  drawPortraitSection("6. Recommandations", executiveAnalysis.recommendations);
-
-  // ─── Landscape page: data table ─────────────────────────────────────────────
+  // ─── Landscape page: direct sheet-style report ──────────────────────────────
   const preferredAirlines = ["CAA", "AIRCONGO", "ETHIOPIAN", "MG", "KP", "KENYA", "SA", "UR"];
   const soldCodes = Array.from(airlineTotals.keys());
   const extraCodes = soldCodes.filter((code) => !preferredAirlines.includes(code)).sort();
   const airlineColumns = [...preferredAirlines.filter((code) => soldCodes.includes(code)), ...extraCodes];
+  const reportTitle = buildReportTitle(reportKind, dateRange.start, dateRange.end);
+  const generatedAt = new Date().toLocaleString("fr-FR", { timeZone: "Africa/Kinshasa" });
+  const reportSubtitle = `${dateRange.startRaw} au ${dateRange.endRaw}`;
 
   let lPage = pdf.addPage([842, 595]);
   const LW = lPage.getWidth();
   const LH = lPage.getHeight();
   const LM = 20;
-  let lY = LH - 28;
+  let lY = LH - 136;
   const rowH = 15;
-  const TABLE_CENTER_MIN_TOP = 70;
+  const TABLE_CENTER_MIN_TOP = 120;
   const TABLE_CENTER_MAX_HEIGHT = 420;
   const centeredStartY = (estimatedHeight: number) => {
     const effectiveHeight = Math.min(Math.max(estimatedHeight, 0), TABLE_CENTER_MAX_HEIGHT);
-    return Math.min(LH - 28, Math.max(TABLE_CENTER_MIN_TOP, (LH + effectiveHeight) / 2));
+    return Math.min(LH - 150, Math.max(TABLE_CENTER_MIN_TOP, (LH + effectiveHeight) / 2));
   };
+
+  const drawLandscapeFrame = (suffix?: string) => {
+    drawTopInfo(lPage, fontBold, fontRegular, `${reportSubtitle}${suffix ? ` • ${suffix}` : ""}`, logoImage);
+    drawFooter(lPage, fontRegular, reportTitle, generatedByWithRole);
+
+    const titleWidth = fontBold.widthOfTextAtSize(reportTitle, 13);
+    lPage.drawText(reportTitle, {
+      x: Math.max(LM, (LW - titleWidth) / 2),
+      y: LH - 84,
+      size: 13,
+      font: fontBold,
+      color: textBlack,
+    });
+
+    const metaText = `Généré le ${generatedAt}`;
+    const metaWidth = fontRegular.widthOfTextAtSize(metaText, 8.5);
+    lPage.drawText(metaText, {
+      x: Math.max(LM, (LW - metaWidth) / 2),
+      y: LH - 98,
+      size: 8.5,
+      font: fontRegular,
+      color: textBlack,
+    });
+
+    lY = LH - 136;
+  };
+
+  drawLandscapeFrame();
 
   const lEnsureSpace = (rows: number) => {
     if (lY - rows * rowH < 45) {
       lPage = pdf.addPage([842, 595]);
-      lY = LH - 28;
+      drawLandscapeFrame("suite");
     }
   };
 
@@ -951,13 +972,8 @@ export async function GET(request: NextRequest) {
     const colWidths = [24, 62, 54, 78, 48, 54, 44, 42, 52, 42, 30];
     const tableWidth = colWidths.reduce((sum, w) => sum + w, 0);
     const startX = (LW - tableWidth) / 2;
-    const estimatedHeight = 30 + (rowH + 9) + tickets.length * (rowH + 9) + 48;
+    const estimatedHeight = 18 + (rowH + 9) + tickets.length * (rowH + 9) + 48;
     lY = centeredStartY(estimatedHeight);
-
-    const tableTitle = `Annexe 1 - Tableau des ventes (${dateRange.startRaw} → ${dateRange.endRaw})`;
-    const tableTitleWidth = fontBold.widthOfTextAtSize(tableTitle, 12);
-    drawLandText(tableTitle, Math.max(0, (LW - tableTitleWidth) / 2), lY, 12, true);
-    lY -= 16;
     drawLandRule(1, startX, startX + tableWidth);
     lY -= 14;
 
@@ -1004,7 +1020,7 @@ export async function GET(request: NextRequest) {
     lY -= rowH;
     drawLandText(`Commission: ${fmtNumber(totalCommission)} USD`, LM + 260, lY, 10, true);
   } else {
-    const headers = ["DATE / PERIODE", "BILLETS", ...airlineColumns, "MONTANTS", "COMMISSION"];
+    const headers = [buildTableFirstColumnHeader(reportKind), "BILLETS", ...airlineColumns, "MONTANTS", "COMMISSION"];
     const airlineCount = airlineColumns.length;
     const usableWidth = Math.min(730, LW - 2 * LM);
 
@@ -1033,13 +1049,8 @@ export async function GET(request: NextRequest) {
     const lineCount = (reportKind === "WEEKLY"
       ? Array.from(byDateAirline.entries()).length
       : Array.from(byWeekAirline.entries()).length);
-    const estimatedHeight = 30 + (rowH + 9) + lineCount * (rowH + 9) + 28;
+    const estimatedHeight = 18 + (rowH + 9) + lineCount * (rowH + 9) + 28;
     lY = centeredStartY(estimatedHeight);
-
-    const tableTitle = `Annexe 1 - Tableau des ventes (${dateRange.startRaw} → ${dateRange.endRaw})`;
-    const tableTitleWidth = fontBold.widthOfTextAtSize(tableTitle, 12);
-    drawLandText(tableTitle, Math.max(0, (LW - tableTitleWidth) / 2), lY, 12, true);
-    lY -= 16;
     drawLandRule(1, startX, startX + tableWidth);
     lY -= 14;
 
