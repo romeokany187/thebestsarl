@@ -74,8 +74,23 @@ type EntryLineForm = {
 };
 
 function toInputDateTime(value?: string | null) {
-  if (!value) return new Date().toISOString().slice(0, 16);
-  return new Date(value).toISOString().slice(0, 16);
+  const date = value ? new Date(value) : new Date();
+  if (Number.isNaN(date.getTime())) {
+    return toLocalDateTimeValue(new Date());
+  }
+  return toLocalDateTimeValue(date);
+}
+
+function padDatePart(value: number) {
+  return String(value).padStart(2, "0");
+}
+
+function toLocalDateValue(date: Date) {
+  return `${date.getFullYear()}-${padDatePart(date.getMonth() + 1)}-${padDatePart(date.getDate())}`;
+}
+
+function toLocalDateTimeValue(date: Date) {
+  return `${toLocalDateValue(date)}T${padDatePart(date.getHours())}:${padDatePart(date.getMinutes())}`;
 }
 
 function lineFactory(side: "DEBIT" | "CREDIT", amountUsd = "", amountCdf = ""): EntryLineForm {
@@ -117,12 +132,12 @@ export function AccountingJournalWorkspace({
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
   const [editingEntryId, setEditingEntryId] = useState("");
-  const [entryDate, setEntryDate] = useState(toInputDateTime(new Date().toISOString()));
+  const [entryDate, setEntryDate] = useState(toInputDateTime());
   const [pole, setPole] = useState("");
   const [libelle, setLibelle] = useState("");
   const [pieceJustificative, setPieceJustificative] = useState("");
   const [ticketInvoiceSelection, setTicketInvoiceSelection] = useState("");
-  const [rateDate, setRateDate] = useState(new Date().toISOString().slice(0, 10));
+  const [rateDate, setRateDate] = useState(toLocalDateValue(new Date()));
   const [dailyRateValue, setDailyRateValue] = useState("");
   const [lines, setLines] = useState<EntryLineForm[]>([lineFactory("DEBIT"), lineFactory("CREDIT")]);
 
@@ -196,7 +211,7 @@ export function AccountingJournalWorkspace({
   );
 
   function resetForm() {
-    setEntryDate(toInputDateTime(new Date().toISOString()));
+    setEntryDate(toInputDateTime());
     setPole("");
     setLibelle("");
     setPieceJustificative("");
