@@ -266,6 +266,12 @@ export function AccountingJournalWorkspace({
   }
 
   async function submitEntry() {
+    if (!selectedEntryRate) {
+      setError("Aucun taux du jour n'est enregistré pour la date choisie. Enregistre d'abord le taux dans le bloc ci-dessus, puis repasse l'écriture.");
+      setMessage("");
+      return;
+    }
+
     setSaving(true);
     setError("");
     setMessage("");
@@ -547,7 +553,7 @@ export function AccountingJournalWorkspace({
 
         <div className="mt-4 flex flex-wrap justify-end gap-2">
           <button type="button" onClick={resetForm} className="rounded-md border border-black/15 px-4 py-2 text-sm font-semibold hover:bg-black/5 dark:border-white/15 dark:hover:bg-white/10">{editingEntryId ? "Annuler la modification" : "Réinitialiser"}</button>
-          <button type="button" disabled={saving || !selectedEntryRate} onClick={submitEntry} className="rounded-md bg-black px-4 py-2 text-sm font-semibold text-white disabled:opacity-60 dark:bg-white dark:text-black">{saving ? "Enregistrement…" : editingEntryId ? "Mettre à jour l'écriture" : "Passer l'écriture"}</button>
+          <button type="button" disabled={saving} onClick={submitEntry} className="rounded-md bg-black px-4 py-2 text-sm font-semibold text-white disabled:opacity-60 dark:bg-white dark:text-black">{saving ? "Enregistrement…" : editingEntryId ? "Mettre à jour l'écriture" : "Passer l'écriture"}</button>
         </div>
       </div>
       ) : null}
