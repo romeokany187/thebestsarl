@@ -621,11 +621,11 @@ export default async function TicketsPage({
             </button>
             <button
               type="submit"
-              formAction="/api/sales/report/pdf"
+              formAction="/api/sales/report/excel"
               formTarget="_blank"
               className="rounded-md border border-black/15 bg-white px-4 py-2 text-sm font-semibold dark:border-white/15 dark:bg-zinc-900"
             >
-              Tirer PDF
+              Tirer Excel
             </button>
           </div>
         </form>
