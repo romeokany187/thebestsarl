@@ -37,6 +37,7 @@ type DeletedEntry = {
 };
 
 const POLE_OPTIONS = ["THE BEST", "SAFETY", "TSL", "VISAS"] as const;
+const POLE_SEPARATOR = " | ";
 
 type DailyRate = {
   id: string;
@@ -93,6 +94,23 @@ function toLocalDateTimeValue(date: Date) {
   return `${toLocalDateValue(date)}T${padDatePart(date.getHours())}:${padDatePart(date.getMinutes())}`;
 }
 
+function parsePoleSelection(value?: string | null) {
+  if (!value?.trim()) return [] as string[];
+
+  const parts = value
+    .split(/\s*\|\s*|\s*,\s*|\s*;\s*/)
+    .map((part) => part.trim())
+    .filter(Boolean);
+
+  return Array.from(new Set(parts)).filter((part): part is typeof POLE_OPTIONS[number] =>
+    POLE_OPTIONS.includes(part as typeof POLE_OPTIONS[number]),
+  );
+}
+
+function serializePoleSelection(values: string[]) {
+  return values.join(POLE_SEPARATOR);
+}
+
 function lineFactory(side: "DEBIT" | "CREDIT", amountUsd = "", amountCdf = ""): EntryLineForm {
   return {
     id: `${side}-${Math.random().toString(36).slice(2, 10)}`,
@@ -133,7 +151,7 @@ export function AccountingJournalWorkspace({
   const [message, setMessage] = useState("");
   const [editingEntryId, setEditingEntryId] = useState("");
   const [entryDate, setEntryDate] = useState(toInputDateTime());
-  const [pole, setPole] = useState("");
+  const [selectedPoles, setSelectedPoles] = useState<string[]>([]);
   const [libelle, setLibelle] = useState("");
   const [pieceJustificative, setPieceJustificative] = useState("");
   const [ticketInvoiceSelection, setTicketInvoiceSelection] = useState("");
@@ -212,7 +230,7 @@ export function AccountingJournalWorkspace({
 
   function resetForm() {
     setEntryDate(toInputDateTime());
-    setPole("");
+    setSelectedPoles([]);
     setLibelle("");
     setPieceJustificative("");
     setTicketInvoiceSelection("");
@@ -253,10 +271,18 @@ export function AccountingJournalWorkspace({
     });
   }
 
+  function togglePole(option: string) {
+    setSelectedPoles((current) => (
+      current.includes(option)
+        ? current.filter((value) => value !== option)
+        : [...current, option]
+    ));
+  }
+
   function startEditEntry(entry: RecentEntry) {
     setEditingEntryId(entry.id);
     setEntryDate(toInputDateTime(entry.entryDate));
-    setPole(entry.pole ?? "");
+    setSelectedPoles(parsePoleSelection(entry.pole));
     setLibelle(entry.libelle ?? "");
     setPieceJustificative(entry.pieceJustificative ?? "");
     const matchedTicket = entry.pieceJustificative ? ticketInvoiceMap.get(entry.pieceJustificative) : null;
@@ -316,7 +342,7 @@ export function AccountingJournalWorkspace({
     const payload = {
       ...(editingEntryId ? { id: editingEntryId } : {}),
       entryDate: new Date(entryDate).toISOString(),
-      pole: pole.trim() || undefined,
+      pole: serializePoleSelection(selectedPoles) || undefined,
       libelle: libelle.trim(),
       pieceJustificative: pieceJustificative.trim() || undefined,
       lines: lines.map((line) => ({
@@ -473,13 +499,29 @@ export function AccountingJournalWorkspace({
             </p>
           </div>
           <div>
-            <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-black/60 dark:text-white/60">Pôle</label>
-            <select value={pole} onChange={(event) => setPole(event.target.value)} className="w-full rounded-md border border-black/15 bg-white px-3 py-2 text-sm dark:border-white/15 dark:bg-zinc-900">
-              <option value="">Choisir un pôle</option>
-              {POLE_OPTIONS.map((option) => (
-                <option key={option} value={option}>{option}</option>
-              ))}
-            </select>
+            <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-black/60 dark:text-white/60">Pôle(x)</label>
+            <div className="grid gap-2 sm:grid-cols-2">
+              {POLE_OPTIONS.map((option) => {
+                const isSelected = selectedPoles.includes(option);
+                return (
+                  <button
+                    key={option}
+                    type="button"
+                    onClick={() => togglePole(option)}
+                    aria-pressed={isSelected}
+                    className={`rounded-md border px-3 py-2 text-sm font-semibold transition ${isSelected
+                      ? "border-black bg-black text-white dark:border-white dark:bg-white dark:text-black"
+                      : "border-black/15 bg-white text-black hover:bg-black/5 dark:border-white/15 dark:bg-zinc-900 dark:text-white dark:hover:bg-white/10"
+                    }`}
+                  >
+                    {option}
+                  </button>
+                );
+              })}
+            </div>
+            <p className="mt-1 text-[11px] text-black/50 dark:text-white/50">
+              Tu peux sélectionner un ou plusieurs pôles pour la même écriture. Laisse vide si l'écriture est sans pôle.
+            </p>
           </div>
           <div>
             <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-black/60 dark:text-white/60">Facture billet depuis le 1er avril</label>
