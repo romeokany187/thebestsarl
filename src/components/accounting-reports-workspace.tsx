@@ -283,7 +283,7 @@ export function AccountingReportsWorkspace({ accounts }: { accounts: AccountOpti
             <p className="mt-1 text-sm text-black/60 dark:text-white/60">{preview.periodLabel}</p>
           </div>
 
-          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-2">
             <div className="rounded-xl border border-black/10 px-3 py-3 text-sm dark:border-white/10">
               <p className="text-xs text-black/55 dark:text-white/55">USD débit</p>
               <p className="mt-1 font-semibold">{money(preview.totals.debitUsd)}</p>
@@ -291,14 +291,6 @@ export function AccountingReportsWorkspace({ accounts }: { accounts: AccountOpti
             <div className="rounded-xl border border-black/10 px-3 py-3 text-sm dark:border-white/10">
               <p className="text-xs text-black/55 dark:text-white/55">USD crédit</p>
               <p className="mt-1 font-semibold">{money(preview.totals.creditUsd)}</p>
-            </div>
-            <div className="rounded-xl border border-black/10 px-3 py-3 text-sm dark:border-white/10">
-              <p className="text-xs text-black/55 dark:text-white/55">CDF débit</p>
-              <p className="mt-1 font-semibold">{money(preview.totals.debitCdf)}</p>
-            </div>
-            <div className="rounded-xl border border-black/10 px-3 py-3 text-sm dark:border-white/10">
-              <p className="text-xs text-black/55 dark:text-white/55">CDF crédit</p>
-              <p className="mt-1 font-semibold">{money(preview.totals.creditCdf)}</p>
             </div>
           </div>
 
@@ -329,7 +321,7 @@ export function AccountingReportsWorkspace({ accounts }: { accounts: AccountOpti
                           {entry.lines.filter((line) => line.side === side).map((line) => (
                             <div key={line.id} className="flex items-center justify-between gap-3 text-xs">
                               <span>{line.accountCode} • {line.accountLabel}</span>
-                              <span className="text-right">USD {money(Number(line.amountUsd ?? 0))} / CDF {money(Number(line.amountCdf ?? 0))}</span>
+                              <span className="text-right">USD {money(Number(line.amountUsd ?? 0))}</span>
                             </div>
                           ))}
                         </div>
@@ -354,7 +346,6 @@ export function AccountingReportsWorkspace({ accounts }: { accounts: AccountOpti
                     </div>
                     <div className="text-right text-xs text-black/55 dark:text-white/55">
                       <p>USD débit {money(group.totals.debitUsd)} / crédit {money(group.totals.creditUsd)}</p>
-                      <p>CDF débit {money(group.totals.debitCdf)} / crédit {money(group.totals.creditCdf)}</p>
                     </div>
                   </div>
                   <div className="mt-3 space-y-2">
@@ -362,7 +353,7 @@ export function AccountingReportsWorkspace({ accounts }: { accounts: AccountOpti
                       <div key={`${row.entryId}-${row.sequence}-${row.side}-${row.counterparts}`} className="rounded-lg border border-black/10 px-3 py-2 text-xs dark:border-white/10">
                         <div className="flex flex-wrap items-center justify-between gap-2">
                           <span className="font-semibold">#{row.sequence} • {new Date(row.entryDate).toLocaleDateString("fr-FR")} • {row.side}</span>
-                          <span>USD {money(row.debitUsd || row.creditUsd)} / CDF {money(row.debitCdf || row.creditCdf)}</span>
+                          <span>USD {money(row.debitUsd || row.creditUsd)}</span>
                         </div>
                         <p className="mt-1 text-black/70 dark:text-white/70">{row.libelle}</p>
                         <p className="mt-1 text-black/55 dark:text-white/55">Contreparties: {row.counterparts || "-"}</p>
@@ -382,15 +373,12 @@ export function AccountingReportsWorkspace({ accounts }: { accounts: AccountOpti
                     <th className="px-3 py-2 text-right font-semibold">Débit USD</th>
                     <th className="px-3 py-2 text-right font-semibold">Crédit USD</th>
                     <th className="px-3 py-2 text-right font-semibold">Solde USD</th>
-                    <th className="px-3 py-2 text-right font-semibold">Débit CDF</th>
-                    <th className="px-3 py-2 text-right font-semibold">Crédit CDF</th>
-                    <th className="px-3 py-2 text-right font-semibold">Solde CDF</th>
                   </tr>
                 </thead>
                 <tbody>
                   {preview.rows.length === 0 ? (
                     <tr>
-                      <td colSpan={8} className="px-4 py-8 text-center text-sm text-black/55 dark:text-white/55">Aucun compte mouvementé sur cette période.</td>
+                      <td colSpan={5} className="px-4 py-8 text-center text-sm text-black/55 dark:text-white/55">Aucun compte mouvementé sur cette période.</td>
                     </tr>
                   ) : preview.rows.map((row) => (
                     <tr key={row.accountCode} className="border-t border-black/5 dark:border-white/10">
@@ -399,9 +387,6 @@ export function AccountingReportsWorkspace({ accounts }: { accounts: AccountOpti
                       <td className="px-3 py-2 text-right">{money(row.debitUsd)}</td>
                       <td className="px-3 py-2 text-right">{money(row.creditUsd)}</td>
                       <td className="px-3 py-2 text-right">{signedBalance(row.balanceUsd, row.balanceUsdSide)}</td>
-                      <td className="px-3 py-2 text-right">{money(row.debitCdf)}</td>
-                      <td className="px-3 py-2 text-right">{money(row.creditCdf)}</td>
-                      <td className="px-3 py-2 text-right">{signedBalance(row.balanceCdf, row.balanceCdfSide)}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -417,15 +402,12 @@ export function AccountingReportsWorkspace({ accounts }: { accounts: AccountOpti
                     <th className="px-3 py-2 text-right font-semibold">Débit USD</th>
                     <th className="px-3 py-2 text-right font-semibold">Crédit USD</th>
                     <th className="px-3 py-2 text-right font-semibold">Solde USD</th>
-                    <th className="px-3 py-2 text-right font-semibold">Débit CDF</th>
-                    <th className="px-3 py-2 text-right font-semibold">Crédit CDF</th>
-                    <th className="px-3 py-2 text-right font-semibold">Solde CDF</th>
                   </tr>
                 </thead>
                 <tbody>
                   {preview.rows.length === 0 ? (
                     <tr>
-                      <td colSpan={8} className="px-4 py-8 text-center text-sm text-black/55 dark:text-white/55">Aucune classe mouvementée sur cette période.</td>
+                      <td colSpan={5} className="px-4 py-8 text-center text-sm text-black/55 dark:text-white/55">Aucune classe mouvementée sur cette période.</td>
                     </tr>
                   ) : preview.rows.map((row) => (
                     <tr key={row.classCode} className="border-t border-black/5 dark:border-white/10">
@@ -434,9 +416,6 @@ export function AccountingReportsWorkspace({ accounts }: { accounts: AccountOpti
                       <td className="px-3 py-2 text-right">{money(row.debitUsd)}</td>
                       <td className="px-3 py-2 text-right">{money(row.creditUsd)}</td>
                       <td className="px-3 py-2 text-right">{signedBalance(row.balanceUsd, row.balanceUsd > 0 ? "DEBIT" : row.balanceUsd < 0 ? "CREDIT" : "ZERO")}</td>
-                      <td className="px-3 py-2 text-right">{money(row.debitCdf)}</td>
-                      <td className="px-3 py-2 text-right">{money(row.creditCdf)}</td>
-                      <td className="px-3 py-2 text-right">{signedBalance(row.balanceCdf, row.balanceCdf > 0 ? "DEBIT" : row.balanceCdf < 0 ? "CREDIT" : "ZERO")}</td>
                     </tr>
                   ))}
                 </tbody>
