@@ -221,7 +221,7 @@ npm run db:push
 npm run db:seed
 ```
 
-`prisma/schema.mysql.prisma` force le client Prisma en mode `binary` pour la cible Hostinger, afin d'éviter les crashes du moteur `library` observés sur certains environnements Node.js/OpenSSL du fournisseur.
+`prisma/schema.mysql.prisma` doit rester en mode `library` sur Hostinger. Le moteur `binary` y provoque des erreurs `spawn ... query-engine ... EAGAIN` au runtime.
 
 5. Pour lancer/build l'app avec MySQL :
 
@@ -231,7 +231,12 @@ npm run build
 npm run start
 ```
 
-6. Déployer ensuite l'app Node.js depuis GitHub sur Hostinger.
+6. Déployer ensuite l'app Node.js via le workflow GitHub Actions prévu dans [.github/workflows/deploy-hostinger.yml](.github/workflows/deploy-hostinger.yml).
+
+Important pour Hostinger:
+- ce dépôt est prévu pour un déploiement SSH automatisé depuis GitHub Actions, pas pour le builder Git intégré de l'écran `Deployments` Hostinger;
+- si tu utilises malgré tout l'écran `Deployments`, Hostinger peut échouer avec une analyse générique `Entry File / Output Directory` sans vrais logs exploitables;
+- `next.config.ts` force maintenant `output: "standalone"` pour rester compatible avec un lancement Node.js classique côté Hostinger.
 
 > Le script `npm run db:migrate:jobtitles` est désormais compatible PostgreSQL **et** MySQL/MariaDB.
 
