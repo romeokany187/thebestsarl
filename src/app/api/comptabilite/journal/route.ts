@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { invoiceNumberFromChronology } from "@/lib/invoice";
 import { prisma } from "@/lib/prisma";
 import { requireApiModuleAccess } from "@/lib/rbac";
+import { writeActivityLog } from "@/lib/activity-log";
 import { accountingEntryCreateSchema } from "@/lib/validators";
 
 const accountingEntryClient = (prisma as unknown as { accountingEntry: any }).accountingEntry;
@@ -23,6 +24,13 @@ type DailyRateRow = {
   createdByName?: string | null;
 };
 
+type DeletedEntryLog = {
+  id: string;
+  createdAt: Date;
+  actor?: { name?: string | null } | null;
+  payload?: unknown;
+};
+
 function canManageAccounting(role: string, jobTitle: string | null | undefined) {
   return role === "ADMIN" || role === "ACCOUNTANT" || (jobTitle ?? "") === "COMPTABLE";
 }
@@ -41,6 +49,43 @@ function normalizeDailyRateRow(row: DailyRateRow) {
     rateDate: new Date(row.rateDate).toISOString(),
     exchangeRate: Number(row.exchangeRate),
     createdBy: row.createdByName ? { name: row.createdByName } : null,
+  };
+}
+
+function normalizeDeletedEntryLog(log: DeletedEntryLog) {
+  const payload = log.payload && typeof log.payload === "object" ? log.payload as {
+    summary?: string | null;
+    details?: {
+      sequence?: number;
+      entryDate?: string;
+      pole?: string | null;
+      libelle?: string;
+      pieceJustificative?: string | null;
+      exchangeRate?: number | null;
+      lines?: Array<{
+        side: "DEBIT" | "CREDIT";
+        orderIndex: number;
+        accountCode: string;
+        accountLabel: string;
+        amountUsd?: number | null;
+        amountCdf?: number | null;
+      }>;
+    } | null;
+  } : null;
+  const details = payload?.details ?? null;
+
+  return {
+    id: log.id,
+    deletedAt: log.createdAt.toISOString(),
+    deletedBy: log.actor?.name ? { name: log.actor.name } : null,
+    summary: payload?.summary ?? null,
+    sequence: typeof details?.sequence === "number" ? details.sequence : null,
+    entryDate: details?.entryDate ?? null,
+    pole: details?.pole ?? null,
+    libelle: details?.libelle ?? null,
+    pieceJustificative: details?.pieceJustificative ?? null,
+    exchangeRate: typeof details?.exchangeRate === "number" ? details.exchangeRate : null,
+    lines: Array.isArray(details?.lines) ? details.lines : [],
   };
 }
 
@@ -186,7 +231,7 @@ export async function GET() {
   const supportStart = ticketSupportRangeStart();
   const yearStart = new Date(Date.UTC(supportStart.getUTCFullYear(), 0, 1, 0, 0, 0, 0));
 
-  const [accounts, recentEntries, yearlyTickets, dailyRates] = await Promise.all([
+  const [accounts, recentEntries, yearlyTickets, dailyRates, deletedEntries] = await Promise.all([
     prisma.account.findMany({
       select: { code: true, label: true, normalBalance: true },
       orderBy: { code: "asc" },
@@ -221,6 +266,19 @@ export async function GET() {
       orderBy: [{ soldAt: "asc" }, { id: "asc" }],
     }),
     listDailyRates(prisma, 60),
+    prisma.auditLog.findMany({
+      where: {
+        action: "ACCOUNTING_ENTRY_DELETED",
+        entityType: "ACCOUNTING_ENTRY",
+      },
+      include: {
+        actor: {
+          select: { name: true },
+        },
+      },
+      orderBy: { createdAt: "desc" },
+      take: 40,
+    }),
   ]);
 
   const ticketInvoiceOptions = yearlyTickets
@@ -243,6 +301,7 @@ export async function GET() {
     recentEntries,
     ticketInvoiceOptions,
     dailyRates,
+    deletedEntries: deletedEntries.map(normalizeDeletedEntryLog),
   });
 }
 
@@ -391,6 +450,22 @@ export async function DELETE(request: NextRequest) {
     return NextResponse.json({ error: "Identifiant d'écriture manquant." }, { status: 400 });
   }
 
+  const existing = await accountingEntryClient.findUnique({
+    where: { id: entryId },
+    include: {
+      lines: {
+        orderBy: [{ side: "asc" }, { orderIndex: "asc" }],
+      },
+      createdBy: {
+        select: { name: true },
+      },
+    },
+  });
+
+  if (!existing) {
+    return NextResponse.json({ error: "Écriture comptable introuvable." }, { status: 404 });
+  }
+
   await prisma.$transaction(async (tx) => {
     await (tx as unknown as { accountingEntryLine: any }).accountingEntryLine.deleteMany({
       where: { entryId },
@@ -398,6 +473,38 @@ export async function DELETE(request: NextRequest) {
     await (tx as unknown as AccountingTxClient).accountingEntry.delete({
       where: { id: entryId },
     });
+  });
+
+  await writeActivityLog({
+    actorId: access.session.user.id,
+    action: "ACCOUNTING_ENTRY_DELETED",
+    entityType: "ACCOUNTING_ENTRY",
+    entityId: existing.id,
+    summary: `Écriture comptable n° ${existing.sequence} supprimée.`,
+    payload: {
+      sequence: existing.sequence,
+      entryDate: existing.entryDate.toISOString(),
+      pole: existing.pole,
+      libelle: existing.libelle,
+      pieceJustificative: existing.pieceJustificative,
+      exchangeRate: existing.exchangeRate,
+      createdBy: existing.createdBy?.name ?? null,
+      lines: existing.lines.map((line: {
+        side: "DEBIT" | "CREDIT";
+        orderIndex: number;
+        accountCode: string;
+        accountLabel: string;
+        amountUsd?: number | null;
+        amountCdf?: number | null;
+      }) => ({
+        side: line.side,
+        orderIndex: line.orderIndex,
+        accountCode: line.accountCode,
+        accountLabel: line.accountLabel,
+        amountUsd: line.amountUsd,
+        amountCdf: line.amountCdf,
+      })),
+    },
   });
 
   return NextResponse.json({ ok: true });

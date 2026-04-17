@@ -15,6 +15,26 @@ type TicketInvoiceOption = {
   soldAt: string;
   invoiceNumber: string;
 };
+type DeletedEntry = {
+  id: string;
+  deletedAt: string;
+  deletedBy?: { name?: string | null } | null;
+  summary?: string | null;
+  sequence?: number | null;
+  entryDate?: string | null;
+  pole?: string | null;
+  libelle?: string | null;
+  pieceJustificative?: string | null;
+  exchangeRate?: number | null;
+  lines: Array<{
+    side: "DEBIT" | "CREDIT";
+    orderIndex: number;
+    accountCode: string;
+    accountLabel: string;
+    amountUsd?: number | null;
+    amountCdf?: number | null;
+  }>;
+};
 
 const POLE_OPTIONS = ["THE BEST", "SAFETY", "TSL", "VISAS"] as const;
 
@@ -87,6 +107,7 @@ export function AccountingJournalWorkspace({
 }) {
   const [accounts, setAccounts] = useState<AccountOption[]>([]);
   const [recentEntries, setRecentEntries] = useState<RecentEntry[]>([]);
+  const [deletedEntries, setDeletedEntries] = useState<DeletedEntry[]>([]);
   const [ticketInvoiceOptions, setTicketInvoiceOptions] = useState<TicketInvoiceOption[]>([]);
   const [dailyRates, setDailyRates] = useState<DailyRate[]>([]);
   const [loading, setLoading] = useState(true);
@@ -121,6 +142,7 @@ export function AccountingJournalWorkspace({
 
       setAccounts(payload.accounts ?? []);
       setRecentEntries(payload.recentEntries ?? []);
+      setDeletedEntries(payload.deletedEntries ?? []);
       setTicketInvoiceOptions(payload.ticketInvoiceOptions ?? []);
       setDailyRates(payload.dailyRates ?? []);
     } catch {
@@ -608,6 +630,59 @@ export function AccountingJournalWorkspace({
               </article>
             ))
           )}
+        </div>
+        <div className="mt-6 border-t border-black/10 pt-4 dark:border-white/10">
+          <div className="mb-3">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-black/50 dark:text-white/50">Suppressions</p>
+            <h3 className="mt-1 text-sm font-semibold">Journal des écritures supprimées</h3>
+            <p className="mt-1 text-xs text-black/55 dark:text-white/55">
+              La numérotation continue normalement. Les numéros supprimés restent tracés ici pour garder l'historique.
+            </p>
+          </div>
+
+          <div className="space-y-3">
+            {deletedEntries.length === 0 ? (
+              <p className="text-sm text-black/55 dark:text-white/55">Aucune écriture supprimée journalisée pour le moment.</p>
+            ) : (
+              deletedEntries.map((entry) => (
+                <article key={entry.id} className="rounded-xl border border-amber-200 bg-amber-50/50 p-3 dark:border-amber-900/60 dark:bg-amber-950/20">
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                      <p className="text-sm font-semibold">Écriture supprimée n° {entry.sequence ?? "-"}</p>
+                      <p className="text-xs text-black/55 dark:text-white/55">
+                        Supprimée le {new Date(entry.deletedAt).toLocaleString("fr-FR")} par {entry.deletedBy?.name ?? "Utilisateur inconnu"}
+                      </p>
+                    </div>
+                    <div className="text-right text-xs text-black/55 dark:text-white/55">
+                      <p>Pièce: {entry.pieceJustificative || "-"}</p>
+                      <p>Taux: {entry.exchangeRate ? `1 USD = ${entry.exchangeRate.toFixed(2)} CDF` : "-"}</p>
+                    </div>
+                  </div>
+                  <p className="mt-2 text-sm text-black/75 dark:text-white/75">{entry.libelle || entry.summary || "Suppression journalisée."}</p>
+                  <p className="mt-1 text-xs text-black/55 dark:text-white/55">
+                    Date d'écriture: {entry.entryDate ? new Date(entry.entryDate).toLocaleString("fr-FR") : "-"} • {entry.pole || "Sans pôle"}
+                  </p>
+                  {entry.lines.length > 0 ? (
+                    <div className="mt-3 grid gap-3 xl:grid-cols-2">
+                      {(["DEBIT", "CREDIT"] as const).map((side) => (
+                        <div key={side} className="rounded-lg border border-black/10 p-2 dark:border-white/10">
+                          <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-black/55 dark:text-white/55">{side === "DEBIT" ? "Débit" : "Crédit"}</p>
+                          <div className="space-y-1.5">
+                            {entry.lines.filter((line) => line.side === side).map((line) => (
+                              <div key={`${entry.id}-${side}-${line.orderIndex}-${line.accountCode}`} className="flex items-center justify-between gap-3 text-xs">
+                                <span>{line.accountCode} • {line.accountLabel}</span>
+                                <span className="text-right">USD {Number(line.amountUsd ?? 0).toFixed(2)} / CDF {Number(line.amountCdf ?? 0).toFixed(2)}</span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : null}
+                </article>
+              ))
+            )}
+          </div>
         </div>
       </section>
       ) : null}
