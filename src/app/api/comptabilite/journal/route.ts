@@ -237,7 +237,7 @@ export async function GET() {
       orderBy: { code: "asc" },
     }),
     accountingEntryClient.findMany({
-      orderBy: [{ entryDate: "desc" }, { sequence: "desc" }],
+      orderBy: [{ sequence: "desc" }],
       take: 40,
       include: {
         createdBy: { select: { name: true } },
