@@ -413,18 +413,18 @@ type JournalColumn = {
 };
 
 const JOURNAL_COLUMNS: JournalColumn[] = [
-  { key: "sequence", label: "N°", width: 30, align: "center" },
-  { key: "entryDate", label: "DATE", width: 58, align: "center" },
-  { key: "pole", label: "POLE", width: 56, align: "center" },
-  { key: "debitCode", label: "N°", width: 48, align: "center" },
-  { key: "debitLabel", label: "INTITULE", width: 150 },
-  { key: "creditCode", label: "N°", width: 48, align: "center" },
-  { key: "creditLabel", label: "INTITULE", width: 150 },
-  { key: "libelle", label: "LIBELLE", width: 220 },
-  { key: "pieceJustificative", label: "PIECE JUSTIFICATIVE", width: 82 },
-  { key: "usdDebit", label: "DEBIT", width: 62, align: "right" },
-  { key: "usdCredit", label: "CREDIT", width: 62, align: "right" },
-  { key: "exchangeRate", label: "TAUX", width: 52, align: "center" },
+  { key: "sequence", label: "N°", width: 34, align: "center" },
+  { key: "entryDate", label: "DATE", width: 66, align: "center" },
+  { key: "pole", label: "POLE", width: 62, align: "center" },
+  { key: "debitCode", label: "N°", width: 50, align: "center" },
+  { key: "debitLabel", label: "INTITULE", width: 168 },
+  { key: "creditCode", label: "N°", width: 50, align: "center" },
+  { key: "creditLabel", label: "INTITULE", width: 168 },
+  { key: "libelle", label: "LIBELLE", width: 252 },
+  { key: "pieceJustificative", label: "PIECE JUSTIFICATIVE", width: 100 },
+  { key: "usdDebit", label: "DEBIT", width: 66, align: "right" },
+  { key: "usdCredit", label: "CREDIT", width: 66, align: "right" },
+  { key: "exchangeRate", label: "TAUX", width: 55, align: "center" },
 ];
 
 function wrapPdfText(text: string, font: PDFFont, size: number, maxWidth: number) {
@@ -489,12 +489,12 @@ function flattenJournalRows(entries: any[]): JournalPdfRow[] {
 
 function journalRowHeight(row: JournalPdfRow, font: PDFFont, size: number) {
   const wrappedLineCount = Math.max(
-    wrapPdfText(row.debitLabel, font, size, 142).length,
-    wrapPdfText(row.creditLabel, font, size, 142).length,
-    wrapPdfText(row.libelle, font, size, 212).length,
-    wrapPdfText(row.pieceJustificative, font, size, 74).length,
+    wrapPdfText(row.debitLabel, font, size, 160).length,
+    wrapPdfText(row.creditLabel, font, size, 160).length,
+    wrapPdfText(row.libelle, font, size, 244).length,
+    wrapPdfText(row.pieceJustificative, font, size, 92).length,
   );
-  return Math.max(18, wrappedLineCount * (size + 2) + 6);
+  return Math.max(24, wrappedLineCount * (size + 3) + 8);
 }
 
 function drawCellText(params: {
@@ -510,9 +510,13 @@ function drawCellText(params: {
 }) {
   const { page, text, x, y, width, height, font, size, align = "left" } = params;
   const lines = wrapPdfText(text, font, size, Math.max(4, width - 8));
-  const lineHeight = size + 2;
+  const lineHeight = size + 3;
   const blockHeight = lines.length * lineHeight;
-  let cursorY = y + height - 4 - Math.max(blockHeight, lineHeight);
+  let cursorY = y + height - 6 - lineHeight;
+
+  if (blockHeight < height - 8) {
+    cursorY = y + height - 5 - ((height - 8 - blockHeight) / 2);
+  }
 
   for (const line of lines) {
     const textWidth = font.widthOfTextAtSize(line, size);
@@ -533,11 +537,11 @@ function drawCellText(params: {
 }
 
 function drawJournalTableHeader(page: PDFPage, font: PDFFont, bold: PDFFont, startX: number, topY: number) {
-  const groupRowHeight = 18;
-  const subRowHeight = 20;
+  const groupRowHeight = 22;
+  const subRowHeight = 24;
   const borderColor = rgb(0.15, 0.15, 0.15);
-  const fill = rgb(0.95, 0.95, 0.95);
-  const groupFill = rgb(0.9, 0.9, 0.9);
+  const fill = rgb(0.93, 0.94, 0.96);
+  const groupFill = rgb(0.84, 0.86, 0.9);
   const totalHeaderHeight = groupRowHeight + subRowHeight;
 
   const simpleKeys: Array<keyof JournalPdfRow> = ["sequence", "entryDate", "pole", "libelle", "pieceJustificative", "exchangeRate"];
@@ -546,7 +550,7 @@ function drawJournalTableHeader(page: PDFPage, font: PDFFont, bold: PDFFont, sta
   for (const column of JOURNAL_COLUMNS) {
     if (simpleKeys.includes(column.key)) {
       page.drawRectangle({ x: cursorX, y: topY - totalHeaderHeight, width: column.width, height: totalHeaderHeight, borderWidth: 0.8, borderColor, color: fill });
-      drawCellText({ page, text: column.label, x: cursorX, y: topY - totalHeaderHeight, width: column.width, height: totalHeaderHeight, font: bold, size: 7, align: "center" });
+      drawCellText({ page, text: column.label, x: cursorX, y: topY - totalHeaderHeight, width: column.width, height: totalHeaderHeight, font: bold, size: 8.2, align: "center" });
     }
     cursorX += column.width;
   }
@@ -564,13 +568,13 @@ function drawJournalTableHeader(page: PDFPage, font: PDFFont, bold: PDFFont, sta
     ["MONTANT USD", usdGroupX, usdGroupWidth],
   ] as const) {
     page.drawRectangle({ x, y: topY - groupRowHeight, width, height: groupRowHeight, borderWidth: 0.8, borderColor, color: groupFill });
-    drawCellText({ page, text: label, x, y: topY - groupRowHeight, width, height: groupRowHeight, font: bold, size: 7, align: "center" });
+    drawCellText({ page, text: label, x, y: topY - groupRowHeight, width, height: groupRowHeight, font: bold, size: 8.2, align: "center" });
   }
 
   cursorX = debitGroupX;
   for (const column of JOURNAL_COLUMNS.slice(3, 11)) {
     page.drawRectangle({ x: cursorX, y: topY - totalHeaderHeight, width: column.width, height: subRowHeight, borderWidth: 0.8, borderColor, color: fill });
-    drawCellText({ page, text: column.label, x: cursorX, y: topY - totalHeaderHeight, width: column.width, height: subRowHeight, font: bold, size: 6.6, align: "center" });
+    drawCellText({ page, text: column.label, x: cursorX, y: topY - totalHeaderHeight, width: column.width, height: subRowHeight, font: bold, size: 7.5, align: "center" });
     cursorX += column.width;
   }
 
@@ -599,13 +603,13 @@ async function buildPdf(report: ReportPayload) {
   }
 
   function drawSummaryBox(text: string, offsetX: number, width: number) {
-    const height = 28;
+    const height = 34;
     page.drawRectangle({ x: offsetX, y, width, height, borderWidth: 1, borderColor: rgb(0.85, 0.87, 0.91) });
-    const lines = wrapPdfText(text, bold, 8, width - 12).slice(0, 2);
-    let textY = y + height - 10;
+    const lines = wrapPdfText(text, bold, 9, width - 12).slice(0, 2);
+    let textY = y + height - 12;
     for (const line of lines) {
-      page.drawText(line, { x: offsetX + 6, y: textY, size: 8, font: bold, color: rgb(0.14, 0.16, 0.2) });
-      textY -= 9;
+      page.drawText(line, { x: offsetX + 6, y: textY, size: 9, font: bold, color: rgb(0.14, 0.16, 0.2) });
+      textY -= 10;
     }
   }
 
@@ -642,7 +646,7 @@ async function buildPdf(report: ReportPayload) {
     drawSummaryBox(`Ecritures: ${report.entryCount}`, margin, 170);
     drawSummaryBox(`USD debit ${formatMoney(report.totals.debitUsd)} | credit ${formatMoney(report.totals.creditUsd)}`, margin + 182, 280);
     drawSummaryBox(`Modele: presentation livre journal`, margin + 474, 250);
-    y -= 42;
+    y -= 48;
   } else if (report.reportType === "ledger") {
     drawSummaryBox(`Comptes mouvementes: ${report.groupCount}`, margin, 180);
     drawSummaryBox(`Filtre: ${report.accountCode ?? "Tous les comptes"}`, margin + 192, 220);
@@ -667,7 +671,7 @@ async function buildPdf(report: ReportPayload) {
     const borderColor = rgb(0.15, 0.15, 0.15);
     const rowFill = rgb(1, 1, 1);
     const alternateFill = rgb(0.985, 0.985, 0.985);
-    const fontSize = 6.7;
+    const fontSize = 8.1;
 
     const drawJournalPageHeader = () => {
       const headerHeight = drawJournalTableHeader(page, font, bold, tableStartX, y);
@@ -691,7 +695,7 @@ async function buildPdf(report: ReportPayload) {
           y: y - rowHeight,
           width: column.width,
           height: rowHeight,
-          borderWidth: 0.55,
+          borderWidth: 0.75,
           borderColor,
           color: index % 2 === 0 ? rowFill : alternateFill,
         });
@@ -702,7 +706,7 @@ async function buildPdf(report: ReportPayload) {
           y: y - rowHeight,
           width: column.width,
           height: rowHeight,
-          font,
+          font: column.key === "sequence" || column.key === "entryDate" || column.key === "usdDebit" || column.key === "usdCredit" ? bold : font,
           size: fontSize,
           align: column.align,
         });
