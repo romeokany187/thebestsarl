@@ -228,8 +228,10 @@ export function AccountingJournalWorkspace({
     [lines],
   );
 
-  function resetForm() {
-    setEntryDate(toInputDateTime());
+  function resetForm(options?: { preserveEntryDate?: boolean }) {
+    if (!options?.preserveEntryDate) {
+      setEntryDate(toInputDateTime());
+    }
     setSelectedPoles([]);
     setLibelle("");
     setPieceJustificative("");
@@ -370,7 +372,7 @@ export function AccountingJournalWorkspace({
       setMessage(editingEntryId
         ? `Écriture n° ${result?.data?.sequence ?? "?"} modifiée.`
         : `Écriture n° ${result?.data?.sequence ?? "?"} enregistrée.`);
-      resetForm();
+      resetForm({ preserveEntryDate: true });
       await loadData();
     } catch {
       setError("Erreur réseau lors de l'enregistrement de l'écriture.");
@@ -631,7 +633,7 @@ export function AccountingJournalWorkspace({
         </datalist>
 
         <div className="mt-4 flex flex-wrap justify-end gap-2">
-          <button type="button" onClick={resetForm} className="rounded-md border border-black/15 px-4 py-2 text-sm font-semibold hover:bg-black/5 dark:border-white/15 dark:hover:bg-white/10">{editingEntryId ? "Annuler la modification" : "Réinitialiser"}</button>
+          <button type="button" onClick={() => resetForm()} className="rounded-md border border-black/15 px-4 py-2 text-sm font-semibold hover:bg-black/5 dark:border-white/15 dark:hover:bg-white/10">{editingEntryId ? "Annuler la modification" : "Réinitialiser"}</button>
           <button type="button" disabled={saving} onClick={submitEntry} className="rounded-md bg-black px-4 py-2 text-sm font-semibold text-white disabled:opacity-60 dark:bg-white dark:text-black">{saving ? "Enregistrement…" : editingEntryId ? "Mettre à jour l'écriture" : "Passer l'écriture"}</button>
         </div>
       </div>
