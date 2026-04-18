@@ -601,11 +601,22 @@ function drawJournalTableHeader(page: PDFPage, font: PDFFont, bold: PDFFont, sta
   return totalHeaderHeight;
 }
 
+async function loadPdfBodyFont(pdf: PDFDocument) {
+  pdf.registerFontkit(fontkit);
+  const fontPath = path.join(process.cwd(), "public", "fonts", "MAIAN.TTF");
+
+  try {
+    const regularBytes = await readFile(fontPath);
+    return await pdf.embedFont(regularBytes);
+  } catch (error) {
+    console.warn("Failed to load MAIAN.TTF for accounting PDF, falling back to Helvetica.", error);
+    return await pdf.embedFont(StandardFonts.Helvetica);
+  }
+}
+
 async function buildPdf(report: ReportPayload) {
   const pdf = await PDFDocument.create();
-  pdf.registerFontkit(fontkit);
-  const regularBytes = await readFile(path.join(process.cwd(), "public", "fonts", "MAIAN.TTF"));
-  const font = await pdf.embedFont(regularBytes);
+  const font = await loadPdfBodyFont(pdf);
   const bold = await pdf.embedFont(StandardFonts.HelveticaBold);
   const pageWidth = report.reportType === "journal" ? 1191 : 842;
   const pageHeight = report.reportType === "journal" ? 842 : 595;
