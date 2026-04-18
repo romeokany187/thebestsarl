@@ -1,8 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { PDFDocument, PDFFont, PDFPage, rgb } from "pdf-lib";
-import fontkit from "@pdf-lib/fontkit";
-import { readFile } from "node:fs/promises";
-import path from "node:path";
+import { PDFDocument, PDFFont, PDFPage, StandardFonts, rgb } from "pdf-lib";
 import { prisma } from "@/lib/prisma";
 import { requireApiModuleAccess } from "@/lib/rbac";
 
@@ -431,6 +428,27 @@ function wrapPdfText(text: string, font: PDFFont, size: number, maxWidth: number
   const content = (text ?? "").trim();
   if (!content) return [""];
 
+  function splitTokenByWidth(token: string) {
+    if (!token) return [""];
+    if (font.widthOfTextAtSize(token, size) <= maxWidth) return [token];
+
+    const parts: string[] = [];
+    let current = "";
+
+    for (const char of token) {
+      const candidate = `${current}${char}`;
+      if (current && font.widthOfTextAtSize(candidate, size) > maxWidth) {
+        parts.push(current);
+        current = char;
+      } else {
+        current = candidate;
+      }
+    }
+
+    if (current) parts.push(current);
+    return parts;
+  }
+
   const lines: string[] = [];
   for (const paragraph of content.split(/\r?\n/)) {
     const trimmed = paragraph.trim();
@@ -442,12 +460,15 @@ function wrapPdfText(text: string, font: PDFFont, size: number, maxWidth: number
     const words = trimmed.split(/\s+/);
     let current = "";
     for (const word of words) {
-      const candidate = current ? `${current} ${word}` : word;
-      if (font.widthOfTextAtSize(candidate, size) <= maxWidth) {
-        current = candidate;
-      } else {
-        if (current) lines.push(current);
-        current = word;
+      const parts = splitTokenByWidth(word);
+      for (const part of parts) {
+        const candidate = current ? `${current} ${part}` : part;
+        if (font.widthOfTextAtSize(candidate, size) <= maxWidth) {
+          current = candidate;
+        } else {
+          if (current) lines.push(current);
+          current = part;
+        }
       }
     }
     if (current) lines.push(current);
@@ -512,11 +533,7 @@ function drawCellText(params: {
   const lines = wrapPdfText(text, font, size, Math.max(4, width - 8));
   const lineHeight = size + 3;
   const blockHeight = lines.length * lineHeight;
-  let cursorY = y + height - 6 - lineHeight;
-
-  if (blockHeight < height - 8) {
-    cursorY = y + height - 5 - ((height - 8 - blockHeight) / 2);
-  }
+  let cursorY = y + ((height + blockHeight) / 2) - lineHeight + 1;
 
   for (const line of lines) {
     const textWidth = font.widthOfTextAtSize(line, size);
@@ -583,11 +600,8 @@ function drawJournalTableHeader(page: PDFPage, font: PDFFont, bold: PDFFont, sta
 
 async function buildPdf(report: ReportPayload) {
   const pdf = await PDFDocument.create();
-  pdf.registerFontkit(fontkit);
-  const regularBytes = await readFile(path.join(process.cwd(), "public", "fonts", "Montserrat-Regular.ttf"));
-  const boldBytes = await readFile(path.join(process.cwd(), "public", "fonts", "Montserrat-Bold.ttf"));
-  const font = await pdf.embedFont(regularBytes);
-  const bold = await pdf.embedFont(boldBytes);
+  const font = await pdf.embedFont(StandardFonts.Helvetica);
+  const bold = await pdf.embedFont(StandardFonts.HelveticaBold);
   const pageWidth = report.reportType === "journal" ? 1191 : 842;
   const pageHeight = report.reportType === "journal" ? 842 : 595;
   const margin = report.reportType === "journal" ? 24 : 28;
