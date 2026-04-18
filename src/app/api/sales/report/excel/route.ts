@@ -299,12 +299,12 @@ function fillDailySheet(sheet: ExcelJS.Worksheet, tickets: any[]) {
   const totalTickets = tickets.length;
   const totalAmount = tickets.reduce((sum, ticket) => sum + getTicketTotalAmount(ticket, getTicketCommissionAmount(ticket)), 0);
   const totalCommission = tickets.reduce((sum, ticket) => sum + getTicketCommissionAmount(ticket), 0);
-  const totalRow = sheet.getRow(Math.max(22, tickets.length + 4));
+  const totalRow = sheet.getRow(tickets.length + 4);
   totalRow.getCell(10).value = totalTickets;
   totalRow.getCell(10).fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFFFFF00" } };
   styleCell(totalRow.getCell(10), { bold: true, align: "center" });
 
-  const amountRow = sheet.getRow(Math.max(23, tickets.length + 5));
+  const amountRow = sheet.getRow(tickets.length + 5);
   amountRow.getCell(10).value = totalAmount;
   amountRow.getCell(11).value = totalCommission || "-";
   amountRow.getCell(10).numFmt = '$ #,##0.00';
@@ -495,23 +495,25 @@ export async function GET(request: NextRequest) {
   workbook.modified = new Date();
   const logoId = await tryAddLogo(workbook);
 
+  const weeks = listCompleteWeeks(range.start, range.end);
+  const weeksByEndDay = new Map(weeks.map((week) => [formatIsoDate(week.end), week]));
   const days = listDays(range.start, range.end);
   for (const day of days) {
     const dayKey = formatIsoDate(day);
     const sheet = workbook.addWorksheet(formatSheetDay(day));
     configureDailySheet(sheet, `RAPPORT VENTE BILLETS ${String(day.getUTCDate()).padStart(2, "0")} ${formatFrenchMonth(day)} ${day.getUTCFullYear()}`, logoId);
     fillDailySheet(sheet, tickets.filter((ticket) => formatIsoDate(startOfUtcDay(new Date(ticket.soldAt))) === dayKey));
-  }
 
-  const weeks = listCompleteWeeks(range.start, range.end);
-  weeks.forEach((week) => {
-    const sheet = workbook.addWorksheet(week.sheetName);
-    configureWeeklySheet(sheet, week.label);
-    fillWeeklySheet(sheet, week, tickets.filter((ticket) => {
-      const soldAt = startOfUtcDay(new Date(ticket.soldAt));
-      return soldAt >= week.start && soldAt < week.endExclusive;
-    }));
-  });
+    const week = weeksByEndDay.get(dayKey);
+    if (week) {
+      const weekSheet = workbook.addWorksheet(week.sheetName);
+      configureWeeklySheet(weekSheet, week.label);
+      fillWeeklySheet(weekSheet, week, tickets.filter((ticket) => {
+        const soldAt = startOfUtcDay(new Date(ticket.soldAt));
+        return soldAt >= week.start && soldAt < week.endExclusive;
+      }));
+    }
+  }
 
   const months = listCompleteMonths(range.start, range.end);
   months.forEach((month) => {
