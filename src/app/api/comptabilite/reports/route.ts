@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { PDFDocument, PDFFont, PDFPage, StandardFonts, rgb } from "pdf-lib";
+import fontkit from "@pdf-lib/fontkit";
+import { readFile } from "node:fs/promises";
+import path from "node:path";
 import { prisma } from "@/lib/prisma";
 import { requireApiModuleAccess } from "@/lib/rbac";
 
@@ -600,7 +603,9 @@ function drawJournalTableHeader(page: PDFPage, font: PDFFont, bold: PDFFont, sta
 
 async function buildPdf(report: ReportPayload) {
   const pdf = await PDFDocument.create();
-  const font = await pdf.embedFont(StandardFonts.Helvetica);
+  pdf.registerFontkit(fontkit);
+  const regularBytes = await readFile(path.join(process.cwd(), "public", "fonts", "MAIAN.TTF"));
+  const font = await pdf.embedFont(regularBytes);
   const bold = await pdf.embedFont(StandardFonts.HelveticaBold);
   const pageWidth = report.reportType === "journal" ? 1191 : 842;
   const pageHeight = report.reportType === "journal" ? 842 : 595;
