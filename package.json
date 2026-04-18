@@ -28,6 +28,7 @@
     "db:allow:pnr-duplicates": "tsx scripts/ensure-ticket-number-duplicates.ts",
     "db:dedup:airlines": "tsx scripts/dedup-airlines.ts",
     "db:normalize:ticket-payers": "tsx scripts/normalize-ticket-payers.ts",
+    "db:normalize:cash-desks": "tsx scripts/normalize-cash-desks.ts",
     "db:reset:operational": "tsx scripts/reset-operational-data.ts"
   },
   "dependencies": {

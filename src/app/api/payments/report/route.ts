@@ -7,6 +7,7 @@ import path from "node:path";
 import { prisma } from "@/lib/prisma";
 import { requireApiModuleAccess } from "@/lib/rbac";
 import { getTicketTotalAmount } from "@/lib/ticket-pricing";
+import { buildDeskScopedCashOperationWhere, isMainCashDesk, normalizeCashDeskValue } from "@/lib/payments-desk";
 
 type ReportMode = "date" | "month" | "year";
 type ReportType = "payments" | "cash-journal" | "cash-summary";
@@ -357,6 +358,10 @@ export async function GET(request: NextRequest) {
   const reportType = (["payments", "cash-journal", "cash-summary"].includes(request.nextUrl.searchParams.get("reportType") ?? "")
     ? request.nextUrl.searchParams.get("reportType")
     : "payments") as ReportType;
+  const requestedDesk = normalizeCashDeskValue(request.nextUrl.searchParams.get("desk"));
+  const selectedDesk = requestedDesk ?? "THE_BEST";
+  const mainDesk = isMainCashDesk(selectedDesk);
+  const scopedCashOperationsWhere = buildDeskScopedCashOperationWhere(selectedDesk);
   const range = dateRangeFromParams(
     request.nextUrl.searchParams,
     reportType === "cash-journal" || reportType === "cash-summary" ? "month" : "date",
@@ -366,7 +371,7 @@ export async function GET(request: NextRequest) {
   const [rows, tickets, airline, cashOperationsInRange, cashOperationsBeforeRange, ticketPaymentsBeforeRange, pendingNeeds, paymentOrders] = await Promise.all([
     paymentClient.findMany({
       where: {
-        paidAt: { gte: range.start, lt: range.end },
+        ...(mainDesk ? { paidAt: { gte: range.start, lt: range.end } } : { id: "__NO_TICKET_PAYMENTS_FOR_DESK__" }),
         ...(airlineId ? { ticket: { airlineId } } : {}),
       },
       include: {
@@ -396,7 +401,7 @@ export async function GET(request: NextRequest) {
       ? prisma.airline.findUnique({ where: { id: airlineId }, select: { code: true, name: true } })
       : Promise.resolve(null),
     cashOperationClient.findMany({
-      where: { occurredAt: { gte: range.start, lt: range.end } },
+      where: { occurredAt: { gte: range.start, lt: range.end }, ...scopedCashOperationsWhere },
       select: {
         occurredAt: true,
         direction: true,
@@ -415,7 +420,7 @@ export async function GET(request: NextRequest) {
       take: 5000,
     }),
     cashOperationClient.findMany({
-      where: { occurredAt: { lt: range.start } },
+      where: { occurredAt: { lt: range.start }, ...scopedCashOperationsWhere },
       select: {
         occurredAt: true,
         direction: true,
@@ -434,7 +439,7 @@ export async function GET(request: NextRequest) {
       take: 5000,
     }),
     paymentClient.findMany({
-      where: { paidAt: { lt: range.start } },
+      where: mainDesk ? { paidAt: { lt: range.start } } : { id: "__NO_TICKET_PAYMENTS_FOR_DESK__" },
       select: {
         paidAt: true,
         amount: true,
@@ -706,8 +711,8 @@ export async function GET(request: NextRequest) {
   const periodStart = range.start.toISOString().slice(0, 10);
   const periodEnd = new Date(range.end.getTime() - 1).toISOString().slice(0, 10);
   const subtitle = airline
-    ? `${range.label} • ${airline.code} - ${airline.name}`
-    : `${range.label} • Toutes compagnies`;
+    ? `${range.label} • ${airline.code} - ${airline.name} • ${selectedDesk}`
+    : `${range.label} • Toutes compagnies • ${selectedDesk}`;
   let filenameBase = "rapport-paiements";
 
   if (reportType === "cash-journal") {

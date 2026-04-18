@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { requireApiModuleAccess } from "@/lib/rbac";
 import { cashOperationCreateSchema } from "@/lib/validators";
 import { isMailConfigured, sendMailBatch } from "@/lib/mail";
+import { inferCashDeskFromDescription } from "@/lib/payments-desk";
 import { writeActivityLog } from "@/lib/activity-log";
 
 const cashOperationClient = (prisma as unknown as { cashOperation: any }).cashOperation;
@@ -358,19 +359,7 @@ export async function POST(request: NextRequest) {
         projectedDailyOutflowUsd = existingDailyOutflowUsd + normalizedAmountUsd;
 
         const desc = (data.description ?? "").trim();
-        blockedCashDesk = desc.startsWith("PROXY_BANKING:")
-          ? "PROXY_BANKING"
-          : desc.startsWith("CAISSE_2_SIEGE:")
-            ? "CAISSE_2_SIEGE"
-          : desc.startsWith("CAISSE_SAFETY:")
-            ? "CAISSE_SAFETY"
-            : desc.startsWith("CAISSE_VISAS:")
-              ? "CAISSE_VISAS"
-              : desc.startsWith("CAISSE_TSL:")
-                ? "CAISSE_TSL"
-                : desc.startsWith("CAISSE_AGENCE:")
-                  ? "CAISSE_AGENCE"
-                  : "THE_BEST";
+        blockedCashDesk = inferCashDeskFromDescription(desc);
 
         if (projectedDailyOutflowUsd > dailyOutflowCap + 0.0001) {
           throw new Error(`DAILY_CAP_EXCEEDED:${projectedDailyOutflowUsd.toFixed(2)}:${dailyOutflowCap.toFixed(2)}`);
@@ -382,13 +371,7 @@ export async function POST(request: NextRequest) {
       }
 
       const desc = (data.description ?? "").trim();
-      let cashDeskForOp = "THE_BEST";
-      if (desc.startsWith("PROXY_BANKING:")) cashDeskForOp = "PROXY_BANKING";
-      else if (desc.startsWith("CAISSE_2_SIEGE:")) cashDeskForOp = "CAISSE_2_SIEGE";
-      else if (desc.startsWith("CAISSE_SAFETY:")) cashDeskForOp = "CAISSE_SAFETY";
-      else if (desc.startsWith("CAISSE_VISAS:")) cashDeskForOp = "CAISSE_VISAS";
-      else if (desc.startsWith("CAISSE_TSL:")) cashDeskForOp = "CAISSE_TSL";
-      else if (desc.startsWith("CAISSE_AGENCE:")) cashDeskForOp = "CAISSE_AGENCE";
+      const cashDeskForOp = inferCashDeskFromDescription(desc);
 
       return (tx as unknown as { cashOperation: any }).cashOperation.create({
         data: {

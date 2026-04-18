@@ -4,6 +4,16 @@ export type CashDeskValue = "PROXY_BANKING" | "THE_BEST" | "CAISSE_2_SIEGE" | "C
 export type CashDeskOption = { value: CashDeskValue; label: string; description: string };
 export type AdminCashRoleScope = "CAISSIER" | "CAISSE_2_SIEGE" | "CAISSE_AGENCE";
 
+export const KNOWN_CASH_DESK_PREFIXES = [
+  "PROXY_BANKING:",
+  "THE_BEST:",
+  "CAISSE_2_SIEGE:",
+  "CAISSE_SAFETY:",
+  "CAISSE_VISAS:",
+  "CAISSE_TSL:",
+  "CAISSE_AGENCE:",
+] as const;
+
 export const ALL_CASH_DESKS: CashDeskOption[] = [
   {
     value: "PROXY_BANKING",
@@ -161,6 +171,40 @@ export function normalizeCashDeskValue(value?: string | null): CashDeskValue | n
   return ALL_CASH_DESKS.some((desk) => desk.value === normalized as CashDeskValue)
     ? normalized as CashDeskValue
     : null;
+}
+
+export function isMainCashDesk(value?: string | null) {
+  const normalized = normalizeCashDeskValue(value);
+  return normalized === "THE_BEST" || normalized === "CAISSE_2_SIEGE";
+}
+
+export function inferCashDeskFromDescription(value?: string | null): CashDeskValue {
+  const normalized = (value ?? "").trim().toUpperCase();
+  if (normalized.startsWith("PROXY_BANKING:")) return "PROXY_BANKING";
+  if (normalized.startsWith("CAISSE_2_SIEGE:")) return "CAISSE_2_SIEGE";
+  if (normalized.startsWith("THE_BEST:")) return "THE_BEST";
+  if (normalized.startsWith("CAISSE_SAFETY:")) return "CAISSE_SAFETY";
+  if (normalized.startsWith("CAISSE_VISAS:")) return "CAISSE_VISAS";
+  if (normalized.startsWith("CAISSE_TSL:")) return "CAISSE_TSL";
+  if (normalized.startsWith("CAISSE_AGENCE:")) return "CAISSE_AGENCE";
+  return "THE_BEST";
+}
+
+export function buildDeskScopedCashOperationWhere(selectedDesk: CashDeskValue) {
+  if (isMainCashDesk(selectedDesk)) {
+    return {
+      OR: KNOWN_CASH_DESK_PREFIXES.map((prefix) => ({ description: { startsWith: prefix } })).concat(
+        { description: { not: { startsWith: "PROXY_BANKING:" } } } as any,
+      ),
+    };
+  }
+
+  return {
+    OR: [
+      { cashDesk: selectedDesk },
+      { description: { startsWith: `${selectedDesk}:` } },
+    ],
+  };
 }
 
 export function inferScopeFromDesk(desk?: string | null): AdminCashRoleScope | null {

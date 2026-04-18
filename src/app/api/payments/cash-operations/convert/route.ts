@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { isCashierJobTitle } from "@/lib/assignment";
 import { prisma } from "@/lib/prisma";
 import { requireApiModuleAccess } from "@/lib/rbac";
+import { inferCashDeskFromDescription } from "@/lib/payments-desk";
 import { cashConversionSchema } from "@/lib/validators";
 import { writeActivityLog } from "@/lib/activity-log";
 
@@ -120,13 +121,7 @@ export async function POST(request: NextRequest) {
   const label = data.description?.trim() || `Conversion caisse ${sourceCurrency} -> ${targetCurrency}`;
 
   const desc = (data.description ?? "").trim();
-  let cashDeskForOp = "THE_BEST";
-  if (desc.startsWith("PROXY_BANKING:")) cashDeskForOp = "PROXY_BANKING";
-  else if (desc.startsWith("CAISSE_2_SIEGE:")) cashDeskForOp = "CAISSE_2_SIEGE";
-  else if (desc.startsWith("CAISSE_SAFETY:")) cashDeskForOp = "CAISSE_SAFETY";
-  else if (desc.startsWith("CAISSE_VISAS:")) cashDeskForOp = "CAISSE_VISAS";
-  else if (desc.startsWith("CAISSE_TSL:")) cashDeskForOp = "CAISSE_TSL";
-  else if (desc.startsWith("CAISSE_AGENCE:")) cashDeskForOp = "CAISSE_AGENCE";
+  const cashDeskForOp = inferCashDeskFromDescription(desc);
 
   const created = await prisma.$transaction(async (tx) => {
     const outflow = await (tx as unknown as { cashOperation: any }).cashOperation.create({

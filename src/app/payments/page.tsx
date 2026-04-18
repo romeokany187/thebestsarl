@@ -16,7 +16,7 @@ import { invoiceNumberFromChronology } from "@/lib/invoice";
 import { isCashierJobTitle } from "@/lib/assignment";
 import { requirePageModuleAccess } from "@/lib/rbac";
 import { prisma } from "@/lib/prisma";
-import { resolvePaymentsDeskState } from "@/lib/payments-desk";
+import { buildDeskScopedCashOperationWhere, isMainCashDesk, resolvePaymentsDeskState } from "@/lib/payments-desk";
 import { getTicketTotalAmount } from "@/lib/ticket-pricing";
 
 type AirlineRow = { id: string; code: string; name: string };
@@ -443,18 +443,8 @@ export default async function PaymentsPage({
       : null,
   });
   const selectedDeskKey = deskState.desk;
-  const KNOWN_DESK_PREFIXES = ["PROXY_BANKING:", "THE_BEST:", "CAISSE_2_SIEGE:", "CAISSE_SAFETY:", "CAISSE_VISAS:", "CAISSE_TSL:", "CAISSE_AGENCE:"];
-  const isMainDesk = selectedDeskKey === "THE_BEST" || selectedDeskKey === "CAISSE_2_SIEGE";
-  const scopedCashOperationsWhere = isMainDesk
-    ? {
-        OR: KNOWN_DESK_PREFIXES.map((prefix) => ({ description: { startsWith: prefix } })).concat({ description: { not: { startsWith: "PROXY_BANKING:" } } } as any),
-      }
-    : {
-        OR: [
-          { cashDesk: selectedDeskKey },
-          { description: { startsWith: `${selectedDeskKey}:` } },
-        ],
-      };
+  const isMainDesk = isMainCashDesk(selectedDeskKey);
+  const scopedCashOperationsWhere = buildDeskScopedCashOperationWhere(selectedDeskKey);
   const range = dateRangeFromParams(resolvedSearchParams);
   const cashRange = monthRangeFromValue(resolvedSearchParams.cashMonth);
 
@@ -464,17 +454,20 @@ export default async function PaymentsPage({
   const reportQuery = new URLSearchParams({
     startDate: range.startRaw,
     endDate: range.endRaw,
+    desk: selectedDeskKey,
     ...(selectedAirlineId ? { airlineId: selectedAirlineId } : {}),
   }).toString();
   const cashJournalReportQuery = new URLSearchParams({
     reportType: "cash-journal",
     mode: "month",
     month: cashRange.monthRaw,
+    desk: selectedDeskKey,
   }).toString();
   const cashSummaryReportQuery = new URLSearchParams({
     reportType: "cash-summary",
     mode: "month",
     month: cashRange.monthRaw,
+    desk: selectedDeskKey,
   }).toString();
   const selectedYear = range.start.getUTCFullYear();
   const yearStart = new Date(Date.UTC(selectedYear, 0, 1, 0, 0, 0, 0));

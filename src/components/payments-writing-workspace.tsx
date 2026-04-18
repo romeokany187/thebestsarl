@@ -213,6 +213,16 @@ export function PaymentsWritingWorkspace({
             ))}
           </div>
 
+          {selectedDesk ? (
+            <a
+              href={`/payments/reports?desk=${selectedDesk}`}
+              className="mt-3 flex w-full items-center justify-between rounded-lg border border-black/15 px-3 py-2 text-left text-xs font-semibold text-black/75 transition hover:bg-black/5 dark:border-white/15 dark:text-white/75 dark:hover:bg-white/10"
+            >
+              <span>Page dédiée rapports</span>
+              <span>↗</span>
+            </a>
+          ) : null}
+
           {mode !== "none" ? (
             <button
               type="button"
