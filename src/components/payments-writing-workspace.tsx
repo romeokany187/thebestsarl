@@ -11,19 +11,23 @@ import {
   type CashDeskValue,
 } from "@/lib/payments-desk";
 
-type WritingMode = "none" | "tickets" | "cash" | "virtual" | "billetage" | "payment-orders" | "needs" | "float";
+type WritingMode = "none" | "tickets" | "cash" | "virtual" | "billetage" | "payment-orders" | "needs" | "float" | "reports";
 type DeskWorkspaceOverride = Partial<Record<Exclude<WritingMode, "none"> | "summary", React.ReactNode>>;
 
 function getAllowedActionsForDesk(deskValue: CashDeskValue | string): Array<Exclude<WritingMode, "none">> {
   if (deskValue === "THE_BEST") {
-    return ["tickets", "cash", "payment-orders", "billetage", "virtual", "needs"];
+    return ["tickets", "cash", "payment-orders", "billetage", "virtual", "needs", "reports"];
+  }
+
+  if (deskValue === "CAISSE_2_SIEGE") {
+    return ["tickets", "cash", "payment-orders", "billetage", "virtual", "needs", "reports"];
   }
 
   if (deskValue === "PROXY_BANKING") {
-    return ["cash", "virtual", "billetage", "float"];
+    return ["cash", "virtual", "billetage", "float", "reports"];
   }
 
-  return ["cash", "payment-orders", "billetage", "virtual", "needs"];
+  return ["cash", "payment-orders", "billetage", "virtual", "needs", "reports"];
 }
 
 export function PaymentsWritingWorkspace({
@@ -32,6 +36,7 @@ export function PaymentsWritingWorkspace({
   virtualWorkspace,
   billetageWorkspace,
   floatWorkspace,
+  reportsWorkspace,
   paymentOrdersWorkspace,
   paymentOrdersLabel,
   needsWorkspace,
@@ -48,6 +53,7 @@ export function PaymentsWritingWorkspace({
   virtualWorkspace?: React.ReactNode;
   billetageWorkspace?: React.ReactNode;
   floatWorkspace?: React.ReactNode;
+  reportsWorkspace?: React.ReactNode;
   paymentOrdersWorkspace?: React.ReactNode;
   paymentOrdersLabel?: string;
   needsWorkspace?: React.ReactNode;
@@ -102,6 +108,7 @@ export function PaymentsWritingWorkspace({
   const resolvedVirtualWorkspace = deskOverride?.virtual ?? virtualWorkspace;
   const resolvedBilletageWorkspace = deskOverride?.billetage ?? billetageWorkspace;
   const resolvedFloatWorkspace = deskOverride?.float ?? floatWorkspace;
+  const resolvedReportsWorkspace = deskOverride?.reports ?? reportsWorkspace;
   const resolvedPaymentOrdersWorkspace = deskOverride?.["payment-orders"] ?? paymentOrdersWorkspace;
   const resolvedNeedsWorkspace = deskOverride?.needs ?? needsWorkspace;
   const resolvedClosedSummary = deskOverride?.summary ?? closedSummary;
@@ -126,6 +133,7 @@ export function PaymentsWritingWorkspace({
       : null,
     resolvedFloatWorkspace ? { key: "float" as const, label: "Gestion du float", tone: "cyan" } : null,
     resolvedNeedsWorkspace ? { key: "needs" as const, label: needsLabel ?? "EDB à exécuter", tone: "violet" } : null,
+    resolvedReportsWorkspace ? { key: "reports" as const, label: "Rapports caisse", tone: "amber" } : null,
   ].filter(Boolean) as Array<{ key: Exclude<WritingMode, "none">; label: string; tone: string }>;
   const allowedActionKeys = getAllowedActionsForDesk(selectedDesk);
   const visibleActionItems = actionItems.filter((item) => allowedActionKeys.includes(item.key));
@@ -239,7 +247,8 @@ export function PaymentsWritingWorkspace({
             {mode === "billetage" ? resolvedBilletageWorkspace : null}
             {mode === "payment-orders" ? resolvedPaymentOrdersWorkspace : null}
             {mode === "needs" ? resolvedNeedsWorkspace : null}
-              {mode === "float" ? resolvedFloatWorkspace : null}
+            {mode === "float" ? resolvedFloatWorkspace : null}
+            {mode === "reports" ? resolvedReportsWorkspace : null}
           </div>
         </div>
       </section>

@@ -1,6 +1,6 @@
 export type AppRoleLike = "ADMIN" | "DIRECTEUR_GENERAL" | "MANAGER" | "EMPLOYEE" | "ACCOUNTANT";
 
-export type CashDeskValue = "PROXY_BANKING" | "THE_BEST" | "CAISSE_SAFETY" | "CAISSE_VISAS" | "CAISSE_TSL" | "CAISSE_AGENCE";
+export type CashDeskValue = "PROXY_BANKING" | "THE_BEST" | "CAISSE_2_SIEGE" | "CAISSE_SAFETY" | "CAISSE_VISAS" | "CAISSE_TSL" | "CAISSE_AGENCE";
 export type CashDeskOption = { value: CashDeskValue; label: string; description: string };
 export type AdminCashRoleScope = "CAISSIER" | "CAISSE_2_SIEGE" | "CAISSE_AGENCE";
 
@@ -14,6 +14,11 @@ export const ALL_CASH_DESKS: CashDeskOption[] = [
     value: "THE_BEST",
     label: "THE BEST",
     description: "Caisse principale THE BEST : paiements billets + autres opérations de caisse.",
+  },
+  {
+    value: "CAISSE_2_SIEGE",
+    label: "Caisse 2 Siège",
+    description: "Alias historique de la caisse 2 siège pour retrouver les opérations déjà encodées.",
   },
   {
     value: "CAISSE_SAFETY",
@@ -65,6 +70,7 @@ export function getManagedCashDesksForScope(scope?: string | null) {
   if (normalizedScope === "CAISSE_2_SIEGE") {
     return ALL_CASH_DESKS.filter((desk) => [
       "THE_BEST",
+      "CAISSE_2_SIEGE",
       "CAISSE_SAFETY",
       "CAISSE_VISAS",
       "CAISSE_TSL",
@@ -162,7 +168,7 @@ export function inferScopeFromDesk(desk?: string | null): AdminCashRoleScope | n
 
   if (normalizedDesk === "PROXY_BANKING") return "CAISSIER";
   if (normalizedDesk === "CAISSE_AGENCE") return "CAISSE_AGENCE";
-  if (["THE_BEST", "CAISSE_SAFETY", "CAISSE_VISAS", "CAISSE_TSL"].includes(normalizedDesk)) {
+  if (["THE_BEST", "CAISSE_2_SIEGE", "CAISSE_SAFETY", "CAISSE_VISAS", "CAISSE_TSL"].includes(normalizedDesk)) {
     return "CAISSE_2_SIEGE";
   }
 

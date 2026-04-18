@@ -443,7 +443,18 @@ export default async function PaymentsPage({
       : null,
   });
   const selectedDeskKey = deskState.desk;
-  const KNOWN_DESK_PREFIXES = ["PROXY_BANKING:", "THE_BEST:", "CAISSE_SAFETY:", "CAISSE_VISAS:", "CAISSE_TSL:", "CAISSE_AGENCE:"];
+  const KNOWN_DESK_PREFIXES = ["PROXY_BANKING:", "THE_BEST:", "CAISSE_2_SIEGE:", "CAISSE_SAFETY:", "CAISSE_VISAS:", "CAISSE_TSL:", "CAISSE_AGENCE:"];
+  const isMainDesk = selectedDeskKey === "THE_BEST" || selectedDeskKey === "CAISSE_2_SIEGE";
+  const scopedCashOperationsWhere = isMainDesk
+    ? {
+        OR: KNOWN_DESK_PREFIXES.map((prefix) => ({ description: { startsWith: prefix } })).concat({ description: { not: { startsWith: "PROXY_BANKING:" } } } as any),
+      }
+    : {
+        OR: [
+          { cashDesk: selectedDeskKey },
+          { description: { startsWith: `${selectedDeskKey}:` } },
+        ],
+      };
   const range = dateRangeFromParams(resolvedSearchParams);
   const cashRange = monthRangeFromValue(resolvedSearchParams.cashMonth);
 
@@ -486,7 +497,7 @@ export default async function PaymentsPage({
         seller: { select: { team: { select: { name: true } } } },
       },
       orderBy: { soldAt: "desc" },
-      take: 800,
+      take: 5000,
     }),
     prisma.ticketSale.findMany({
       where: {
@@ -500,7 +511,7 @@ export default async function PaymentsPage({
       take: 10000,
     }),
     // Ticket payments only belong to THE_BEST desk; for other desks we skip ticket payments
-    selectedDeskKey === "THE_BEST"
+    isMainDesk
       ? prisma.payment.findMany({
         where: {
           paidAt: { gte: range.start, lt: range.end },
@@ -518,11 +529,11 @@ export default async function PaymentsPage({
           },
         },
         orderBy: { paidAt: "desc" },
-        take: 250,
+        take: 5000,
       })
       : Promise.resolve([]),
     // cashPayments: ticket payments for cash journal (THE_BEST only)
-    selectedDeskKey === "THE_BEST"
+    isMainDesk
       ? paymentClient.findMany({
         where: { paidAt: { gte: cashRange.start, lt: cashRange.end } },
         include: {
@@ -538,35 +549,19 @@ export default async function PaymentsPage({
         take: 5000,
       })
       : Promise.resolve([]),
-    // cash operations: return only operations for the selected desk
-    selectedDeskKey === "THE_BEST"
-      ? cashOperationClient.findMany({
-        where: {
-          occurredAt: { gte: cashRange.start, lt: cashRange.end },
-          // include operations explicitly tagged with known desk prefixes OR operations not tagged as proxy (THE_BEST default)
-          OR: KNOWN_DESK_PREFIXES.map((p) => ({ description: { startsWith: p } })).concat({ description: { not: { startsWith: "PROXY_BANKING:" } } } as any),
-        },
-        include: {
-          createdBy: { select: { name: true, jobTitle: true } },
-        },
-        orderBy: { occurredAt: "desc" },
-        take: 250,
-      })
-      : cashOperationClient.findMany({
-        where: {
-          occurredAt: { gte: cashRange.start, lt: cashRange.end },
-          OR: [
-            { cashDesk: selectedDeskKey },
-            { description: { startsWith: `${selectedDeskKey}:` } },
-          ],
-        },
-        include: {
-          createdBy: { select: { name: true, jobTitle: true } },
-        },
-        orderBy: { occurredAt: "desc" },
-        take: 250,
-      }),
-    selectedDeskKey === "THE_BEST"
+    // cash operations: return desk-scoped operations
+    cashOperationClient.findMany({
+      where: {
+        occurredAt: { gte: cashRange.start, lt: cashRange.end },
+        ...scopedCashOperationsWhere,
+      },
+      include: {
+        createdBy: { select: { name: true, jobTitle: true } },
+      },
+      orderBy: { occurredAt: "desc" },
+      take: 5000,
+    }),
+    isMainDesk
       ? paymentClient.findMany({
         where: { paidAt: { lt: cashRange.start } },
         select: {
@@ -581,48 +576,25 @@ export default async function PaymentsPage({
         take: 5000,
       })
       : Promise.resolve([]),
-    selectedDeskKey === "THE_BEST"
-      ? cashOperationClient.findMany({
-        where: {
-          occurredAt: { lt: cashRange.start },
-          OR: KNOWN_DESK_PREFIXES.map((p) => ({ description: { startsWith: p } })),
-        },
-        select: {
-          occurredAt: true,
-          category: true,
-          amount: true,
-          direction: true,
-          method: true,
-          currency: true,
-          amountUsd: true,
-          fxRateToUsd: true,
-          fxRateUsdToCdf: true,
-          description: true,
-        },
-        take: 5000,
-      })
-      : cashOperationClient.findMany({
-        where: {
-          occurredAt: { lt: cashRange.start },
-          OR: [
-            { cashDesk: selectedDeskKey },
-            { description: { startsWith: `${selectedDeskKey}:` } },
-          ],
-        },
-        select: {
-          occurredAt: true,
-          category: true,
-          amount: true,
-          direction: true,
-          method: true,
-          currency: true,
-          amountUsd: true,
-          fxRateToUsd: true,
-          fxRateUsdToCdf: true,
-          description: true,
-        },
-        take: 5000,
-      }),
+    cashOperationClient.findMany({
+      where: {
+        occurredAt: { lt: cashRange.start },
+        ...scopedCashOperationsWhere,
+      },
+      select: {
+        occurredAt: true,
+        category: true,
+        amount: true,
+        direction: true,
+        method: true,
+        currency: true,
+        amountUsd: true,
+        fxRateToUsd: true,
+        fxRateUsdToCdf: true,
+        description: true,
+      },
+      take: 5000,
+    }),
     canWrite
       ? paymentOrderClient.findMany({
           where: { status: "APPROVED" },
@@ -1409,6 +1381,61 @@ export default async function PaymentsPage({
             <KpiCard label="Niveau de risque" value={riskLevel} hint={riskHint} />
           </div>
         )}
+        reportsWorkspace={(
+          <section className="space-y-4 rounded-2xl border border-black/10 bg-white p-4 dark:border-white/10 dark:bg-zinc-900">
+            <div>
+              <h2 className="text-sm font-semibold">Centre de rapports caisse</h2>
+              <p className="mt-2 text-xs text-black/60 dark:text-white/60">
+                Lancez rapidement les rapports PDF de paiements billets, journal de caisse et synthèse caisse pour la période active.
+              </p>
+            </div>
+
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+              <a
+                href={`/api/payments/report?${reportQuery}`}
+                target="_blank"
+                rel="noreferrer"
+                className="rounded-lg border border-black/15 px-3 py-2 text-xs font-semibold hover:bg-black/5 dark:border-white/15 dark:hover:bg-white/10"
+              >
+                Lire PDF paiements billets
+              </a>
+              <a
+                href={`/api/payments/report?${reportQuery}&download=1`}
+                className="rounded-lg border border-black/15 px-3 py-2 text-xs font-semibold hover:bg-black/5 dark:border-white/15 dark:hover:bg-white/10"
+              >
+                Télécharger PDF paiements billets
+              </a>
+              <a
+                href={`/api/payments/report?${cashJournalReportQuery}`}
+                target="_blank"
+                rel="noreferrer"
+                className="rounded-lg border border-black/15 px-3 py-2 text-xs font-semibold hover:bg-black/5 dark:border-white/15 dark:hover:bg-white/10"
+              >
+                Voir journal de caisse
+              </a>
+              <a
+                href={`/api/payments/report?${cashSummaryReportQuery}`}
+                target="_blank"
+                rel="noreferrer"
+                className="rounded-lg border border-black/15 px-3 py-2 text-xs font-semibold hover:bg-black/5 dark:border-white/15 dark:hover:bg-white/10"
+              >
+                Voir synthèse caisse
+              </a>
+              <a
+                href={`/api/payments/report?${cashJournalReportQuery}&download=1`}
+                className="rounded-lg border border-black/15 px-3 py-2 text-xs font-semibold hover:bg-black/5 dark:border-white/15 dark:hover:bg-white/10"
+              >
+                Télécharger journal de caisse
+              </a>
+              <a
+                href={`/api/payments/report?${cashSummaryReportQuery}&download=1`}
+                className="rounded-lg border border-black/15 px-3 py-2 text-xs font-semibold hover:bg-black/5 dark:border-white/15 dark:hover:bg-white/10"
+              >
+                Télécharger synthèse caisse
+              </a>
+            </div>
+          </section>
+        )}
         ticketWorkspace={(
           <div className="space-y-4">
             <section className="rounded-2xl border border-black/10 bg-white p-4 dark:border-white/10 dark:bg-zinc-900">
@@ -1469,6 +1496,45 @@ export default async function PaymentsPage({
               <KpiCard label="Billets partiels" value={`${partialTickets.length}`} hint={`${partialCollected.toFixed(2)} / ${partialBilled.toFixed(2)} USD eq`} />
               <KpiCard label="Tickets totalement payés" value={`${collectedTotal.toFixed(2)} USD`} />
             </div>
+
+            <section className="overflow-hidden rounded-2xl border border-black/10 bg-white shadow-sm dark:border-white/10 dark:bg-zinc-900">
+              <div className="border-b border-black/10 px-4 py-3 dark:border-white/10">
+                <h2 className="text-sm font-semibold">Billets trouvés sur la période (y compris imports Excel)</h2>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="min-w-full text-sm">
+                  <thead className="bg-black/5 dark:bg-white/10">
+                    <tr>
+                      <th className="px-4 py-3 text-left font-semibold">Date</th>
+                      <th className="px-4 py-3 text-left font-semibold">N° billet</th>
+                      <th className="px-4 py-3 text-left font-semibold">Client</th>
+                      <th className="px-4 py-3 text-left font-semibold">Montant billet</th>
+                      <th className="px-4 py-3 text-left font-semibold">Montant encaissé</th>
+                      <th className="px-4 py-3 text-left font-semibold">Statut calculé</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {ticketsWithComputedStatus.map((ticket) => (
+                      <tr key={ticket.id} className="border-t border-black/5 dark:border-white/10">
+                        <td className="px-4 py-3">{new Date(ticket.soldAt).toLocaleDateString("fr-FR")}</td>
+                        <td className="px-4 py-3 font-medium">{ticket.ticketNumber}</td>
+                        <td className="px-4 py-3">{ticket.customerName}</td>
+                        <td className="px-4 py-3">{ticket.totalTicketAmount.toFixed(2)} {normalizeMoneyCurrency(ticket.currency)}</td>
+                        <td className="px-4 py-3">{ticket.paidAmount.toFixed(2)} {normalizeMoneyCurrency(ticket.currency)}</td>
+                        <td className="px-4 py-3">{ticket.computedStatus}</td>
+                      </tr>
+                    ))}
+                    {ticketsWithComputedStatus.length === 0 ? (
+                      <tr>
+                        <td colSpan={6} className="px-4 py-8 text-center text-sm text-black/55 dark:text-white/55">
+                          Aucun billet trouvé pour ce filtre.
+                        </td>
+                      </tr>
+                    ) : null}
+                  </tbody>
+                </table>
+              </div>
+            </section>
 
             {canWrite ? (
               <PaymentEntryForm tickets={paymentTickets} />

@@ -122,6 +122,7 @@ export async function POST(request: NextRequest) {
   const desc = (data.description ?? "").trim();
   let cashDeskForOp = "THE_BEST";
   if (desc.startsWith("PROXY_BANKING:")) cashDeskForOp = "PROXY_BANKING";
+  else if (desc.startsWith("CAISSE_2_SIEGE:")) cashDeskForOp = "CAISSE_2_SIEGE";
   else if (desc.startsWith("CAISSE_SAFETY:")) cashDeskForOp = "CAISSE_SAFETY";
   else if (desc.startsWith("CAISSE_VISAS:")) cashDeskForOp = "CAISSE_VISAS";
   else if (desc.startsWith("CAISSE_TSL:")) cashDeskForOp = "CAISSE_TSL";
