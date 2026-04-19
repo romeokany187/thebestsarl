@@ -191,11 +191,27 @@ export function inferCashDeskFromDescription(value?: string | null): CashDeskVal
 }
 
 export function buildDeskScopedCashOperationWhere(selectedDesk: CashDeskValue) {
-  if (isMainCashDesk(selectedDesk)) {
+  if (selectedDesk === "THE_BEST") {
     return {
-      OR: KNOWN_CASH_DESK_PREFIXES.map((prefix) => ({ description: { startsWith: prefix } })).concat(
-        { description: { not: { startsWith: "PROXY_BANKING:" } } } as any,
-      ),
+      OR: [
+        { cashDesk: "THE_BEST" },
+        { description: { startsWith: "THE_BEST:" } },
+        {
+          AND: [
+            { cashDesk: "THE_BEST" },
+            { NOT: KNOWN_CASH_DESK_PREFIXES.map((prefix) => ({ description: { startsWith: prefix } })) as any },
+          ],
+        },
+      ],
+    };
+  }
+
+  if (selectedDesk === "CAISSE_2_SIEGE") {
+    return {
+      OR: [
+        { cashDesk: "CAISSE_2_SIEGE" },
+        { description: { startsWith: "CAISSE_2_SIEGE:" } },
+      ],
     };
   }
 

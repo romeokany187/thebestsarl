@@ -1,13 +1,13 @@
 import { NeedRequestStatus } from "@prisma/client";
 import { NextRequest, NextResponse } from "next/server";
-import { PDFDocument, rgb } from "pdf-lib";
+import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
 import fontkit from "@pdf-lib/fontkit";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { prisma } from "@/lib/prisma";
 import { requireApiModuleAccess } from "@/lib/rbac";
 import { getTicketTotalAmount } from "@/lib/ticket-pricing";
-import { buildDeskScopedCashOperationWhere, isMainCashDesk, normalizeCashDeskValue } from "@/lib/payments-desk";
+import { ALL_CASH_DESKS, buildDeskScopedCashOperationWhere, normalizeCashDeskValue } from "@/lib/payments-desk";
 
 type ReportMode = "date" | "month" | "year";
 type ReportType = "payments" | "cash-journal" | "cash-summary";
@@ -338,14 +338,28 @@ async function readFirstExistingFile(candidates: string[]) {
   return null;
 }
 
+async function loadPaymentReportFonts(pdf: PDFDocument) {
+  pdf.registerFontkit(fontkit);
+  const bodyBytes = await readFirstExistingFile([
+    "public/fonts/MAIAN.TTF",
+    "public/fonts/Montserrat-Regular.ttf",
+    "public/branding/fonts/Montserrat-Regular.ttf",
+  ]);
+
+  const body = bodyBytes ? await pdf.embedFont(bodyBytes) : await pdf.embedFont(StandardFonts.Helvetica);
+  const bold = await pdf.embedFont(StandardFonts.HelveticaBold);
+  return { body, bold };
+}
+
 function drawFooter(pdf: PDFDocument, font: any, generatedBy: string, textBlack: any, lineGray: any) {
   const pages = pdf.getPages();
   pages.forEach((page, index) => {
-    page.drawLine({ start: { x: 24, y: 20 }, end: { x: 818, y: 20 }, thickness: 0.6, color: lineGray });
+    const pageWidth = page.getWidth();
+    page.drawLine({ start: { x: 24, y: 20 }, end: { x: pageWidth - 24, y: 20 }, thickness: 0.6, color: lineGray });
     page.drawText(`Page ${index + 1}/${pages.length}`, { x: 24, y: 10, size: 8, font, color: textBlack });
     const rightText = `Par ${generatedBy}`;
     const rightWidth = font.widthOfTextAtSize(rightText, 8);
-    page.drawText(rightText, { x: 818 - rightWidth, y: 10, size: 8, font, color: textBlack });
+    page.drawText(rightText, { x: pageWidth - 24 - rightWidth, y: 10, size: 8, font, color: textBlack });
   });
 }
 
@@ -360,7 +374,7 @@ export async function GET(request: NextRequest) {
     : "payments") as ReportType;
   const requestedDesk = normalizeCashDeskValue(request.nextUrl.searchParams.get("desk"));
   const selectedDesk = requestedDesk ?? "THE_BEST";
-  const mainDesk = isMainCashDesk(selectedDesk);
+  const mainDesk = selectedDesk === "THE_BEST";
   const scopedCashOperationsWhere = buildDeskScopedCashOperationWhere(selectedDesk);
   const range = dateRangeFromParams(
     request.nextUrl.searchParams,
@@ -693,132 +707,194 @@ export async function GET(request: NextRequest) {
   }, { usd: 0, cdf: 0 });
 
   const pdf = await PDFDocument.create();
-  pdf.registerFontkit(fontkit);
-  const montserratRegular = await readFirstExistingFile([
-    "public/fonts/Montserrat-Regular.ttf",
-    "public/branding/fonts/Montserrat-Regular.ttf",
-  ]);
-
-  if (!montserratRegular) {
-    return NextResponse.json({ error: "Police Montserrat Regular introuvable sur le serveur." }, { status: 500 });
-  }
-
-  const font = await pdf.embedFont(montserratRegular);
-  const fontBold = font;
+  const { body: font, bold: fontBold } = await loadPaymentReportFonts(pdf);
   const textBlack = rgb(0, 0, 0);
   const lineGray = rgb(0.84, 0.84, 0.84);
   const generatedBy = access.session.user.name ?? access.session.user.email ?? "Utilisateur";
   const periodStart = range.start.toISOString().slice(0, 10);
   const periodEnd = new Date(range.end.getTime() - 1).toISOString().slice(0, 10);
+  const selectedDeskLabel = ALL_CASH_DESKS.find((desk) => desk.value === selectedDesk)?.label ?? selectedDesk;
   const subtitle = airline
-    ? `${range.label} • ${airline.code} - ${airline.name} • ${selectedDesk}`
-    : `${range.label} • Toutes compagnies • ${selectedDesk}`;
+    ? `${range.label} • ${airline.code} - ${airline.name} • ${selectedDeskLabel}`
+    : `${range.label} • Toutes compagnies • ${selectedDeskLabel}`;
   let filenameBase = "rapport-paiements";
 
   if (reportType === "cash-journal") {
     filenameBase = "journal-caisse";
-    let page = pdf.addPage([842, 595]);
+    const pageWidth = 1191;
+    const pageHeight = 842;
+    const margin = 28;
+    let page = pdf.addPage([pageWidth, pageHeight]);
+
+    const columns = [
+      { key: "date", label: "Date", width: 72 },
+      { key: "type", label: "Type d'opération", width: 128 },
+      { key: "libelle", label: "Libellé", width: 352 },
+      { key: "usdIn", label: "USD +", width: 74 },
+      { key: "usdOut", label: "USD -", width: 74 },
+      { key: "usdBalance", label: "USD solde", width: 88 },
+      { key: "cdfIn", label: "CDF +", width: 84 },
+      { key: "cdfOut", label: "CDF -", width: 84 },
+      { key: "cdfBalance", label: "CDF solde", width: 96 },
+      { key: "reference", label: "Référence", width: 80 },
+    ] as const;
+    const tableWidth = columns.reduce((sum, column) => sum + column.width, 0);
+    const tableX = margin;
+    const lineHeight = 11;
+    const bodySize = 9.2;
 
     const drawHeader = (continuation = false) => {
+      page.drawRectangle({ x: 0, y: pageHeight - 108, width: pageWidth, height: 108, color: rgb(0.09, 0.1, 0.14) });
       page.drawText(`THEBEST SARL - Journal de caisse${continuation ? " (suite)" : ""}`, {
-        x: 24,
-        y: 566,
-        size: 13,
+        x: margin,
+        y: pageHeight - 34,
+        size: 21,
         font: fontBold,
-        color: textBlack,
+        color: rgb(1, 1, 1),
       });
-      page.drawText(subtitle, { x: 24, y: 550, size: 9, font, color: textBlack });
-      page.drawText(`Période: ${periodStart} au ${periodEnd}`, { x: 24, y: 538, size: 8.2, font, color: textBlack });
-      page.drawText(`Ouverture USD ${openingUsd.toFixed(2)} • Clôture USD ${closingUsd.toFixed(2)} • Ouverture CDF ${openingCdf.toFixed(2)} • Clôture CDF ${closingCdf.toFixed(2)}`, { x: 24, y: 526, size: 7.7, font, color: textBlack });
-      page.drawLine({ start: { x: 24, y: 520 }, end: { x: 818, y: 520 }, thickness: 0.8, color: lineGray });
+      page.drawText(subtitle, { x: margin, y: pageHeight - 58, size: 11, font, color: rgb(0.87, 0.89, 0.93) });
+      page.drawText(`Période du ${periodStart} au ${periodEnd}`, { x: margin, y: pageHeight - 76, size: 10, font, color: rgb(0.76, 0.8, 0.87) });
+
+      const cards = [
+        `Ouverture USD\n${openingUsd.toFixed(2)} USD`,
+        `Clôture USD\n${closingUsd.toFixed(2)} USD`,
+        `Ouverture CDF\n${openingCdf.toFixed(2)} CDF`,
+        `Clôture CDF\n${closingCdf.toFixed(2)} CDF`,
+      ];
+      const cardWidth = 172;
+      const cardY = pageHeight - 146;
+      cards.forEach((text, index) => {
+        const x = margin + index * (cardWidth + 14);
+        page.drawRectangle({ x, y: cardY, width: cardWidth, height: 46, borderWidth: 0.7, borderColor: rgb(0.82, 0.84, 0.9), color: rgb(0.98, 0.98, 0.99) });
+        const [title, value] = text.split("\n");
+        page.drawText(title, { x: x + 10, y: cardY + 28, size: 8.8, font: fontBold, color: rgb(0.22, 0.24, 0.28) });
+        page.drawText(value, { x: x + 10, y: cardY + 12, size: 10.5, font, color: textBlack });
+      });
     };
 
-    const headers = ["Date", "Type", "Libellé", "USD +", "USD -", "USD solde", "CDF +", "CDF -", "CDF solde", "Réf"];
-    const x = [24, 72, 140, 338, 402, 466, 545, 610, 676, 752];
     const drawTableHeader = (topY: number) => {
-      headers.forEach((header, index) => {
-        page.drawText(header, { x: x[index], y: topY, size: 7.8, font: fontBold, color: textBlack });
+      page.drawRectangle({ x: tableX, y: topY - 28, width: tableWidth, height: 28, color: rgb(0.9, 0.92, 0.96), borderWidth: 0.8, borderColor: rgb(0.63, 0.67, 0.76) });
+      let cursorX = tableX;
+      columns.forEach((column) => {
+        page.drawText(column.label, { x: cursorX + 6, y: topY - 18, size: 9.2, font: fontBold, color: rgb(0.12, 0.14, 0.18) });
+        cursorX += column.width;
       });
-      page.drawLine({ start: { x: 24, y: topY - 4 }, end: { x: 818, y: topY - 4 }, thickness: 0.6, color: lineGray });
     };
 
     drawHeader();
-    drawTableHeader(504);
-    let y = 488;
+    drawTableHeader(pageHeight - 184);
+    let y = pageHeight - 224;
 
-    page.drawText(periodStart, { x: 24, y, size: 7.4, font, color: textBlack });
-    page.drawText("Report à nouveau / solde d'ouverture", { x: 72, y, size: 7.4, font, color: textBlack });
-    page.drawText("Solde reporté automatiquement", { x: 140, y, size: 7.4, font, color: textBlack });
-    page.drawText(`${openingUsd.toFixed(2)}`, { x: 466, y, size: 7.4, font, color: textBlack });
-    page.drawText(`${openingCdf.toFixed(2)}`, { x: 676, y, size: 7.4, font, color: textBlack });
-    y -= 12;
+    const openingRowHeight = 28;
+    page.drawRectangle({ x: tableX, y: y - openingRowHeight + 6, width: tableWidth, height: openingRowHeight, color: rgb(0.97, 0.97, 0.98), borderWidth: 0.5, borderColor: rgb(0.88, 0.89, 0.92) });
+    let openingX = tableX;
+    const openingValues = [
+      periodStart,
+      "Solde d'ouverture",
+      "Report à nouveau automatique de la caisse active",
+      "-",
+      "-",
+      openingUsd.toFixed(2),
+      "-",
+      "-",
+      openingCdf.toFixed(2),
+      "-",
+    ];
+    openingValues.forEach((value, index) => {
+      page.drawText(value, { x: openingX + 6, y: y - 10, size: 9.1, font: index === 1 ? fontBold : font, color: textBlack });
+      openingX += columns[index].width;
+    });
+    y -= 36;
 
-    for (const row of caisseLedger) {
-      const libelleLines = wrapTextToWidth(row.libelle, font, 7.1, x[3] - x[2] - 8);
-      const rowHeight = Math.max(12, libelleLines.length * 8 + 2);
+    for (const [rowIndex, row] of caisseLedger.entries()) {
+      const cellMap = {
+        date: [row.occurredAt.toISOString().slice(0, 10)],
+        type: wrapTextToWidth(row.typeOperation, font, bodySize, columns[1].width - 10),
+        libelle: wrapTextToWidth(row.libelle, font, bodySize, columns[2].width - 10),
+        usdIn: [row.usdIn > 0 ? row.usdIn.toFixed(2) : "-"],
+        usdOut: [row.usdOut > 0 ? row.usdOut.toFixed(2) : "-"],
+        usdBalance: [row.usdBalance.toFixed(2)],
+        cdfIn: [row.cdfIn > 0 ? row.cdfIn.toFixed(2) : "-"],
+        cdfOut: [row.cdfOut > 0 ? row.cdfOut.toFixed(2) : "-"],
+        cdfBalance: [row.cdfBalance.toFixed(2)],
+        reference: wrapTextToWidth(row.reference, font, bodySize, columns[9].width - 10),
+      } as const;
+      const maxLines = Math.max(...Object.values(cellMap).map((lines) => lines.length));
+      const rowHeight = Math.max(30, maxLines * lineHeight + 10);
 
-      if (y - rowHeight < 38) {
-        page = pdf.addPage([842, 595]);
+      if (y - rowHeight < 42) {
+        page = pdf.addPage([pageWidth, pageHeight]);
         drawHeader(true);
-        drawTableHeader(504);
-        y = 488;
+        drawTableHeader(pageHeight - 184);
+        y = pageHeight - 224;
       }
 
-      const values = [
-        row.occurredAt.toISOString().slice(0, 10),
-        short(row.typeOperation, 12),
-        "",
-        row.usdIn > 0 ? row.usdIn.toFixed(2) : "-",
-        row.usdOut > 0 ? row.usdOut.toFixed(2) : "-",
-        row.usdBalance.toFixed(2),
-        row.cdfIn > 0 ? row.cdfIn.toFixed(2) : "-",
-        row.cdfOut > 0 ? row.cdfOut.toFixed(2) : "-",
-        row.cdfBalance.toFixed(2),
-        short(row.reference, 12),
-      ];
-
-      values.forEach((value, index) => {
-        if (index === 2) return;
-        page.drawText(value, { x: x[index], y, size: 7.1, font, color: textBlack });
+      page.drawRectangle({
+        x: tableX,
+        y: y - rowHeight + 6,
+        width: tableWidth,
+        height: rowHeight,
+        color: rowIndex % 2 === 0 ? rgb(1, 1, 1) : rgb(0.985, 0.987, 0.992),
+        borderWidth: 0.35,
+        borderColor: rgb(0.9, 0.91, 0.94),
       });
 
-      libelleLines.forEach((line, index) => {
-        page.drawText(line, { x: x[2], y: y - index * 7.5, size: 7.1, font, color: textBlack });
+      let cursorX = tableX;
+      columns.forEach((column) => {
+        const lines = cellMap[column.key];
+        const startY = y - 11;
+        lines.forEach((line, index) => {
+          page.drawText(line, { x: cursorX + 6, y: startY - index * lineHeight, size: bodySize, font, color: textBlack });
+        });
+        cursorX += column.width;
       });
 
-      page.drawLine({ start: { x: 24, y: y - rowHeight + 2 }, end: { x: 818, y: y - rowHeight + 2 }, thickness: 0.25, color: lineGray });
-      y -= rowHeight;
+      y -= rowHeight + 6;
     }
   } else if (reportType === "cash-summary") {
     filenameBase = "recap-caisse";
-    const page = pdf.addPage([842, 595]);
+    const page = pdf.addPage([1000, 700]);
+    const margin = 30;
 
-    page.drawText("THEBEST SARL - Récapitulatif de caisse", { x: 24, y: 566, size: 13, font: fontBold, color: textBlack });
-    page.drawText(subtitle, { x: 24, y: 550, size: 9, font, color: textBlack });
-    page.drawText(`Période: ${periodStart} au ${periodEnd}`, { x: 24, y: 538, size: 8.2, font, color: textBlack });
-    page.drawLine({ start: { x: 24, y: 532 }, end: { x: 818, y: 532 }, thickness: 0.8, color: lineGray });
+    page.drawRectangle({ x: 0, y: 610, width: 1000, height: 90, color: rgb(0.09, 0.1, 0.14) });
+    page.drawText("THEBEST SARL - Récapitulatif de caisse", { x: margin, y: 656, size: 21, font: fontBold, color: rgb(1, 1, 1) });
+    page.drawText(subtitle, { x: margin, y: 634, size: 11, font, color: rgb(0.87, 0.89, 0.93) });
+    page.drawText(`Période du ${periodStart} au ${periodEnd}`, { x: margin, y: 618, size: 10, font, color: rgb(0.76, 0.8, 0.87) });
 
-    page.drawText("1. Soldes physiques de caisse", { x: 24, y: 514, size: 9.4, font: fontBold, color: textBlack });
-    page.drawText(`USD: ouverture ${openingUsd.toFixed(2)} • encaissements billets ${ticketPaymentInflowUsd.toFixed(2)} • autres entrées ${cashInflowUsd.toFixed(2)} • sorties ${cashOutflowUsd.toFixed(2)} • clôture ${closingUsd.toFixed(2)}`, { x: 24, y: 500, size: 8.1, font, color: textBlack });
-    page.drawText(`CDF: ouverture ${openingCdf.toFixed(2)} • encaissements billets ${ticketPaymentInflowCdf.toFixed(2)} • autres entrées ${cashInflowCdf.toFixed(2)} • sorties ${cashOutflowCdf.toFixed(2)} • clôture ${closingCdf.toFixed(2)}`, { x: 24, y: 488, size: 8.1, font, color: textBlack });
-    page.drawText(`Contrôle global (USD eq): ouverture ${openingBalance.toFixed(2)} • entrées ${grossInflows.toFixed(2)} • sorties ${cashOutflowsUsdEq.toFixed(2)} • variation ${netCashVariation.toFixed(2)} • clôture ${closingBalance.toFixed(2)} (${accountingConsistency ? "OK" : "Écart"})`, { x: 24, y: 476, size: 8.1, font, color: textBlack });
-    page.drawText(`Créances billets: facturé ${totalBilled.toFixed(2)} USD eq • encaissé ${totalPaidOnTickets.toFixed(2)} USD eq • reste ${totalOutstanding.toFixed(2)} USD eq`, { x: 24, y: 464, size: 8.1, font, color: textBlack });
-
-    const methodsLabel = topMethods.length > 0
-      ? `Méthodes dominantes: ${topMethods.map(([method, amount]) => `${method} ${amount.toFixed(2)} USD eq`).join(" | ")}`
-      : "Méthodes dominantes: -";
-    page.drawText(short(methodsLabel, 160), { x: 24, y: 452, size: 7.8, font, color: textBlack });
-
-    page.drawText("2. Soldes par canal + cash (billetage)", { x: 24, y: 432, size: 9.4, font: fontBold, color: textBlack });
-    const headers = ["Canal", "Ouv USD", "Ent USD", "Sort USD", "Clôt USD", "Ouv CDF", "Ent CDF", "Sort CDF", "Clôt CDF"];
-    const x = [24, 118, 205, 285, 365, 450, 540, 620, 705];
-    headers.forEach((header, index) => {
-      page.drawText(header, { x: x[index], y: 418, size: 7.7, font: fontBold, color: textBlack });
+    const cards = [
+      { title: "Ouverture USD", value: `${openingUsd.toFixed(2)} USD` },
+      { title: "Clôture USD", value: `${closingUsd.toFixed(2)} USD` },
+      { title: "Ouverture CDF", value: `${openingCdf.toFixed(2)} CDF` },
+      { title: "Clôture CDF", value: `${closingCdf.toFixed(2)} CDF` },
+    ];
+    cards.forEach((card, index) => {
+      const x = margin + index * 235;
+      page.drawRectangle({ x, y: 540, width: 205, height: 54, borderWidth: 0.7, borderColor: rgb(0.82, 0.84, 0.9), color: rgb(0.985, 0.986, 0.99) });
+      page.drawText(card.title, { x: x + 12, y: 572, size: 9.2, font: fontBold, color: rgb(0.22, 0.24, 0.28) });
+      page.drawText(card.value, { x: x + 12, y: 550, size: 13, font, color: textBlack });
     });
-    page.drawLine({ start: { x: 24, y: 414 }, end: { x: 818, y: 414 }, thickness: 0.6, color: lineGray });
 
-    let y = 399;
-    for (const row of channelRows) {
+    page.drawText("Situation de la caisse active", { x: margin, y: 510, size: 14, font: fontBold, color: textBlack });
+    const summaryLines = [
+      `USD: ouverture ${openingUsd.toFixed(2)} • paiements billets ${ticketPaymentInflowUsd.toFixed(2)} • autres entrées ${cashInflowUsd.toFixed(2)} • sorties ${cashOutflowUsd.toFixed(2)} • clôture ${closingUsd.toFixed(2)}.`,
+      `CDF: ouverture ${openingCdf.toFixed(2)} • paiements billets ${ticketPaymentInflowCdf.toFixed(2)} • autres entrées ${cashInflowCdf.toFixed(2)} • sorties ${cashOutflowCdf.toFixed(2)} • clôture ${closingCdf.toFixed(2)}.`,
+      `Contrôle global USD équivalent: ouverture ${openingBalance.toFixed(2)} • entrées ${grossInflows.toFixed(2)} • sorties ${cashOutflowsUsdEq.toFixed(2)} • variation ${netCashVariation.toFixed(2)} • clôture ${closingBalance.toFixed(2)} (${accountingConsistency ? "OK" : "Écart"}).`,
+    ];
+    summaryLines.forEach((line, index) => {
+      page.drawText(line, { x: margin, y: 488 - index * 18, size: 10.4, font, color: textBlack, maxWidth: 940 });
+    });
+
+    page.drawText("Soldes par canal de la caisse", { x: margin, y: 425, size: 14, font: fontBold, color: textBlack });
+    const headers = ["Canal", "Ouv USD", "Entrées USD", "Sorties USD", "Clôture USD", "Ouv CDF", "Entrées CDF", "Sorties CDF", "Clôture CDF"];
+    const x = [30, 180, 280, 395, 515, 640, 740, 845, 935];
+    page.drawRectangle({ x: margin, y: 392, width: 940, height: 28, color: rgb(0.9, 0.92, 0.96), borderWidth: 0.8, borderColor: rgb(0.63, 0.67, 0.76) });
+    headers.forEach((header, index) => {
+      page.drawText(header, { x: x[index], y: 402, size: 9.1, font: fontBold, color: rgb(0.12, 0.14, 0.18) });
+    });
+
+    let y = 382;
+    for (const [rowIndex, row] of channelRows.entries()) {
+      page.drawRectangle({ x: margin, y: y - 22, width: 940, height: 26, color: rowIndex % 2 === 0 ? rgb(1, 1, 1) : rgb(0.985, 0.987, 0.992), borderWidth: 0.35, borderColor: rgb(0.9, 0.91, 0.94) });
       const values = [
         row.label,
         row.openingUsd.toFixed(2),
@@ -831,14 +907,12 @@ export async function GET(request: NextRequest) {
         row.closingCdf.toFixed(2),
       ];
       values.forEach((value, index) => {
-        page.drawText(short(value, index === 0 ? 18 : 10), { x: x[index], y, size: 7.1, font, color: textBlack });
+        page.drawText(value, { x: x[index], y: y - 12, size: 9.3, font: index === 0 ? fontBold : font, color: textBlack });
       });
-      page.drawLine({ start: { x: 24, y: y - 3 }, end: { x: 818, y: y - 3 }, thickness: 0.25, color: lineGray });
-      y -= 12;
+      y -= 30;
     }
 
-    page.drawLine({ start: { x: 24, y: y - 1 }, end: { x: 818, y: y - 1 }, thickness: 0.6, color: lineGray });
-    y -= 10;
+    page.drawRectangle({ x: margin, y: y - 24, width: 940, height: 28, color: rgb(0.95, 0.96, 0.98), borderWidth: 0.5, borderColor: rgb(0.86, 0.88, 0.92) });
     const totalValues = [
       "TOTAL",
       channelTotals.openingUsd.toFixed(2),
@@ -851,13 +925,16 @@ export async function GET(request: NextRequest) {
       channelTotals.closingCdf.toFixed(2),
     ];
     totalValues.forEach((value, index) => {
-      page.drawText(short(value, index === 0 ? 18 : 10), { x: x[index], y, size: 7.2, font: fontBold, color: textBlack });
+      page.drawText(value, { x: x[index], y: y - 13, size: 9.5, font: fontBold, color: textBlack });
     });
 
-    page.drawText("3. Engagements en attente", { x: 24, y: 205, size: 9.4, font: fontBold, color: textBlack });
-    page.drawText(`États de besoin en attente: ${pendingNeedTotals.cdf.toFixed(2)} CDF • ${pendingNeedTotals.usd.toFixed(2)} USD`, { x: 24, y: 191, size: 8.2, font, color: textBlack });
-    page.drawText(`Ordres de paiement en attente: ${pendingPaymentOrderTotals.cdf.toFixed(2)} CDF • ${pendingPaymentOrderTotals.usd.toFixed(2)} USD`, { x: 24, y: 179, size: 8.2, font, color: textBlack });
-    page.drawText(`Billets payés ${paidTickets.length} • Billets impayés ${unpaidTickets.length} • Billets partiels ${partialTickets.length} (couverture ${partialCoverage.toFixed(1)}%)`, { x: 24, y: 167, size: 8.2, font, color: textBlack });
+    page.drawText("Situation billets de cette caisse", { x: margin, y: 118, size: 13.5, font: fontBold, color: textBlack });
+    if (mainDesk) {
+      page.drawText(`Billets facturés: ${totalBilled.toFixed(2)} USD eq • encaissés: ${totalPaidOnTickets.toFixed(2)} USD eq • reste: ${totalOutstanding.toFixed(2)} USD eq.`, { x: margin, y: 96, size: 10.5, font, color: textBlack });
+      page.drawText(`Billets payés: ${paidTickets.length} • impayés: ${unpaidTickets.length} • partiels: ${partialTickets.length} • couverture des partiels: ${partialCoverage.toFixed(1)}%.`, { x: margin, y: 78, size: 10.5, font, color: textBlack });
+    } else {
+      page.drawText("Cette caisse ne porte pas les paiements billets. Le récapitulatif reste donc limité à ses propres opérations de caisse et canaux associés.", { x: margin, y: 90, size: 10.5, font, color: textBlack, maxWidth: 920 });
+    }
   } else {
     const mode = request.nextUrl.searchParams.get("mode") ?? "date";
     const detailLabel = mode === "month"
