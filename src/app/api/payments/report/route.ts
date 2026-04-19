@@ -1,4 +1,3 @@
-import { NeedRequestStatus } from "@prisma/client";
 import { NextRequest, NextResponse } from "next/server";
 import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
 import fontkit from "@pdf-lib/fontkit";
@@ -14,7 +13,6 @@ type ReportType = "payments" | "cash-journal" | "cash-summary";
 type VirtualChannel = "AIRTEL_MONEY" | "ORANGE_MONEY" | "MPESA" | "EQUITY" | "RAWBANK_ILLICOCASH";
 
 const paymentClient = (prisma as unknown as { payment: any }).payment;
-const paymentOrderClient = (prisma as unknown as { paymentOrder: any }).paymentOrder;
 const cashOperationClient = (prisma as unknown as { cashOperation: any }).cashOperation;
 const virtualChannels: Array<{ key: VirtualChannel; label: string }> = [
   { key: "AIRTEL_MONEY", label: "Airtel Money" },
@@ -375,14 +373,14 @@ export async function GET(request: NextRequest) {
   const requestedDesk = normalizeCashDeskValue(request.nextUrl.searchParams.get("desk"));
   const selectedDesk = requestedDesk ?? "THE_BEST";
   const mainDesk = selectedDesk === "THE_BEST";
-  const scopedCashOperationsWhere = buildDeskScopedCashOperationWhere(selectedDesk);
+  const scopedCashOperationsWhere = buildDeskScopedCashOperationWhere(selectedDesk, { strict: true });
   const range = dateRangeFromParams(
     request.nextUrl.searchParams,
     reportType === "cash-journal" || reportType === "cash-summary" ? "month" : "date",
   );
   const airlineId = request.nextUrl.searchParams.get("airlineId")?.trim() || undefined;
 
-  const [rows, tickets, airline, cashOperationsInRange, cashOperationsBeforeRange, ticketPaymentsBeforeRange, pendingNeeds, paymentOrders] = await Promise.all([
+  const [rows, tickets, airline, cashOperationsInRange, cashOperationsBeforeRange, ticketPaymentsBeforeRange] = await Promise.all([
     paymentClient.findMany({
       where: {
         ...(mainDesk ? { paidAt: { gte: range.start, lt: range.end } } : { id: "__NO_TICKET_PAYMENTS_FOR_DESK__" }),
@@ -464,16 +462,6 @@ export async function GET(request: NextRequest) {
         method: true,
       },
       take: 5000,
-    }),
-    prisma.needRequest.findMany({
-      where: { status: NeedRequestStatus.SUBMITTED },
-      select: { estimatedAmount: true, currency: true },
-      take: 1000,
-    }),
-    paymentOrderClient.findMany({
-      where: { status: "SUBMITTED" },
-      select: { amount: true, currency: true },
-      take: 1000,
     }),
   ]);
 
@@ -690,21 +678,6 @@ export async function GET(request: NextRequest) {
       closingCdf: 0,
     },
   );
-
-  const pendingNeedTotals = pendingNeeds.reduce((sum: { usd: number; cdf: number }, need: any) => {
-    const amount = typeof need.estimatedAmount === "number" ? need.estimatedAmount : 0;
-    const currency = normalizeMoneyCurrency(need.currency);
-    if (currency === "USD") sum.usd += amount;
-    else sum.cdf += amount;
-    return sum;
-  }, { usd: 0, cdf: 0 });
-
-  const pendingPaymentOrderTotals = paymentOrders.reduce((sum: { usd: number; cdf: number }, order: any) => {
-    const currency = normalizeMoneyCurrency(order.currency);
-    if (currency === "USD") sum.usd += order.amount;
-    else sum.cdf += order.amount;
-    return sum;
-  }, { usd: 0, cdf: 0 });
 
   const pdf = await PDFDocument.create();
   const { body: font, bold: fontBold } = await loadPaymentReportFonts(pdf);

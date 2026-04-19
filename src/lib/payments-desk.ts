@@ -190,18 +190,25 @@ export function inferCashDeskFromDescription(value?: string | null): CashDeskVal
   return "THE_BEST";
 }
 
-export function buildDeskScopedCashOperationWhere(selectedDesk: CashDeskValue) {
+export function buildDeskScopedCashOperationWhere(
+  selectedDesk: CashDeskValue,
+  options?: { strict?: boolean },
+) {
+  const strict = options?.strict === true;
+
   if (selectedDesk === "THE_BEST") {
     return {
       OR: [
         { cashDesk: "THE_BEST" },
         { description: { startsWith: "THE_BEST:" } },
-        {
-          AND: [
-            { cashDesk: "THE_BEST" },
-            { NOT: KNOWN_CASH_DESK_PREFIXES.map((prefix) => ({ description: { startsWith: prefix } })) as any },
-          ],
-        },
+        ...(strict
+          ? []
+          : [{
+            AND: [
+              { cashDesk: "THE_BEST" },
+              { NOT: KNOWN_CASH_DESK_PREFIXES.map((prefix) => ({ description: { startsWith: prefix } })) as any },
+            ],
+          }]),
       ],
     };
   }
