@@ -412,6 +412,13 @@ type JournalColumn = {
   align?: "left" | "center" | "right";
 };
 
+type GenericColumn<Row extends Record<string, string>> = {
+  key: keyof Row;
+  label: string;
+  width: number;
+  align?: "left" | "center" | "right";
+};
+
 const JOURNAL_COLUMNS: JournalColumn[] = [
   { key: "sequence", label: "N°", width: 34, align: "center" },
   { key: "entryDate", label: "DATE", width: 66, align: "center" },
@@ -425,6 +432,76 @@ const JOURNAL_COLUMNS: JournalColumn[] = [
   { key: "usdDebit", label: "DEBIT", width: 66, align: "right" },
   { key: "usdCredit", label: "CREDIT", width: 66, align: "right" },
   { key: "exchangeRate", label: "TAUX", width: 55, align: "center" },
+];
+
+type LedgerPdfRow = {
+  sequence: string;
+  entryDate: string;
+  pole: string;
+  pieceJustificative: string;
+  libelle: string;
+  counterparts: string;
+  debitUsd: string;
+  creditUsd: string;
+  debitCdf: string;
+  creditCdf: string;
+};
+
+const LEDGER_COLUMNS: GenericColumn<LedgerPdfRow>[] = [
+  { key: "sequence", label: "N°", width: 42, align: "center" },
+  { key: "entryDate", label: "DATE", width: 70, align: "center" },
+  { key: "pole", label: "POLE", width: 70, align: "center" },
+  { key: "pieceJustificative", label: "PIÈCE", width: 84, align: "center" },
+  { key: "libelle", label: "LIBELLÉ", width: 230 },
+  { key: "counterparts", label: "CONTREPARTIES", width: 300 },
+  { key: "debitUsd", label: "DÉBIT USD", width: 90, align: "right" },
+  { key: "creditUsd", label: "CRÉDIT USD", width: 90, align: "right" },
+  { key: "debitCdf", label: "DÉBIT CDF", width: 94, align: "right" },
+  { key: "creditCdf", label: "CRÉDIT CDF", width: 94, align: "right" },
+];
+
+type BalancePdfRow = {
+  accountCode: string;
+  accountLabel: string;
+  debitUsd: string;
+  creditUsd: string;
+  balanceUsd: string;
+  debitCdf: string;
+  creditCdf: string;
+  balanceCdf: string;
+};
+
+const TRIAL_BALANCE_COLUMNS: GenericColumn<BalancePdfRow>[] = [
+  { key: "accountCode", label: "COMPTE", width: 82, align: "center" },
+  { key: "accountLabel", label: "INTITULÉ", width: 320 },
+  { key: "debitUsd", label: "DÉBIT USD", width: 96, align: "right" },
+  { key: "creditUsd", label: "CRÉDIT USD", width: 96, align: "right" },
+  { key: "balanceUsd", label: "SOLDE USD", width: 112, align: "right" },
+  { key: "debitCdf", label: "DÉBIT CDF", width: 110, align: "right" },
+  { key: "creditCdf", label: "CRÉDIT CDF", width: 110, align: "right" },
+  { key: "balanceCdf", label: "SOLDE CDF", width: 116, align: "right" },
+];
+
+type GeneralBalancePdfRow = {
+  classLabel: string;
+  accountCount: string;
+  debitUsd: string;
+  creditUsd: string;
+  balanceUsd: string;
+  debitCdf: string;
+  creditCdf: string;
+  balanceCdf: string;
+};
+
+const GENERAL_BALANCE_COLUMNS: GenericColumn<GeneralBalancePdfRow>[] = [
+  { key: "classLabel", label: "CLASSE", width: 250 },
+  { key: "accountCount", label: "NB COMPTES", width: 94, align: "right" },
+  { key: "debitUsd", label: "DÉBIT USD", width: 104, align: "right" },
+  { key: "creditUsd", label: "CRÉDIT USD", width: 104, align: "right" },
+  { key: "balanceUsd", label: "SOLDE USD", width: 122, align: "right" },
+  { key: "debitCdf", label: "DÉBIT CDF", width: 118, align: "right" },
+  { key: "creditCdf", label: "CRÉDIT CDF", width: 118, align: "right" },
+  { key: "balanceCdf", label: "SOLDE CDF", width: 129, align: "right" },
 ];
 
 function wrapPdfText(text: string, font: PDFFont, size: number, maxWidth: number) {
@@ -601,6 +678,96 @@ function drawJournalTableHeader(page: PDFPage, font: PDFFont, bold: PDFFont, sta
   return totalHeaderHeight;
 }
 
+function genericRowHeight<Row extends Record<string, string>>(
+  row: Row,
+  columns: GenericColumn<Row>[],
+  font: PDFFont,
+  size: number,
+) {
+  const wrappedLineCount = columns.reduce((max, column) => {
+    const lines = wrapPdfText(row[column.key], font, size, Math.max(4, column.width - 8)).length;
+    return Math.max(max, lines);
+  }, 1);
+  return Math.max(24, wrappedLineCount * (size + 3) + 8);
+}
+
+function drawGenericTableHeader<Row extends Record<string, string>>(
+  page: PDFPage,
+  bold: PDFFont,
+  startX: number,
+  topY: number,
+  columns: GenericColumn<Row>[],
+) {
+  const headerHeight = 26;
+  const borderColor = rgb(0.15, 0.15, 0.15);
+  const fill = rgb(0.93, 0.94, 0.96);
+  let cursorX = startX;
+
+  for (const column of columns) {
+    page.drawRectangle({ x: cursorX, y: topY - headerHeight, width: column.width, height: headerHeight, borderWidth: 0.8, borderColor, color: fill });
+    drawCellText({ page, text: column.label, x: cursorX, y: topY - headerHeight, width: column.width, height: headerHeight, font: bold, size: 8.1, align: "center" });
+    cursorX += column.width;
+  }
+
+  return headerHeight;
+}
+
+function drawGenericTableRow<Row extends Record<string, string>>(params: {
+  page: PDFPage;
+  row: Row;
+  columns: GenericColumn<Row>[];
+  startX: number;
+  topY: number;
+  rowHeight: number;
+  font: PDFFont;
+  bold: PDFFont;
+  fontSize: number;
+  shaded?: boolean;
+  emphasizeKeys?: Array<keyof Row>;
+  fillColor?: ReturnType<typeof rgb>;
+}) {
+  const {
+    page,
+    row,
+    columns,
+    startX,
+    topY,
+    rowHeight,
+    font,
+    bold,
+    fontSize,
+    shaded = false,
+    emphasizeKeys = [],
+    fillColor,
+  } = params;
+  const borderColor = rgb(0.15, 0.15, 0.15);
+  let cursorX = startX;
+
+  for (const column of columns) {
+    page.drawRectangle({
+      x: cursorX,
+      y: topY - rowHeight,
+      width: column.width,
+      height: rowHeight,
+      borderWidth: 0.75,
+      borderColor,
+      color: fillColor ?? (shaded ? rgb(0.985, 0.985, 0.985) : rgb(1, 1, 1)),
+    });
+    drawCellText({
+      page,
+      text: row[column.key],
+      x: cursorX,
+      y: topY - rowHeight,
+      width: column.width,
+      height: rowHeight,
+      font: emphasizeKeys.includes(column.key) ? bold : font,
+      size: fontSize,
+      align: column.align,
+    });
+    cursorX += column.width;
+  }
+}
+
 async function loadPdfBodyFont(pdf: PDFDocument) {
   pdf.registerFontkit(fontkit);
   const fontPath = path.join(process.cwd(), "public", "fonts", "MAIAN.TTF");
@@ -618,11 +785,18 @@ async function buildPdf(report: ReportPayload) {
   const pdf = await PDFDocument.create();
   const font = await loadPdfBodyFont(pdf);
   const bold = await pdf.embedFont(StandardFonts.HelveticaBold);
-  const pageWidth = report.reportType === "journal" ? 1191 : 842;
-  const pageHeight = report.reportType === "journal" ? 842 : 595;
-  const margin = report.reportType === "journal" ? 24 : 28;
+  const pageWidth = 1191;
+  const pageHeight = 842;
+  const margin = 24;
   let page = pdf.addPage([pageWidth, pageHeight]);
   let y = pageHeight - margin;
+  const reportTitle = report.reportType === "journal"
+    ? "Livre journal comptable"
+    : report.reportType === "ledger"
+      ? "Grand livre comptable"
+      : report.reportType === "trial-balance"
+        ? "Balance des comptes"
+        : "Balance générale";
 
   function drawHeader(title: string, subtitle: string) {
     page.drawRectangle({ x: 0, y: pageHeight - 92, width: pageWidth, height: 92, color: rgb(0.08, 0.1, 0.14) });
@@ -645,32 +819,10 @@ async function buildPdf(report: ReportPayload) {
 
   function addPage() {
     page = pdf.addPage([pageWidth, pageHeight]);
-    drawHeader(
-      report.reportType === "journal" ? "Livre journal comptable" : report.reportType === "ledger" ? "Grand livre comptable" : report.reportType === "trial-balance" ? "Balance des comptes" : "Balance generale",
-      report.periodLabel,
-    );
+    drawHeader(reportTitle, report.periodLabel);
   }
 
-  function line(text: string, options?: { size?: number; bold?: boolean; color?: [number, number, number] }) {
-    const size = options?.size ?? 9;
-    const currentFont = options?.bold ? bold : font;
-    const color = options?.color ?? [0.15, 0.15, 0.15];
-    if (y < 40) addPage();
-    page.drawText(text, {
-      x: margin,
-      y,
-      size,
-      font: currentFont,
-      color: rgb(color[0], color[1], color[2]),
-      maxWidth: pageWidth - margin * 2,
-    });
-    y -= size + 6;
-  }
-
-  drawHeader(
-    report.reportType === "journal" ? "Livre journal comptable" : report.reportType === "ledger" ? "Grand livre comptable" : report.reportType === "trial-balance" ? "Balance des comptes" : "Balance generale",
-    report.periodLabel,
-  );
+  drawHeader(reportTitle, report.periodLabel);
 
   if (report.reportType === "journal") {
     drawSummaryBox(`Ecritures: ${report.entryCount}`, margin, 170);
@@ -678,21 +830,24 @@ async function buildPdf(report: ReportPayload) {
     drawSummaryBox(`Modele: presentation livre journal`, margin + 474, 250);
     y -= 48;
   } else if (report.reportType === "ledger") {
-    drawSummaryBox(`Comptes mouvementes: ${report.groupCount}`, margin, 180);
-    drawSummaryBox(`Filtre: ${report.accountCode ?? "Tous les comptes"}`, margin + 192, 220);
-    drawSummaryBox(`Sous-comptes: ${report.includeSubaccounts ? "Oui" : "Non"}`, margin + 424, 160);
-    drawSummaryBox(`USD D ${formatMoney(report.totals.debitUsd)} | C ${formatMoney(report.totals.creditUsd)}`, margin + 596, 218);
-    y -= 42;
+    drawSummaryBox(`Comptes mouvementés: ${report.groupCount}`, margin, 200);
+    drawSummaryBox(`Filtre: ${report.accountCode ?? "Tous les comptes"}`, margin + 212, 250);
+    drawSummaryBox(`Sous-comptes: ${report.includeSubaccounts ? "Oui" : "Non"}`, margin + 474, 170);
+    drawSummaryBox(`USD D ${formatMoney(report.totals.debitUsd)} | C ${formatMoney(report.totals.creditUsd)}`, margin + 656, 240);
+    drawSummaryBox(`CDF D ${formatMoney(report.totals.debitCdf)} | C ${formatMoney(report.totals.creditCdf)}`, margin + 908, 240);
+    y -= 48;
   } else if (report.reportType === "trial-balance") {
-    drawSummaryBox(`Comptes: ${report.rowCount}`, margin, 160);
-    drawSummaryBox(`USD D ${formatMoney(report.totals.debitUsd)} | C ${formatMoney(report.totals.creditUsd)}`, margin + 172, 260);
-    drawSummaryBox(`Filtre: ${report.accountCode ?? "Tous les comptes"}`, margin + 444, 260);
-    y -= 42;
+    drawSummaryBox(`Comptes: ${report.rowCount}`, margin, 180);
+    drawSummaryBox(`Filtre: ${report.accountCode ?? "Tous les comptes"}`, margin + 192, 260);
+    drawSummaryBox(`USD D ${formatMoney(report.totals.debitUsd)} | C ${formatMoney(report.totals.creditUsd)}`, margin + 464, 250);
+    drawSummaryBox(`CDF D ${formatMoney(report.totals.debitCdf)} | C ${formatMoney(report.totals.creditCdf)}`, margin + 726, 250);
+    y -= 48;
   } else {
-    drawSummaryBox(`Classes: ${report.rowCount}`, margin, 160);
-    drawSummaryBox(`USD D ${formatMoney(report.totals.debitUsd)} | C ${formatMoney(report.totals.creditUsd)}`, margin + 172, 260);
-    drawSummaryBox(`Filtre: ${report.accountCode ?? "Toutes les classes"}`, margin + 444, 260);
-    y -= 42;
+    drawSummaryBox(`Classes: ${report.rowCount}`, margin, 180);
+    drawSummaryBox(`Filtre: ${report.accountCode ?? "Toutes les classes"}`, margin + 192, 260);
+    drawSummaryBox(`USD D ${formatMoney(report.totals.debitUsd)} | C ${formatMoney(report.totals.creditUsd)}`, margin + 464, 250);
+    drawSummaryBox(`CDF D ${formatMoney(report.totals.debitCdf)} | C ${formatMoney(report.totals.creditCdf)}`, margin + 726, 250);
+    y -= 48;
   }
 
   if (report.reportType === "journal") {
@@ -791,25 +946,238 @@ async function buildPdf(report: ReportPayload) {
       totalX += column.width;
     }
   } else if (report.reportType === "ledger") {
+    const tableStartX = margin;
+    const fontSize = 8.2;
+
+    const drawLedgerHeader = () => {
+      const headerHeight = drawGenericTableHeader(page, bold, tableStartX, y, LEDGER_COLUMNS);
+      y -= headerHeight;
+    };
+
     for (const group of report.groups) {
-      line(`${group.accountCode} - ${group.accountLabel}`, { bold: true });
-      line(`Totaux | USD debit ${formatMoney(group.totals.debitUsd)} / credit ${formatMoney(group.totals.creditUsd)}`, { size: 8, color: [0.35, 0.35, 0.35] });
-      for (const row of group.rows) {
-        line(`  #${row.sequence} | ${new Date(row.entryDate).toLocaleDateString("fr-FR")} | ${row.side} | USD ${formatMoney(row.debitUsd || row.creditUsd)} | ${row.libelle}`, { size: 8 });
-        if (row.counterparts) line(`    Contreparties: ${row.counterparts}`, { size: 7, color: [0.4, 0.4, 0.4] });
+      const groupHeight = 34;
+      if (y - groupHeight < 42) addPage();
+      page.drawRectangle({ x: tableStartX, y: y - groupHeight, width: LEDGER_COLUMNS.reduce((sum, column) => sum + column.width, 0), height: groupHeight, color: rgb(0.9, 0.92, 0.96), borderWidth: 0.8, borderColor: rgb(0.2, 0.24, 0.3) });
+      page.drawText(`${group.accountCode} - ${group.accountLabel}`, { x: tableStartX + 8, y: y - 14, size: 11, font: bold, color: rgb(0.1, 0.12, 0.16) });
+      page.drawText(
+        `Lignes ${group.rows.length} • USD débit ${formatMoney(group.totals.debitUsd)} / crédit ${formatMoney(group.totals.creditUsd)} • CDF débit ${formatMoney(group.totals.debitCdf)} / crédit ${formatMoney(group.totals.creditCdf)}`,
+        { x: tableStartX + 8, y: y - 27, size: 8.2, font, color: rgb(0.25, 0.28, 0.34) },
+      );
+      y -= groupHeight;
+      drawLedgerHeader();
+
+      group.rows.forEach((row, index) => {
+        const pdfRow: LedgerPdfRow = {
+          sequence: String(row.sequence),
+          entryDate: new Date(row.entryDate).toLocaleDateString("fr-FR"),
+          pole: row.pole ?? "-",
+          pieceJustificative: row.pieceJustificative ?? "-",
+          libelle: row.libelle ?? "-",
+          counterparts: row.counterparts || "-",
+          debitUsd: formatMoneyCell(row.debitUsd),
+          creditUsd: formatMoneyCell(row.creditUsd),
+          debitCdf: formatMoneyCell(row.debitCdf),
+          creditCdf: formatMoneyCell(row.creditCdf),
+        };
+        const rowHeight = genericRowHeight(pdfRow, LEDGER_COLUMNS, font, fontSize);
+        if (y - rowHeight < 42) {
+          addPage();
+          y -= 8;
+          drawLedgerHeader();
+        }
+        drawGenericTableRow({
+          page,
+          row: pdfRow,
+          columns: LEDGER_COLUMNS,
+          startX: tableStartX,
+          topY: y,
+          rowHeight,
+          font,
+          bold,
+          fontSize,
+          shaded: index % 2 === 1,
+          emphasizeKeys: ["sequence", "entryDate"],
+        });
+        y -= rowHeight;
+      });
+
+      const totalRow: LedgerPdfRow = {
+        sequence: "",
+        entryDate: "",
+        pole: "",
+        pieceJustificative: "",
+        libelle: "TOTAL COMPTE",
+        counterparts: `${group.rows.length} ligne(s)`,
+        debitUsd: formatMoneyCell(group.totals.debitUsd),
+        creditUsd: formatMoneyCell(group.totals.creditUsd),
+        debitCdf: formatMoneyCell(group.totals.debitCdf),
+        creditCdf: formatMoneyCell(group.totals.creditCdf),
+      };
+      const totalHeight = genericRowHeight(totalRow, LEDGER_COLUMNS, bold, fontSize);
+      if (y - totalHeight < 42) {
+        addPage();
+        y -= 8;
+        drawLedgerHeader();
       }
-      y -= 4;
+      drawGenericTableRow({
+        page,
+        row: totalRow,
+        columns: LEDGER_COLUMNS,
+        startX: tableStartX,
+        topY: y,
+        rowHeight: totalHeight,
+        font,
+        bold,
+        fontSize,
+        emphasizeKeys: ["libelle", "counterparts", "debitUsd", "creditUsd", "debitCdf", "creditCdf"],
+        fillColor: rgb(0.94, 0.94, 0.94),
+      });
+      y -= totalHeight + 10;
     }
   } else if (report.reportType === "trial-balance") {
-    line("Compte | Intitule | Debit USD | Credit USD | Solde USD", { size: 9, bold: true });
-    for (const row of report.rows) {
-      line(`${row.accountCode} | ${row.accountLabel} | ${formatMoney(row.debitUsd)} | ${formatMoney(row.creditUsd)} | ${formatMoney(Math.abs(row.balanceUsd))} ${row.balanceUsdSide === "ZERO" ? "" : row.balanceUsdSide === "DEBIT" ? "D" : "C"}`, { size: 8 });
+    const rows = report.rows.map<BalancePdfRow>((row) => ({
+      accountCode: row.accountCode,
+      accountLabel: row.accountLabel,
+      debitUsd: formatMoneyCell(row.debitUsd),
+      creditUsd: formatMoneyCell(row.creditUsd),
+      balanceUsd: `${formatMoneyCell(Math.abs(row.balanceUsd))}${row.balanceUsdSide === "ZERO" ? "" : row.balanceUsdSide === "DEBIT" ? " D" : " C"}`,
+      debitCdf: formatMoneyCell(row.debitCdf),
+      creditCdf: formatMoneyCell(row.creditCdf),
+      balanceCdf: `${formatMoneyCell(Math.abs(row.balanceCdf))}${row.balanceCdfSide === "ZERO" ? "" : row.balanceCdfSide === "DEBIT" ? " D" : " C"}`,
+    }));
+    const tableStartX = margin;
+    const fontSize = 8.3;
+
+    const drawBalanceHeader = () => {
+      const headerHeight = drawGenericTableHeader(page, bold, tableStartX, y, TRIAL_BALANCE_COLUMNS);
+      y -= headerHeight;
+    };
+
+    drawBalanceHeader();
+    rows.forEach((row, index) => {
+      const rowHeight = genericRowHeight(row, TRIAL_BALANCE_COLUMNS, font, fontSize);
+      if (y - rowHeight < 42) {
+        addPage();
+        y -= 8;
+        drawBalanceHeader();
+      }
+      drawGenericTableRow({
+        page,
+        row,
+        columns: TRIAL_BALANCE_COLUMNS,
+        startX: tableStartX,
+        topY: y,
+        rowHeight,
+        font,
+        bold,
+        fontSize,
+        shaded: index % 2 === 1,
+        emphasizeKeys: ["accountCode"],
+      });
+      y -= rowHeight;
+    });
+
+    const totalRow: BalancePdfRow = {
+      accountCode: "",
+      accountLabel: "TOTAL GÉNÉRAL",
+      debitUsd: formatMoneyCell(report.totals.debitUsd),
+      creditUsd: formatMoneyCell(report.totals.creditUsd),
+      balanceUsd: `${formatMoneyCell(Math.abs(report.totals.debitUsd - report.totals.creditUsd))}${balanceSide(report.totals.debitUsd - report.totals.creditUsd) === "ZERO" ? "" : balanceSide(report.totals.debitUsd - report.totals.creditUsd) === "DEBIT" ? " D" : " C"}`,
+      debitCdf: formatMoneyCell(report.totals.debitCdf),
+      creditCdf: formatMoneyCell(report.totals.creditCdf),
+      balanceCdf: `${formatMoneyCell(Math.abs(report.totals.debitCdf - report.totals.creditCdf))}${balanceSide(report.totals.debitCdf - report.totals.creditCdf) === "ZERO" ? "" : balanceSide(report.totals.debitCdf - report.totals.creditCdf) === "DEBIT" ? " D" : " C"}`,
+    };
+    const totalHeight = genericRowHeight(totalRow, TRIAL_BALANCE_COLUMNS, bold, fontSize);
+    if (y - totalHeight < 42) {
+      addPage();
+      y -= 8;
+      drawBalanceHeader();
     }
+    drawGenericTableRow({
+      page,
+      row: totalRow,
+      columns: TRIAL_BALANCE_COLUMNS,
+      startX: tableStartX,
+      topY: y,
+      rowHeight: totalHeight,
+      font,
+      bold,
+      fontSize,
+      emphasizeKeys: ["accountLabel", "debitUsd", "creditUsd", "balanceUsd", "debitCdf", "creditCdf", "balanceCdf"],
+      fillColor: rgb(0.94, 0.94, 0.94),
+    });
   } else {
-    line("Classe | Comptes | Debit USD | Credit USD | Solde USD", { size: 9, bold: true });
-    for (const row of report.rows) {
-      line(`${row.classLabel} | ${row.accountCount} | ${formatMoney(row.debitUsd)} | ${formatMoney(row.creditUsd)} | ${formatMoney(Math.abs(row.balanceUsd))} ${balanceSide(row.balanceUsd) === "ZERO" ? "" : balanceSide(row.balanceUsd) === "DEBIT" ? "D" : "C"}`, { size: 8 });
+    const rows = report.rows.map<GeneralBalancePdfRow>((row) => ({
+      classLabel: row.classLabel,
+      accountCount: String(row.accountCount),
+      debitUsd: formatMoneyCell(row.debitUsd),
+      creditUsd: formatMoneyCell(row.creditUsd),
+      balanceUsd: `${formatMoneyCell(Math.abs(row.balanceUsd))}${balanceSide(row.balanceUsd) === "ZERO" ? "" : balanceSide(row.balanceUsd) === "DEBIT" ? " D" : " C"}`,
+      debitCdf: formatMoneyCell(row.debitCdf),
+      creditCdf: formatMoneyCell(row.creditCdf),
+      balanceCdf: `${formatMoneyCell(Math.abs(row.balanceCdf))}${balanceSide(row.balanceCdf) === "ZERO" ? "" : balanceSide(row.balanceCdf) === "DEBIT" ? " D" : " C"}`,
+    }));
+    const tableStartX = margin;
+    const fontSize = 8.3;
+
+    const drawGeneralBalanceHeader = () => {
+      const headerHeight = drawGenericTableHeader(page, bold, tableStartX, y, GENERAL_BALANCE_COLUMNS);
+      y -= headerHeight;
+    };
+
+    drawGeneralBalanceHeader();
+    rows.forEach((row, index) => {
+      const rowHeight = genericRowHeight(row, GENERAL_BALANCE_COLUMNS, font, fontSize);
+      if (y - rowHeight < 42) {
+        addPage();
+        y -= 8;
+        drawGeneralBalanceHeader();
+      }
+      drawGenericTableRow({
+        page,
+        row,
+        columns: GENERAL_BALANCE_COLUMNS,
+        startX: tableStartX,
+        topY: y,
+        rowHeight,
+        font,
+        bold,
+        fontSize,
+        shaded: index % 2 === 1,
+        emphasizeKeys: ["classLabel"],
+      });
+      y -= rowHeight;
+    });
+
+    const totalRow: GeneralBalancePdfRow = {
+      classLabel: "TOTAL GÉNÉRAL",
+      accountCount: String(report.rows.reduce((sum, row) => sum + row.accountCount, 0)),
+      debitUsd: formatMoneyCell(report.totals.debitUsd),
+      creditUsd: formatMoneyCell(report.totals.creditUsd),
+      balanceUsd: `${formatMoneyCell(Math.abs(report.totals.debitUsd - report.totals.creditUsd))}${balanceSide(report.totals.debitUsd - report.totals.creditUsd) === "ZERO" ? "" : balanceSide(report.totals.debitUsd - report.totals.creditUsd) === "DEBIT" ? " D" : " C"}`,
+      debitCdf: formatMoneyCell(report.totals.debitCdf),
+      creditCdf: formatMoneyCell(report.totals.creditCdf),
+      balanceCdf: `${formatMoneyCell(Math.abs(report.totals.debitCdf - report.totals.creditCdf))}${balanceSide(report.totals.debitCdf - report.totals.creditCdf) === "ZERO" ? "" : balanceSide(report.totals.debitCdf - report.totals.creditCdf) === "DEBIT" ? " D" : " C"}`,
+    };
+    const totalHeight = genericRowHeight(totalRow, GENERAL_BALANCE_COLUMNS, bold, fontSize);
+    if (y - totalHeight < 42) {
+      addPage();
+      y -= 8;
+      drawGeneralBalanceHeader();
     }
+    drawGenericTableRow({
+      page,
+      row: totalRow,
+      columns: GENERAL_BALANCE_COLUMNS,
+      startX: tableStartX,
+      topY: y,
+      rowHeight: totalHeight,
+      font,
+      bold,
+      fontSize,
+      emphasizeKeys: ["classLabel", "accountCount", "debitUsd", "creditUsd", "balanceUsd", "debitCdf", "creditCdf", "balanceCdf"],
+      fillColor: rgb(0.94, 0.94, 0.94),
+    });
   }
 
   return pdf.save();
