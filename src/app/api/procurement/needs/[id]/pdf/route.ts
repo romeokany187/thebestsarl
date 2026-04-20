@@ -78,6 +78,16 @@ function statusLabel(status: string, reviewComment?: string | null) {
   return status;
 }
 
+function fallbackNeedDescription(details: string | null | undefined) {
+  const normalized = (details ?? "").trim();
+  if (!normalized) return "-";
+  if (parseNeedQuote(normalized)) return "-";
+  if ((normalized.startsWith("{") && normalized.endsWith("}")) || (normalized.startsWith("[") && normalized.endsWith("]"))) {
+    return "-";
+  }
+  return normalized;
+}
+
 async function readFirstExistingFile(candidates: string[]) {
   for (const candidate of candidates) {
     try {
@@ -473,10 +483,11 @@ export async function GET(req: NextRequest, context: RouteContext) {
     const quote = parseNeedQuote(need.details);
     const articles = quote?.items?.length
       ? quote.items
-      : [{ designation: need.title ?? "-", description: need.details ?? "-", quantity: need.quantity ?? 1, unitPrice: need.estimatedAmount ?? 0, lineTotal: need.estimatedAmount ?? 0 }];
+      : [{ designation: need.title ?? "-", description: fallbackNeedDescription(need.details), quantity: need.quantity ?? 1, unitPrice: need.estimatedAmount ?? 0, lineTotal: need.estimatedAmount ?? 0 }];
     const totalGeneral = quote?.totalGeneral ?? need.estimatedAmount ?? articles.reduce((sum, article) => sum + (article.lineTotal ?? 0), 0);
     const reviewComment = (need.reviewComment ?? "-").trim() || "-";
     const printedAt = formatDate(new Date());
+    const showApprovalAssets = need.status === "APPROVED";
 
     const pdf = await PDFDocument.create();
     pdf.registerFontkit(fontkit);
@@ -503,7 +514,7 @@ export async function GET(req: NextRequest, context: RouteContext) {
       page.drawRectangle({ x: 0, y: PAGE_HEIGHT - 134, width: PAGE_WIDTH, height: 134, color: COLORS.accent });
       page.drawRectangle({ x: 0, y: PAGE_HEIGHT - 150, width: PAGE_WIDTH, height: 16, color: COLORS.accentSoft });
 
-      if (logo) {
+      if (showApprovalAssets && logo) {
         const scaled = (logo as PDFImage).scale(0.23);
         page.drawImage(logo, {
           x: LEFT,
@@ -696,7 +707,7 @@ export async function GET(req: NextRequest, context: RouteContext) {
       color: COLORS.muted,
     });
 
-    if (signature) {
+    if (showApprovalAssets && signature) {
       currentPage.drawImage(signature, {
         x: RIGHT - 148,
         y: currentY - noteHeight + 16,
@@ -704,7 +715,7 @@ export async function GET(req: NextRequest, context: RouteContext) {
         height: 24,
       });
     }
-    if (stamp) {
+    if (showApprovalAssets && stamp) {
       currentPage.drawImage(stamp, {
         x: RIGHT - 94,
         y: currentY - noteHeight + 2,

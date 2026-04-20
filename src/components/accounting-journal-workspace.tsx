@@ -337,6 +337,12 @@ export function AccountingJournalWorkspace({
       return;
     }
 
+    if (!pieceJustificative.trim()) {
+      setError("La pièce justificative est obligatoire pour chaque écriture comptable.");
+      setMessage("");
+      return;
+    }
+
     setSaving(true);
     setError("");
     setMessage("");
@@ -551,6 +557,7 @@ export function AccountingJournalWorkspace({
             <input
               list="accounting-ticket-invoices"
               value={pieceJustificative}
+              required
               onChange={(event) => {
                 const nextValue = event.target.value;
                 setPieceJustificative(nextValue);
@@ -565,6 +572,9 @@ export function AccountingJournalWorkspace({
               placeholder="BEC, OP, reçu ou facture billet..."
               className="w-full rounded-md border border-black/15 bg-white px-3 py-2 text-sm dark:border-white/15 dark:bg-zinc-900"
             />
+            <p className="mt-1 text-[11px] text-black/50 dark:text-white/50">
+              Champ obligatoire: indique la référence de la pièce justificative liée à l'écriture.
+            </p>
           </div>
         </div>
 

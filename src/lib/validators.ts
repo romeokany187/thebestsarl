@@ -369,7 +369,7 @@ export const accountingEntryCreateSchema = z.object({
   entryDate: z.coerce.date(),
   pole: z.string().trim().max(120).optional(),
   libelle: z.string().trim().min(3).max(500),
-  pieceJustificative: z.string().trim().max(180).optional(),
+  pieceJustificative: z.string().trim().min(1, "La pièce justificative est obligatoire.").max(180),
   exchangeRate: z.number().positive().optional(),
   lines: z.array(accountingEntryLineSchema).min(2),
 }).superRefine((value, ctx) => {
