@@ -23,13 +23,68 @@ function round2(value: number) {
   return Math.round(value * 100) / 100;
 }
 
+function sanitizeQuoteJsonCandidate(value: string) {
+  let result = "";
+  let inString = false;
+  let escaped = false;
+
+  for (const char of value) {
+    if (escaped) {
+      result += char;
+      escaped = false;
+      continue;
+    }
+
+    if (char === "\\") {
+      result += char;
+      escaped = true;
+      continue;
+    }
+
+    if (char === '"') {
+      inString = !inString;
+      result += char;
+      continue;
+    }
+
+    if (inString && (char === "\n" || char === "\r")) {
+      result += "\\n";
+      continue;
+    }
+
+    result += char;
+  }
+
+  return result;
+}
+
+function looksLikeSerializedNeedQuote(value: string | null | undefined) {
+  if (!value) return false;
+
+  try {
+    const parsed = JSON.parse(sanitizeQuoteJsonCandidate(value.trim())) as {
+      format?: string;
+      items?: unknown;
+    };
+    return parsed?.format === "QUOTE_V1" && Array.isArray(parsed.items);
+  } catch {
+    return false;
+  }
+}
+
+function sanitizeNeedLineDescription(value: string | null | undefined) {
+  const normalized = (value ?? "").trim();
+  if (!normalized) return "";
+  return looksLikeSerializedNeedQuote(normalized) ? "" : normalized;
+}
+
 export function normalizeNeedLines(
   items: Array<{ designation: string; description?: string; quantity: number; unitPrice: number }>,
 ): NeedLine[] {
   return items
     .map((item) => {
       const designation = item.designation.trim();
-      const description = (item.description ?? "").trim();
+      const description = sanitizeNeedLineDescription(item.description);
       const quantity = Number(item.quantity);
       const unitPrice = Number(item.unitPrice);
       return {
@@ -70,41 +125,6 @@ export function quoteFromItems(
 
 export function serializeNeedQuote(quote: NeedDetailsQuote) {
   return JSON.stringify(quote);
-}
-
-function sanitizeQuoteJsonCandidate(value: string) {
-  let result = "";
-  let inString = false;
-  let escaped = false;
-
-  for (const char of value) {
-    if (escaped) {
-      result += char;
-      escaped = false;
-      continue;
-    }
-
-    if (char === "\\") {
-      result += char;
-      escaped = true;
-      continue;
-    }
-
-    if (char === '"') {
-      inString = !inString;
-      result += char;
-      continue;
-    }
-
-    if (inString && (char === "\n" || char === "\r")) {
-      result += "\\n";
-      continue;
-    }
-
-    result += char;
-  }
-
-  return result;
 }
 
 function parseQuotePayload(details: string) {
@@ -157,11 +177,10 @@ export function parseNeedQuote(details: string | null | undefined): NeedDetailsQ
   }
 
   const rawItems = Array.isArray(payload.items) ? payload.items : [];
-
   const items: NeedLine[] = rawItems
     .map((item) => {
       const designation = (item.designation ?? "").trim();
-      const description = (item.description ?? "").trim();
+      const description = sanitizeNeedLineDescription(item.description);
       const quantity = Number(item.quantity ?? 0);
       const unitPrice = Number(item.unitPrice ?? 0);
       const lineTotal = Number(item.lineTotal ?? quantity * unitPrice);
