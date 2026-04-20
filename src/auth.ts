@@ -9,7 +9,13 @@ function normalizeEmail(value?: string | null) {
 }
 
 function tokenNeedsDatabaseRefresh(token: Record<string, unknown>) {
-  return !token.sub || !token.role || !token.jobTitle || !token.name;
+  return !token.sub || !token.role || !token.jobTitle || !token.name || !("teamName" in token) || !("dbSyncedAt" in token);
+}
+
+function tokenRefreshExpired(token: Record<string, unknown>) {
+  const syncedAt = typeof token.dbSyncedAt === "number" ? token.dbSyncedAt : 0;
+  const refreshIntervalMs = 10 * 60 * 1000;
+  return syncedAt <= 0 || (Date.now() - syncedAt) > refreshIntervalMs;
 }
 
 const adminEmails = new Set(
@@ -77,7 +83,7 @@ export const authOptions: NextAuthOptions = {
         token.email = user.email.trim().toLowerCase();
       }
 
-      if (token.email && (user?.email || tokenNeedsDatabaseRefresh(token as Record<string, unknown>))) {
+      if (token.email && (user?.email || tokenNeedsDatabaseRefresh(token as Record<string, unknown>) || tokenRefreshExpired(token as Record<string, unknown>))) {
         try {
           const dbUser = await prisma.user.findUnique({
             where: { email: String(token.email).trim().toLowerCase() },
@@ -98,6 +104,7 @@ export const authOptions: NextAuthOptions = {
             token.jobTitle = dbUser.jobTitle;
             token.teamName = dbUser.team?.name ?? null;
             token.canImportTicketWorkbook = dbUser.canImportTicketWorkbook;
+            token.dbSyncedAt = Date.now();
           }
         } catch (error) {
           console.error("[auth] jwt database error", error);
