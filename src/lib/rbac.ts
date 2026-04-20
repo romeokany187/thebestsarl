@@ -69,10 +69,6 @@ export function hasModuleAccess(params: {
     return role === "ACCOUNTANT" || isCashierJobTitle(jobTitle) || jobTitle === "COMPTABLE";
   }
 
-  if (role === "ACCOUNTANT") {
-    return true;
-  }
-
   if (role === "ADMIN") {
     return true;
   }
