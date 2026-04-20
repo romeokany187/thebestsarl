@@ -3,6 +3,7 @@ import { z } from "zod";
 import { isPasswordAuthActive, passwordAuthLaunchAtIso } from "@/lib/auth-rollout";
 import { prisma } from "@/lib/prisma";
 import {
+  ensurePasswordSetupStorage,
   hashPasswordSetupCode,
   hashUserPassword,
   normalizeAuthEmail,
@@ -45,6 +46,8 @@ export async function POST(request: NextRequest) {
 
   const email = normalizeAuthEmail(parsed.data.email);
   const codeHash = hashPasswordSetupCode(email, parsed.data.code);
+
+  await ensurePasswordSetupStorage();
 
   const setupCode = await prisma.passwordSetupCode.findFirst({
     where: {

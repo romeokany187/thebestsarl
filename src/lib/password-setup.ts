@@ -1,6 +1,7 @@
 import { createHash, randomInt } from "node:crypto";
 import bcrypt from "bcryptjs";
 import { sendMailBatch } from "@/lib/mail";
+import { prisma } from "@/lib/prisma";
 
 const PASSWORD_SETUP_PURPOSE = "PASSWORD_SETUP";
 const PASSWORD_SETUP_CODE_TTL_MINUTES = 15;
@@ -46,6 +47,28 @@ export function passwordSetupMaxRequestsPerWindow() {
 
 export function passwordSetupRequestWindowStart() {
   return new Date(Date.now() - PASSWORD_SETUP_REQUEST_WINDOW_MINUTES * 60 * 1000);
+}
+
+export async function ensurePasswordSetupStorage() {
+  await prisma.$executeRawUnsafe(`
+    CREATE TABLE IF NOT EXISTS \`PasswordSetupCode\` (
+      \`id\` VARCHAR(191) NOT NULL,
+      \`userId\` VARCHAR(191) NOT NULL,
+      \`email\` VARCHAR(191) NOT NULL,
+      \`codeHash\` VARCHAR(191) NOT NULL,
+      \`purpose\` VARCHAR(191) NOT NULL DEFAULT 'PASSWORD_SETUP',
+      \`expiresAt\` DATETIME(3) NOT NULL,
+      \`consumedAt\` DATETIME(3) NULL,
+      \`createdAt\` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      PRIMARY KEY (\`id\`),
+      INDEX \`PasswordSetupCode_userId_expiresAt_idx\` (\`userId\`, \`expiresAt\`),
+      INDEX \`PasswordSetupCode_email_expiresAt_idx\` (\`email\`, \`expiresAt\`),
+      CONSTRAINT \`PasswordSetupCode_userId_fkey\`
+        FOREIGN KEY (\`userId\`) REFERENCES \`User\`(\`id\`)
+        ON DELETE CASCADE
+        ON UPDATE CASCADE
+    ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci
+  `);
 }
 
 export async function hashUserPassword(password: string) {

@@ -4,6 +4,7 @@ import { isPasswordAuthActive, passwordAuthLaunchAtIso } from "@/lib/auth-rollou
 import { prisma } from "@/lib/prisma";
 import { isMailConfigured } from "@/lib/mail";
 import {
+  ensurePasswordSetupStorage,
   generatePasswordSetupCode,
   hashPasswordSetupCode,
   normalizeAuthEmail,
@@ -59,6 +60,8 @@ export async function POST(request: NextRequest) {
       { status: 409 },
     );
   }
+
+  await ensurePasswordSetupStorage();
 
   const recentCodes = await prisma.passwordSetupCode.findMany({
     where: {
