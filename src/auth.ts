@@ -89,8 +89,16 @@ export const authOptions: NextAuthOptions = {
   },
   callbacks: {
     async signIn({ user, account }) {
+      if (account?.provider === "credentials") {
+        return isPasswordAuthActive();
+      }
+
       if (account?.provider !== "google" || !user.email) {
-        return account?.provider === "credentials" ? isPasswordAuthActive() : false;
+        return false;
+      }
+
+      if (isPasswordAuthActive()) {
+        return "/auth/error?error=PasswordLoginRequired";
       }
 
       const normalizedEmail = normalizeAuthEmail(user.email);

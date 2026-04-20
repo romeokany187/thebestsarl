@@ -200,7 +200,7 @@ export default function SignInPage() {
           </h1>
           <p className="mt-5 max-w-xl text-sm leading-6 text-slate-600 dark:text-white/65">
             Chaque collaborateur reçoit un code unique par email pour confirmer la création de son mot de passe.
-            Une fois activé, l&apos;accès se fait directement par email et mot de passe, avec Google conservé comme secours.
+            Une fois activé, l&apos;accès se fait uniquement par adresse email et mot de passe personnel.
           </p>
 
           <div className="mt-8 grid gap-3 sm:grid-cols-3">
@@ -394,17 +394,25 @@ export default function SignInPage() {
             ) : null}
           </div>
 
-          <div className="mt-8 border-t border-slate-200/80 pt-6 dark:border-white/10">
-            <p className="text-xs leading-5 text-slate-500 dark:text-white/50">
-              En vous connectant, vous acceptez les règles d&apos;accès de la plateforme. En cas de blocage exceptionnel, Google reste disponible comme secours contrôlé.
-            </p>
-            <button
-              onClick={() => signIn("google", { callbackUrl: "/post-login" })}
-              className="mt-4 flex w-full items-center justify-center gap-2 rounded-2xl border border-slate-200 px-4 py-3 text-sm font-semibold text-slate-800 transition hover:bg-slate-50 dark:border-white/15 dark:text-white dark:hover:bg-white/10"
-            >
-              Utiliser Google en secours
-            </button>
-          </div>
+          {!passwordAuthActive ? (
+            <div className="mt-8 border-t border-slate-200/80 pt-6 dark:border-white/10">
+              <p className="text-xs leading-5 text-slate-500 dark:text-white/50">
+                Pendant la période de préparation, Google reste disponible pour l&apos;accès courant. Après activation, seule la connexion email + mot de passe restera autorisée.
+              </p>
+              <button
+                onClick={() => signIn("google", { callbackUrl: "/post-login" })}
+                className="mt-4 flex w-full items-center justify-center gap-2 rounded-2xl border border-slate-200 px-4 py-3 text-sm font-semibold text-slate-800 transition hover:bg-slate-50 dark:border-white/15 dark:text-white dark:hover:bg-white/10"
+              >
+                Continuer avec Google pour aujourd&apos;hui
+              </button>
+            </div>
+          ) : (
+            <div className="mt-8 border-t border-slate-200/80 pt-6 dark:border-white/10">
+              <div className="rounded-2xl border border-slate-200 bg-slate-50/80 px-4 py-4 text-sm text-slate-600 dark:border-white/10 dark:bg-white/5 dark:text-white/60">
+                La connexion Google est désactivée une fois le mot de passe activé. L&apos;accès se fait uniquement avec l&apos;adresse email et le mot de passe configuré.
+              </div>
+            </div>
+          )}
         </section>
       </div>
     </main>
