@@ -5,7 +5,7 @@ const MESSAGES: Record<string, string> = {
   AccessDenied: "L'accès a été refusé pour ce compte.",
   Configuration: "La configuration d'authentification est momentanément indisponible.",
   Verification: "La vérification de connexion n'a pas pu aboutir.",
-  PasswordLoginRequired: "La connexion Google n'est plus autorisée. Utilisez désormais votre adresse email et votre mot de passe.",
+  PasswordLoginRequired: "La connexion Google est réservée à la toute première activation d'un compte sans mot de passe. Pour ce compte, utilisez désormais votre adresse email et votre mot de passe.",
 };
 
 export default async function AuthErrorPage({

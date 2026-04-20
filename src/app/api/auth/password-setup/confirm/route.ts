@@ -60,6 +60,7 @@ export async function POST(request: NextRequest) {
           id: true,
           email: true,
           name: true,
+          passwordHash: true,
         },
       },
     },
@@ -68,6 +69,18 @@ export async function POST(request: NextRequest) {
 
   if (!setupCode) {
     return NextResponse.json({ error: "Code invalide ou expiré." }, { status: 400 });
+  }
+
+  if (setupCode.user.passwordHash?.trim()) {
+    await prisma.passwordSetupCode.update({
+      where: { id: setupCode.id },
+      data: { consumedAt: new Date() },
+    });
+
+    return NextResponse.json(
+      { error: "Le mot de passe de ce compte est déjà configuré. Connectez-vous avec votre email et votre mot de passe." },
+      { status: 409 },
+    );
   }
 
   const passwordHash = await hashUserPassword(parsed.data.password);

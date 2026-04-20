@@ -46,11 +46,18 @@ export async function POST(request: NextRequest) {
   const email = normalizeAuthEmail(parsed.data.email);
   const user = await prisma.user.findUnique({
     where: { email },
-    select: { id: true, name: true, email: true },
+    select: { id: true, name: true, email: true, passwordHash: true },
   });
 
   if (!user) {
     return NextResponse.json({ ok: true, message: "Si ce compte existe, un code vient d'être envoyé." });
+  }
+
+  if (user.passwordHash?.trim()) {
+    return NextResponse.json(
+      { error: "Le mot de passe est déjà configuré pour ce compte. Connectez-vous directement avec votre email et votre mot de passe." },
+      { status: 409 },
+    );
   }
 
   const recentCodes = await prisma.passwordSetupCode.findMany({

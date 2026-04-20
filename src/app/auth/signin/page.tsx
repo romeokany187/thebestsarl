@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { signIn } from "next-auth/react";
 import { isPasswordAuthActive, passwordAuthLaunchAtIso } from "@/lib/auth-rollout";
 
@@ -51,6 +51,7 @@ export default function SignInPage() {
   const [setupRequested, setSetupRequested] = useState(false);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
+  const [setupRequired, setSetupRequired] = useState(false);
   const passwordAuthActive = useMemo(() => isPasswordAuthActive(), []);
   const launchAtLabel = useMemo(
     () => new Date(passwordAuthLaunchAtIso()).toLocaleString("fr-FR", {
@@ -60,6 +61,26 @@ export default function SignInPage() {
     }),
     [],
   );
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const setupEmailFromQuery = params.get("email")?.trim().toLowerCase() ?? "";
+    const requiresSetup = params.get("setup") === "required";
+
+    setSetupRequired(requiresSetup);
+
+    if (!setupEmailFromQuery) {
+      return;
+    }
+
+    setSetupEmail(setupEmailFromQuery);
+    setEmail(setupEmailFromQuery);
+
+    if (requiresSetup) {
+      setMessage("Première connexion confirmée. Configurez maintenant votre mot de passe pour finaliser l'accès à votre espace.");
+      setError("");
+    }
+  }, []);
 
   async function handleCredentialsSignIn(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -196,18 +217,18 @@ export default function SignInPage() {
             THEBEST SARL Workspace
           </Link>
           <h1 className="max-w-2xl text-4xl font-semibold tracking-tight text-slate-950 sm:text-5xl dark:text-white">
-            Accès sécurisé à l&apos;espace de travail avec mot de passe personnel et confirmation par email.
+            Accès sécurisé à l&apos;espace de travail avec mot de passe personnel et activation guidée.
           </h1>
           <p className="mt-5 max-w-xl text-sm leading-6 text-slate-600 dark:text-white/65">
-            Chaque collaborateur reçoit un code unique par email pour confirmer la création de son mot de passe.
-            Une fois activé, l&apos;accès se fait uniquement par adresse email et mot de passe personnel.
+            Un nouveau collaborateur peut faire une première entrée avec Google si son compte n&apos;a pas encore de mot de passe.
+            Ensuite, il configure son mot de passe une seule fois par code email, puis les connexions suivantes se font simplement par adresse email et mot de passe.
           </p>
 
           <div className="mt-8 grid gap-3 sm:grid-cols-3">
             {[
-              { step: "01", title: "Email vérifié", text: "Le code est envoyé uniquement à l'adresse du compte utilisateur existant." },
-              { step: "02", title: "Code unique", text: "Le code OTP expire vite et ne peut être utilisé qu'une seule fois." },
-              { step: "03", title: "Connexion simple", text: "Après activation, l'utilisateur accède à son espace avec ses propres identifiants." },
+              { step: "01", title: "Première entrée", text: "Google reste accepté uniquement pour un compte qui n'a pas encore de mot de passe." },
+              { step: "02", title: "Activation unique", text: "Le code OTP sert seulement à créer le mot de passe et n'est pas redemandé à chaque expiration de session." },
+              { step: "03", title: "Connexion simple", text: "Une fois le mot de passe créé, l'utilisateur se connecte ensuite avec email et mot de passe." },
             ].map((item) => (
               <div key={item.step} className="rounded-3xl border border-slate-200/80 bg-white/80 p-4 shadow-[0_12px_40px_rgba(15,23,42,0.06)] backdrop-blur dark:border-white/10 dark:bg-white/5 dark:shadow-none">
                 <p className="text-[11px] font-semibold tracking-[0.25em] text-slate-400 dark:text-white/40">{item.step}</p>
@@ -223,11 +244,11 @@ export default function SignInPage() {
             </p>
             <p className="mt-2 text-sm font-medium">
               {passwordAuthActive
-                ? "Le nouveau parcours de connexion par mot de passe est maintenant actif."
+                ? "Le parcours d'activation par mot de passe est actif. Google reste limité au tout premier accès d'un compte sans mot de passe."
                 : `Le nouveau parcours sera activé demain à 05:00, soit le ${launchAtLabel}.`}
             </p>
             <p className="mt-2 text-xs leading-5 opacity-80">
-              Les sessions utilisateur expireront automatiquement après 8 heures et les demandes de code OTP sont limitées pour éviter les abus.
+              Les sessions utilisateur expirent automatiquement après 8 heures. L'OTP n'est pas demandé à chaque reconnexion: il sert uniquement à l'initialisation du mot de passe et ses demandes restent limitées pour éviter les abus.
             </p>
           </div>
         </section>
@@ -236,7 +257,7 @@ export default function SignInPage() {
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
               <h2 className="text-xl font-semibold text-slate-950 dark:text-white">Connexion</h2>
-              <p className="mt-2 text-sm text-slate-600 dark:text-white/60">Saisissez votre email professionnel et votre mot de passe.</p>
+              <p className="mt-2 text-sm text-slate-600 dark:text-white/60">Utilisez votre email professionnel et votre mot de passe après la première activation.</p>
             </div>
             <div className={`rounded-full px-3 py-1 text-[11px] font-semibold tracking-[0.16em] ${passwordAuthActive ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-200" : "bg-slate-100 text-slate-600 dark:bg-white/10 dark:text-white/60"}`}>
               {passwordAuthActive ? "Actif" : "En attente"}
@@ -291,7 +312,7 @@ export default function SignInPage() {
               <div>
                 <h3 className="text-base font-semibold text-slate-950 dark:text-white">Première connexion ou mot de passe à créer</h3>
                 <p className="mt-1 text-sm text-slate-600 dark:text-white/60">
-                  Entrez votre email, recevez un code à usage unique, puis créez votre mot de passe.
+                  Après la première entrée Google d&apos;un compte sans mot de passe, demandez le code email puis créez le mot de passe définitif du compte.
                 </p>
               </div>
               <div className="rounded-full bg-slate-100 px-3 py-1 text-[11px] font-semibold tracking-[0.16em] text-slate-600 dark:bg-white/10 dark:text-white/60">
@@ -408,9 +429,15 @@ export default function SignInPage() {
             </div>
           ) : (
             <div className="mt-8 border-t border-slate-200/80 pt-6 dark:border-white/10">
-              <div className="rounded-2xl border border-slate-200 bg-slate-50/80 px-4 py-4 text-sm text-slate-600 dark:border-white/10 dark:bg-white/5 dark:text-white/60">
-                La connexion Google est désactivée une fois le mot de passe activé. L&apos;accès se fait uniquement avec l&apos;adresse email et le mot de passe configuré.
-              </div>
+              <p className="text-xs leading-5 text-slate-500 dark:text-white/50">
+                Après activation, Google ne sert plus qu&apos;à la toute première entrée d&apos;un compte sans mot de passe. Une fois le mot de passe créé, les connexions suivantes se font uniquement avec email + mot de passe, sans nouveau code OTP à chaque session.
+              </p>
+              <button
+                onClick={() => signIn("google", { callbackUrl: "/post-login" })}
+                className="mt-4 flex w-full items-center justify-center gap-2 rounded-2xl border border-slate-200 px-4 py-3 text-sm font-semibold text-slate-800 transition hover:bg-slate-50 dark:border-white/15 dark:text-white dark:hover:bg-white/10"
+              >
+                Première connexion avec Google
+              </button>
             </div>
           )}
         </section>

@@ -97,15 +97,23 @@ export const authOptions: NextAuthOptions = {
         return false;
       }
 
-      if (isPasswordAuthActive()) {
-        return "/auth/error?error=PasswordLoginRequired";
-      }
-
       const normalizedEmail = normalizeAuthEmail(user.email);
       const isAdminEmail = adminEmails.has(normalizedEmail);
 
       try {
-        const existing = await prisma.user.findUnique({ where: { email: normalizedEmail } });
+        const existing = await prisma.user.findUnique({
+          where: { email: normalizedEmail },
+          select: {
+            id: true,
+            role: true,
+            canImportTicketWorkbook: true,
+            passwordHash: true,
+          },
+        });
+
+        if (isPasswordAuthActive() && existing?.passwordHash?.trim()) {
+          return "/auth/error?error=PasswordLoginRequired";
+        }
 
         if (!existing) {
           await prisma.user.create({
