@@ -24,6 +24,7 @@ type UserRow = {
   role: UserRole;
   jobTitle: JobTitle;
   teamName: string;
+  passwordConfigured: boolean;
 };
 
 const roleOptions: Array<{ value: UserRole; label: string }> = [
@@ -56,7 +57,7 @@ function roleLabel(role: UserRole) {
   return "Employé";
 }
 
-export function UserJobTitleAdmin({ users }: { users: UserRow[] }) {
+export function UserJobTitleAdmin({ users, currentUserId }: { users: UserRow[]; currentUserId: string }) {
   const [rows, setRows] = useState(users);
   const [status, setStatus] = useState<string>("");
   const [savingId, setSavingId] = useState<string>("");
@@ -127,6 +128,37 @@ export function UserJobTitleAdmin({ users }: { users: UserRow[] }) {
     setSavingId("");
   }
 
+  async function resetPassword(userId: string) {
+    const row = rows.find((item) => item.id === userId);
+    if (!row) return;
+
+    const ok = window.confirm(
+      `Réinitialiser le mot de passe de ${row.name} ? L'utilisateur sera déconnecté et devra repasser par Google puis recréer son mot de passe.`,
+    );
+    if (!ok) return;
+
+    setSavingId(userId);
+    setStatus("Réinitialisation du mot de passe...");
+
+    const response = await fetch(`/api/users/${userId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ resetPassword: true }),
+    });
+
+    const payload = await response.json().catch(() => null);
+
+    if (!response.ok) {
+      setStatus(payload?.error ?? "Échec de la réinitialisation du mot de passe.");
+      setSavingId("");
+      return;
+    }
+
+    setRows((prev) => prev.map((item) => (item.id === userId ? { ...item, passwordConfigured: false } : item)));
+    setStatus(`Mot de passe réinitialisé pour ${row.name}.`);
+    setSavingId("");
+  }
+
   return (
     <section className="rounded-xl border border-black/10 bg-white p-4 dark:border-white/10 dark:bg-zinc-900">
       <div className="mb-3">
@@ -142,6 +174,7 @@ export function UserJobTitleAdmin({ users }: { users: UserRow[] }) {
             <tr>
               <th className="px-3 py-2 text-left">Employé</th>
               <th className="px-3 py-2 text-left">Email</th>
+              <th className="px-3 py-2 text-left">Mot de passe</th>
               <th className="px-3 py-2 text-left">Rôle système</th>
               <th className="px-3 py-2 text-left">Service</th>
               <th className="px-3 py-2 text-left">Fonction métier</th>
@@ -153,6 +186,15 @@ export function UserJobTitleAdmin({ users }: { users: UserRow[] }) {
               <tr key={user.id} className="border-t border-black/5 dark:border-white/10">
                 <td className="px-3 py-2">{user.name}</td>
                 <td className="px-3 py-2">{user.email}</td>
+                <td className="px-3 py-2">
+                  <span
+                    className={`inline-flex rounded-full px-2 py-1 text-[11px] font-semibold ${user.passwordConfigured
+                      ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300"
+                      : "bg-amber-100 text-amber-800 dark:bg-amber-950/40 dark:text-amber-300"}`}
+                  >
+                    {user.passwordConfigured ? "Configure" : "A creer"}
+                  </span>
+                </td>
                 <td className="px-3 py-2">
                   <select
                     className="w-full rounded-md border px-2 py-1.5"
@@ -190,6 +232,14 @@ export function UserJobTitleAdmin({ users }: { users: UserRow[] }) {
                       className="rounded-md border border-black/15 px-3 py-1.5 text-xs font-semibold hover:bg-black/5 disabled:cursor-not-allowed disabled:opacity-60 dark:border-white/20 dark:hover:bg-white/10"
                     >
                       {savingId === user.id ? "Sauvegarde..." : "Enregistrer"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => void resetPassword(user.id)}
+                      disabled={savingId === user.id || user.id === currentUserId || user.role === "ADMIN"}
+                      className="rounded-md border border-amber-300 px-3 py-1.5 text-xs font-semibold text-amber-800 hover:bg-amber-50 disabled:cursor-not-allowed disabled:opacity-60 dark:border-amber-700/60 dark:text-amber-300 dark:hover:bg-amber-950/30"
+                    >
+                      Reinitialiser mot de passe
                     </button>
                     <button
                       type="button"

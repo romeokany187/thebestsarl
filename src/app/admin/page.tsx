@@ -8,7 +8,7 @@ import { requirePageModuleAccess } from "@/lib/rbac";
 export const dynamic = "force-dynamic";
 
 export default async function AdminPage() {
-  const { role } = await requirePageModuleAccess("admin", ["ADMIN"]);
+  const { role, session } = await requirePageModuleAccess("admin", ["ADMIN"]);
 
   const [users, airlines, openingBalances] = await Promise.all([
     prisma.user.findMany({
@@ -67,7 +67,9 @@ export default async function AdminPage() {
             role: user.role,
             jobTitle: user.jobTitle,
             teamName: user.team?.name ?? "Sans équipe",
+            passwordConfigured: Boolean(user.passwordHash?.trim()),
           }))}
+          currentUserId={session.user.id}
         />
       </section>
 

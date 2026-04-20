@@ -8,6 +8,7 @@ declare module "next-auth" {
       jobTitle?: string;
       teamName?: string | null;
       canImportTicketWorkbook?: boolean;
+      sessionRevoked?: boolean;
     } & DefaultSession["user"];
   }
 }
@@ -18,5 +19,6 @@ declare module "next-auth/jwt" {
     jobTitle?: string;
     teamName?: string | null;
     canImportTicketWorkbook?: boolean;
+    sessionRevoked?: boolean;
   }
 }

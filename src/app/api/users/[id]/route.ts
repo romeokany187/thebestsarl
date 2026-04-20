@@ -69,7 +69,8 @@ const userUpdateSchema = z.object({
   teamId: z.string().min(1).nullable().optional(),
   role: z.nativeEnum(Role).optional(),
   canImportTicketWorkbook: z.boolean().optional(),
-}).refine((value) => value.jobTitle !== undefined || value.teamId !== undefined || value.role !== undefined || value.canImportTicketWorkbook !== undefined, {
+  resetPassword: z.boolean().optional(),
+}).refine((value) => value.jobTitle !== undefined || value.teamId !== undefined || value.role !== undefined || value.canImportTicketWorkbook !== undefined || value.resetPassword !== undefined, {
   message: "Aucune donnée à mettre à jour.",
 });
 
@@ -134,6 +135,75 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
         { error: "Seul un administrateur peut modifier le rôle d'un administrateur." },
         { status: 403 },
       );
+    }
+  }
+
+  if (parsed.data.resetPassword) {
+    if (actor.role !== "ADMIN") {
+      return NextResponse.json({ error: "La réinitialisation du mot de passe est réservée à l'administrateur." }, { status: 403 });
+    }
+
+    if (existing.role === "ADMIN") {
+      return NextResponse.json({ error: "Réinitialisation du mot de passe d'un administrateur interdite." }, { status: 400 });
+    }
+
+    try {
+      const updated = await prisma.$transaction(async (tx) => {
+        await tx.passwordSetupCode.updateMany({
+          where: {
+            userId: id,
+            consumedAt: null,
+          },
+          data: {
+            consumedAt: new Date(),
+          },
+        });
+
+        return tx.user.update({
+          where: { id },
+          data: { passwordHash: "" },
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            role: true,
+            jobTitle: true,
+            canImportTicketWorkbook: true,
+            team: { select: { id: true, name: true } },
+          },
+        });
+      });
+
+      await prisma.userNotification.create({
+        data: {
+          userId: updated.id,
+          title: "Mot de passe réinitialisé",
+          type: "SECURITY",
+          message: "Votre mot de passe a été réinitialisé par l'administrateur. Reconnectez-vous avec Google pour définir un nouveau mot de passe.",
+          metadata: {
+            resetBy: actor.id,
+            resetByName: actor.name,
+          },
+        },
+      });
+
+      await writeActivityLog({
+        actorId: access.session.user.id,
+        action: "USER_PASSWORD_RESET",
+        entityType: "USER",
+        entityId: updated.id,
+        summary: `Mot de passe réinitialisé pour ${updated.name}.`,
+        payload: {
+          name: updated.name,
+          email: updated.email,
+          changedBy: actor.name,
+        },
+      });
+
+      return NextResponse.json({ data: updated, passwordReset: true });
+    } catch (error) {
+      console.error("PATCH /api/users/[id] resetPassword failed", error);
+      return NextResponse.json({ error: "Échec de la réinitialisation du mot de passe." }, { status: 500 });
     }
   }
 

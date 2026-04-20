@@ -4,6 +4,7 @@ import GoogleProvider from "next-auth/providers/google";
 import { isPasswordAuthActive } from "@/lib/auth-rollout";
 import { prisma } from "@/lib/prisma";
 import { normalizeAuthEmail, verifyUserPassword } from "@/lib/password-setup";
+import { shouldForceReauthenticateSession } from "@/lib/session-security";
 
 const DEFAULT_ADMIN_EMAIL = "romeokany187@gmail.com";
 const SESSION_MAX_AGE_SECONDS = 8 * 60 * 60;
@@ -145,6 +146,12 @@ export const authOptions: NextAuthOptions = {
       }
     },
     async jwt({ token, user }) {
+      const tokenIssuedAt = typeof token.iat === "number" ? token.iat : undefined;
+
+      if (shouldForceReauthenticateSession(tokenIssuedAt)) {
+        token.sessionRevoked = true;
+      }
+
       const authUser = user as (typeof user & {
         id?: string;
         role?: string;
@@ -168,6 +175,9 @@ export const authOptions: NextAuthOptions = {
       if (typeof authUser?.canImportTicketWorkbook !== "undefined") {
         token.canImportTicketWorkbook = Boolean(authUser.canImportTicketWorkbook);
       }
+      if (authUser?.id) {
+        token.sessionRevoked = false;
+      }
       if (user?.email) {
         token.email = user.email.trim().toLowerCase();
       }
@@ -183,6 +193,7 @@ export const authOptions: NextAuthOptions = {
               role: true,
               jobTitle: true,
               canImportTicketWorkbook: true,
+              passwordHash: true,
               team: { select: { name: true } },
             },
           });
@@ -194,6 +205,11 @@ export const authOptions: NextAuthOptions = {
             token.jobTitle = dbUser.jobTitle;
             token.teamName = dbUser.team?.name ?? null;
             token.canImportTicketWorkbook = dbUser.canImportTicketWorkbook;
+            if (isPasswordAuthActive() && !dbUser.passwordHash?.trim()) {
+              token.sessionRevoked = true;
+            }
+          } else {
+            token.sessionRevoked = true;
           }
         } catch (error) {
           console.error("[auth] jwt database error", error);
@@ -203,6 +219,20 @@ export const authOptions: NextAuthOptions = {
       return token;
     },
     async session({ session, token }) {
+      if (token.sessionRevoked) {
+        if (session.user) {
+          session.user.id = "";
+          session.user.role = "";
+          session.user.jobTitle = undefined;
+          session.user.teamName = null;
+          session.user.canImportTicketWorkbook = false;
+          session.user.name = undefined;
+          session.user.email = undefined;
+          session.user.sessionRevoked = true;
+        }
+        return session;
+      }
+
       if (session.user) {
         session.user.id = token.sub ?? "";
         session.user.role = token.role as string;
@@ -211,6 +241,7 @@ export const authOptions: NextAuthOptions = {
         session.user.canImportTicketWorkbook = Boolean(token.canImportTicketWorkbook);
         session.user.name = token.name ?? session.user.name;
         session.user.email = token.email ?? session.user.email;
+        session.user.sessionRevoked = false;
       }
       return session;
     },
