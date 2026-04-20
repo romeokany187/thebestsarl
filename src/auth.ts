@@ -8,6 +8,10 @@ function normalizeEmail(value?: string | null) {
   return value?.trim().toLowerCase() ?? "";
 }
 
+function tokenNeedsDatabaseRefresh(token: Record<string, unknown>) {
+  return !token.sub || !token.role || !token.jobTitle || !token.name;
+}
+
 const adminEmails = new Set(
   `${process.env.ADMIN_EMAILS ?? ""},${process.env.ADMIN_EMAIL ?? ""},${DEFAULT_ADMIN_EMAIL}`
     .split(",")
@@ -73,7 +77,7 @@ export const authOptions: NextAuthOptions = {
         token.email = user.email.trim().toLowerCase();
       }
 
-      if (token.email) {
+      if (token.email && (user?.email || tokenNeedsDatabaseRefresh(token as Record<string, unknown>))) {
         try {
           const dbUser = await prisma.user.findUnique({
             where: { email: String(token.email).trim().toLowerCase() },
