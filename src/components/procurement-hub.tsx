@@ -2,6 +2,11 @@
 
 import { FormEvent, useMemo, useState } from "react";
 import { parseNeedQuote } from "@/lib/need-lines";
+import {
+  WORKFLOW_ASSIGNMENT_OPTIONS,
+  workflowAssignmentLabel,
+  type WorkflowAssignmentValue,
+} from "@/lib/workflow-assignment";
 
 type NeedStatus = "DRAFT" | "SUBMITTED" | "APPROVED" | "REJECTED";
 type MovementType = "IN" | "OUT";
@@ -78,11 +83,12 @@ function parseNeedMeta(details: string) {
     beneficiaryPersonId: string | null;
     beneficiaryPersonName: string | null;
     items: Array<{ designation: string; description: string; quantity: number; unitPrice: number }>;
+    assignment: WorkflowAssignmentValue;
   };
 
   const parsed = parseNeedQuote(details);
   if (!parsed) {
-    const meta: NeedMeta = { urgencyLevel: null, beneficiaryTeam: null, beneficiaryPersonId: null, beneficiaryPersonName: null, items: [] };
+    const meta: NeedMeta = { urgencyLevel: null, beneficiaryTeam: null, beneficiaryPersonId: null, beneficiaryPersonName: null, assignment: "A_MON_COMPTE", items: [] };
     return meta;
   }
 
@@ -91,6 +97,7 @@ function parseNeedMeta(details: string) {
     beneficiaryTeam: parsed.beneficiaryTeam ?? null,
     beneficiaryPersonId: parsed.beneficiaryPersonId ?? null,
     beneficiaryPersonName: parsed.beneficiaryPersonName ?? null,
+    assignment: parsed.assignment ?? "A_MON_COMPTE",
     items: parsed.items.map((item) => ({
       designation: item.designation,
       description: item.description,
@@ -159,6 +166,7 @@ export function ProcurementHub({
   const [needCurrency, setNeedCurrency] = useState<"CDF" | "USD">("CDF");
   const [selectedBeneficiaryTeam, setSelectedBeneficiaryTeam] = useState<NeedBeneficiaryTeam>("KINSHASA");
   const [selectedBeneficiaryPerson, setSelectedBeneficiaryPerson] = useState("");
+  const [selectedAssignment, setSelectedAssignment] = useState<WorkflowAssignmentValue>("A_MON_COMPTE");
 
   const filteredUsers = useMemo(() => {
     const keyword = selectedBeneficiaryTeam.toLowerCase();
@@ -207,6 +215,7 @@ export function ProcurementHub({
         need.code ?? "",
         need.title,
         need.requester.name,
+        workflowAssignmentLabel(meta.assignment),
         meta.beneficiaryPersonName ?? "",
         meta.beneficiaryTeam ? BENEFICIARY_LABEL[meta.beneficiaryTeam] : "",
       ]
@@ -233,6 +242,7 @@ export function ProcurementHub({
     setSelectedUrgencyLevel("NORMALE");
     setSelectedBeneficiaryTeam("KINSHASA");
     setSelectedBeneficiaryPerson("");
+    setSelectedAssignment("A_MON_COMPTE");
     setNeedCurrency("CDF");
     setNeedLines([{ designation: "", description: "", quantity: "1", unitPrice: "0" }]);
   }
@@ -244,6 +254,7 @@ export function ProcurementHub({
     setSelectedUrgencyLevel(meta.urgencyLevel ?? "NORMALE");
     setSelectedBeneficiaryTeam(meta.beneficiaryTeam ?? "KINSHASA");
     setSelectedBeneficiaryPerson(meta.beneficiaryPersonId ?? "");
+    setSelectedAssignment(meta.assignment ?? "A_MON_COMPTE");
     setNeedCurrency(normalizeMoneyCurrency(need.currency));
     setNeedLines(
       meta.items.length > 0
@@ -325,6 +336,7 @@ export function ProcurementHub({
         beneficiaryTeam: selectedBeneficiaryTeam,
         beneficiaryPersonId,
         beneficiaryPersonName,
+        assignment: selectedAssignment,
         currency: needCurrency,
         items,
       }),
@@ -475,6 +487,17 @@ export function ProcurementHub({
                     <option value="ELEVEE">Urgence élevée</option>
                     <option value="NORMALE">Urgence normale</option>
                     <option value="FAIBLE">Urgence faible</option>
+                  </select>
+                  <select
+                    name="assignment"
+                    value={selectedAssignment}
+                    onChange={(event) => setSelectedAssignment(event.target.value as WorkflowAssignmentValue)}
+                    required
+                    className="rounded-md border px-3 py-2 text-sm"
+                  >
+                    {WORKFLOW_ASSIGNMENT_OPTIONS.map((option) => (
+                      <option key={option.value} value={option.value}>{option.label}</option>
+                    ))}
                   </select>
                   <select
                     name="beneficiaryTeam"
@@ -697,6 +720,7 @@ export function ProcurementHub({
                 <th className="px-3 py-2 text-left font-semibold">Objet</th>
                 <th className="px-3 py-2 text-left font-semibold">Demandeur</th>
                 <th className="px-3 py-2 text-left font-semibold">Urgence</th>
+                <th className="px-3 py-2 text-left font-semibold">Affectation</th>
                 <th className="px-3 py-2 text-left font-semibold">Équipe cible</th>
                 <th className="px-3 py-2 text-left font-semibold">Bénéficiaire</th>
                 <th className="px-3 py-2 text-left font-semibold">Montant</th>
@@ -715,6 +739,7 @@ export function ProcurementHub({
                   <td className="px-3 py-2 font-medium">{need.title}</td>
                   <td className="px-3 py-2">{need.requester.name}</td>
                   <td className="px-3 py-2 text-xs font-semibold">{meta.urgencyLevel ? URGENCY_LABEL[meta.urgencyLevel] : "-"}</td>
+                  <td className="px-3 py-2 text-xs">{workflowAssignmentLabel(meta.assignment)}</td>
                   <td className="px-3 py-2 text-xs">{meta.beneficiaryTeam ? BENEFICIARY_LABEL[meta.beneficiaryTeam] : "-"}</td>
                   <td className="px-3 py-2 text-xs">{meta.beneficiaryPersonName ?? "-"}</td>
                   <td className="px-3 py-2">

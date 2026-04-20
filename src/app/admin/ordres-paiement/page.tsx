@@ -3,21 +3,13 @@ import { PaymentOrderDeleteButton } from "@/components/payment-order-delete-butt
 import { PaymentOrderForm } from "@/components/payment-order-form";
 import { prisma } from "@/lib/prisma";
 import { requirePageModuleAccess } from "@/lib/rbac";
+import { workflowAssignmentLabel } from "@/lib/workflow-assignment";
 
 const paymentOrderClient = (prisma as unknown as { paymentOrder: any }).paymentOrder;
 
 function normalizeMoneyCurrency(value: string | null | undefined): "USD" | "CDF" {
   const normalized = (value ?? "CDF").trim().toUpperCase();
   return normalized === "USD" ? "USD" : "CDF";
-}
-
-function paymentOrderAssignmentLabel(value: string | null | undefined) {
-  const normalized = (value ?? "A_MON_COMPTE").trim().toUpperCase();
-  if (normalized === "VISAS") return "Visas";
-  if (normalized === "SAFETY") return "Safety";
-  if (normalized === "BILLETTERIE") return "THE BEST";
-  if (normalized === "TSL") return "TSL";
-  return "À mon compte";
 }
 
 export const dynamic = "force-dynamic";
@@ -77,7 +69,7 @@ export default async function AdminPaymentOrdersPage() {
                   <td className="px-4 py-3 font-mono text-xs font-semibold">{order.code ?? "-"}</td>
                   <td className="px-4 py-3">{order.beneficiary || "-"}</td>
                   <td className="px-4 py-3">{order.purpose || "-"}</td>
-                  <td className="px-4 py-3">{paymentOrderAssignmentLabel(order.assignment)}</td>
+                  <td className="px-4 py-3">{workflowAssignmentLabel(order.assignment)}</td>
                   <td className="px-4 py-3">{order.amount.toFixed(2)} {normalizeMoneyCurrency(order.currency)}</td>
                   <td className="px-4 py-3">{order.status}</td>
                   <td className="px-4 py-3">

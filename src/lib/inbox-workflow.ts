@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { isCashierJobTitle } from "@/lib/assignment";
+import { parseNeedQuote } from "@/lib/need-lines";
 
 export type WorkflowPaymentOrder = {
   id: string;
@@ -25,6 +26,7 @@ export type WorkflowNeed = {
   id: string;
   code?: string | null;
   title: string;
+  assignment: string;
   category: string;
   estimatedAmount?: number | null;
   currency?: string | null;
@@ -68,6 +70,7 @@ type NeedRecord = {
   id: string;
   code?: string | null;
   title: string;
+  details?: string | null;
   category: string;
   estimatedAmount?: number | null;
   currency?: string | null;
@@ -100,8 +103,10 @@ function serializePaymentOrder(order: PaymentOrderRecord): WorkflowPaymentOrder 
 }
 
 function serializeNeed(need: NeedRecord): WorkflowNeed {
+  const quote = parseNeedQuote(need.details ?? null);
   return {
     ...need,
+    assignment: quote?.assignment ?? "A_MON_COMPTE",
     createdAt: need.createdAt.toISOString(),
     submittedAt: need.submittedAt?.toISOString() ?? null,
     approvedAt: need.approvedAt?.toISOString() ?? null,

@@ -2,17 +2,9 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { WORKFLOW_ASSIGNMENT_OPTIONS, type WorkflowAssignmentValue } from "@/lib/workflow-assignment";
 
-type PaymentOrderAssignment = "A_MON_COMPTE" | "VISAS" | "SAFETY" | "BILLETTERIE" | "TSL";
 type PaymentOrderIssuerRole = "ADMIN" | "DIRECTEUR_GENERAL";
-
-const ASSIGNMENT_LABELS: Record<PaymentOrderAssignment, string> = {
-  A_MON_COMPTE: "À mon compte",
-  VISAS: "Visas",
-  SAFETY: "Safety",
-  BILLETTERIE: "THE BEST",
-  TSL: "TSL",
-};
 
 const PURPOSE_SUGGESTIONS = [
   "Approvisionnement compagnie",
@@ -49,7 +41,7 @@ export function PaymentOrderForm({ issuerRole = "DIRECTEUR_GENERAL" }: { issuerR
   const [beneficiary, setBeneficiary] = useState("");
   const [purpose, setPurpose] = useState("");
   const [description, setDescription] = useState("");
-  const [assignment, setAssignment] = useState<PaymentOrderAssignment>("A_MON_COMPTE");
+  const [assignment, setAssignment] = useState<WorkflowAssignmentValue>("A_MON_COMPTE");
   const [amount, setAmount] = useState("");
   const [currency, setCurrency] = useState<"CDF" | "USD">("CDF");
   const [state, setState] = useState<"idle" | "loading" | "success" | "error">("idle");
@@ -162,12 +154,12 @@ export function PaymentOrderForm({ issuerRole = "DIRECTEUR_GENERAL" }: { issuerR
         />
         <select
           value={assignment}
-          onChange={(event) => setAssignment(event.target.value as PaymentOrderAssignment)}
+          onChange={(event) => setAssignment(event.target.value as WorkflowAssignmentValue)}
           className="min-w-0 rounded-md border border-black/15 bg-white px-3 py-2 text-sm dark:border-white/15 dark:bg-zinc-900"
           disabled={state === "loading"}
         >
-          {Object.entries(ASSIGNMENT_LABELS).map(([value, label]) => (
-            <option key={value} value={value}>{label}</option>
+          {WORKFLOW_ASSIGNMENT_OPTIONS.map((option) => (
+            <option key={option.value} value={option.value}>{option.label}</option>
           ))}
         </select>
         <input

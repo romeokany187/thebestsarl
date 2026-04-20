@@ -5,6 +5,7 @@ import { requireApiModuleAccess } from "@/lib/rbac";
 import { needRequestSchema, needRequestUpdateSchema } from "@/lib/validators";
 import { quoteFromItems, serializeNeedQuote } from "@/lib/need-lines";
 import { writeActivityLog } from "@/lib/activity-log";
+import { normalizeWorkflowAssignment } from "@/lib/workflow-assignment";
 
 function normalizeMoneyCurrency(value: string | null | undefined): "USD" | "CDF" {
   const normalized = (value ?? "CDF").trim().toUpperCase();
@@ -60,6 +61,7 @@ export async function POST(request: NextRequest) {
     beneficiaryTeam: parsed.data.beneficiaryTeam,
     beneficiaryPersonId: parsed.data.beneficiaryPersonId,
     beneficiaryPersonName: parsed.data.beneficiaryPersonName,
+    assignment: normalizeWorkflowAssignment(parsed.data.assignment),
   };
 
   const quote = parsed.data.items?.length
@@ -221,6 +223,7 @@ export async function PATCH(request: NextRequest) {
     beneficiaryTeam: parsed.data.beneficiaryTeam,
     beneficiaryPersonId: parsed.data.beneficiaryPersonId,
     beneficiaryPersonName: parsed.data.beneficiaryPersonName,
+    assignment: normalizeWorkflowAssignment(parsed.data.assignment),
   };
 
   const quote = parsed.data.items?.length

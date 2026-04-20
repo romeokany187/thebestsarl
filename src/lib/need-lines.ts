@@ -1,3 +1,5 @@
+import { normalizeWorkflowAssignment, type WorkflowAssignmentValue } from "@/lib/workflow-assignment";
+
 export type NeedLine = {
   designation: string;
   description: string;
@@ -14,6 +16,7 @@ export type NeedDetailsQuote = {
   beneficiaryTeam?: "KINSHASA" | "LUBUMBASHI" | "MBUJIMAYI";
   beneficiaryPersonId?: string;
   beneficiaryPersonName?: string;
+  assignment?: WorkflowAssignmentValue;
 };
 
 function round2(value: number) {
@@ -47,6 +50,7 @@ export function quoteFromItems(
     beneficiaryTeam?: "KINSHASA" | "LUBUMBASHI" | "MBUJIMAYI";
     beneficiaryPersonId?: string;
     beneficiaryPersonName?: string;
+    assignment?: WorkflowAssignmentValue;
   },
 ): NeedDetailsQuote {
   const normalized = normalizeNeedLines(items);
@@ -60,6 +64,7 @@ export function quoteFromItems(
     beneficiaryTeam: options?.beneficiaryTeam,
     beneficiaryPersonId: options?.beneficiaryPersonId,
     beneficiaryPersonName: options?.beneficiaryPersonName,
+    assignment: options?.assignment,
   };
 }
 
@@ -121,6 +126,7 @@ function parseQuotePayload(details: string) {
         beneficiaryTeam?: string;
         beneficiaryPersonId?: string;
         beneficiaryPersonName?: string;
+        assignment?: string;
         items?: Array<{
           designation?: string;
           description?: string;
@@ -189,5 +195,6 @@ export function parseNeedQuote(details: string | null | undefined): NeedDetailsQ
         : undefined,
     beneficiaryPersonId: typeof payload.beneficiaryPersonId === "string" ? payload.beneficiaryPersonId : undefined,
     beneficiaryPersonName: typeof payload.beneficiaryPersonName === "string" ? payload.beneficiaryPersonName : undefined,
+    assignment: normalizeWorkflowAssignment(payload.assignment),
   };
 }

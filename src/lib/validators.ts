@@ -1,5 +1,6 @@
 import { PaymentStatus, ReportPeriod, ReportStatus, SaleNature, SiteType, TravelClass } from "@prisma/client";
 import { z } from "zod";
+import { WORKFLOW_ASSIGNMENT_VALUES } from "@/lib/workflow-assignment";
 
 const moneyCurrencySchema = z.preprocess(
   (value) => (typeof value === "string" ? value.trim().toUpperCase() : value),
@@ -227,6 +228,7 @@ export const needRequestSchema = z.object({
   beneficiaryTeam: z.enum(["KINSHASA", "LUBUMBASHI", "MBUJIMAYI"]),
   beneficiaryPersonId: z.string().optional(),
   beneficiaryPersonName: z.string().max(120).optional(),
+  assignment: z.enum(WORKFLOW_ASSIGNMENT_VALUES),
   details: z.string().min(10).max(4000).optional(),
   quantity: z.number().positive().optional(),
   unit: z.string().min(1).max(20).optional(),
@@ -276,7 +278,7 @@ export const stockMovementSchema = z.object({
   needRequestId: z.string().optional(),
 });
 
-export const paymentOrderAssignmentSchema = z.enum(["A_MON_COMPTE", "VISAS", "SAFETY", "BILLETTERIE", "TSL"]);
+export const paymentOrderAssignmentSchema = z.enum(WORKFLOW_ASSIGNMENT_VALUES);
 
 export const paymentOrderCreationSchema = z.object({
   beneficiary: z.string().trim().min(2).max(180),

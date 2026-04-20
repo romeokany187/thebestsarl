@@ -5,6 +5,7 @@ import { PaymentOrderDeleteButton } from "@/components/payment-order-delete-butt
 import { ProcurementInboxActions } from "@/components/procurement-inbox-actions";
 import { ProcurementCashExecutionActions } from "@/components/procurement-cash-execution-actions";
 import type { WorkflowNeed, WorkflowPaymentOrder } from "@/lib/inbox-workflow";
+import { workflowAssignmentLabel } from "@/lib/workflow-assignment";
 
 type WorkflowMode = "validate" | "execute" | "history";
 
@@ -16,15 +17,6 @@ function formatWhen(value?: string | null) {
 function normalizeMoneyCurrency(value?: string | null): "USD" | "CDF" {
   const normalized = (value ?? "CDF").trim().toUpperCase();
   return normalized === "USD" ? "USD" : "CDF";
-}
-
-function paymentOrderAssignmentLabel(value?: string | null) {
-  const normalized = (value ?? "A_MON_COMPTE").trim().toUpperCase();
-  if (normalized === "VISAS") return "Visas";
-  if (normalized === "SAFETY") return "Safety";
-  if (normalized === "BILLETTERIE") return "THE BEST";
-  if (normalized === "TSL") return "TSL";
-  return "À mon compte";
 }
 
 function hasNeedExecutionMarker(value?: string | null) {
@@ -103,7 +95,7 @@ function renderPaymentCard(order: WorkflowPaymentOrder, mode: WorkflowMode) {
         <div>
           <p className="font-semibold">{order.code ?? `OP-${order.id.slice(0, 8).toUpperCase()}`}</p>
           <p className="text-xs text-black/60 dark:text-white/60">
-            {order.beneficiary} • {paymentOrderAssignmentLabel(order.assignment)}
+            {order.beneficiary} - {workflowAssignmentLabel(order.assignment)}
           </p>
         </div>
         <span className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold ${statusBadgeClass(order.status)}`}>
@@ -153,7 +145,7 @@ function renderNeedCard(need: WorkflowNeed, mode: WorkflowMode) {
         <div>
           <p className="font-semibold">{need.code ?? `EDB-${need.id.slice(0, 8).toUpperCase()}`}</p>
           <p className="text-xs text-black/60 dark:text-white/60">
-            {need.title} • {need.category}
+            {need.title} - {workflowAssignmentLabel(need.assignment)}
           </p>
         </div>
         <span className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold ${statusBadgeClass(badgeStatus)}`}>
@@ -199,10 +191,10 @@ export function WorkflowStatusBoard({
 }) {
   const groupedPayments = mode === "history"
     ? null
-    : groupByLabel(paymentOrders, (order) => paymentOrderAssignmentLabel(order.assignment));
+    : groupByLabel(paymentOrders, (order) => workflowAssignmentLabel(order.assignment));
   const groupedNeeds = mode === "history"
     ? null
-    : groupByLabel(needs, (need) => need.category || "GENERAL");
+    : groupByLabel(needs, (need) => workflowAssignmentLabel(need.assignment));
 
   return (
     <div className="space-y-5">

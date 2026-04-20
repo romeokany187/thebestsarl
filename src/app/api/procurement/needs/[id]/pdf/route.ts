@@ -1,10 +1,11 @@
 import path from "node:path";
+import { readFile } from "node:fs/promises";
 import { NextResponse, NextRequest } from "next/server";
-import { PDFDocument, PDFFont, PDFImage, rgb } from "pdf-lib";
+import { PDFDocument, PDFFont, StandardFonts, rgb, type PDFImage, type PDFPage } from "pdf-lib";
 import fontkit from "@pdf-lib/fontkit";
-import fs from "fs";
 import { parseNeedQuote } from "@/lib/need-lines";
 import { prisma } from "@/lib/prisma";
+import { workflowAssignmentLabel } from "@/lib/workflow-assignment";
 
 type RouteContext = {
   params: Promise<{ id: string }>;
@@ -12,14 +13,19 @@ type RouteContext = {
 
 const PAGE_WIDTH = 595;
 const PAGE_HEIGHT = 842;
-const LEFT = 42;
-const RIGHT = 553;
-const LABEL_WIDTH = 102;
-const VALUE_X = LEFT + LABEL_WIDTH;
-const RIGHT_COLUMN_X = 392;
-const LIGHT = rgb(0.82, 0.85, 0.9);
-const TEXT = rgb(0.18, 0.2, 0.23);
-const MUTED = rgb(0.45, 0.48, 0.53);
+const LEFT = 38;
+const RIGHT = 557;
+
+const COLORS = {
+  ink: rgb(0.12, 0.16, 0.21),
+  muted: rgb(0.43, 0.47, 0.54),
+  line: rgb(0.84, 0.88, 0.93),
+  panel: rgb(0.96, 0.97, 0.99),
+  accent: rgb(0.09, 0.23, 0.39),
+  accentSoft: rgb(0.89, 0.94, 0.98),
+  white: rgb(1, 1, 1),
+  zebra: rgb(0.985, 0.989, 0.995),
+};
 
 function formatDate(value: Date | null | undefined) {
   if (!value) return "-";
@@ -72,9 +78,67 @@ function statusLabel(status: string, reviewComment?: string | null) {
   return status;
 }
 
+async function readFirstExistingFile(candidates: string[]) {
+  for (const candidate of candidates) {
+    try {
+      return await readFile(path.join(process.cwd(), candidate));
+    } catch {
+      continue;
+    }
+  }
+  return null;
+}
+
+async function embedOptionalImage(pdf: PDFDocument, candidates: string[]) {
+  for (const candidate of candidates) {
+    try {
+      const bytes = await readFile(path.join(process.cwd(), candidate));
+      const lower = candidate.toLowerCase();
+      if (lower.endsWith(".jpg") || lower.endsWith(".jpeg")) {
+        return await pdf.embedJpg(bytes);
+      }
+      return await pdf.embedPng(bytes);
+    } catch {
+      continue;
+    }
+  }
+  return null;
+}
+
+async function loadFonts(pdf: PDFDocument) {
+  const maiandra = await readFirstExistingFile([
+    "public/fonts/MAIAN.TTF",
+    "public/branding/fonts/MAIAN.TTF",
+  ]);
+  if (maiandra) {
+    const font = await pdf.embedFont(maiandra);
+    return { regularFont: font, boldFont: font };
+  }
+
+  const montserratRegular = await readFirstExistingFile([
+    "public/fonts/Montserrat-Regular.ttf",
+    "public/branding/fonts/Montserrat-Regular.ttf",
+  ]);
+  const montserratBold = await readFirstExistingFile([
+    "public/fonts/Montserrat-Bold.ttf",
+    "public/branding/fonts/Montserrat-Bold.ttf",
+  ]);
+  if (montserratRegular) {
+    return {
+      regularFont: await pdf.embedFont(montserratRegular),
+      boldFont: await pdf.embedFont(montserratBold ?? montserratRegular),
+    };
+  }
+
+  return {
+    regularFont: await pdf.embedFont(StandardFonts.Helvetica),
+    boldFont: await pdf.embedFont(StandardFonts.HelveticaBold),
+  };
+}
+
 function wrapText(text: string, font: PDFFont, size: number, maxWidth: number) {
-  const content = (text || "-").replace(/\s+/g, " ").trim() || "-";
-  const words = content.split(" ");
+  const normalized = (text || "-").replace(/\s+/g, " ").trim() || "-";
+  const words = normalized.split(" ");
   const lines: string[] = [];
   let current = "";
 
@@ -84,15 +148,31 @@ function wrapText(text: string, font: PDFFont, size: number, maxWidth: number) {
       current = candidate;
       continue;
     }
-    if (current) lines.push(current);
-    current = word;
+
+    if (current) {
+      lines.push(current);
+      current = word;
+      continue;
+    }
+
+    let part = "";
+    for (const char of word) {
+      const nextPart = `${part}${char}`;
+      if (font.widthOfTextAtSize(nextPart, size) <= maxWidth) {
+        part = nextPart;
+      } else {
+        if (part) lines.push(part);
+        part = char;
+      }
+    }
+    current = part;
   }
 
   if (current) lines.push(current);
   return lines.length > 0 ? lines : ["-"];
 }
 
-function drawWrappedText(page: import("pdf-lib").PDFPage, text: string, options: {
+function drawWrappedText(page: PDFPage, text: string, options: {
   x: number;
   y: number;
   font: PDFFont;
@@ -109,40 +189,261 @@ function drawWrappedText(page: import("pdf-lib").PDFPage, text: string, options:
       y: options.y - (index * lineHeight),
       size: options.size,
       font: options.font,
-      color: options.color ?? TEXT,
+      color: options.color ?? COLORS.ink,
     });
   });
   return lines.length * lineHeight;
 }
 
-function drawInfoRow(page: import("pdf-lib").PDFPage, label: string, value: string, y: number, font: PDFFont, maxWidth = 230) {
-  page.drawText(label, { x: LEFT, y, size: 8.8, font, color: MUTED });
-  const consumed = drawWrappedText(page, value, {
-    x: VALUE_X,
+function drawSectionTitle(page: PDFPage, font: PDFFont, title: string, x: number, y: number) {
+  page.drawText(title, {
+    x,
     y,
+    size: 10.5,
     font,
-    size: 8.8,
-    maxWidth,
-    color: TEXT,
-    lineHeight: 10.5,
+    color: COLORS.accent,
   });
-  return Math.max(12, consumed);
 }
 
-function embedOptionalImage(pdf: PDFDocument, relativePath: string, type: "png" | "jpg" = "png") {
-  try {
-    const bytes = fs.readFileSync(path.join(process.cwd(), relativePath));
-    return type === "jpg" ? pdf.embedJpg(bytes) : pdf.embedPng(bytes);
-  } catch {
-    return null;
+function drawCard(page: PDFPage, options: {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  label: string;
+  value: string;
+  regularFont: PDFFont;
+  boldFont: PDFFont;
+}) {
+  page.drawRectangle({
+    x: options.x,
+    y: options.y - options.height,
+    width: options.width,
+    height: options.height,
+    color: COLORS.panel,
+    borderColor: COLORS.line,
+    borderWidth: 1,
+  });
+
+  page.drawText(options.label.toUpperCase(), {
+    x: options.x + 14,
+    y: options.y - 18,
+    size: 7.8,
+    font: options.boldFont,
+    color: COLORS.muted,
+  });
+
+  const lines = wrapText(options.value, options.regularFont, 11.7, options.width - 28);
+  lines.slice(0, 2).forEach((line, index) => {
+    page.drawText(line, {
+      x: options.x + 14,
+      y: options.y - 39 - (index * 14),
+      size: 11.7,
+      font: options.boldFont,
+      color: COLORS.ink,
+    });
+  });
+}
+
+function drawInfoPanel(page: PDFPage, options: {
+  x: number;
+  y: number;
+  width: number;
+  title: string;
+  rows: Array<{ label: string; value: string }>;
+  regularFont: PDFFont;
+  boldFont: PDFFont;
+}) {
+  const rowSpacing = 18;
+  const height = 18 + 22 + (options.rows.length * rowSpacing) + 12;
+
+  page.drawRectangle({
+    x: options.x,
+    y: options.y - height,
+    width: options.width,
+    height,
+    color: COLORS.white,
+    borderColor: COLORS.line,
+    borderWidth: 1,
+  });
+
+  drawSectionTitle(page, options.boldFont, options.title, options.x + 16, options.y - 18);
+  const labelWidth = 108;
+  let cursorY = options.y - 42;
+
+  options.rows.forEach((row) => {
+    page.drawText(row.label, {
+      x: options.x + 16,
+      y: cursorY,
+      size: 9,
+      font: options.boldFont,
+      color: COLORS.muted,
+    });
+
+    const textHeight = drawWrappedText(page, row.value, {
+      x: options.x + labelWidth,
+      y: cursorY,
+      font: options.regularFont,
+      size: 9.2,
+      maxWidth: options.width - labelWidth - 18,
+      lineHeight: 10.5,
+      color: COLORS.ink,
+    });
+
+    cursorY -= Math.max(rowSpacing, textHeight + 4);
+  });
+
+  return height;
+}
+
+function drawTableHeader(page: PDFPage, y: number, boldFont: PDFFont) {
+  const headerHeight = 24;
+  page.drawRectangle({
+    x: LEFT,
+    y: y - headerHeight,
+    width: RIGHT - LEFT,
+    height: headerHeight,
+    color: COLORS.accentSoft,
+    borderColor: COLORS.line,
+    borderWidth: 1,
+  });
+
+  const columns = [
+    { label: "N°", x: LEFT + 8 },
+    { label: "Désignation", x: LEFT + 34 },
+    { label: "Description", x: LEFT + 154 },
+    { label: "Qté", x: LEFT + 350 },
+    { label: "P.U", x: LEFT + 395 },
+    { label: "Total", x: LEFT + 457 },
+  ];
+
+  columns.forEach((column) => {
+    page.drawText(column.label, {
+      x: column.x,
+      y: y - 15,
+      size: 8.5,
+      font: boldFont,
+      color: COLORS.accent,
+    });
+  });
+
+  return y - headerHeight - 10;
+}
+
+function drawArticleRow(page: PDFPage, options: {
+  y: number;
+  index: number;
+  designation: string;
+  description: string;
+  quantity: number;
+  unitPrice: number;
+  lineTotal: number;
+  regularFont: PDFFont;
+}) {
+  const designationLines = wrapText(options.designation, options.regularFont, 8.8, 110);
+  const descriptionLines = wrapText(options.description || "-", options.regularFont, 8.8, 172);
+  const rowLines = Math.max(designationLines.length, descriptionLines.length, 1);
+  const rowHeight = Math.max(22, 10 + (rowLines * 11));
+
+  if (options.index % 2 === 0) {
+    page.drawRectangle({
+      x: LEFT,
+      y: options.y - rowHeight + 6,
+      width: RIGHT - LEFT,
+      height: rowHeight,
+      color: COLORS.zebra,
+    });
   }
+
+  page.drawText(String(options.index + 1), {
+    x: LEFT + 8,
+    y: options.y - 10,
+    size: 8.8,
+    font: options.regularFont,
+    color: COLORS.ink,
+  });
+
+  designationLines.forEach((line, lineIndex) => {
+    page.drawText(line, {
+      x: LEFT + 34,
+      y: options.y - 10 - (lineIndex * 11),
+      size: 8.8,
+      font: options.regularFont,
+      color: COLORS.ink,
+    });
+  });
+
+  descriptionLines.forEach((line, lineIndex) => {
+    page.drawText(line, {
+      x: LEFT + 154,
+      y: options.y - 10 - (lineIndex * 11),
+      size: 8.8,
+      font: options.regularFont,
+      color: COLORS.ink,
+    });
+  });
+
+  page.drawText(String(options.quantity), {
+    x: LEFT + 350,
+    y: options.y - 10,
+    size: 8.8,
+    font: options.regularFont,
+    color: COLORS.ink,
+  });
+  page.drawText(formatAmount(options.unitPrice), {
+    x: LEFT + 395,
+    y: options.y - 10,
+    size: 8.8,
+    font: options.regularFont,
+    color: COLORS.ink,
+  });
+  page.drawText(formatAmount(options.lineTotal), {
+    x: LEFT + 457,
+    y: options.y - 10,
+    size: 8.8,
+    font: options.regularFont,
+    color: COLORS.ink,
+  });
+
+  page.drawLine({
+    start: { x: LEFT, y: options.y - rowHeight + 4 },
+    end: { x: RIGHT, y: options.y - rowHeight + 4 },
+    thickness: 0.6,
+    color: COLORS.line,
+  });
+
+  return options.y - rowHeight;
 }
 
-async function drawOptionalImage(page: import("pdf-lib").PDFPage, imagePromise: Promise<PDFImage | null> | null, options: { x: number; y: number; width: number; height: number }) {
-  if (!imagePromise) return;
-  const image = await imagePromise;
-  if (!image) return;
-  page.drawImage(image, options);
+function drawFooter(page: PDFPage, options: {
+  regularFont: PDFFont;
+  pageNumber: number;
+  totalPages: number;
+  printedAt: string;
+}) {
+  page.drawLine({
+    start: { x: LEFT, y: 28 },
+    end: { x: RIGHT, y: 28 },
+    thickness: 0.8,
+    color: COLORS.line,
+  });
+  page.drawText(`EDB • Imprimé le ${options.printedAt}`, {
+    x: LEFT,
+    y: 16,
+    size: 8,
+    font: options.regularFont,
+    color: COLORS.muted,
+  });
+
+  const pageText = `Page ${options.pageNumber}/${options.totalPages}`;
+  const width = options.regularFont.widthOfTextAtSize(pageText, 8);
+  page.drawText(pageText, {
+    x: RIGHT - width,
+    y: 16,
+    size: 8,
+    font: options.regularFont,
+    color: COLORS.muted,
+  });
 }
 
 export async function GET(req: NextRequest, context: RouteContext) {
@@ -179,143 +480,247 @@ export async function GET(req: NextRequest, context: RouteContext) {
 
     const pdf = await PDFDocument.create();
     pdf.registerFontkit(fontkit);
-    const page = pdf.addPage([PAGE_WIDTH, PAGE_HEIGHT]);
-    const montserratRegular = fs.readFileSync(path.join(process.cwd(), "public/fonts/Montserrat-Regular.ttf"));
-    const montserratBold = fs.readFileSync(path.join(process.cwd(), "public/fonts/Montserrat-Bold.ttf"));
-    const font = await pdf.embedFont(montserratRegular);
-    const fontBold = await pdf.embedFont(montserratBold);
-    const logoPromise = embedOptionalImage(pdf, "public/logo thebest.png");
-    const stampPromise = embedOptionalImage(pdf, "public/cachet.png");
-    const signaturePromise = embedOptionalImage(pdf, "public/signature.png");
+    const { regularFont, boldFont } = await loadFonts(pdf);
+    const logo = await embedOptionalImage(pdf, [
+      "public/logo thebest.png",
+      "public/branding/logo thebest.png",
+      "public/logo.png",
+      "public/branding/logo.png",
+    ]);
+    const stamp = await embedOptionalImage(pdf, [
+      "public/cachet.png",
+      "public/branding/cachet.png",
+    ]);
+    const signature = await embedOptionalImage(pdf, [
+      "public/signature.png",
+      "public/branding/signature.png",
+    ]);
 
-    let y = 786;
+    const pages: PDFPage[] = [];
+    const newPage = () => {
+      const page = pdf.addPage([PAGE_WIDTH, PAGE_HEIGHT]);
+      page.drawRectangle({ x: 0, y: 0, width: PAGE_WIDTH, height: PAGE_HEIGHT, color: COLORS.white });
+      page.drawRectangle({ x: 0, y: PAGE_HEIGHT - 134, width: PAGE_WIDTH, height: 134, color: COLORS.accent });
+      page.drawRectangle({ x: 0, y: PAGE_HEIGHT - 150, width: PAGE_WIDTH, height: 16, color: COLORS.accentSoft });
 
-    await drawOptionalImage(page, logoPromise, { x: LEFT, y: 770, width: 95, height: 42 });
-    page.drawText("THE BEST SARL", { x: 205, y: 792, size: 14, font: fontBold, color: TEXT });
-    page.drawText("ETAT DE BESOIN - APPROVISIONNEMENT", { x: 205, y: 772, size: 10.5, font, color: MUTED });
-    page.drawLine({ start: { x: LEFT, y: 750 }, end: { x: RIGHT, y: 750 }, thickness: 0.8, color: LIGHT });
-    y = 722;
+      if (logo) {
+        const scaled = (logo as PDFImage).scale(0.23);
+        page.drawImage(logo, {
+          x: LEFT,
+          y: PAGE_HEIGHT - 88,
+          width: Math.min(138, scaled.width),
+          height: Math.min(58, scaled.height),
+        });
+      }
 
-    page.drawText(`Réf: ${need.code ?? need.id}`, { x: LEFT, y, size: 9.5, font, color: MUTED });
-    page.drawText(`Statut: ${statusLabel(need.status, need.reviewComment)}`, { x: RIGHT_COLUMN_X, y, size: 9.5, font, color: MUTED });
-    page.drawLine({ start: { x: LEFT, y: y - 8 }, end: { x: RIGHT, y: y - 8 }, thickness: 0.7, color: LIGHT });
-    y -= 24;
+      page.drawText("THE BEST SARL", {
+        x: 208,
+        y: PAGE_HEIGHT - 54,
+        size: 19,
+        font: boldFont,
+        color: COLORS.white,
+      });
+      page.drawText("État de besoin - approvisionnement", {
+        x: 208,
+        y: PAGE_HEIGHT - 80,
+        size: 13,
+        font: regularFont,
+        color: COLORS.white,
+      });
+      page.drawText("Document de synthèse pour validation et exécution", {
+        x: 208,
+        y: PAGE_HEIGHT - 99,
+        size: 9.2,
+        font: regularFont,
+        color: COLORS.accentSoft,
+      });
 
-    y -= drawInfoRow(page, "Objet:", need.title ?? "-", y, font, 240) - 2;
-    y -= drawInfoRow(page, "Quantité:", `${need.quantity ?? "-"} ${need.unit ?? ""}`.trim(), y, font, 240) - 2;
-    y -= drawInfoRow(page, "Montant estimatif:", `${formatAmount(need.estimatedAmount)} ${need.currency ?? ""}`.trim(), y, font, 240) - 2;
-    y -= drawInfoRow(page, "Demandeur:", `${need.requester?.name ?? "-"} (${need.requester?.jobTitle ?? "-"})`, y, font, 240) - 2;
-    y -= drawInfoRow(page, "Soumis le:", formatDate(need.submittedAt), y, font, 240) - 2;
-    y -= drawInfoRow(page, "Validé par:", need.reviewedBy?.name ?? "-", y, font, 240) - 2;
-    y -= drawInfoRow(page, "Date validation:", formatDate(need.approvedAt ?? need.reviewedAt), y, font, 240) - 2;
-    y -= drawInfoRow(page, "Exécution:", executionLabel(need.status, need.reviewComment), y, font, 240) - 2;
-    y -= drawInfoRow(page, "Niveau d'urgence:", urgencyLabel(quote?.urgencyLevel), y, font, 240) - 2;
-    y -= drawInfoRow(page, "Équipe bénéficiaire:", beneficiaryLabel(quote?.beneficiaryTeam), y, font, 240) - 2;
-    if (quote?.beneficiaryPersonName) {
-      y -= drawInfoRow(page, "Bénéficiaire:", quote.beneficiaryPersonName, y, font, 240) - 2;
+      pages.push(page);
+      return page;
+    };
+
+    const firstPage = newPage();
+    const topCardsY = PAGE_HEIGHT - 176;
+    const cardWidth = 161;
+    drawCard(firstPage, {
+      x: LEFT,
+      y: topCardsY,
+      width: cardWidth,
+      height: 72,
+      label: "Référence",
+      value: need.code ?? need.id,
+      regularFont,
+      boldFont,
+    });
+    drawCard(firstPage, {
+      x: LEFT + cardWidth + 12,
+      y: topCardsY,
+      width: cardWidth,
+      height: 72,
+      label: "Statut",
+      value: statusLabel(need.status, need.reviewComment),
+      regularFont,
+      boldFont,
+    });
+    drawCard(firstPage, {
+      x: LEFT + ((cardWidth + 12) * 2),
+      y: topCardsY,
+      width: cardWidth,
+      height: 72,
+      label: "Montant total",
+      value: `${formatAmount(totalGeneral)} ${need.currency ?? "CDF"}`,
+      regularFont,
+      boldFont,
+    });
+
+    const columnGap = 16;
+    const columnWidth = (RIGHT - LEFT - columnGap) / 2;
+    const infoY = PAGE_HEIGHT - 272;
+
+    drawInfoPanel(firstPage, {
+      x: LEFT,
+      y: infoY,
+      width: columnWidth,
+      title: "Résumé de la demande",
+      rows: [
+        { label: "Objet", value: need.title ?? "-" },
+        { label: "Quantité", value: `${need.quantity ?? "-"} ${need.unit ?? ""}`.trim() || "-" },
+        { label: "Urgence", value: urgencyLabel(quote?.urgencyLevel) },
+        { label: "Affectation", value: workflowAssignmentLabel(quote?.assignment) },
+        { label: "Équipe", value: beneficiaryLabel(quote?.beneficiaryTeam) },
+      ],
+      regularFont,
+      boldFont,
+    });
+
+    drawInfoPanel(firstPage, {
+      x: LEFT + columnWidth + columnGap,
+      y: infoY,
+      width: columnWidth,
+      title: "Suivi de validation",
+      rows: [
+        { label: "Demandeur", value: `${need.requester?.name ?? "-"} (${need.requester?.jobTitle ?? "-"})` },
+        { label: "Soumis le", value: formatDate(need.submittedAt) },
+        { label: "Validé par", value: need.reviewedBy?.name ?? "-" },
+        { label: "Date validation", value: formatDate(need.approvedAt ?? need.reviewedAt) },
+        { label: "Exécution", value: executionLabel(need.status, need.reviewComment) },
+      ],
+      regularFont,
+      boldFont,
+    });
+
+    drawSectionTitle(firstPage, boldFont, "Articles demandés", LEFT, PAGE_HEIGHT - 468);
+    let currentPage = firstPage;
+    let currentY = drawTableHeader(firstPage, PAGE_HEIGHT - 482, boldFont);
+
+    articles.forEach((article, index) => {
+      const designationLines = wrapText(article.designation, regularFont, 8.8, 110);
+      const descriptionLines = wrapText(article.description || "-", regularFont, 8.8, 172);
+      const estimatedHeight = Math.max(22, 10 + (Math.max(designationLines.length, descriptionLines.length, 1) * 11));
+
+      if (currentY - estimatedHeight < 150) {
+        currentPage = newPage();
+        drawSectionTitle(currentPage, boldFont, "Articles demandés (suite)", LEFT, PAGE_HEIGHT - 176);
+        currentY = drawTableHeader(currentPage, PAGE_HEIGHT - 192, boldFont);
+      }
+
+      currentY = drawArticleRow(currentPage, {
+        y: currentY,
+        index,
+        designation: article.designation,
+        description: article.description,
+        quantity: article.quantity,
+        unitPrice: article.unitPrice,
+        lineTotal: article.lineTotal,
+        regularFont,
+      });
+    });
+
+    if (currentY < 162) {
+      currentPage = newPage();
+      currentY = PAGE_HEIGHT - 182;
     }
 
-    y -= 14;
-    page.drawText("Articles demandés:", { x: LEFT, y, size: 10.5, font: fontBold, color: TEXT });
-    y -= 18;
+    currentPage.drawRectangle({
+      x: LEFT,
+      y: currentY - 74,
+      width: RIGHT - LEFT,
+      height: 74,
+      color: COLORS.accentSoft,
+      borderColor: COLORS.line,
+      borderWidth: 1,
+    });
+    drawSectionTitle(currentPage, boldFont, "Total général", LEFT + 16, currentY - 18);
+    currentPage.drawText(`${formatAmount(totalGeneral)} ${need.currency ?? "CDF"}`, {
+      x: LEFT + 16,
+      y: currentY - 46,
+      size: 15,
+      font: boldFont,
+      color: COLORS.ink,
+    });
 
-    const tableTop = y;
-    const colNo = LEFT;
-    const colDesignation = LEFT + 32;
-    const colDescription = LEFT + 155;
-    const colQuantity = LEFT + 347;
-    const colUnitPrice = LEFT + 402;
-    const colTotal = LEFT + 466;
+    if (currentY - 96 < 92) {
+      currentPage = newPage();
+      currentY = PAGE_HEIGHT - 182;
+    } else {
+      currentY -= 96;
+    }
 
-    page.drawText("N°", { x: colNo, y: tableTop, size: 8.5, font, color: MUTED });
-    page.drawText("Désignation", { x: colDesignation, y: tableTop, size: 8.5, font, color: MUTED });
-    page.drawText("Description", { x: colDescription, y: tableTop, size: 8.5, font, color: MUTED });
-    page.drawText("Qté", { x: colQuantity, y: tableTop, size: 8.5, font, color: MUTED });
-    page.drawText("P.U", { x: colUnitPrice, y: tableTop, size: 8.5, font, color: MUTED });
-    page.drawText("P.T", { x: colTotal, y: tableTop, size: 8.5, font, color: MUTED });
-    page.drawLine({ start: { x: LEFT, y: tableTop - 8 }, end: { x: RIGHT, y: tableTop - 8 }, thickness: 0.7, color: LIGHT });
-
-    y = tableTop - 20;
-    articles.forEach((article, index) => {
-      const designationHeight = drawWrappedText(page, article.designation, {
-        x: colDesignation,
-        y,
-        font,
-        size: 8.8,
-        maxWidth: 110,
-        color: MUTED,
-        lineHeight: 10,
+    const commentLines = wrapText(`Commentaire de validation: ${reviewComment}`, regularFont, 9.2, RIGHT - LEFT - 32);
+    const noteHeight = Math.max(72, 28 + (commentLines.length * 12));
+    currentPage.drawRectangle({
+      x: LEFT,
+      y: currentY - noteHeight,
+      width: RIGHT - LEFT,
+      height: noteHeight,
+      color: COLORS.white,
+      borderColor: COLORS.line,
+      borderWidth: 1,
+    });
+    drawSectionTitle(currentPage, boldFont, "Validation finale", LEFT + 16, currentY - 18);
+    commentLines.forEach((line, index) => {
+      currentPage.drawText(line, {
+        x: LEFT + 16,
+        y: currentY - 44 - (index * 12),
+        size: 9.2,
+        font: regularFont,
+        color: COLORS.ink,
       });
-      const descriptionHeight = drawWrappedText(page, article.description || "-", {
-        x: colDescription,
-        y,
-        font,
-        size: 8.8,
-        maxWidth: 155,
-        color: MUTED,
-        lineHeight: 10,
+    });
+
+    currentPage.drawText(`Document scellé le ${need.sealedAt ? formatDate(need.sealedAt) : printedAt}`, {
+      x: LEFT + 16,
+      y: currentY - noteHeight + 14,
+      size: 8.5,
+      font: regularFont,
+      color: COLORS.muted,
+    });
+
+    if (signature) {
+      currentPage.drawImage(signature, {
+        x: RIGHT - 148,
+        y: currentY - noteHeight + 16,
+        width: 62,
+        height: 24,
       });
-      const rowHeight = Math.max(18, designationHeight, descriptionHeight);
+    }
+    if (stamp) {
+      currentPage.drawImage(stamp, {
+        x: RIGHT - 94,
+        y: currentY - noteHeight + 2,
+        width: 70,
+        height: 70,
+        opacity: 0.92,
+      });
+    }
 
-      page.drawText(String(index + 1), { x: colNo, y, size: 8.8, font, color: MUTED });
-      page.drawText(String(article.quantity), { x: colQuantity, y, size: 8.8, font, color: MUTED });
-      page.drawText(formatAmount(article.unitPrice), { x: colUnitPrice, y, size: 8.8, font, color: MUTED });
-      page.drawText(formatAmount(article.lineTotal), { x: colTotal, y, size: 8.8, font, color: MUTED });
-      y -= rowHeight;
-    });
-
-    page.drawLine({ start: { x: LEFT, y: y + 6 }, end: { x: RIGHT, y: y + 6 }, thickness: 0.7, color: LIGHT });
-    page.drawText(`Total général: ${formatAmount(totalGeneral)} ${need.currency ?? "CDF"}`, {
-      x: 340,
-      y: y - 10,
-      size: 10,
-      font,
-      color: MUTED,
-    });
-
-    const footerLineY = 116;
-    page.drawLine({ start: { x: LEFT, y: footerLineY }, end: { x: RIGHT, y: footerLineY }, thickness: 0.7, color: LIGHT });
-    page.drawText("Validation Direction / Finance", { x: LEFT, y: footerLineY - 12, size: 9, font, color: MUTED });
-    drawWrappedText(page, `Commentaire: ${reviewComment}`, {
-      x: LEFT,
-      y: footerLineY - 30,
-      font,
-      size: 8.4,
-      maxWidth: 385,
-      color: MUTED,
-      lineHeight: 10,
-    });
-
-    page.drawText(`Document scellé le ${need.sealedAt ? formatDate(need.sealedAt) : printedAt}`, {
-      x: LEFT,
-      y: 64,
-      size: 7.8,
-      font,
-      color: MUTED,
-    });
-    page.drawText(`Mention finale: ${statusLabel(need.status, need.reviewComment)} (${printedAt})`, {
-      x: LEFT,
-      y: 52,
-      size: 7.6,
-      font,
-      color: MUTED,
-    });
-    page.drawText(`Page 1/1 · Imprimé le ${printedAt}`, {
-      x: LEFT,
-      y: 40,
-      size: 7.6,
-      font,
-      color: MUTED,
-    });
-
-    await drawOptionalImage(page, signaturePromise, { x: 405, y: 56, width: 64, height: 26 });
-    await drawOptionalImage(page, stampPromise, { x: 438, y: 20, width: 70, height: 70 });
-    page.drawText(`Par ${need.reviewedBy?.name ?? "-"}`, {
-      x: 470,
-      y: 34,
-      size: 8,
-      font,
-      color: MUTED,
+    pages.forEach((page, index) => {
+      drawFooter(page, {
+        regularFont,
+        pageNumber: index + 1,
+        totalPages: pages.length,
+        printedAt,
+      });
     });
 
     const bytes = await pdf.save();
@@ -331,7 +736,7 @@ export async function GET(req: NextRequest, context: RouteContext) {
   } catch (e) {
     return NextResponse.json(
       { error: "Erreur génération PDF", details: String(e) },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

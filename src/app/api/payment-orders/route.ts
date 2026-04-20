@@ -5,29 +5,13 @@ import { prisma } from "@/lib/prisma";
 import { requireApiRoles } from "@/lib/rbac";
 import { paymentOrderCreationSchema } from "@/lib/validators";
 import { writeActivityLog } from "@/lib/activity-log";
+import { normalizeWorkflowAssignment, workflowAssignmentLabel } from "@/lib/workflow-assignment";
 
 const paymentOrderClient = (prisma as unknown as { paymentOrder: any }).paymentOrder;
 
 function normalizeMoneyCurrency(value: string | null | undefined): "USD" | "CDF" {
   const normalized = (value ?? "CDF").trim().toUpperCase();
   return normalized === "USD" ? "USD" : "CDF";
-}
-
-function normalizePaymentOrderAssignment(value: string | null | undefined) {
-  const normalized = (value ?? "A_MON_COMPTE").trim().toUpperCase();
-  if (["A_MON_COMPTE", "VISAS", "SAFETY", "BILLETTERIE", "TSL"].includes(normalized)) {
-    return normalized;
-  }
-  return "A_MON_COMPTE";
-}
-
-function paymentOrderAssignmentLabel(value: string | null | undefined) {
-  const normalized = normalizePaymentOrderAssignment(value);
-  if (normalized === "VISAS") return "Visas";
-  if (normalized === "SAFETY") return "Safety";
-  if (normalized === "BILLETTERIE") return "THE BEST";
-  if (normalized === "TSL") return "TSL";
-  return "À mon compte";
 }
 
 function buildNextPaymentOrderCode(existingCodes: Array<string | null | undefined>, codePrefix: string, year: number) {
@@ -75,7 +59,7 @@ export async function POST(request: NextRequest) {
     const issuerLabel = isAdminIssuer ? "Admin" : "DG";
     const codePrefix = isAdminIssuer ? "TB-ADM-OP" : "TB-DG-OP";
     const orderCurrency = normalizeMoneyCurrency(parsed.data.currency);
-    const orderAssignment = normalizePaymentOrderAssignment(parsed.data.assignment);
+    const orderAssignment = normalizeWorkflowAssignment(parsed.data.assignment);
     const year = now.getUTCFullYear();
     const yearStart = new Date(Date.UTC(year, 0, 1, 0, 0, 0, 0));
     const yearEnd = new Date(Date.UTC(year + 1, 0, 1, 0, 0, 0, 0));

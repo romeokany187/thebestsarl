@@ -4,6 +4,7 @@ import { AppShell } from "@/components/app-shell";
 import { prisma } from "@/lib/prisma";
 import { requirePageRoles } from "@/lib/rbac";
 import { parseNeedQuote } from "@/lib/need-lines";
+import { workflowAssignmentLabel } from "@/lib/workflow-assignment";
 
 type PageContext = {
   params: Promise<{ id: string }>;
@@ -118,6 +119,7 @@ export default async function NeedReadPage(context: PageContext) {
               ? "Exécuté (validation caisse enregistrée)"
               : "En attente d'exécution"}</p>
           <p><span className="font-semibold">Niveau d&apos;urgence:</span> {urgencyLabel}</p>
+          <p><span className="font-semibold">Affectation:</span> {workflowAssignmentLabel(quote?.assignment)}</p>
           <p><span className="font-semibold">Équipe bénéficiaire:</span> {beneficiaryLabel}</p>
           {quote?.beneficiaryPersonName && (
             <p><span className="font-semibold">Personne bénéficiaire:</span> {quote.beneficiaryPersonName}</p>
