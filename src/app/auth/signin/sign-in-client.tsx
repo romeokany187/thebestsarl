@@ -9,6 +9,32 @@ type SignInClientPageProps = {
   launchAtIso: string;
 };
 
+function validateSetupPassword(password: string, confirmation: string) {
+  const normalizedPassword = password.trim();
+
+  if (normalizedPassword.length < 8) {
+    return "Le mot de passe doit contenir au moins 8 caractères.";
+  }
+
+  if (normalizedPassword.length > 100) {
+    return "Le mot de passe est trop long.";
+  }
+
+  if (!/[A-Za-z]/.test(normalizedPassword)) {
+    return "Le mot de passe doit contenir au moins une lettre.";
+  }
+
+  if (!/\d/.test(normalizedPassword)) {
+    return "Le mot de passe doit contenir au moins un chiffre.";
+  }
+
+  if (normalizedPassword !== confirmation.trim()) {
+    return "La confirmation du mot de passe ne correspond pas.";
+  }
+
+  return null;
+}
+
 function extractApiError(payload: unknown, fallback: string) {
   if (typeof payload === "string") return payload;
   if (payload && typeof payload === "object") {
@@ -53,6 +79,7 @@ export default function SignInClientPage({ passwordAuthActive, launchAtIso }: Si
   const [setupPasswordConfirmation, setSetupPasswordConfirmation] = useState("");
   const [loading, setLoading] = useState(false);
   const [setupRequested, setSetupRequested] = useState(false);
+  const [prefilledSetupEmail, setPrefilledSetupEmail] = useState(false);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
   const launchAtLabel = useMemo(
@@ -73,6 +100,7 @@ export default function SignInClientPage({ passwordAuthActive, launchAtIso }: Si
       return;
     }
 
+    setPrefilledSetupEmail(true);
     setSetupEmail(setupEmailFromQuery);
     setEmail(setupEmailFromQuery);
 
@@ -120,6 +148,13 @@ export default function SignInClientPage({ passwordAuthActive, launchAtIso }: Si
       return;
     }
 
+    const passwordValidationError = validateSetupPassword(setupPassword, setupPasswordConfirmation);
+    if (passwordValidationError) {
+      setError(passwordValidationError);
+      setMessage("");
+      return;
+    }
+
     setLoading(true);
     setError("");
     setMessage("");
@@ -139,7 +174,7 @@ export default function SignInClientPage({ passwordAuthActive, launchAtIso }: Si
       }
 
       setSetupRequested(true);
-      setMessage(payload?.message ?? "Un code a été envoyé à votre adresse email.");
+      setMessage(payload?.message ?? "Un code a été envoyé à votre adresse email. Saisissez-le maintenant pour activer l'accès à votre espace.");
     } catch {
       setError("Erreur réseau lors de l'envoi du code.");
     }
@@ -221,14 +256,14 @@ export default function SignInClientPage({ passwordAuthActive, launchAtIso }: Si
           </h1>
           <p className="mt-5 max-w-xl text-sm leading-6 text-slate-600 dark:text-white/65">
             Un nouveau collaborateur peut faire une première entrée avec Google si son compte n&apos;a pas encore de mot de passe.
-            Ensuite, il configure son mot de passe une seule fois par code email, puis les connexions suivantes se font simplement par adresse email et mot de passe.
+            Ensuite, son email est récupéré automatiquement, il crée son mot de passe, confirme ce mot de passe, puis valide l&apos;OTP reçu par email avant d&apos;accéder à son espace de travail.
           </p>
 
           <div className="mt-8 grid gap-3 sm:grid-cols-3">
             {[
               { step: "01", title: "Première entrée", text: "Google reste accepté uniquement pour un compte qui n'a pas encore de mot de passe." },
-              { step: "02", title: "Activation unique", text: "Le code OTP sert seulement à créer le mot de passe et n'est pas redemandé à chaque expiration de session." },
-              { step: "03", title: "Connexion simple", text: "Une fois le mot de passe créé, l'utilisateur se connecte ensuite avec email et mot de passe." },
+              { step: "02", title: "Mot de passe défini", text: "L'email du compte est repris automatiquement pour permettre la création et la confirmation du mot de passe." },
+              { step: "03", title: "OTP final", text: "Le code OTP valide la création une seule fois, puis les prochaines connexions se font par email et mot de passe." },
             ].map((item) => (
               <div key={item.step} className="rounded-3xl border border-slate-200/80 bg-white/80 p-4 shadow-[0_12px_40px_rgba(15,23,42,0.06)] backdrop-blur dark:border-white/10 dark:bg-white/5 dark:shadow-none">
                 <p className="text-[11px] font-semibold tracking-[0.25em] text-slate-400 dark:text-white/40">{item.step}</p>
@@ -312,7 +347,7 @@ export default function SignInClientPage({ passwordAuthActive, launchAtIso }: Si
               <div>
                 <h3 className="text-base font-semibold text-slate-950 dark:text-white">Première connexion ou mot de passe à créer</h3>
                 <p className="mt-1 text-sm text-slate-600 dark:text-white/60">
-                  Après la première entrée Google d&apos;un compte sans mot de passe, demandez le code email puis créez le mot de passe définitif du compte.
+                  Après la première entrée Google d&apos;un compte sans mot de passe, l&apos;email est repris ici. Définissez le mot de passe du compte, puis entrez le code OTP reçu par email pour ouvrir l&apos;accès.
                 </p>
               </div>
               <div className="rounded-full bg-slate-100 px-3 py-1 text-[11px] font-semibold tracking-[0.16em] text-slate-600 dark:bg-white/10 dark:text-white/60">
@@ -336,28 +371,52 @@ export default function SignInClientPage({ passwordAuthActive, launchAtIso }: Si
                   className="w-full rounded-2xl border border-slate-200 bg-slate-50/60 px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-slate-400 focus:bg-white dark:border-white/15 dark:bg-white/5 dark:text-white dark:focus:border-white/30"
                   placeholder="vous@thebest.com"
                   required
+                  readOnly={prefilledSetupEmail}
                 />
               </div>
+              <div>
+                <label className="mb-1 block text-sm font-medium">Nouveau mot de passe</label>
+                <input
+                  type="password"
+                  value={setupPassword}
+                  onChange={(event) => setSetupPassword(event.target.value)}
+                  className="w-full rounded-2xl border border-slate-200 bg-slate-50/60 px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-slate-400 focus:bg-white dark:border-white/15 dark:bg-white/5 dark:text-white dark:focus:border-white/30"
+                  placeholder="Minimum 8 caractères, avec lettres et chiffres"
+                  required
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-sm font-medium">Confirmer le mot de passe</label>
+                <input
+                  type="password"
+                  value={setupPasswordConfirmation}
+                  onChange={(event) => setSetupPasswordConfirmation(event.target.value)}
+                  className="w-full rounded-2xl border border-slate-200 bg-slate-50/60 px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-slate-400 focus:bg-white dark:border-white/15 dark:bg-white/5 dark:text-white dark:focus:border-white/30"
+                  placeholder="Retapez le mot de passe"
+                  required
+                />
+              </div>
+              <p className="text-xs leading-5 text-slate-500 dark:text-white/50">
+                Définissez d&apos;abord le mot de passe. Si les informations sont valides, un OTP sera envoyé à cet email pour finaliser l&apos;activation.
+              </p>
               <button
                 type="submit"
                 disabled={loading || !passwordAuthActive}
                 className="flex w-full items-center justify-center rounded-2xl border border-slate-200 px-4 py-3 text-sm font-semibold text-slate-800 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60 dark:border-white/15 dark:text-white dark:hover:bg-white/10"
               >
-                {loading ? "Envoi..." : "Envoyer le code"}
+                {loading ? "Vérification..." : "Continuer et recevoir l'OTP"}
               </button>
             </form>
 
             {setupRequested ? (
               <form onSubmit={confirmPasswordSetup} className="mt-5 space-y-4 rounded-3xl border border-slate-200/80 bg-slate-50/60 p-4 dark:border-white/10 dark:bg-white/5">
                 <div className="flex items-center justify-between gap-3">
-                  <p className="text-sm font-semibold text-slate-900 dark:text-white">Confirmation du mot de passe</p>
+                  <p className="text-sm font-semibold text-slate-900 dark:text-white">Validation OTP et ouverture d&apos;accès</p>
                   <button
                     type="button"
                     onClick={() => {
                       setSetupRequested(false);
                       setSetupCode("");
-                      setSetupPassword("");
-                      setSetupPasswordConfirmation("");
                       setMessage("");
                       setError("");
                     }}
@@ -379,37 +438,19 @@ export default function SignInClientPage({ passwordAuthActive, launchAtIso }: Si
                     required
                   />
                 </div>
-                <div>
-                  <label className="mb-1 block text-sm font-medium">Nouveau mot de passe</label>
-                  <input
-                    type="password"
-                    value={setupPassword}
-                    onChange={(event) => setSetupPassword(event.target.value)}
-                    className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-950 outline-none transition focus:border-slate-400 dark:border-white/15 dark:bg-[#0b0f14] dark:text-white dark:focus:border-white/30"
-                    placeholder="Minimum 8 caractères, avec lettres et chiffres"
-                    required
-                  />
-                </div>
-                <div>
-                  <label className="mb-1 block text-sm font-medium">Confirmer le mot de passe</label>
-                  <input
-                    type="password"
-                    value={setupPasswordConfirmation}
-                    onChange={(event) => setSetupPasswordConfirmation(event.target.value)}
-                    className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-950 outline-none transition focus:border-slate-400 dark:border-white/15 dark:bg-[#0b0f14] dark:text-white dark:focus:border-white/30"
-                    placeholder="Retapez le mot de passe"
-                    required
-                  />
+                <div className="rounded-2xl border border-slate-200 bg-white/80 px-4 py-3 text-sm text-slate-600 dark:border-white/10 dark:bg-[#0b0f14] dark:text-white/70">
+                  <p className="font-medium text-slate-900 dark:text-white">Email</p>
+                  <p className="mt-1 break-all">{setupEmail}</p>
                 </div>
                 <p className="text-xs leading-5 text-slate-500 dark:text-white/50">
-                  Le mot de passe doit contenir au moins 8 caractères, avec au moins une lettre et un chiffre.
+                  Si le code OTP est correct, le mot de passe que vous venez de définir sera activé et l&apos;accès à l&apos;espace de travail sera immédiatement ouvert.
                 </p>
                 <button
                   type="submit"
                   disabled={loading || !passwordAuthActive}
                   className="flex w-full items-center justify-center rounded-2xl bg-slate-950 px-4 py-3 text-sm font-semibold text-white transition hover:opacity-92 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-white dark:text-slate-950"
                 >
-                  {loading ? "Confirmation..." : "Créer mon mot de passe"}
+                  {loading ? "Validation..." : "Valider l'OTP et accéder à l'espace"}
                 </button>
               </form>
             ) : null}
