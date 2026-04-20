@@ -4,6 +4,9 @@ import { sendMailBatch } from "@/lib/mail";
 
 const PASSWORD_SETUP_PURPOSE = "PASSWORD_SETUP";
 const PASSWORD_SETUP_CODE_TTL_MINUTES = 15;
+const PASSWORD_SETUP_REQUEST_COOLDOWN_SECONDS = 60;
+const PASSWORD_SETUP_MAX_REQUESTS_PER_WINDOW = 3;
+const PASSWORD_SETUP_REQUEST_WINDOW_MINUTES = 15;
 
 export function normalizeAuthEmail(value?: string | null) {
   return value?.trim().toLowerCase() ?? "";
@@ -31,6 +34,18 @@ export function passwordSetupExpiryDate() {
 
 export function passwordSetupPurpose() {
   return PASSWORD_SETUP_PURPOSE;
+}
+
+export function passwordSetupRequestCooldownSeconds() {
+  return PASSWORD_SETUP_REQUEST_COOLDOWN_SECONDS;
+}
+
+export function passwordSetupMaxRequestsPerWindow() {
+  return PASSWORD_SETUP_MAX_REQUESTS_PER_WINDOW;
+}
+
+export function passwordSetupRequestWindowStart() {
+  return new Date(Date.now() - PASSWORD_SETUP_REQUEST_WINDOW_MINUTES * 60 * 1000);
 }
 
 export async function hashUserPassword(password: string) {

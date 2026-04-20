@@ -184,7 +184,7 @@ export default function SignInPage() {
   }
 
   return (
-    <main className="min-h-screen overflow-hidden bg-[radial-gradient(circle_at_top_left,_rgba(15,61,105,0.14),_transparent_34%),linear-gradient(180deg,_rgba(247,249,252,0.98),_rgba(236,241,247,0.92))] text-foreground dark:bg-[radial-gradient(circle_at_top_left,_rgba(124,179,255,0.12),_transparent_28%),linear-gradient(180deg,_rgba(10,12,16,1),_rgba(18,21,27,0.98))]">
+    <main className="min-h-screen overflow-hidden bg-[radial-gradient(circle_at_top_left,rgba(15,61,105,0.14),transparent_34%),linear-gradient(180deg,rgba(247,249,252,0.98),rgba(236,241,247,0.92))] text-foreground dark:bg-[radial-gradient(circle_at_top_left,rgba(124,179,255,0.12),transparent_28%),linear-gradient(180deg,rgba(10,12,16,1),rgba(18,21,27,0.98))]">
       <div className="mx-auto grid min-h-screen max-w-6xl items-center gap-10 px-4 py-10 sm:px-6 lg:grid-cols-[1.05fr,0.95fr] lg:px-8">
         <section className="relative">
           <div className="pointer-events-none absolute -left-10 top-0 h-48 w-48 rounded-full bg-sky-200/35 blur-3xl dark:bg-sky-500/10" />
@@ -226,10 +226,13 @@ export default function SignInPage() {
                 ? "Le nouveau parcours de connexion par mot de passe est maintenant actif."
                 : `Le nouveau parcours sera activé demain à 05:00, soit le ${launchAtLabel}.`}
             </p>
+            <p className="mt-2 text-xs leading-5 opacity-80">
+              Les sessions utilisateur expireront automatiquement après 8 heures et les demandes de code OTP sont limitées pour éviter les abus.
+            </p>
           </div>
         </section>
 
-        <section className="rounded-[32px] border border-slate-200/80 bg-white/88 p-6 shadow-[0_24px_90px_rgba(15,23,42,0.08)] backdrop-blur dark:border-white/10 dark:bg-[#0f1319]/92 dark:shadow-none sm:p-8">
+        <section className="rounded-4xl border border-slate-200/80 bg-white/88 p-6 shadow-[0_24px_90px_rgba(15,23,42,0.08)] backdrop-blur dark:border-white/10 dark:bg-[#0f1319]/92 dark:shadow-none sm:p-8">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
               <h2 className="text-xl font-semibold text-slate-950 dark:text-white">Connexion</h2>

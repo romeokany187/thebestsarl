@@ -8,7 +8,10 @@ import {
   hashPasswordSetupCode,
   normalizeAuthEmail,
   passwordSetupExpiryDate,
+  passwordSetupMaxRequestsPerWindow,
   passwordSetupPurpose,
+  passwordSetupRequestCooldownSeconds,
+  passwordSetupRequestWindowStart,
   sendPasswordSetupCodeEmail,
 } from "@/lib/password-setup";
 
@@ -48,6 +51,40 @@ export async function POST(request: NextRequest) {
 
   if (!user) {
     return NextResponse.json({ ok: true, message: "Si ce compte existe, un code vient d'être envoyé." });
+  }
+
+  const recentCodes = await prisma.passwordSetupCode.findMany({
+    where: {
+      userId: user.id,
+      purpose: passwordSetupPurpose(),
+      createdAt: { gte: passwordSetupRequestWindowStart() },
+    },
+    orderBy: { createdAt: "desc" },
+    select: { createdAt: true },
+    take: passwordSetupMaxRequestsPerWindow(),
+  });
+
+  if (recentCodes.length >= passwordSetupMaxRequestsPerWindow()) {
+    return NextResponse.json(
+      {
+        error: `Trop de demandes de code ont été effectuées. Réessayez plus tard.`,
+      },
+      { status: 429 },
+    );
+  }
+
+  const latestCode = recentCodes[0] ?? null;
+  if (latestCode) {
+    const nextAllowedAt = latestCode.createdAt.getTime() + (passwordSetupRequestCooldownSeconds() * 1000);
+    if (Date.now() < nextAllowedAt) {
+      const remainingSeconds = Math.max(1, Math.ceil((nextAllowedAt - Date.now()) / 1000));
+      return NextResponse.json(
+        {
+          error: `Veuillez attendre encore ${remainingSeconds} seconde(s) avant de demander un nouveau code.`,
+        },
+        { status: 429 },
+      );
+    }
   }
 
   const code = generatePasswordSetupCode();
