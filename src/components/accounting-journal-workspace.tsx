@@ -36,7 +36,7 @@ type DeletedEntry = {
   }>;
 };
 
-const POLE_OPTIONS = ["THE BEST", "SAFETY", "TSL", "VISAS"] as const;
+const POLE_OPTIONS = ["THE BEST", "SAFETY", "TSL", "VISAS", "PROXYBANK"] as const;
 const POLE_SEPARATOR = " | ";
 
 type DailyRate = {
