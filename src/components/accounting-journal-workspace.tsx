@@ -705,7 +705,7 @@ export function AccountingJournalWorkspace({
             <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-black/50 dark:text-white/50">Suppressions</p>
             <h3 className="mt-1 text-sm font-semibold">Journal des écritures supprimées</h3>
             <p className="mt-1 text-xs text-black/55 dark:text-white/55">
-              La numérotation continue normalement. Les numéros supprimés restent tracés ici pour garder l'historique.
+              Les écritures actives sont renumérotées selon leur chronologie comptable. Les suppressions restent archivées ici avec leur numéro au moment de la suppression.
             </p>
           </div>
 

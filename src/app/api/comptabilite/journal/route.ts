@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { invoiceNumberFromChronology } from "@/lib/invoice";
+import { applyAccountingChronologySequence, buildAccountingChronologySequenceMap } from "@/lib/accounting-chronology";
 import { prisma } from "@/lib/prisma";
 import { requireApiModuleAccess } from "@/lib/rbac";
 import { writeActivityLog } from "@/lib/activity-log";
@@ -29,6 +30,13 @@ type DeletedEntryLog = {
   createdAt: Date;
   actor?: { name?: string | null } | null;
   payload?: unknown;
+};
+
+type AccountingChronologyRow = {
+  id: string;
+  entryDate: Date;
+  createdAt: Date;
+  sequence: number;
 };
 
 function canManageAccounting(role: string, jobTitle: string | null | undefined) {
@@ -128,6 +136,22 @@ async function listDailyRates(client: { $queryRawUnsafe?: <T = unknown>(query: s
   `);
 
   return rows.map(normalizeDailyRateRow);
+}
+
+async function listAccountingChronologyRows(client: { accountingEntry: any }) {
+  return client.accountingEntry.findMany({
+    select: {
+      id: true,
+      entryDate: true,
+      createdAt: true,
+      sequence: true,
+    },
+  }) as Promise<AccountingChronologyRow[]>;
+}
+
+async function resolveAccountingChronologySequence(client: { accountingEntry: any }, entryId: string) {
+  const rows = await listAccountingChronologyRows(client);
+  return buildAccountingChronologySequenceMap(rows).get(entryId) ?? null;
 }
 
 async function buildEntryPayload(client: PrismaLikeTransactionClient, body: unknown) {
@@ -231,13 +255,14 @@ export async function GET() {
   const supportStart = ticketSupportRangeStart();
   const yearStart = new Date(Date.UTC(supportStart.getUTCFullYear(), 0, 1, 0, 0, 0, 0));
 
-  const [accounts, recentEntries, yearlyTickets, dailyRates, deletedEntries] = await Promise.all([
+  const [accounts, chronologyRows, recentEntriesRaw, yearlyTickets, dailyRates, deletedEntries] = await Promise.all([
     prisma.account.findMany({
       select: { code: true, label: true, normalBalance: true },
       orderBy: { code: "asc" },
     }),
+    listAccountingChronologyRows({ accountingEntry: accountingEntryClient }),
     accountingEntryClient.findMany({
-      orderBy: [{ sequence: "desc" }],
+      orderBy: [{ entryDate: "desc" }, { createdAt: "desc" }, { id: "desc" }],
       take: 40,
       include: {
         createdBy: { select: { name: true } },
@@ -280,6 +305,11 @@ export async function GET() {
       take: 40,
     }),
   ]);
+
+  const recentEntries = applyAccountingChronologySequence(
+    recentEntriesRaw,
+    buildAccountingChronologySequenceMap(chronologyRows),
+  );
 
   const ticketInvoiceOptions = yearlyTickets
     .map((ticket, index) => ({
@@ -349,7 +379,11 @@ export async function POST(request: NextRequest) {
         },
       });
 
-      return entry;
+      const sequence = await resolveAccountingChronologySequence(tx as unknown as AccountingTxClient, entry.id);
+      return {
+        ...entry,
+        sequence: sequence ?? entry.sequence,
+      };
     });
 
     return NextResponse.json({ data: createdEntry }, { status: 201 });
@@ -394,7 +428,7 @@ export async function PUT(request: NextRequest) {
         where: { entryId },
       });
 
-      return (tx as unknown as AccountingTxClient).accountingEntry.update({
+      const entry = await (tx as unknown as AccountingTxClient).accountingEntry.update({
         where: { id: entryId },
         data: {
           entryDate: data.entryDate,
@@ -418,6 +452,12 @@ export async function PUT(request: NextRequest) {
           lines: { orderBy: [{ side: "asc" }, { orderIndex: "asc" }] },
         },
       });
+
+      const sequence = await resolveAccountingChronologySequence(tx as unknown as AccountingTxClient, entry.id);
+      return {
+        ...entry,
+        sequence: sequence ?? entry.sequence,
+      };
     });
 
     return NextResponse.json({ data: updatedEntry });

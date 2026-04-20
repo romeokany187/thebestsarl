@@ -3,6 +3,7 @@ import { PDFDocument, PDFFont, PDFPage, StandardFonts, rgb } from "pdf-lib";
 import fontkit from "@pdf-lib/fontkit";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
+import { applyAccountingChronologySequence, buildAccountingChronologySequenceMap } from "@/lib/accounting-chronology";
 import { prisma } from "@/lib/prisma";
 import { requireApiModuleAccess } from "@/lib/rbac";
 
@@ -1203,21 +1204,36 @@ export async function GET(request: NextRequest) {
   const includeSubaccounts = searchParams.get("includeSubaccounts") === "1";
   const range = parseDateRange(searchParams);
 
-  const entries = await accountingEntryClient.findMany({
-    where: {
-      entryDate: {
-        gte: range.start,
-        lt: range.end,
+  const [chronologyRows, entriesRaw] = await Promise.all([
+    accountingEntryClient.findMany({
+      select: {
+        id: true,
+        entryDate: true,
+        createdAt: true,
+        sequence: true,
       },
-    },
-    orderBy: [{ entryDate: "asc" }, { sequence: "asc" }],
-    include: {
-      createdBy: { select: { name: true } },
-      lines: {
-        orderBy: [{ side: "asc" }, { orderIndex: "asc" }],
+    }),
+    accountingEntryClient.findMany({
+      where: {
+        entryDate: {
+          gte: range.start,
+          lt: range.end,
+        },
       },
-    },
-  });
+      orderBy: [{ entryDate: "asc" }, { createdAt: "asc" }, { id: "asc" }],
+      include: {
+        createdBy: { select: { name: true } },
+        lines: {
+          orderBy: [{ side: "asc" }, { orderIndex: "asc" }],
+        },
+      },
+    }),
+  ]);
+
+  const entries = applyAccountingChronologySequence(
+    entriesRaw,
+    buildAccountingChronologySequenceMap(chronologyRows),
+  );
 
   const payload = reportType === "journal"
     ? buildJournalPayload(entries, range.label)
