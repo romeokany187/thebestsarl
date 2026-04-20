@@ -17,6 +17,7 @@
     "db:push": "sh -c 'PRISMA_RESOLVED_SCHEMA=$(node scripts/resolve-prisma-schema.js) && prisma db push --schema \"$PRISMA_RESOLVED_SCHEMA\" --accept-data-loss'",
     "db:push:mysql": "PRISMA_SCHEMA_FILE=prisma/schema.mysql.prisma npm run db:push",
     "db:validate:mysql": "prisma validate --schema prisma/schema.mysql.prisma",
+    "db:ensure:password-setup-table": "tsx scripts/ensure-password-setup-table.ts",
     "db:migrate:jobtitles": "tsx scripts/migrate-jobtitle-enum.ts",
     "db:clone:prod-to-local": "bash scripts/clone-prod-to-local.sh",
     "deploy:hostinger": "bash scripts/deploy-hostinger.sh",
