@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
+import { isPasswordAuthActive, passwordAuthLaunchAtIso } from "@/lib/auth-rollout";
 import { prisma } from "@/lib/prisma";
 import { isMailConfigured } from "@/lib/mail";
 import {
@@ -16,6 +17,16 @@ const requestSchema = z.object({
 });
 
 export async function POST(request: NextRequest) {
+  if (!isPasswordAuthActive()) {
+    return NextResponse.json(
+      {
+        error: "La création des mots de passe n'est pas encore ouverte.",
+        launchAt: passwordAuthLaunchAtIso(),
+      },
+      { status: 403 },
+    );
+  }
+
   if (!isMailConfigured()) {
     return NextResponse.json(
       { error: "SMTP non configuré. Impossible d'envoyer le code de confirmation." },
@@ -65,11 +76,31 @@ export async function POST(request: NextRequest) {
     }),
   ]);
 
-  await sendPasswordSetupCodeEmail({
-    email: user.email,
-    name: user.name,
-    code,
-  });
+  try {
+    await sendPasswordSetupCodeEmail({
+      email: user.email,
+      name: user.name,
+      code,
+    });
+  } catch (error) {
+    await prisma.passwordSetupCode.updateMany({
+      where: {
+        userId: user.id,
+        purpose: passwordSetupPurpose(),
+        consumedAt: null,
+      },
+      data: {
+        consumedAt: new Date(),
+      },
+    });
+
+    return NextResponse.json(
+      {
+        error: error instanceof Error ? error.message : "Erreur lors de l'envoi de l'email de confirmation.",
+      },
+      { status: 500 },
+    );
+  }
 
   return NextResponse.json({
     ok: true,

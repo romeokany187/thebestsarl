@@ -1,6 +1,7 @@
 import { type NextAuthOptions } from "next-auth";
 import CredentialsProvider from "next-auth/providers/credentials";
 import GoogleProvider from "next-auth/providers/google";
+import { isPasswordAuthActive } from "@/lib/auth-rollout";
 import { prisma } from "@/lib/prisma";
 import { normalizeAuthEmail, verifyUserPassword } from "@/lib/password-setup";
 
@@ -23,6 +24,10 @@ export const authOptions: NextAuthOptions = {
         password: { label: "Mot de passe", type: "password" },
       },
       async authorize(credentials) {
+        if (!isPasswordAuthActive()) {
+          return null;
+        }
+
         const email = normalizeAuthEmail(credentials?.email);
         const password = credentials?.password?.trim() ?? "";
 
@@ -76,7 +81,7 @@ export const authOptions: NextAuthOptions = {
   callbacks: {
     async signIn({ user, account }) {
       if (account?.provider !== "google" || !user.email) {
-        return account?.provider === "credentials";
+        return account?.provider === "credentials" ? isPasswordAuthActive() : false;
       }
 
       const normalizedEmail = normalizeAuthEmail(user.email);

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
+import { isPasswordAuthActive, passwordAuthLaunchAtIso } from "@/lib/auth-rollout";
 import { prisma } from "@/lib/prisma";
 import {
   hashPasswordSetupCode,
@@ -11,7 +12,9 @@ import {
 const confirmSchema = z.object({
   email: z.string().trim().email("Adresse email invalide."),
   code: z.string().trim().length(6, "Le code doit contenir 6 chiffres.").regex(/^\d{6}$/, "Le code doit contenir 6 chiffres."),
-  password: z.string().min(8, "Le mot de passe doit contenir au moins 8 caractères.").max(100),
+  password: z.string().min(8, "Le mot de passe doit contenir au moins 8 caractères.").max(100)
+    .regex(/[A-Za-z]/, "Le mot de passe doit contenir au moins une lettre.")
+    .regex(/\d/, "Le mot de passe doit contenir au moins un chiffre."),
   passwordConfirmation: z.string().min(8).max(100),
 }).superRefine((value, ctx) => {
   if (value.password !== value.passwordConfirmation) {
@@ -24,6 +27,16 @@ const confirmSchema = z.object({
 });
 
 export async function POST(request: NextRequest) {
+  if (!isPasswordAuthActive()) {
+    return NextResponse.json(
+      {
+        error: "La création des mots de passe n'est pas encore ouverte.",
+        launchAt: passwordAuthLaunchAtIso(),
+      },
+      { status: 403 },
+    );
+  }
+
   const body = await request.json().catch(() => null);
   const parsed = confirmSchema.safeParse(body);
   if (!parsed.success) {
