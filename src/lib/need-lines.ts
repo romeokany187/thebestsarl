@@ -58,6 +58,106 @@ function sanitizeQuoteJsonCandidate(value: string) {
   return result;
 }
 
+function decodeJsonStringFragment(value: string | undefined) {
+  if (!value) return "";
+
+  try {
+    return JSON.parse(`"${value}"`) as string;
+  } catch {
+    return value
+      .replace(/\\n/g, "\n")
+      .replace(/\\r/g, "\r")
+      .replace(/\\t/g, "\t")
+      .replace(/\\\//g, "/")
+      .replace(/\\"/g, '"')
+      .replace(/\\\\/g, "\\");
+  }
+}
+
+function extractLooseString(details: string, keys: string[]) {
+  for (const key of keys) {
+    const match = details.match(new RegExp(`"${key}"\\s*:\\s*"((?:\\\\.|[^"\\\\])*)"`, "i"));
+    if (match) {
+      return decodeJsonStringFragment(match[1]);
+    }
+  }
+  return undefined;
+}
+
+function extractLooseNumber(details: string, keys: string[]) {
+  for (const key of keys) {
+    const match = details.match(new RegExp(`"${key}"\\s*:\\s*(-?\\d+(?:\\.\\d+)?)`, "i"));
+    if (match) {
+      const value = Number(match[1]);
+      if (Number.isFinite(value)) {
+        return value;
+      }
+    }
+  }
+  return undefined;
+}
+
+function parseLooseQuotePayload(details: string) {
+  if (!details.includes('"QUOTE_V1"')) {
+    return null;
+  }
+
+  const itemPattern = /\{[^{}]*?"(?:designation|designationn)"\s*:\s*"((?:\\.|[^"\\])*)"[^{}]*?"description"\s*:\s*"((?:\\.|[^"\\])*)"[^{}]*?"quantity"\s*:\s*(-?\d+(?:\.\d+)?)\s*,[^{}]*?"unitPrice"\s*:\s*(-?\d+(?:\.\d+)?)(?:\s*,[^{}]*?"lineTotal"\s*:\s*(-?\d+(?:\.\d+)?))?[^{}]*?\}/gi;
+  const items: Array<{
+    designation?: string;
+    description?: string;
+    quantity?: number;
+    unitPrice?: number;
+    lineTotal?: number;
+  }> = [];
+
+  for (const match of details.matchAll(itemPattern)) {
+    const quantity = Number(match[3]);
+    const unitPrice = Number(match[4]);
+    const lineTotal = match[5] ? Number(match[5]) : quantity * unitPrice;
+    items.push({
+      designation: decodeJsonStringFragment(match[1]),
+      description: decodeJsonStringFragment(match[2]),
+      quantity: Number.isFinite(quantity) ? quantity : undefined,
+      unitPrice: Number.isFinite(unitPrice) ? unitPrice : undefined,
+      lineTotal: Number.isFinite(lineTotal) ? lineTotal : undefined,
+    });
+  }
+
+  if (items.length === 0) {
+    const designation = extractLooseString(details, ["designation", "designationn"]);
+    const description = extractLooseString(details, ["description"]);
+    const quantity = extractLooseNumber(details, ["quantity"]);
+    const unitPrice = extractLooseNumber(details, ["unitPrice"]);
+    const lineTotal = extractLooseNumber(details, ["lineTotal"]);
+
+    if (designation && typeof quantity === "number" && typeof unitPrice === "number") {
+      items.push({
+        designation,
+        description,
+        quantity,
+        unitPrice,
+        lineTotal: typeof lineTotal === "number" ? lineTotal : quantity * unitPrice,
+      });
+    }
+  }
+
+  if (items.length === 0) {
+    return null;
+  }
+
+  return {
+    format: "QUOTE_V1" as const,
+    items,
+    totalGeneral: extractLooseNumber(details, ["totalGeneral"]),
+    urgencyLevel: extractLooseString(details, ["urgencyLevel"]),
+    beneficiaryTeam: extractLooseString(details, ["beneficiaryTeam"]),
+    beneficiaryPersonId: extractLooseString(details, ["beneficiaryPersonId"]),
+    beneficiaryPersonName: extractLooseString(details, ["beneficiaryPersonName"]),
+    assignment: extractLooseString(details, ["assignment"]),
+  };
+}
+
 function looksLikeSerializedNeedQuote(value: string | null | undefined) {
   if (!value) return false;
 
@@ -139,6 +239,17 @@ function parseQuotePayload(details: string) {
   for (const candidate of candidates) {
     if (!candidate) continue;
 
+    if (candidate.startsWith('"') && candidate.endsWith('"')) {
+      try {
+        const decoded = JSON.parse(candidate) as string;
+        if (typeof decoded === "string" && decoded.trim()) {
+          candidates.push(decoded.trim());
+        }
+      } catch {
+        continue;
+      }
+    }
+
     try {
       const parsed = JSON.parse(sanitizeQuoteJsonCandidate(candidate)) as {
         format?: string;
@@ -165,7 +276,7 @@ function parseQuotePayload(details: string) {
     }
   }
 
-  return null;
+  return parseLooseQuotePayload(details);
 }
 
 export function parseNeedQuote(details: string | null | undefined): NeedDetailsQuote | null {
