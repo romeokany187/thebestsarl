@@ -1,23 +1,69 @@
 import { type NextAuthOptions } from "next-auth";
+import CredentialsProvider from "next-auth/providers/credentials";
 import GoogleProvider from "next-auth/providers/google";
 import { prisma } from "@/lib/prisma";
+import { normalizeAuthEmail, verifyUserPassword } from "@/lib/password-setup";
 
 const DEFAULT_ADMIN_EMAIL = "romeokany187@gmail.com";
-
-function normalizeEmail(value?: string | null) {
-  return value?.trim().toLowerCase() ?? "";
-}
 
 const adminEmails = new Set(
   `${process.env.ADMIN_EMAILS ?? ""},${process.env.ADMIN_EMAIL ?? ""},${DEFAULT_ADMIN_EMAIL}`
     .split(",")
-    .map((email) => normalizeEmail(email))
+    .map((email) => normalizeAuthEmail(email))
     .filter(Boolean),
 );
 
 export const authOptions: NextAuthOptions = {
   session: { strategy: "jwt" },
   providers: [
+    CredentialsProvider({
+      name: "EmailPassword",
+      credentials: {
+        email: { label: "Email", type: "email" },
+        password: { label: "Mot de passe", type: "password" },
+      },
+      async authorize(credentials) {
+        const email = normalizeAuthEmail(credentials?.email);
+        const password = credentials?.password?.trim() ?? "";
+
+        if (!email || !password) {
+          return null;
+        }
+
+        const user = await prisma.user.findUnique({
+          where: { email },
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            passwordHash: true,
+            role: true,
+            jobTitle: true,
+            canImportTicketWorkbook: true,
+            team: { select: { name: true } },
+          },
+        });
+
+        if (!user) {
+          return null;
+        }
+
+        const isValid = await verifyUserPassword(password, user.passwordHash);
+        if (!isValid) {
+          return null;
+        }
+
+        return {
+          id: user.id,
+          name: user.name,
+          email: user.email,
+          role: user.role,
+          jobTitle: user.jobTitle,
+          teamName: user.team?.name ?? null,
+          canImportTicketWorkbook: user.canImportTicketWorkbook,
+        };
+      },
+    }),
     GoogleProvider({
       clientId: process.env.GOOGLE_CLIENT_ID ?? "",
       clientSecret: process.env.GOOGLE_CLIENT_SECRET ?? "",
@@ -30,10 +76,10 @@ export const authOptions: NextAuthOptions = {
   callbacks: {
     async signIn({ user, account }) {
       if (account?.provider !== "google" || !user.email) {
-        return false;
+        return account?.provider === "credentials";
       }
 
-      const normalizedEmail = normalizeEmail(user.email);
+      const normalizedEmail = normalizeAuthEmail(user.email);
       const isAdminEmail = adminEmails.has(normalizedEmail);
 
       try {
@@ -69,6 +115,29 @@ export const authOptions: NextAuthOptions = {
       }
     },
     async jwt({ token, user }) {
+      const authUser = user as (typeof user & {
+        id?: string;
+        role?: string;
+        jobTitle?: string;
+        teamName?: string | null;
+        canImportTicketWorkbook?: boolean;
+      }) | undefined;
+
+      if (authUser?.id) {
+        token.sub = authUser.id;
+      }
+      if (typeof authUser?.role === "string") {
+        token.role = authUser.role;
+      }
+      if (typeof authUser?.jobTitle === "string") {
+        token.jobTitle = authUser.jobTitle;
+      }
+      if (typeof authUser?.teamName !== "undefined") {
+        token.teamName = authUser.teamName ?? null;
+      }
+      if (typeof authUser?.canImportTicketWorkbook !== "undefined") {
+        token.canImportTicketWorkbook = Boolean(authUser.canImportTicketWorkbook);
+      }
       if (user?.email) {
         token.email = user.email.trim().toLowerCase();
       }
@@ -80,6 +149,7 @@ export const authOptions: NextAuthOptions = {
             select: {
               id: true,
               name: true,
+              email: true,
               role: true,
               jobTitle: true,
               canImportTicketWorkbook: true,
