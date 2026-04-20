@@ -768,23 +768,26 @@ function drawGenericTableRow<Row extends Record<string, string>>(params: {
   }
 }
 
-async function loadPdfBodyFont(pdf: PDFDocument) {
+async function loadPdfFonts(pdf: PDFDocument) {
   pdf.registerFontkit(fontkit);
   const fontPath = path.join(process.cwd(), "public", "fonts", "MAIAN.TTF");
 
   try {
     const regularBytes = await readFile(fontPath);
-    return await pdf.embedFont(regularBytes);
+    const maiandra = await pdf.embedFont(regularBytes);
+    return { body: maiandra, bold: maiandra };
   } catch (error) {
     console.warn("Failed to load MAIAN.TTF for accounting PDF, falling back to Helvetica.", error);
-    return await pdf.embedFont(StandardFonts.Helvetica);
+    return {
+      body: await pdf.embedFont(StandardFonts.Helvetica),
+      bold: await pdf.embedFont(StandardFonts.HelveticaBold),
+    };
   }
 }
 
 async function buildPdf(report: ReportPayload) {
   const pdf = await PDFDocument.create();
-  const font = await loadPdfBodyFont(pdf);
-  const bold = await pdf.embedFont(StandardFonts.HelveticaBold);
+  const { body: font, bold } = await loadPdfFonts(pdf);
   const pageWidth = 1191;
   const pageHeight = 842;
   const margin = 24;

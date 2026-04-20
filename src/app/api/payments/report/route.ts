@@ -345,7 +345,7 @@ async function loadPaymentReportFonts(pdf: PDFDocument) {
   ]);
 
   const body = bodyBytes ? await pdf.embedFont(bodyBytes) : await pdf.embedFont(StandardFonts.Helvetica);
-  const bold = await pdf.embedFont(StandardFonts.HelveticaBold);
+  const bold = bodyBytes ? await pdf.embedFont(bodyBytes) : await pdf.embedFont(StandardFonts.HelveticaBold);
   return { body, bold };
 }
 
