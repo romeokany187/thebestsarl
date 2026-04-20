@@ -195,14 +195,22 @@ export function buildDeskScopedCashOperationWhere(
   options?: { strict?: boolean },
 ) {
   const strict = options?.strict === true;
+  const selectedPrefix = `${selectedDesk}:`;
+  const foreignDeskPrefixFilters = KNOWN_CASH_DESK_PREFIXES
+    .filter((prefix) => prefix !== selectedPrefix)
+    .map((prefix) => ({ description: { startsWith: prefix } })) as any;
 
   if (selectedDesk === "THE_BEST") {
     return {
       OR: [
-        { cashDesk: "THE_BEST" },
         { description: { startsWith: "THE_BEST:" } },
         ...(strict
-          ? []
+          ? [{
+            AND: [
+              { cashDesk: "THE_BEST" },
+              { NOT: foreignDeskPrefixFilters },
+            ],
+          }]
           : [{
             AND: [
               { cashDesk: "THE_BEST" },
@@ -216,16 +224,30 @@ export function buildDeskScopedCashOperationWhere(
   if (selectedDesk === "CAISSE_2_SIEGE") {
     return {
       OR: [
-        { cashDesk: "CAISSE_2_SIEGE" },
         { description: { startsWith: "CAISSE_2_SIEGE:" } },
+        ...(strict
+          ? [{
+            AND: [
+              { cashDesk: "CAISSE_2_SIEGE" },
+              { NOT: foreignDeskPrefixFilters },
+            ],
+          }]
+          : [{ cashDesk: "CAISSE_2_SIEGE" }]),
       ],
     };
   }
 
   return {
     OR: [
-      { cashDesk: selectedDesk },
       { description: { startsWith: `${selectedDesk}:` } },
+      ...(strict
+        ? [{
+          AND: [
+            { cashDesk: selectedDesk },
+            { NOT: foreignDeskPrefixFilters },
+          ],
+        }]
+        : [{ cashDesk: selectedDesk }]),
     ],
   };
 }
