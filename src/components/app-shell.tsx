@@ -232,7 +232,7 @@ export async function AppShell({
 
   return (
     <div className="min-h-screen w-full bg-background text-foreground">
-      {session?.user?.id ? <SessionIdleGuard /> : null}
+      {session?.user?.id ? <SessionIdleGuard sessionKey={`${session.user.id}:${session.expires}`} /> : null}
       <div className="flex min-h-screen w-full">
         <aside className="sticky top-0 hidden h-screen w-72 shrink-0 overflow-y-auto border-r border-black/10 bg-white/70 p-5 backdrop-blur md:block dark:border-white/10 dark:bg-zinc-950/70">
           <div className="mb-6">

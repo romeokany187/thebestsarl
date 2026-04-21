@@ -5,10 +5,13 @@ import { signOut } from "next-auth/react";
 import { SESSION_INACTIVITY_TIMEOUT_MS } from "@/lib/session-security";
 
 const LAST_ACTIVITY_STORAGE_KEY = "thebest:last-activity-at";
+const SESSION_IDLE_GUARD_SESSION_KEY = "thebest:session-idle-key";
+const ACTIVITY_WRITE_THROTTLE_MS = 15 * 1000;
 
-export function SessionIdleGuard() {
+export function SessionIdleGuard({ sessionKey }: { sessionKey: string }) {
   const timerRef = useRef<number | null>(null);
   const isSigningOutRef = useRef(false);
+  const lastActivityWriteRef = useRef(0);
 
   useEffect(() => {
     function readLastActivity() {
@@ -55,7 +58,10 @@ export function SessionIdleGuard() {
       }
 
       const now = Date.now();
-      window.localStorage.setItem(LAST_ACTIVITY_STORAGE_KEY, String(now));
+      if (now - lastActivityWriteRef.current >= ACTIVITY_WRITE_THROTTLE_MS) {
+        window.localStorage.setItem(LAST_ACTIVITY_STORAGE_KEY, String(now));
+        lastActivityWriteRef.current = now;
+      }
       scheduleExpiry(now);
     }
 
@@ -71,6 +77,17 @@ export function SessionIdleGuard() {
     }
 
     function handleStorage(event: StorageEvent) {
+      if (event.key === SESSION_IDLE_GUARD_SESSION_KEY) {
+        if (event.newValue && event.newValue !== sessionKey) {
+          window.localStorage.setItem(SESSION_IDLE_GUARD_SESSION_KEY, sessionKey);
+          const now = Date.now();
+          window.localStorage.setItem(LAST_ACTIVITY_STORAGE_KEY, String(now));
+          lastActivityWriteRef.current = now;
+          scheduleExpiry(now);
+        }
+        return;
+      }
+
       if (event.key !== LAST_ACTIVITY_STORAGE_KEY) {
         return;
       }
@@ -84,7 +101,15 @@ export function SessionIdleGuard() {
       void expireSession();
     }
 
-    const initialActivityAt = readLastActivity();
+    const storedSessionKey = window.localStorage.getItem(SESSION_IDLE_GUARD_SESSION_KEY);
+    const initialActivityAt = storedSessionKey === sessionKey ? readLastActivity() : Date.now();
+
+    if (storedSessionKey !== sessionKey) {
+      window.localStorage.setItem(SESSION_IDLE_GUARD_SESSION_KEY, sessionKey);
+      window.localStorage.setItem(LAST_ACTIVITY_STORAGE_KEY, String(initialActivityAt));
+      lastActivityWriteRef.current = initialActivityAt;
+    }
+
     if (Date.now() - initialActivityAt >= SESSION_INACTIVITY_TIMEOUT_MS) {
       void expireSession();
       return;
@@ -107,7 +132,7 @@ export function SessionIdleGuard() {
       window.removeEventListener("storage", handleStorage);
       document.removeEventListener("visibilitychange", handleVisibilityChange);
     };
-  }, []);
+  }, [sessionKey]);
 
   return null;
 }
