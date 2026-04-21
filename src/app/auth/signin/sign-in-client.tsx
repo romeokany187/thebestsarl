@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import { signIn } from "next-auth/react";
+import { getCsrfToken, signIn } from "next-auth/react";
 
 const GOOGLE_EMAIL_HINT_STORAGE_KEY = "thebest.google-email-hint";
 
@@ -178,35 +178,37 @@ export default function SignInClientPage({ passwordAuthActive, launchAtIso }: Si
     setMessage("");
 
     try {
-      const csrfResponse = await fetch("/api/auth/csrf");
-      const csrfPayload = await csrfResponse.json().catch(() => null);
-      const csrfToken = typeof csrfPayload?.csrfToken === "string" ? csrfPayload.csrfToken : "";
+      const csrfToken = (await getCsrfToken())?.trim() ?? "";
 
-      if (!csrfResponse.ok || !csrfToken) {
+      if (!csrfToken) {
         throw new Error("csrf");
       }
 
-      const authParams = new URLSearchParams();
+      const actionUrl = new URL("/api/auth/signin/google", window.location.origin);
+      actionUrl.searchParams.set("prompt", "select_account");
       if (hintedEmail) {
-        authParams.set("login_hint", hintedEmail);
+        actionUrl.searchParams.set("login_hint", hintedEmail);
       }
 
-      const response = await fetch(`/api/auth/signin/google${authParams.toString() ? `?${authParams.toString()}` : ""}`, {
-        method: "POST",
-        headers: { "Content-Type": "application/x-www-form-urlencoded" },
-        body: new URLSearchParams({
-          csrfToken,
-          callbackUrl: "/post-login",
-          json: "true",
-        }),
-      });
+      const form = document.createElement("form");
+      form.method = "POST";
+      form.action = actionUrl.toString();
+      form.style.display = "none";
 
-      const payload = await response.json().catch(() => null);
-      if (!response.ok || typeof payload?.url !== "string" || !payload.url) {
-        throw new Error("signin");
-      }
+      const csrfInput = document.createElement("input");
+      csrfInput.type = "hidden";
+      csrfInput.name = "csrfToken";
+      csrfInput.value = csrfToken;
+      form.appendChild(csrfInput);
 
-      window.location.href = payload.url;
+      const callbackInput = document.createElement("input");
+      callbackInput.type = "hidden";
+      callbackInput.name = "callbackUrl";
+      callbackInput.value = "/post-login";
+      form.appendChild(callbackInput);
+
+      document.body.appendChild(form);
+      form.submit();
       return;
     } catch {
       setError("Impossible de démarrer la connexion Google. Réessayez dans un seul onglet sur le domaine officiel de l'application.");
