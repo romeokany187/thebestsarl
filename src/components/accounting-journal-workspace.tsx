@@ -155,6 +155,7 @@ export function AccountingJournalWorkspace({
   const [libelle, setLibelle] = useState("");
   const [pieceJustificative, setPieceJustificative] = useState("");
   const [ticketInvoiceSelection, setTicketInvoiceSelection] = useState("");
+  const [ticketInvoiceQuery, setTicketInvoiceQuery] = useState("");
   const [rateDate, setRateDate] = useState(toLocalDateValue(new Date()));
   const [dailyRateValue, setDailyRateValue] = useState("");
   const [lines, setLines] = useState<EntryLineForm[]>([lineFactory("DEBIT"), lineFactory("CREDIT")]);
@@ -203,6 +204,17 @@ export function AccountingJournalWorkspace({
   );
   const selectedEntryRate = dailyRateMap.get(entryDate.slice(0, 10)) ?? null;
   const selectedManagedRate = dailyRateMap.get(rateDate) ?? null;
+  const filteredTicketInvoiceOptions = useMemo(() => {
+    const query = ticketInvoiceQuery.trim().toLowerCase();
+
+    if (!query) {
+      return ticketInvoiceOptions.slice(0, 8);
+    }
+
+    return ticketInvoiceOptions
+      .filter((ticket) => `${ticket.customerName} ${ticket.invoiceNumber} ${ticket.ticketNumber}`.toLowerCase().includes(query))
+      .slice(0, 8);
+  }, [ticketInvoiceOptions, ticketInvoiceQuery]);
 
   useEffect(() => {
     const matchingRate = dailyRateMap.get(rateDate);
@@ -236,12 +248,36 @@ export function AccountingJournalWorkspace({
     setLibelle("");
     setPieceJustificative("");
     setTicketInvoiceSelection("");
+    setTicketInvoiceQuery("");
     setEditingEntryId("");
     setLines([lineFactory("DEBIT"), lineFactory("CREDIT")]);
   }
 
   function buildTicketSaleLabel(ticket: TicketInvoiceOption) {
     return `Vente billet ${ticket.customerName}`;
+  }
+
+  function formatTicketInvoiceSearchLabel(ticket: TicketInvoiceOption) {
+    return `${ticket.customerName} • ${ticket.invoiceNumber}`;
+  }
+
+  function findMatchingTicketInvoice(value: string) {
+    const normalized = value.trim().toLowerCase();
+    if (!normalized) return null;
+
+    const exactMatch = ticketInvoiceOptions.find((ticket) => (
+      ticket.invoiceNumber.toLowerCase() === normalized
+      || ticket.customerName.toLowerCase() === normalized
+      || ticket.ticketNumber.toLowerCase() === normalized
+      || formatTicketInvoiceSearchLabel(ticket).toLowerCase() === normalized
+    ));
+
+    if (exactMatch) {
+      return exactMatch;
+    }
+
+    const partialMatches = ticketInvoiceOptions.filter((ticket) => `${ticket.customerName} ${ticket.invoiceNumber} ${ticket.ticketNumber}`.toLowerCase().includes(normalized));
+    return partialMatches.length === 1 ? partialMatches[0] : null;
   }
 
   function applyTicketInvoiceSuggestion(invoiceNumber: string) {
@@ -251,6 +287,7 @@ export function AccountingJournalWorkspace({
     }
 
     setTicketInvoiceSelection(ticket.id);
+    setTicketInvoiceQuery(formatTicketInvoiceSearchLabel(ticket));
     setPieceJustificative(ticket.invoiceNumber);
     setLibelle(buildTicketSaleLabel(ticket));
   }
@@ -289,6 +326,7 @@ export function AccountingJournalWorkspace({
     setPieceJustificative(entry.pieceJustificative ?? "");
     const matchedTicket = entry.pieceJustificative ? ticketInvoiceMap.get(entry.pieceJustificative) : null;
     setTicketInvoiceSelection(matchedTicket?.id ?? "");
+    setTicketInvoiceQuery(matchedTicket ? formatTicketInvoiceSearchLabel(matchedTicket) : entry.pieceJustificative ?? "");
     setLines(entry.lines.map((line) => ({
       id: line.id,
       side: line.side,
@@ -496,8 +534,8 @@ export function AccountingJournalWorkspace({
           </div>
         </div>
 
-        <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-          <div>
+        <div className="mt-4 grid gap-3 md:grid-cols-2 2xl:grid-cols-4">
+          <div className="min-w-0">
             <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-black/60 dark:text-white/60">Date</label>
             <input type="datetime-local" value={entryDate} onChange={(event) => setEntryDate(event.target.value)} className="w-full rounded-md border border-black/15 bg-white px-3 py-2 text-sm dark:border-white/15 dark:bg-zinc-900" />
             <p className="mt-1 text-[11px] text-black/50 dark:text-white/50">
@@ -506,7 +544,7 @@ export function AccountingJournalWorkspace({
                 : "Aucun taux du jour enregistré pour cette date. Enregistre-le dans le bloc ci-dessus avant de passer l'écriture."}
             </p>
           </div>
-          <div>
+          <div className="min-w-0">
             <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-black/60 dark:text-white/60">Pôle(x)</label>
             <div className="grid gap-2 sm:grid-cols-2">
               {POLE_OPTIONS.map((option) => {
@@ -531,28 +569,54 @@ export function AccountingJournalWorkspace({
               Tu peux sélectionner un ou plusieurs pôles pour la même écriture. Laisse vide si l'écriture est sans pôle.
             </p>
           </div>
-          <div>
+          <div className="min-w-0">
             <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-black/60 dark:text-white/60">Facture billet depuis le 1er avril</label>
-            <select
-              value={ticketInvoiceSelection}
+            <input
+              value={ticketInvoiceQuery}
               onChange={(event) => {
-                const nextSelection = event.target.value;
-                setTicketInvoiceSelection(nextSelection);
-                const ticket = ticketInvoiceOptions.find((option) => option.id === nextSelection);
-                if (!ticket) return;
-                applyTicketInvoiceSuggestion(ticket.invoiceNumber);
+                const nextValue = event.target.value;
+                setTicketInvoiceQuery(nextValue);
+                const matchedTicket = findMatchingTicketInvoice(nextValue);
+
+                if (matchedTicket) {
+                  applyTicketInvoiceSuggestion(matchedTicket.invoiceNumber);
+                } else {
+                  setTicketInvoiceSelection("");
+                }
               }}
+              placeholder="Recherche par nom, n° facture ou billet"
               className="w-full rounded-md border border-black/15 bg-white px-3 py-2 text-sm dark:border-white/15 dark:bg-zinc-900"
-            >
-              <option value="">Choisir une facture pour préremplir</option>
-              {ticketInvoiceOptions.map((ticket) => (
-                <option key={ticket.id} value={ticket.id}>
-                  {ticket.invoiceNumber} • {ticket.customerName}
-                </option>
-              ))}
-            </select>
+            />
+            <div className="mt-2 max-h-48 overflow-y-auto rounded-xl border border-black/10 bg-black/2 p-2 dark:border-white/10 dark:bg-white/5">
+              {filteredTicketInvoiceOptions.length > 0 ? (
+                <div className="space-y-1">
+                  {filteredTicketInvoiceOptions.map((ticket) => {
+                    const isSelected = ticket.id === ticketInvoiceSelection;
+                    return (
+                      <button
+                        key={ticket.id}
+                        type="button"
+                        onClick={() => applyTicketInvoiceSuggestion(ticket.invoiceNumber)}
+                        className={`flex w-full items-start justify-between gap-3 rounded-lg px-3 py-2 text-left text-xs transition ${isSelected
+                          ? "border border-black bg-black text-white dark:border-white dark:bg-white dark:text-black"
+                          : "border border-transparent hover:bg-black/5 dark:hover:bg-white/10"
+                        }`}
+                      >
+                        <span className="min-w-0 flex-1 truncate">{ticket.customerName}</span>
+                        <span className="shrink-0 font-semibold">{ticket.invoiceNumber}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              ) : (
+                <p className="px-2 py-1 text-xs text-black/50 dark:text-white/50">Aucune facture trouvée pour cette recherche.</p>
+              )}
+            </div>
+            <p className="mt-1 text-[11px] text-black/50 dark:text-white/50">
+              Recherche directe par nom client, numéro de facture ou numéro de billet. Dès qu'une facture est trouvée, la pièce justificative se remplit avec sa référence.
+            </p>
           </div>
-          <div>
+          <div className="min-w-0">
             <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-black/60 dark:text-white/60">Pièce justificative</label>
             <input
               list="accounting-ticket-invoices"
@@ -564,6 +628,7 @@ export function AccountingJournalWorkspace({
                 const matchedTicket = ticketInvoiceMap.get(nextValue);
                 if (matchedTicket) {
                   setTicketInvoiceSelection(matchedTicket.id);
+                  setTicketInvoiceQuery(formatTicketInvoiceSearchLabel(matchedTicket));
                   setLibelle(buildTicketSaleLabel(matchedTicket));
                 } else {
                   setTicketInvoiceSelection("");
@@ -638,7 +703,7 @@ export function AccountingJournalWorkspace({
         </datalist>
         <datalist id="accounting-ticket-invoices">
           {ticketInvoiceOptions.map((ticket) => (
-            <option key={ticket.id} value={ticket.invoiceNumber}>{ticket.customerName}</option>
+            <option key={ticket.id} value={ticket.invoiceNumber}>{ticket.customerName} • {ticket.ticketNumber}</option>
           ))}
         </datalist>
 
