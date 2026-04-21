@@ -109,6 +109,25 @@ function formatMoneyCell(value: number) {
   return value === 0 ? "" : Number(value).toLocaleString("fr-FR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
+function formatJournalAmountCell(amountUsd: number | null | undefined, amountCdf: number | null | undefined) {
+  const usd = numberValue(amountUsd);
+  const cdf = numberValue(amountCdf);
+
+  if (usd > 0 && cdf > 0) {
+    return `USD ${formatMoneyCell(usd)} / CDF ${formatMoneyCell(cdf)}`;
+  }
+
+  if (usd > 0) {
+    return `USD ${formatMoneyCell(usd)}`;
+  }
+
+  if (cdf > 0) {
+    return `CDF ${formatMoneyCell(cdf)}`;
+  }
+
+  return "";
+}
+
 function formatJournalDate(value: string | Date) {
   return new Date(value).toLocaleDateString("fr-FR");
 }
@@ -579,8 +598,8 @@ function flattenJournalRows(entries: any[]): JournalPdfRow[] {
         creditLabel: creditLine?.accountLabel ?? "",
         libelle: index === 0 ? entry.libelle ?? "" : "",
         pieceJustificative: index === 0 ? entry.pieceJustificative ?? "" : "",
-        usdDebit: formatMoneyCell(numberValue(debitLine?.amountUsd)),
-        usdCredit: formatMoneyCell(numberValue(creditLine?.amountUsd)),
+        usdDebit: formatJournalAmountCell(debitLine?.amountUsd, debitLine?.amountCdf),
+        usdCredit: formatJournalAmountCell(creditLine?.amountUsd, creditLine?.amountCdf),
         exchangeRate: index === 0 && entry.exchangeRate ? formatMoneyCell(Number(entry.exchangeRate)) : "",
       });
     }
@@ -595,6 +614,8 @@ function journalRowHeight(row: JournalPdfRow, font: PDFFont, size: number) {
     wrapPdfText(row.creditLabel, font, size, 160).length,
     wrapPdfText(row.libelle, font, size, 244).length,
     wrapPdfText(row.pieceJustificative, font, size, 92).length,
+    wrapPdfText(row.usdDebit, font, size, 58).length,
+    wrapPdfText(row.usdCredit, font, size, 58).length,
   );
   return Math.max(24, wrappedLineCount * (size + 3) + 8);
 }
@@ -663,7 +684,7 @@ function drawJournalTableHeader(page: PDFPage, font: PDFFont, bold: PDFFont, sta
   for (const [label, x, width] of [
     ["DEBIT", debitGroupX, debitGroupWidth],
     ["CREDIT", creditGroupX, creditGroupWidth],
-    ["MONTANT USD", usdGroupX, usdGroupWidth],
+    ["MONTANTS", usdGroupX, usdGroupWidth],
   ] as const) {
     page.drawRectangle({ x, y: topY - groupRowHeight, width, height: groupRowHeight, borderWidth: 0.8, borderColor, color: groupFill });
     drawCellText({ page, text: label, x, y: topY - groupRowHeight, width, height: groupRowHeight, font: bold, size: 8.2, align: "center" });
@@ -914,8 +935,8 @@ async function buildPdf(report: ReportPayload) {
       creditLabel: "",
       libelle: `${report.entryCount} ecritures`,
       pieceJustificative: "",
-      usdDebit: formatMoneyCell(report.totals.debitUsd),
-      usdCredit: formatMoneyCell(report.totals.creditUsd),
+      usdDebit: formatJournalAmountCell(report.totals.debitUsd, report.totals.debitCdf),
+      usdCredit: formatJournalAmountCell(report.totals.creditUsd, report.totals.creditCdf),
       exchangeRate: "",
     };
     const totalHeight = journalRowHeight(totalRow, bold, fontSize);

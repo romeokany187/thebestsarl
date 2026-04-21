@@ -133,6 +133,25 @@ function money(value: number) {
   return value.toFixed(2);
 }
 
+function journalLineAmounts(amountUsd?: number | null, amountCdf?: number | null) {
+  const usd = Number(amountUsd ?? 0);
+  const cdf = Number(amountCdf ?? 0);
+
+  if (usd > 0 && cdf > 0) {
+    return `USD ${money(usd)} / CDF ${money(cdf)}`;
+  }
+
+  if (usd > 0) {
+    return `USD ${money(usd)}`;
+  }
+
+  if (cdf > 0) {
+    return `CDF ${money(cdf)}`;
+  }
+
+  return "-";
+}
+
 function signedBalance(value: number, side: "DEBIT" | "CREDIT" | "ZERO") {
   if (side === "ZERO") return "0.00";
   return `${money(Math.abs(value))} ${side === "DEBIT" ? "D" : "C"}`;
@@ -283,7 +302,7 @@ export function AccountingReportsWorkspace({ accounts }: { accounts: AccountOpti
             <p className="mt-1 text-sm text-black/60 dark:text-white/60">{preview.periodLabel}</p>
           </div>
 
-          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-2">
+          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
             <div className="rounded-xl border border-black/10 px-3 py-3 text-sm dark:border-white/10">
               <p className="text-xs text-black/55 dark:text-white/55">USD débit</p>
               <p className="mt-1 font-semibold">{money(preview.totals.debitUsd)}</p>
@@ -291,6 +310,14 @@ export function AccountingReportsWorkspace({ accounts }: { accounts: AccountOpti
             <div className="rounded-xl border border-black/10 px-3 py-3 text-sm dark:border-white/10">
               <p className="text-xs text-black/55 dark:text-white/55">USD crédit</p>
               <p className="mt-1 font-semibold">{money(preview.totals.creditUsd)}</p>
+            </div>
+            <div className="rounded-xl border border-black/10 px-3 py-3 text-sm dark:border-white/10">
+              <p className="text-xs text-black/55 dark:text-white/55">CDF débit</p>
+              <p className="mt-1 font-semibold">{money(preview.totals.debitCdf)}</p>
+            </div>
+            <div className="rounded-xl border border-black/10 px-3 py-3 text-sm dark:border-white/10">
+              <p className="text-xs text-black/55 dark:text-white/55">CDF crédit</p>
+              <p className="mt-1 font-semibold">{money(preview.totals.creditCdf)}</p>
             </div>
           </div>
 
@@ -321,7 +348,7 @@ export function AccountingReportsWorkspace({ accounts }: { accounts: AccountOpti
                           {entry.lines.filter((line) => line.side === side).map((line) => (
                             <div key={line.id} className="flex items-center justify-between gap-3 text-xs">
                               <span>{line.accountCode} • {line.accountLabel}</span>
-                              <span className="text-right">USD {money(Number(line.amountUsd ?? 0))}</span>
+                              <span className="text-right">{journalLineAmounts(line.amountUsd, line.amountCdf)}</span>
                             </div>
                           ))}
                         </div>
