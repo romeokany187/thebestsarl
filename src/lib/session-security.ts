@@ -1,4 +1,5 @@
 const DEFAULT_FORCE_REAUTH_AFTER = "2026-04-20T21:20:00.000Z";
+export const SESSION_INACTIVITY_TIMEOUT_MS = 5 * 60 * 1000;
 
 export function forceReauthAfter() {
   return new Date(process.env.FORCE_REAUTH_AFTER?.trim() || DEFAULT_FORCE_REAUTH_AFTER);
