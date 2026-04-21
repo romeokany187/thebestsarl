@@ -131,6 +131,15 @@ function formatError(error: unknown) {
   return "Erreur inconnue.";
 }
 
+function buildAccountingSigninUrl() {
+  if (typeof window === "undefined") {
+    return "/auth/signin";
+  }
+
+  const callbackUrl = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+  return `/auth/signin?callbackUrl=${encodeURIComponent(callbackUrl)}`;
+}
+
 export function AccountingJournalWorkspace({
   showComposer = true,
   showHistory = true,
@@ -160,12 +169,29 @@ export function AccountingJournalWorkspace({
   const [dailyRateValue, setDailyRateValue] = useState("");
   const [lines, setLines] = useState<EntryLineForm[]>([lineFactory("DEBIT"), lineFactory("CREDIT")]);
 
+  async function fetchAccounting(input: string, init?: RequestInit) {
+    const response = await fetch(input, {
+      ...init,
+      credentials: "include",
+      headers: {
+        ...(init?.headers ?? {}),
+      },
+    });
+
+    if (response.status === 401 && typeof window !== "undefined") {
+      window.location.href = buildAccountingSigninUrl();
+      throw new Error("SESSION_EXPIREE");
+    }
+
+    return response;
+  }
+
   async function loadData() {
     setLoading(true);
     setError("");
 
     try {
-      const response = await fetch("/api/comptabilite/journal", { cache: "no-store" });
+      const response = await fetchAccounting("/api/comptabilite/journal", { cache: "no-store" });
       const payload = await response.json().catch(() => null);
 
       if (!response.ok) {
@@ -179,7 +205,10 @@ export function AccountingJournalWorkspace({
       setDeletedEntries(payload.deletedEntries ?? []);
       setTicketInvoiceOptions(payload.ticketInvoiceOptions ?? []);
       setDailyRates(payload.dailyRates ?? []);
-    } catch {
+    } catch (error) {
+      if (error instanceof Error && error.message === "SESSION_EXPIREE") {
+        return;
+      }
       setError("Erreur réseau lors du chargement du journal comptable.");
     }
 
@@ -343,7 +372,7 @@ export function AccountingJournalWorkspace({
     setMessage("");
 
     try {
-      const response = await fetch("/api/comptabilite/journal/daily-rate", {
+      const response = await fetchAccounting("/api/comptabilite/journal/daily-rate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -361,7 +390,10 @@ export function AccountingJournalWorkspace({
 
       setMessage(`Taux du ${new Date(`${rateDate}T00:00:00.000Z`).toLocaleDateString("fr-FR")} enregistré.`);
       await loadData();
-    } catch {
+    } catch (error) {
+      if (error instanceof Error && error.message === "SESSION_EXPIREE") {
+        return;
+      }
       setError("Erreur réseau lors de l'enregistrement du taux du jour.");
     }
 
@@ -400,7 +432,7 @@ export function AccountingJournalWorkspace({
     };
 
     try {
-      const response = await fetch("/api/comptabilite/journal", {
+      const response = await fetchAccounting("/api/comptabilite/journal", {
         method: editingEntryId ? "PUT" : "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
@@ -418,7 +450,10 @@ export function AccountingJournalWorkspace({
         : `Écriture n° ${result?.data?.sequence ?? "?"} enregistrée.`);
       resetForm({ preserveEntryDate: true });
       await loadData();
-    } catch {
+    } catch (error) {
+      if (error instanceof Error && error.message === "SESSION_EXPIREE") {
+        return;
+      }
       setError("Erreur réseau lors de l'enregistrement de l'écriture.");
     }
 
@@ -431,7 +466,7 @@ export function AccountingJournalWorkspace({
     setMessage("");
 
     try {
-      const response = await fetch(`/api/comptabilite/journal?id=${entryId}`, {
+      const response = await fetchAccounting(`/api/comptabilite/journal?id=${entryId}`, {
         method: "DELETE",
       });
       const result = await response.json().catch(() => null);
@@ -447,7 +482,10 @@ export function AccountingJournalWorkspace({
       }
       setMessage("Écriture comptable supprimée.");
       await loadData();
-    } catch {
+    } catch (error) {
+      if (error instanceof Error && error.message === "SESSION_EXPIREE") {
+        return;
+      }
       setError("Erreur réseau lors de la suppression de l'écriture.");
     }
 
