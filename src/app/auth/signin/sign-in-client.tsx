@@ -150,6 +150,20 @@ export default function SignInClientPage({ initialMode, passwordAuthActive, laun
   );
 
   useEffect(() => {
+    setMode(initialMode);
+
+    if (initialMode === "setup") {
+      setEmail("");
+      setPassword("");
+      setError("");
+    }
+
+    if (initialMode === "login") {
+      clearSetupIdentity();
+    }
+  }, [initialMode]);
+
+  useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const setupEmailFromQuery = normalizeEmailValue(params.get("email") ?? "");
     const requiresSetup = params.get("setup") === "required";
@@ -184,7 +198,7 @@ export default function SignInClientPage({ initialMode, passwordAuthActive, laun
     if (requestedMode) {
       setMode("setup");
     }
-  }, []);
+  }, [launchAtLabel]);
 
   function resetSetupProgress(options?: { keepFeedback?: boolean }) {
     setSetupRequested(false);
@@ -506,6 +520,7 @@ export default function SignInClientPage({ initialMode, passwordAuthActive, laun
                           type="email"
                           value={email}
                           onChange={(event) => setEmail(event.target.value)}
+                          autoComplete="off"
                           className="w-full rounded-lg border border-white/15 bg-white/8 px-4 py-3 text-base text-white outline-none transition placeholder:text-white/35 focus:border-sky-300 focus:bg-white/10"
                           placeholder="vous@thebest.com"
                           required
@@ -518,6 +533,7 @@ export default function SignInClientPage({ initialMode, passwordAuthActive, laun
                           type="password"
                           value={password}
                           onChange={(event) => setPassword(event.target.value)}
+                          autoComplete="off"
                           className="w-full rounded-lg border border-white/15 bg-white/8 px-4 py-3 text-base text-white outline-none transition placeholder:text-white/35 focus:border-sky-300 focus:bg-white/10"
                           placeholder="Votre mot de passe"
                           required
@@ -616,6 +632,7 @@ export default function SignInClientPage({ initialMode, passwordAuthActive, laun
                               type="email"
                               value={setupEmail}
                               onChange={(event) => setSetupEmail(event.target.value)}
+                              autoComplete="off"
                               className="w-full rounded-lg border border-white/15 bg-white/8 px-4 py-3 text-base text-white outline-none transition placeholder:text-white/35 focus:border-sky-300 focus:bg-white/10"
                               placeholder="vous@thebest.com"
                               required
@@ -628,6 +645,7 @@ export default function SignInClientPage({ initialMode, passwordAuthActive, laun
                               type="password"
                               value={setupPassword}
                               onChange={(event) => setSetupPassword(event.target.value)}
+                              autoComplete="new-password"
                               className="w-full rounded-lg border border-white/15 bg-white/8 px-4 py-3 text-base text-white outline-none transition placeholder:text-white/35 focus:border-sky-300 focus:bg-white/10"
                               placeholder="Minimum 8 caracteres avec lettres et chiffres"
                               required
@@ -640,6 +658,7 @@ export default function SignInClientPage({ initialMode, passwordAuthActive, laun
                               type="password"
                               value={setupPasswordConfirmation}
                               onChange={(event) => setSetupPasswordConfirmation(event.target.value)}
+                              autoComplete="new-password"
                               className="w-full rounded-lg border border-white/15 bg-white/8 px-4 py-3 text-base text-white outline-none transition placeholder:text-white/35 focus:border-sky-300 focus:bg-white/10"
                               placeholder="Retapez le mot de passe"
                               required
