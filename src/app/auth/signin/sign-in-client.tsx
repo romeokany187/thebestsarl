@@ -78,6 +78,22 @@ function normalizeEmailValue(value: string) {
   return value.trim().toLowerCase();
 }
 
+function readRememberedEmail() {
+  try {
+    return normalizeEmailValue(window.sessionStorage.getItem(GOOGLE_EMAIL_HINT_STORAGE_KEY) ?? "");
+  } catch {
+    return "";
+  }
+}
+
+function clearRememberedEmail() {
+  try {
+    window.sessionStorage.removeItem(GOOGLE_EMAIL_HINT_STORAGE_KEY);
+  } catch {
+    // Ignore storage errors.
+  }
+}
+
 function getFriendlySignInError(errorCode: string, launchAtLabel: string) {
   if (errorCode === "OAuthSignin") {
     return "La connexion Google n'a pas pu démarrer. Réessayez depuis un seul onglet sur le domaine officiel de l'application.";
@@ -138,19 +154,15 @@ export default function SignInClientPage({ passwordAuthActive, launchAtIso }: Si
     const requiresSetup = params.get("setup") === "required";
     const authError = params.get("error")?.trim() ?? "";
 
-    let rememberedEmail = "";
-    try {
-      rememberedEmail = normalizeEmailValue(window.sessionStorage.getItem(GOOGLE_EMAIL_HINT_STORAGE_KEY) ?? "");
-    } catch {
-      rememberedEmail = "";
-    }
-
+    const rememberedEmail = readRememberedEmail();
     const resolvedEmail = setupEmailFromQuery || rememberedEmail;
 
-    if (resolvedEmail) {
+    if (requiresSetup && resolvedEmail) {
       setPrefilledSetupEmail(true);
       setSetupEmail(resolvedEmail);
-      setEmail(resolvedEmail);
+      clearRememberedEmail();
+    } else if (!requiresSetup) {
+      clearRememberedEmail();
     }
 
     if (authError) {
@@ -176,8 +188,18 @@ export default function SignInClientPage({ passwordAuthActive, launchAtIso }: Si
     }
   }
 
+  function clearSetupIdentity() {
+    clearRememberedEmail();
+    setSetupEmail("");
+    setSetupPassword("");
+    setSetupPasswordConfirmation("");
+    setSetupCode("");
+    setPrefilledSetupEmail(false);
+  }
+
   function openLoginMode(options?: { keepFeedback?: boolean }) {
     setMode("login");
+    clearSetupIdentity();
     resetSetupProgress(options);
   }
 
@@ -195,6 +217,8 @@ export default function SignInClientPage({ passwordAuthActive, launchAtIso }: Si
     try {
       if (hintedEmail) {
         window.sessionStorage.setItem(GOOGLE_EMAIL_HINT_STORAGE_KEY, hintedEmail);
+      } else {
+        clearRememberedEmail();
       }
     } catch {
       // Ignore storage errors and continue the auth flow.
@@ -351,6 +375,7 @@ export default function SignInClientPage({ passwordAuthActive, launchAtIso }: Si
       setMessage(payload?.message ?? "Mot de passe créé.");
       setEmail(setupEmail);
       setPassword(setupPassword);
+      clearRememberedEmail();
 
       const result = await signIn("credentials", {
         email: setupEmail,
@@ -435,11 +460,6 @@ export default function SignInClientPage({ passwordAuthActive, launchAtIso }: Si
               </div>
 
               <div className="mt-6">
-                <p className="text-sm text-white/50">
-                  {mode === "setup"
-                    ? normalizeEmailValue(setupEmail || email) || "Configuration du compte"
-                    : normalizeEmailValue(email) || "Acces utilisateur"}
-                </p>
                 <h2 className="mt-2 text-4xl font-semibold tracking-tight text-white">
                   {mode === "login"
                     ? "Connexion"
@@ -549,21 +569,33 @@ export default function SignInClientPage({ passwordAuthActive, launchAtIso }: Si
 
                     {!setupRequested ? (
                       <>
-                        <div className="rounded-2xl border border-white/10 bg-white/6 p-4">
-                          <p className="text-sm font-semibold text-white">Etape 1: premiere entree Google</p>
-                          <p className="mt-2 text-sm leading-5 text-white/58">
-                            Choisissez le bon compte Google, puis definissez le mot de passe.
-                          </p>
-
-                          <button
-                            type="button"
-                            onClick={() => void startGoogleSignIn()}
-                            disabled={loading}
-                            className="mt-4 flex w-full items-center justify-center rounded-lg border border-white/15 bg-white/8 px-4 py-3.5 text-sm font-semibold text-white transition hover:bg-white/12 disabled:cursor-not-allowed disabled:opacity-60"
-                          >
-                            {loading ? "Ouverture de Google..." : "Continuer avec Google"}
-                          </button>
-                        </div>
+                        {!setupEmail ? (
+                          <div className="rounded-2xl border border-white/10 bg-white/6 p-4">
+                            <p className="text-sm font-semibold text-white">Premiere entree Google</p>
+                            <button
+                              type="button"
+                              onClick={() => void startGoogleSignIn()}
+                              disabled={loading}
+                              className="mt-3 flex w-full items-center justify-center rounded-lg border border-white/15 bg-white/8 px-4 py-3 text-sm font-semibold text-white transition hover:bg-white/12 disabled:cursor-not-allowed disabled:opacity-60"
+                            >
+                              {loading ? "Ouverture de Google..." : "Continuer avec Google"}
+                            </button>
+                          </div>
+                        ) : (
+                          <div className="flex items-center justify-between gap-3 rounded-2xl border border-white/10 bg-white/6 px-4 py-3 text-sm text-white/75">
+                            <span>{setupEmail}</span>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                clearSetupIdentity();
+                                void startGoogleSignIn();
+                              }}
+                              className="font-semibold text-white transition hover:text-sky-200"
+                            >
+                              Changer
+                            </button>
+                          </div>
+                        )}
 
                         {!passwordAuthActive ? (
                           <div className="rounded-xl border border-dashed border-white/15 bg-white/5 px-4 py-3 text-sm text-white/65">
@@ -581,7 +613,6 @@ export default function SignInClientPage({ passwordAuthActive, launchAtIso }: Si
                               className="w-full rounded-lg border border-white/15 bg-white/8 px-4 py-3 text-base text-white outline-none transition placeholder:text-white/35 focus:border-sky-300 focus:bg-white/10"
                               placeholder="vous@thebest.com"
                               required
-                              readOnly={prefilledSetupEmail}
                             />
                           </div>
 
