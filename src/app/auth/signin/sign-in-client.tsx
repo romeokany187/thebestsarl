@@ -7,6 +7,7 @@ import { getCsrfToken, signIn } from "next-auth/react";
 const GOOGLE_EMAIL_HINT_STORAGE_KEY = "thebest.google-email-hint";
 
 type SignInClientPageProps = {
+  initialMode: FormMode;
   passwordAuthActive: boolean;
   launchAtIso: string;
 };
@@ -126,7 +127,7 @@ function getFriendlySignInError(errorCode: string, launchAtLabel: string) {
   return "Une erreur de connexion est survenue. Réessayez dans quelques instants.";
 }
 
-export default function SignInClientPage({ passwordAuthActive, launchAtIso }: SignInClientPageProps) {
+export default function SignInClientPage({ initialMode, passwordAuthActive, launchAtIso }: SignInClientPageProps) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [setupEmail, setSetupEmail] = useState("");
@@ -136,7 +137,7 @@ export default function SignInClientPage({ passwordAuthActive, launchAtIso }: Si
   const [loading, setLoading] = useState(false);
   const [setupRequested, setSetupRequested] = useState(false);
   const [prefilledSetupEmail, setPrefilledSetupEmail] = useState(false);
-  const [mode, setMode] = useState<FormMode>("login");
+  const [mode, setMode] = useState<FormMode>(initialMode);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
   const launchAtLabel = useMemo(
@@ -152,6 +153,7 @@ export default function SignInClientPage({ passwordAuthActive, launchAtIso }: Si
     const params = new URLSearchParams(window.location.search);
     const setupEmailFromQuery = normalizeEmailValue(params.get("email") ?? "");
     const requiresSetup = params.get("setup") === "required";
+    const requestedMode = params.get("mode") === "setup";
     const authError = params.get("error")?.trim() ?? "";
 
     const rememberedEmail = readRememberedEmail();
@@ -176,6 +178,11 @@ export default function SignInClientPage({ passwordAuthActive, launchAtIso }: Si
       setMode("setup");
       setMessage("Première connexion confirmée. Configurez maintenant votre mot de passe pour finaliser l'accès à votre espace.");
       setError("");
+      return;
+    }
+
+    if (requestedMode) {
+      setMode("setup");
     }
   }, []);
 
@@ -540,13 +547,12 @@ export default function SignInClientPage({ passwordAuthActive, launchAtIso }: Si
                         </div>
                       </div>
 
-                      <button
-                        type="button"
-                        onClick={() => openSetupMode()}
+                      <Link
+                        href="/auth/signin?mode=setup"
                         className="mt-4 flex w-full items-center justify-center rounded-lg border border-white/15 bg-white/8 px-4 py-3.5 text-sm font-semibold text-white transition hover:bg-white/12"
                       >
                         Creer ou configurer le mot de passe
-                      </button>
+                      </Link>
                     </div>
                   </>
                 ) : null}
@@ -558,13 +564,13 @@ export default function SignInClientPage({ passwordAuthActive, launchAtIso }: Si
                         {setupRequested ? "OTP EMAIL" : "CONFIGURATION"}
                       </div>
 
-                      <button
-                        type="button"
+                      <Link
+                        href="/auth/signin"
                         onClick={() => openLoginMode()}
                         className="text-sm font-semibold text-white/60 transition hover:text-white"
                       >
                         Retour a la connexion
-                      </button>
+                      </Link>
                     </div>
 
                     {!setupRequested ? (
