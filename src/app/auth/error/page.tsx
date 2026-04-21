@@ -5,6 +5,9 @@ const MESSAGES: Record<string, string> = {
   AccessDenied: "L'accès a été refusé pour ce compte.",
   Configuration: "La configuration d'authentification est momentanément indisponible.",
   Verification: "La vérification de connexion n'a pas pu aboutir.",
+  OAuthSignin: "La connexion Google n'a pas pu démarrer correctement. Réessayez depuis un seul onglet et vérifiez que vous utilisez le domaine officiel de l'application.",
+  OAuthCallback: "Le retour Google a échoué car la session de sécurité n'a pas été conservée. Fermez les autres onglets de connexion puis réessayez.",
+  Callback: "Le retour du fournisseur d'authentification a échoué. Réessayez dans un seul onglet de connexion.",
   PasswordLoginRequired: "La connexion Google est réservée à la toute première activation d'un compte sans mot de passe. Pour ce compte, utilisez désormais votre adresse email et votre mot de passe.",
 };
 

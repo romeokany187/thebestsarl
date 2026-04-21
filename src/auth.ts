@@ -6,6 +6,8 @@ import { prisma } from "@/lib/prisma";
 import { normalizeAuthEmail, verifyUserPassword } from "@/lib/password-setup";
 import { shouldForceReauthenticateSession } from "@/lib/session-security";
 
+process.env.AUTH_TRUST_HOST = process.env.AUTH_TRUST_HOST?.trim() || "true";
+
 const DEFAULT_ADMIN_EMAIL = "romeokany187@gmail.com";
 const SESSION_MAX_AGE_SECONDS = 8 * 60 * 60;
 const SESSION_UPDATE_AGE_SECONDS = 30 * 60;
@@ -18,6 +20,7 @@ const adminEmails = new Set(
 );
 
 export const authOptions: NextAuthOptions = {
+  secret: process.env.NEXTAUTH_SECRET?.trim() || process.env.AUTH_SECRET?.trim(),
   session: {
     strategy: "jwt",
     maxAge: SESSION_MAX_AGE_SECONDS,

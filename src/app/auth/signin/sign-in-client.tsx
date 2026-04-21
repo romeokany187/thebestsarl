@@ -4,6 +4,8 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { signIn } from "next-auth/react";
 
+const GOOGLE_EMAIL_HINT_STORAGE_KEY = "thebest.google-email-hint";
+
 type SignInClientPageProps = {
   passwordAuthActive: boolean;
   launchAtIso: string;
@@ -70,6 +72,42 @@ function extractApiError(payload: unknown, fallback: string) {
   return fallback;
 }
 
+function normalizeEmailValue(value: string) {
+  return value.trim().toLowerCase();
+}
+
+function getFriendlySignInError(errorCode: string, launchAtLabel: string) {
+  if (errorCode === "OAuthSignin") {
+    return "La connexion Google n'a pas pu démarrer. Réessayez depuis un seul onglet sur le domaine officiel de l'application.";
+  }
+
+  if (errorCode === "OAuthCallback") {
+    return "Google a bien répondu, mais le cookie de sécurité de retour n'a pas été validé. Fermez les autres onglets de connexion puis recommencez.";
+  }
+
+  if (errorCode === "Callback") {
+    return "Le retour de Google a échoué. Réessayez la connexion depuis un seul onglet.";
+  }
+
+  if (errorCode === "PasswordLoginRequired") {
+    return "Ce compte a déjà un mot de passe. Utilisez maintenant l'email et le mot de passe pour vous connecter.";
+  }
+
+  if (errorCode === "AccessDenied") {
+    return "L'accès a été refusé pour ce compte.";
+  }
+
+  if (errorCode === "DatabaseUnavailable") {
+    return "La base de données est temporairement indisponible.";
+  }
+
+  if (errorCode === "ActivationPending") {
+    return `La création du mot de passe sera activée le ${launchAtLabel}.`;
+  }
+
+  return "Une erreur de connexion est survenue. Réessayez dans quelques instants.";
+}
+
 export default function SignInClientPage({ passwordAuthActive, launchAtIso }: SignInClientPageProps) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -93,22 +131,89 @@ export default function SignInClientPage({ passwordAuthActive, launchAtIso }: Si
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
-    const setupEmailFromQuery = params.get("email")?.trim().toLowerCase() ?? "";
+    const setupEmailFromQuery = normalizeEmailValue(params.get("email") ?? "");
     const requiresSetup = params.get("setup") === "required";
+    const authError = params.get("error")?.trim() ?? "";
 
-    if (!setupEmailFromQuery) {
-      return;
+    let rememberedEmail = "";
+    try {
+      rememberedEmail = normalizeEmailValue(window.sessionStorage.getItem(GOOGLE_EMAIL_HINT_STORAGE_KEY) ?? "");
+    } catch {
+      rememberedEmail = "";
     }
 
-    setPrefilledSetupEmail(true);
-    setSetupEmail(setupEmailFromQuery);
-    setEmail(setupEmailFromQuery);
+    const resolvedEmail = setupEmailFromQuery || rememberedEmail;
+
+    if (resolvedEmail) {
+      setPrefilledSetupEmail(true);
+      setSetupEmail(resolvedEmail);
+      setEmail(resolvedEmail);
+    }
+
+    if (authError) {
+      setError(getFriendlySignInError(authError, launchAtLabel));
+      setMessage("");
+      return;
+    }
 
     if (requiresSetup) {
       setMessage("Première connexion confirmée. Configurez maintenant votre mot de passe pour finaliser l'accès à votre espace.");
       setError("");
     }
   }, []);
+
+  async function startGoogleSignIn() {
+    const hintedEmail = normalizeEmailValue(setupEmail || email);
+
+    try {
+      if (hintedEmail) {
+        window.sessionStorage.setItem(GOOGLE_EMAIL_HINT_STORAGE_KEY, hintedEmail);
+      }
+    } catch {
+      // Ignore storage errors and continue the auth flow.
+    }
+
+    setLoading(true);
+    setError("");
+    setMessage("");
+
+    try {
+      const csrfResponse = await fetch("/api/auth/csrf");
+      const csrfPayload = await csrfResponse.json().catch(() => null);
+      const csrfToken = typeof csrfPayload?.csrfToken === "string" ? csrfPayload.csrfToken : "";
+
+      if (!csrfResponse.ok || !csrfToken) {
+        throw new Error("csrf");
+      }
+
+      const authParams = new URLSearchParams();
+      if (hintedEmail) {
+        authParams.set("login_hint", hintedEmail);
+      }
+
+      const response = await fetch(`/api/auth/signin/google${authParams.toString() ? `?${authParams.toString()}` : ""}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: new URLSearchParams({
+          csrfToken,
+          callbackUrl: "/post-login",
+          json: "true",
+        }),
+      });
+
+      const payload = await response.json().catch(() => null);
+      if (!response.ok || typeof payload?.url !== "string" || !payload.url) {
+        throw new Error("signin");
+      }
+
+      window.location.href = payload.url;
+      return;
+    } catch {
+      setError("Impossible de démarrer la connexion Google. Réessayez dans un seul onglet sur le domaine officiel de l'application.");
+    }
+
+    setLoading(false);
+  }
 
   async function handleCredentialsSignIn(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -462,10 +567,12 @@ export default function SignInClientPage({ passwordAuthActive, launchAtIso }: Si
                 Pendant la période de préparation, Google reste disponible pour l&apos;accès courant. Après activation, seule la connexion email + mot de passe restera autorisée.
               </p>
               <button
-                onClick={() => signIn("google", { callbackUrl: "/post-login" })}
+                type="button"
+                onClick={() => void startGoogleSignIn()}
+                disabled={loading}
                 className="mt-4 flex w-full items-center justify-center gap-2 rounded-2xl border border-slate-200 px-4 py-3 text-sm font-semibold text-slate-800 transition hover:bg-slate-50 dark:border-white/15 dark:text-white dark:hover:bg-white/10"
               >
-                Continuer avec Google pour aujourd&apos;hui
+                {loading ? "Ouverture de Google..." : "Continuer avec Google pour aujourd&apos;hui"}
               </button>
             </div>
           ) : (
@@ -474,10 +581,12 @@ export default function SignInClientPage({ passwordAuthActive, launchAtIso }: Si
                 Après activation, Google ne sert plus qu&apos;à la toute première entrée d&apos;un compte sans mot de passe. Une fois le mot de passe créé, les connexions suivantes se font uniquement avec email + mot de passe, sans nouveau code OTP à chaque session.
               </p>
               <button
-                onClick={() => signIn("google", { callbackUrl: "/post-login" })}
+                type="button"
+                onClick={() => void startGoogleSignIn()}
+                disabled={loading}
                 className="mt-4 flex w-full items-center justify-center gap-2 rounded-2xl border border-slate-200 px-4 py-3 text-sm font-semibold text-slate-800 transition hover:bg-slate-50 dark:border-white/15 dark:text-white dark:hover:bg-white/10"
               >
-                Première connexion avec Google
+                {loading ? "Ouverture de Google..." : "Première connexion avec Google"}
               </button>
             </div>
           )}
