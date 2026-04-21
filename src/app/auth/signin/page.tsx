@@ -9,7 +9,11 @@ type SignInPageProps = {
 
 export default async function SignInPage({ searchParams }: SignInPageProps) {
   const resolvedSearchParams = searchParams ? await searchParams : undefined;
-  const initialMode = resolvedSearchParams?.mode === "setup" ? "setup" : "login";
+  const initialMode = resolvedSearchParams?.mode === "setup"
+    ? "setup"
+    : resolvedSearchParams?.mode === "login"
+      ? "login"
+      : "google";
 
   return (
     <SignInClientPage

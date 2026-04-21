@@ -115,10 +115,6 @@ export const authOptions: NextAuthOptions = {
           },
         });
 
-        if (isPasswordAuthActive() && existing?.passwordHash?.trim()) {
-          return "/auth/error?error=PasswordLoginRequired";
-        }
-
         if (!existing) {
           await prisma.user.create({
             data: {
@@ -142,7 +138,19 @@ export const authOptions: NextAuthOptions = {
           });
         }
 
-        return true;
+        const passwordConfigured = Boolean(existing?.passwordHash?.trim());
+        const nextMode = passwordConfigured ? "login" : "setup";
+        const query = new URLSearchParams({
+          mode: nextMode,
+          email: normalizedEmail,
+          google: "done",
+        });
+
+        if (!passwordConfigured) {
+          query.set("setup", "required");
+        }
+
+        return `/auth/signin?${query.toString()}`;
       } catch (error) {
         console.error("[auth] signIn database error", error);
         return "/auth/error?error=DatabaseUnavailable";

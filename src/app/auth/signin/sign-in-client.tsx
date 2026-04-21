@@ -4,15 +4,13 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { getCsrfToken, signIn } from "next-auth/react";
 
-const GOOGLE_EMAIL_HINT_STORAGE_KEY = "thebest.google-email-hint";
-
 type SignInClientPageProps = {
   initialMode: FormMode;
   passwordAuthActive: boolean;
   launchAtIso: string;
 };
 
-type FormMode = "login" | "setup";
+type FormMode = "google" | "login" | "setup";
 
 function validateSetupPassword(password: string, confirmation: string) {
   const normalizedPassword = password.trim();
@@ -79,22 +77,6 @@ function normalizeEmailValue(value: string) {
   return value.trim().toLowerCase();
 }
 
-function readRememberedEmail() {
-  try {
-    return normalizeEmailValue(window.sessionStorage.getItem(GOOGLE_EMAIL_HINT_STORAGE_KEY) ?? "");
-  } catch {
-    return "";
-  }
-}
-
-function clearRememberedEmail() {
-  try {
-    window.sessionStorage.removeItem(GOOGLE_EMAIL_HINT_STORAGE_KEY);
-  } catch {
-    // Ignore storage errors.
-  }
-}
-
 function getFriendlySignInError(errorCode: string, launchAtLabel: string) {
   if (errorCode === "OAuthSignin") {
     return "La connexion Google n'a pas pu démarrer. Réessayez depuis un seul onglet sur le domaine officiel de l'application.";
@@ -136,7 +118,7 @@ export default function SignInClientPage({ initialMode, passwordAuthActive, laun
   const [setupPasswordConfirmation, setSetupPasswordConfirmation] = useState("");
   const [loading, setLoading] = useState(false);
   const [setupRequested, setSetupRequested] = useState(false);
-  const [prefilledSetupEmail, setPrefilledSetupEmail] = useState(false);
+  const [emailLockedByGoogle, setEmailLockedByGoogle] = useState(false);
   const [mode, setMode] = useState<FormMode>(initialMode);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
@@ -159,7 +141,18 @@ export default function SignInClientPage({ initialMode, passwordAuthActive, laun
     }
 
     if (initialMode === "login") {
+      setSetupPassword("");
+      setSetupPasswordConfirmation("");
+      setSetupCode("");
+      setSetupRequested(false);
+      setError("");
+    }
+
+    if (initialMode === "google") {
       clearSetupIdentity();
+      setEmail("");
+      setPassword("");
+      setEmailLockedByGoogle(false);
     }
   }, [initialMode]);
 
@@ -167,19 +160,13 @@ export default function SignInClientPage({ initialMode, passwordAuthActive, laun
     const params = new URLSearchParams(window.location.search);
     const setupEmailFromQuery = normalizeEmailValue(params.get("email") ?? "");
     const requiresSetup = params.get("setup") === "required";
-    const requestedMode = params.get("mode") === "setup";
+    const requestedMode = params.get("mode") === "setup"
+      ? "setup"
+      : params.get("mode") === "login"
+        ? "login"
+        : "google";
+    const googleDone = params.get("google") === "done";
     const authError = params.get("error")?.trim() ?? "";
-
-    const rememberedEmail = readRememberedEmail();
-    const resolvedEmail = setupEmailFromQuery || rememberedEmail;
-
-    if (requiresSetup && resolvedEmail) {
-      setPrefilledSetupEmail(true);
-      setSetupEmail(resolvedEmail);
-      clearRememberedEmail();
-    } else if (!requiresSetup) {
-      clearRememberedEmail();
-    }
 
     if (authError) {
       setMode(errorCodeToMode(authError));
@@ -188,15 +175,35 @@ export default function SignInClientPage({ initialMode, passwordAuthActive, laun
       return;
     }
 
+    setMode(requestedMode);
+
+    if (googleDone && setupEmailFromQuery) {
+      setEmailLockedByGoogle(true);
+
+      if (requestedMode === "login") {
+        setEmail(setupEmailFromQuery);
+        setPassword("");
+        setSetupEmail("");
+        setSetupPassword("");
+        setSetupPasswordConfirmation("");
+        setSetupCode("");
+        setSetupRequested(false);
+      }
+
+      if (requestedMode === "setup") {
+        setSetupEmail(setupEmailFromQuery);
+        setEmail("");
+        setPassword("");
+      }
+    } else {
+      setEmailLockedByGoogle(false);
+    }
+
     if (requiresSetup) {
       setMode("setup");
       setMessage("Première connexion confirmée. Configurez maintenant votre mot de passe pour finaliser l'accès à votre espace.");
       setError("");
       return;
-    }
-
-    if (requestedMode) {
-      setMode("setup");
     }
   }, [launchAtLabel]);
 
@@ -210,17 +217,15 @@ export default function SignInClientPage({ initialMode, passwordAuthActive, laun
   }
 
   function clearSetupIdentity() {
-    clearRememberedEmail();
     setSetupEmail("");
     setSetupPassword("");
     setSetupPasswordConfirmation("");
     setSetupCode("");
-    setPrefilledSetupEmail(false);
+    setEmailLockedByGoogle(false);
   }
 
   function openLoginMode(options?: { keepFeedback?: boolean }) {
     setMode("login");
-    clearSetupIdentity();
     resetSetupProgress(options);
   }
 
@@ -234,16 +239,6 @@ export default function SignInClientPage({ initialMode, passwordAuthActive, laun
 
   async function startGoogleSignIn() {
     const hintedEmail = normalizeEmailValue(setupEmail || email);
-
-    try {
-      if (hintedEmail) {
-        window.sessionStorage.setItem(GOOGLE_EMAIL_HINT_STORAGE_KEY, hintedEmail);
-      } else {
-        clearRememberedEmail();
-      }
-    } catch {
-      // Ignore storage errors and continue the auth flow.
-    }
 
     setLoading(true);
     setError("");
@@ -276,7 +271,7 @@ export default function SignInClientPage({ initialMode, passwordAuthActive, laun
       const callbackInput = document.createElement("input");
       callbackInput.type = "hidden";
       callbackInput.name = "callbackUrl";
-      callbackInput.value = "/post-login";
+      callbackInput.value = "/auth/signin";
       form.appendChild(callbackInput);
 
       document.body.appendChild(form);
@@ -396,7 +391,6 @@ export default function SignInClientPage({ initialMode, passwordAuthActive, laun
       setMessage(payload?.message ?? "Mot de passe créé.");
       setEmail(setupEmail);
       setPassword(setupPassword);
-      clearRememberedEmail();
 
       const result = await signIn("credentials", {
         email: setupEmail,
@@ -406,8 +400,9 @@ export default function SignInClientPage({ initialMode, passwordAuthActive, laun
       });
 
       if (!result || result.error) {
-        setMessage("Mot de passe créé. Vous pouvez maintenant vous connecter.");
-        openLoginMode({ keepFeedback: true });
+        setMessage("Mot de passe créé. Connectez-vous maintenant avec ce meme email.");
+        setMode("login");
+        setEmailLockedByGoogle(true);
         setLoading(false);
         return;
       }
@@ -482,14 +477,18 @@ export default function SignInClientPage({ initialMode, passwordAuthActive, laun
 
               <div className="mt-6">
                 <h2 className="mt-2 text-4xl font-semibold tracking-tight text-white">
-                  {mode === "login"
+                  {mode === "google"
+                    ? "Connectez-vous avec Google"
+                    : mode === "login"
                     ? "Connexion"
                     : setupRequested
                       ? "Validation OTP"
                       : "Configuration du mot de passe"}
                 </h2>
                 <p className="mt-2 text-sm leading-5 text-white/62">
-                  {mode === "login"
+                  {mode === "google"
+                    ? "Commencez toujours par Google. Le systeme recupere ensuite votre email et vous envoie vers la bonne etape."
+                    : mode === "login"
                     ? "Email et mot de passe pour les comptes deja actifs."
                     : setupRequested
                       ? "Entrez le code OTP recu par email."
@@ -510,66 +509,90 @@ export default function SignInClientPage({ initialMode, passwordAuthActive, laun
                   </div>
                 ) : null}
 
+                {mode === "google" ? (
+                  <div className="space-y-4">
+                    <div className="rounded-2xl border border-white/10 bg-white/6 p-4">
+                      <p className="text-sm font-semibold text-white">Authentification initiale</p>
+                      <p className="mt-2 text-sm leading-5 text-white/58">
+                        Continuez avec le bon compte Google. L'email sera ensuite place automatiquement dans le formulaire adapte.
+                      </p>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => void startGoogleSignIn()}
+                      disabled={loading}
+                      className="flex w-full items-center justify-center rounded-lg bg-[#1f66d1] px-4 py-3.5 text-sm font-semibold text-white transition hover:bg-[#1857b5] disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      {loading ? "Ouverture de Google..." : "Continuer avec Google"}
+                    </button>
+                  </div>
+                ) : null}
+
                 {mode === "login" ? (
                   <>
-                    <form onSubmit={handleCredentialsSignIn} className="space-y-4">
-                      <div>
-                        <p className="mb-1 text-xs font-semibold uppercase tracking-[0.15em] text-white/45">Obligatoire</p>
-                        <label className="mb-1.5 block text-sm font-medium text-white/88">Email professionnel</label>
-                        <input
-                          type="email"
-                          value={email}
-                          onChange={(event) => setEmail(event.target.value)}
-                          autoComplete="off"
-                          className="w-full rounded-lg border border-white/15 bg-white/8 px-4 py-3 text-base text-white outline-none transition placeholder:text-white/35 focus:border-sky-300 focus:bg-white/10"
-                          placeholder="vous@thebest.com"
-                          required
-                        />
-                      </div>
+                    {email ? (
+                      <>
+                        <form onSubmit={handleCredentialsSignIn} className="space-y-4">
+                          <div>
+                            <p className="mb-1 text-xs font-semibold uppercase tracking-[0.15em] text-white/45">Obligatoire</p>
+                            <label className="mb-1.5 block text-sm font-medium text-white/88">Email professionnel</label>
+                            <input
+                              type="email"
+                              value={email}
+                              onChange={(event) => setEmail(event.target.value)}
+                              autoComplete="off"
+                              readOnly={emailLockedByGoogle}
+                              className="w-full rounded-lg border border-white/15 bg-white/8 px-4 py-3 text-base text-white outline-none transition placeholder:text-white/35 focus:border-sky-300 focus:bg-white/10"
+                              placeholder="vous@thebest.com"
+                              required
+                            />
+                          </div>
 
-                      <div>
-                        <label className="mb-1.5 block text-sm font-medium text-white/88">Mot de passe</label>
-                        <input
-                          type="password"
-                          value={password}
-                          onChange={(event) => setPassword(event.target.value)}
-                          autoComplete="off"
-                          className="w-full rounded-lg border border-white/15 bg-white/8 px-4 py-3 text-base text-white outline-none transition placeholder:text-white/35 focus:border-sky-300 focus:bg-white/10"
-                          placeholder="Votre mot de passe"
-                          required
-                        />
-                      </div>
+                          <div>
+                            <label className="mb-1.5 block text-sm font-medium text-white/88">Mot de passe</label>
+                            <input
+                              type="password"
+                              value={password}
+                              onChange={(event) => setPassword(event.target.value)}
+                              autoComplete="off"
+                              className="w-full rounded-lg border border-white/15 bg-white/8 px-4 py-3 text-base text-white outline-none transition placeholder:text-white/35 focus:border-sky-300 focus:bg-white/10"
+                              placeholder="Votre mot de passe"
+                              required
+                            />
+                          </div>
 
-                      <button
-                        type="submit"
-                        disabled={loading || !passwordAuthActive}
-                        className="flex w-full items-center justify-center rounded-lg bg-[#1f66d1] px-4 py-3.5 text-sm font-semibold text-white transition hover:bg-[#1857b5] disabled:cursor-not-allowed disabled:opacity-60"
-                      >
-                        {loading ? "Connexion..." : "Connexion"}
-                      </button>
-                    </form>
+                          <button
+                            type="submit"
+                            disabled={loading || !passwordAuthActive}
+                            className="flex w-full items-center justify-center rounded-lg bg-[#1f66d1] px-4 py-3.5 text-sm font-semibold text-white transition hover:bg-[#1857b5] disabled:cursor-not-allowed disabled:opacity-60"
+                          >
+                            {loading ? "Connexion..." : "Connexion"}
+                          </button>
+                        </form>
 
-                    <div className="border-t border-white/10 pt-4">
-                      <div className="flex items-start justify-between gap-3">
-                        <div>
-                          <h3 className="text-lg font-semibold text-white">Premiere connexion</h3>
-                          <p className="mt-1 text-sm leading-5 text-white/58">
-                            Activez ici un compte sans mot de passe.
-                          </p>
+                        <div className="border-t border-white/10 pt-4 text-sm text-white/62">
+                          <Link
+                            href="/auth/signin"
+                            onClick={() => {
+                              setEmail("");
+                              setPassword("");
+                              setEmailLockedByGoogle(false);
+                            }}
+                            className="font-semibold text-white transition hover:text-sky-200"
+                          >
+                            Changer de compte Google
+                          </Link>
                         </div>
-
-                        <div className={`rounded-full px-3 py-1 text-[11px] font-semibold tracking-[0.16em] ${passwordAuthActive ? "bg-emerald-400/15 text-emerald-100" : "bg-amber-400/15 text-amber-100"}`}>
-                          {passwordAuthActive ? "ACTIF" : "EN ATTENTE"}
-                        </div>
-                      </div>
-
+                      </>
+                    ) : (
                       <Link
-                        href="/auth/signin?mode=setup"
-                        className="mt-4 flex w-full items-center justify-center rounded-lg border border-white/15 bg-white/8 px-4 py-3.5 text-sm font-semibold text-white transition hover:bg-white/12"
+                        href="/auth/signin"
+                        className="flex w-full items-center justify-center rounded-lg bg-[#1f66d1] px-4 py-3.5 text-sm font-semibold text-white transition hover:bg-[#1857b5]"
                       >
-                        Creer ou configurer le mot de passe
+                        Continuer avec Google
                       </Link>
-                    </div>
+                    )}
                   </>
                 ) : null}
 
@@ -582,42 +605,33 @@ export default function SignInClientPage({ initialMode, passwordAuthActive, laun
 
                       <Link
                         href="/auth/signin"
-                        onClick={() => openLoginMode()}
+                        onClick={() => {
+                          clearSetupIdentity();
+                          setMode("google");
+                        }}
                         className="text-sm font-semibold text-white/60 transition hover:text-white"
                       >
-                        Retour a la connexion
+                        Changer de compte Google
                       </Link>
                     </div>
 
                     {!setupRequested ? (
                       <>
-                        {!setupEmail ? (
-                          <div className="rounded-2xl border border-white/10 bg-white/6 p-4">
-                            <p className="text-sm font-semibold text-white">Premiere entree Google</p>
-                            <button
-                              type="button"
-                              onClick={() => void startGoogleSignIn()}
-                              disabled={loading}
-                              className="mt-3 flex w-full items-center justify-center rounded-lg border border-white/15 bg-white/8 px-4 py-3 text-sm font-semibold text-white transition hover:bg-white/12 disabled:cursor-not-allowed disabled:opacity-60"
-                            >
-                              {loading ? "Ouverture de Google..." : "Continuer avec Google"}
-                            </button>
-                          </div>
-                        ) : (
+                        {setupEmail ? (
                           <div className="flex items-center justify-between gap-3 rounded-2xl border border-white/10 bg-white/6 px-4 py-3 text-sm text-white/75">
                             <span>{setupEmail}</span>
                             <button
                               type="button"
                               onClick={() => {
                                 clearSetupIdentity();
-                                void startGoogleSignIn();
+                                setMode("google");
                               }}
                               className="font-semibold text-white transition hover:text-sky-200"
                             >
                               Changer
                             </button>
                           </div>
-                        )}
+                        ) : null}
 
                         {!passwordAuthActive ? (
                           <div className="rounded-xl border border-dashed border-white/15 bg-white/5 px-4 py-3 text-sm text-white/65">
@@ -625,7 +639,8 @@ export default function SignInClientPage({ initialMode, passwordAuthActive, laun
                           </div>
                         ) : null}
 
-                        <form onSubmit={requestSetupCode} className="space-y-4">
+                        {setupEmail ? (
+                          <form onSubmit={requestSetupCode} className="space-y-4">
                           <div>
                             <label className="mb-1.5 block text-sm font-medium text-white/88">Email</label>
                             <input
@@ -633,6 +648,7 @@ export default function SignInClientPage({ initialMode, passwordAuthActive, laun
                               value={setupEmail}
                               onChange={(event) => setSetupEmail(event.target.value)}
                               autoComplete="off"
+                              readOnly={emailLockedByGoogle}
                               className="w-full rounded-lg border border-white/15 bg-white/8 px-4 py-3 text-base text-white outline-none transition placeholder:text-white/35 focus:border-sky-300 focus:bg-white/10"
                               placeholder="vous@thebest.com"
                               required
@@ -672,7 +688,15 @@ export default function SignInClientPage({ initialMode, passwordAuthActive, laun
                           >
                             {loading ? "Verification..." : "Continuer et recevoir l'OTP"}
                           </button>
-                        </form>
+                          </form>
+                        ) : (
+                          <Link
+                            href="/auth/signin"
+                            className="flex w-full items-center justify-center rounded-lg bg-[#1f66d1] px-4 py-3.5 text-sm font-semibold text-white transition hover:bg-[#1857b5]"
+                          >
+                            Continuer avec Google
+                          </Link>
+                        )}
                       </>
                     ) : (
                       <form onSubmit={confirmPasswordSetup} className="space-y-4 rounded-2xl border border-white/10 bg-white/6 p-4">
@@ -733,5 +757,5 @@ function errorCodeToMode(errorCode: string): FormMode {
     return "login";
   }
 
-  return "setup";
+  return "google";
 }
