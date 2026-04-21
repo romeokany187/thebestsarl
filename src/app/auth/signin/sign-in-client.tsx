@@ -375,16 +375,16 @@ export default function SignInClientPage({ passwordAuthActive, launchAtIso }: Si
   }
 
   return (
-    <main className="min-h-screen bg-[#07124c] text-slate-950">
-      <section className="relative overflow-hidden bg-[#07124c]">
+    <main className="h-screen overflow-hidden bg-[#07124c] text-slate-950">
+      <section className="relative h-screen overflow-hidden bg-[#07124c]">
         <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(6,17,74,0.86),rgba(6,17,74,0.98))]" />
         <div className="absolute -left-24 top-[-6%] h-168 w-168 rounded-full border border-sky-400/30" />
         <div className="absolute -left-10 top-[12%] h-152 w-152 rounded-full border border-sky-400/20" />
         <div className="absolute left-[16%] top-[-10%] h-224 w-224 rounded-full border border-sky-400/15" />
 
-        <div className="relative mx-auto flex min-h-screen w-full max-w-[1600px] flex-col justify-between px-5 py-8 text-white sm:px-8 lg:px-10 lg:py-12 xl:px-16">
-          <div className="grid items-start gap-10 lg:grid-cols-[minmax(0,1.2fr)_minmax(360px,460px)] lg:gap-12 xl:gap-16">
-            <div className="min-w-0">
+        <div className="relative mx-auto flex h-screen w-full max-w-[1600px] items-center px-5 py-6 text-white sm:px-8 lg:px-10 xl:px-16">
+          <div className="grid w-full items-center gap-8 lg:grid-cols-[minmax(0,1.15fr)_minmax(340px,430px)] lg:gap-10 xl:gap-14">
+            <div className="min-w-0 self-center">
               <Link
                 href="/"
                 className="inline-flex rounded-full border border-white/15 bg-white/5 px-4 py-1.5 text-[11px] font-semibold tracking-[0.24em] text-white/80 transition hover:bg-white/10"
@@ -392,57 +392,71 @@ export default function SignInClientPage({ passwordAuthActive, launchAtIso }: Si
                 THEBEST SARL WORKSPACE
               </Link>
 
-              <div className="mt-16 max-w-xl lg:mt-24">
+              <div className="mt-10 max-w-xl lg:mt-12">
                 <p className="text-sm font-medium uppercase tracking-[0.22em] text-sky-200/80">
                   Authentification securisee
                 </p>
-                <h1 className="mt-6 text-5xl font-semibold leading-[1.05] text-white xl:text-6xl">
+                <h1 className="mt-5 text-5xl font-semibold leading-[1.02] text-white xl:text-6xl">
                   Espace de travail
                   <br />
                   THEBEST SARL
                 </h1>
-                <p className="mt-8 max-w-lg text-base leading-7 text-white/72">
-                  Connexion professionnelle avec premiere entree Google, creation du mot de passe, puis validation OTP unique avant ouverture complete de l'espace.
+                <p className="mt-6 max-w-lg text-base leading-7 text-white/72">
+                  Premiere entree Google, creation du mot de passe, puis validation OTP unique.
                 </p>
+
+                <div className="mt-8 grid max-w-2xl gap-3 md:grid-cols-3">
+                  {[
+                    { step: "01", title: "Premiere entree", text: "Google" },
+                    { step: "02", title: "Mot de passe", text: "Creation" },
+                    { step: "03", title: "OTP", text: "Validation" },
+                  ].map((item) => (
+                    <div key={item.step} className="rounded-2xl border border-white/12 bg-white/6 p-4 backdrop-blur-sm">
+                      <p className="text-[11px] font-semibold tracking-[0.25em] text-sky-200/70">{item.step}</p>
+                      <h2 className="mt-2 text-sm font-semibold text-white">{item.title}</h2>
+                      <p className="mt-1 text-xs leading-5 text-white/58">{item.text}</p>
+                    </div>
+                  ))}
+                </div>
               </div>
             </div>
 
-            <div className="w-full rounded-[28px] border border-white/12 bg-white/8 p-5 shadow-[0_30px_80px_rgba(3,9,38,0.45)] backdrop-blur-md sm:p-6 lg:sticky lg:top-10 xl:p-7">
-              <div className="rounded-2xl border border-red-200/20 bg-red-500/10 px-4 py-4 text-red-50">
+            <div className="w-full self-center rounded-[28px] border border-white/12 bg-white/8 p-5 shadow-[0_30px_80px_rgba(3,9,38,0.45)] backdrop-blur-md sm:p-5 xl:p-6">
+              <div className="rounded-2xl border border-red-200/20 bg-red-500/10 px-4 py-3 text-red-50">
                 <div className="flex items-start gap-3">
                   <div className="mt-0.5 h-2.5 w-2.5 rounded-full bg-red-300" />
                   <div>
                     <p className="text-sm font-semibold">Alerte de securite</p>
-                    <p className="mt-1 text-sm leading-6 text-red-50/85">
-                      Utilisez toujours le bon compte Google ou votre email professionnel pour acceder a la plateforme THEBEST SARL.
+                    <p className="mt-1 text-sm leading-5 text-red-50/85">
+                      Utilisez le bon compte Google ou votre email professionnel.
                     </p>
                   </div>
                 </div>
               </div>
 
-              <div className="mt-8">
+              <div className="mt-6">
                 <p className="text-sm text-white/50">
                   {mode === "setup"
                     ? normalizeEmailValue(setupEmail || email) || "Configuration du compte"
                     : normalizeEmailValue(email) || "Acces utilisateur"}
                 </p>
-                <h2 className="mt-3 text-4xl font-semibold tracking-tight text-white">
+                <h2 className="mt-2 text-4xl font-semibold tracking-tight text-white">
                   {mode === "login"
                     ? "Connexion"
                     : setupRequested
                       ? "Validation OTP"
                       : "Configuration du mot de passe"}
                 </h2>
-                <p className="mt-3 text-sm leading-6 text-white/68">
+                <p className="mt-2 text-sm leading-5 text-white/62">
                   {mode === "login"
-                    ? "Saisissez votre email et votre mot de passe si votre compte est deja actif. Si c'est une premiere entree, basculez vers la configuration du mot de passe."
+                    ? "Email et mot de passe pour les comptes deja actifs."
                     : setupRequested
-                      ? "Entrez maintenant le code OTP recu par email pour finaliser l'activation du mot de passe et ouvrir l'acces."
-                      : "Commencez par la premiere entree Google si necessaire, puis definissez le mot de passe du compte avant de recevoir le code OTP."}
+                      ? "Entrez le code OTP recu par email."
+                      : "Premier acces: Google puis creation du mot de passe."}
                 </p>
               </div>
 
-              <div className="mt-8 space-y-5">
+              <div className="mt-6 space-y-4">
                 {error ? (
                   <div className="rounded-xl border border-red-200/20 bg-red-500/10 px-4 py-3 text-sm text-red-50">
                     {error}
@@ -492,12 +506,12 @@ export default function SignInClientPage({ passwordAuthActive, launchAtIso }: Si
                       </button>
                     </form>
 
-                    <div className="border-t border-white/10 pt-5">
+                    <div className="border-t border-white/10 pt-4">
                       <div className="flex items-start justify-between gap-3">
                         <div>
                           <h3 className="text-lg font-semibold text-white">Premiere connexion</h3>
-                          <p className="mt-1 text-sm leading-6 text-white/62">
-                            Si votre compte n'a pas encore de mot de passe, passez au formulaire de configuration pour commencer la premiere activation.
+                          <p className="mt-1 text-sm leading-5 text-white/58">
+                            Activez ici un compte sans mot de passe.
                           </p>
                         </div>
 
@@ -537,8 +551,8 @@ export default function SignInClientPage({ passwordAuthActive, launchAtIso }: Si
                       <>
                         <div className="rounded-2xl border border-white/10 bg-white/6 p-4">
                           <p className="text-sm font-semibold text-white">Etape 1: premiere entree Google</p>
-                          <p className="mt-2 text-sm leading-6 text-white/62">
-                            Choisissez le bon compte Google sur cet appareil. Si votre email a deja ete reconnu, vous pouvez directement definir le mot de passe ci-dessous.
+                          <p className="mt-2 text-sm leading-5 text-white/58">
+                            Choisissez le bon compte Google, puis definissez le mot de passe.
                           </p>
 
                           <button
@@ -652,19 +666,6 @@ export default function SignInClientPage({ passwordAuthActive, launchAtIso }: Si
             </div>
           </div>
 
-          <div className="mt-10 grid max-w-2xl gap-4 xl:grid-cols-3">
-            {[
-              { step: "01", title: "Premiere entree", text: "Google n'est accepte que pour un compte sans mot de passe configure." },
-              { step: "02", title: "Mot de passe", text: "L'email recupere permet ensuite de definir et confirmer le mot de passe." },
-              { step: "03", title: "Validation OTP", text: "Le code recu par email finalise l'activation une seule fois." },
-            ].map((item) => (
-              <div key={item.step} className="rounded-2xl border border-white/12 bg-white/6 p-4 backdrop-blur-sm">
-                <p className="text-[11px] font-semibold tracking-[0.25em] text-sky-200/70">{item.step}</p>
-                <h2 className="mt-3 text-sm font-semibold text-white">{item.title}</h2>
-                <p className="mt-2 text-xs leading-5 text-white/65">{item.text}</p>
-              </div>
-            ))}
-          </div>
         </div>
       </section>
     </main>
