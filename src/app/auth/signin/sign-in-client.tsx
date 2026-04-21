@@ -375,15 +375,16 @@ export default function SignInClientPage({ passwordAuthActive, launchAtIso }: Si
   }
 
   return (
-    <main className="min-h-screen bg-[#eef2f6] text-slate-950 dark:bg-[#0b111a] dark:text-white">
-      <div className="grid min-h-screen lg:grid-cols-[1.38fr,0.98fr]">
-        <section className="relative hidden overflow-hidden bg-[#07124c] lg:block">
-          <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(6,17,74,0.86),rgba(6,17,74,0.98))]" />
-          <div className="absolute -left-24 top-[-6%] h-168 w-168 rounded-full border border-sky-400/30" />
-          <div className="absolute -left-10 top-[12%] h-152 w-152 rounded-full border border-sky-400/20" />
-          <div className="absolute left-[16%] top-[-10%] h-224 w-224 rounded-full border border-sky-400/15" />
-          <div className="relative flex min-h-screen flex-col justify-between px-10 py-12 text-white xl:px-16">
-            <div>
+    <main className="min-h-screen bg-[#07124c] text-slate-950">
+      <section className="relative overflow-hidden bg-[#07124c]">
+        <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(6,17,74,0.86),rgba(6,17,74,0.98))]" />
+        <div className="absolute -left-24 top-[-6%] h-168 w-168 rounded-full border border-sky-400/30" />
+        <div className="absolute -left-10 top-[12%] h-152 w-152 rounded-full border border-sky-400/20" />
+        <div className="absolute left-[16%] top-[-10%] h-224 w-224 rounded-full border border-sky-400/15" />
+
+        <div className="relative mx-auto flex min-h-screen w-full max-w-[1600px] flex-col justify-between px-5 py-8 text-white sm:px-8 lg:px-10 lg:py-12 xl:px-16">
+          <div className="grid items-start gap-10 lg:grid-cols-[minmax(0,1.2fr)_minmax(360px,460px)] lg:gap-12 xl:gap-16">
+            <div className="min-w-0">
               <Link
                 href="/"
                 className="inline-flex rounded-full border border-white/15 bg-white/5 px-4 py-1.5 text-[11px] font-semibold tracking-[0.24em] text-white/80 transition hover:bg-white/10"
@@ -391,7 +392,7 @@ export default function SignInClientPage({ passwordAuthActive, launchAtIso }: Si
                 THEBEST SARL WORKSPACE
               </Link>
 
-              <div className="mt-24 max-w-xl">
+              <div className="mt-16 max-w-xl lg:mt-24">
                 <p className="text-sm font-medium uppercase tracking-[0.22em] text-sky-200/80">
                   Authentification securisee
                 </p>
@@ -406,256 +407,266 @@ export default function SignInClientPage({ passwordAuthActive, launchAtIso }: Si
               </div>
             </div>
 
-            <div className="grid max-w-2xl gap-4 xl:grid-cols-3">
-              {[
-                { step: "01", title: "Premiere entree", text: "Google n'est accepte que pour un compte sans mot de passe configure." },
-                { step: "02", title: "Mot de passe", text: "L'email recupere permet ensuite de definir et confirmer le mot de passe." },
-                { step: "03", title: "Validation OTP", text: "Le code recu par email finalise l'activation une seule fois." },
-              ].map((item) => (
-                <div key={item.step} className="rounded-2xl border border-white/12 bg-white/6 p-4 backdrop-blur-sm">
-                  <p className="text-[11px] font-semibold tracking-[0.25em] text-sky-200/70">{item.step}</p>
-                  <h2 className="mt-3 text-sm font-semibold text-white">{item.title}</h2>
-                  <p className="mt-2 text-xs leading-5 text-white/65">{item.text}</p>
-                </div>
-              ))}
-            </div>
-          </div>
-        </section>
-
-        <section className="flex min-h-screen items-start justify-center bg-white px-5 py-8 dark:bg-[#0f1319] sm:px-8 lg:px-10 lg:py-12">
-          <div className="w-full max-w-md">
-            <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-4 text-red-800 dark:border-red-500/25 dark:bg-red-500/10 dark:text-red-200">
-              <div className="flex items-start gap-3">
-                <div className="mt-0.5 h-2.5 w-2.5 rounded-full bg-red-500" />
-                <div>
-                  <p className="text-sm font-semibold">Alerte de securite</p>
-                  <p className="mt-1 text-sm leading-6 text-red-700/90 dark:text-red-200/80">
-                    Utilisez toujours le bon compte Google ou votre email professionnel pour acceder a la plateforme THEBEST SARL.
-                  </p>
+            <div className="w-full rounded-[28px] border border-white/12 bg-white/8 p-5 shadow-[0_30px_80px_rgba(3,9,38,0.45)] backdrop-blur-md sm:p-6 lg:sticky lg:top-10 xl:p-7">
+              <div className="rounded-2xl border border-red-200/20 bg-red-500/10 px-4 py-4 text-red-50">
+                <div className="flex items-start gap-3">
+                  <div className="mt-0.5 h-2.5 w-2.5 rounded-full bg-red-300" />
+                  <div>
+                    <p className="text-sm font-semibold">Alerte de securite</p>
+                    <p className="mt-1 text-sm leading-6 text-red-50/85">
+                      Utilisez toujours le bon compte Google ou votre email professionnel pour acceder a la plateforme THEBEST SARL.
+                    </p>
+                  </div>
                 </div>
               </div>
-            </div>
 
-            <div className="mt-8">
-              <p className="text-sm text-slate-500 dark:text-white/45">
-                {mode === "setup"
-                  ? normalizeEmailValue(setupEmail || email) || "Configuration du compte"
-                  : normalizeEmailValue(email) || "Acces utilisateur"}
-              </p>
-              <h2 className="mt-3 text-4xl font-semibold tracking-tight text-slate-950 dark:text-white">
-                {mode === "login"
-                  ? "Connexion"
-                  : setupRequested
-                    ? "Validation OTP"
-                    : "Configuration du mot de passe"}
-              </h2>
-              <p className="mt-3 text-sm leading-6 text-slate-600 dark:text-white/65">
-                {mode === "login"
-                  ? "Saisissez votre email et votre mot de passe si votre compte est deja actif. Si c'est une premiere entree, basculez vers la configuration du mot de passe."
-                  : setupRequested
-                    ? "Entrez maintenant le code OTP recu par email pour finaliser l'activation du mot de passe et ouvrir l'acces."
-                    : "Commencez par la premiere entree Google si necessaire, puis definissez le mot de passe du compte avant de recevoir le code OTP."}
-              </p>
-            </div>
+              <div className="mt-8">
+                <p className="text-sm text-white/50">
+                  {mode === "setup"
+                    ? normalizeEmailValue(setupEmail || email) || "Configuration du compte"
+                    : normalizeEmailValue(email) || "Acces utilisateur"}
+                </p>
+                <h2 className="mt-3 text-4xl font-semibold tracking-tight text-white">
+                  {mode === "login"
+                    ? "Connexion"
+                    : setupRequested
+                      ? "Validation OTP"
+                      : "Configuration du mot de passe"}
+                </h2>
+                <p className="mt-3 text-sm leading-6 text-white/68">
+                  {mode === "login"
+                    ? "Saisissez votre email et votre mot de passe si votre compte est deja actif. Si c'est une premiere entree, basculez vers la configuration du mot de passe."
+                    : setupRequested
+                      ? "Entrez maintenant le code OTP recu par email pour finaliser l'activation du mot de passe et ouvrir l'acces."
+                      : "Commencez par la premiere entree Google si necessaire, puis definissez le mot de passe du compte avant de recevoir le code OTP."}
+                </p>
+              </div>
 
-            <div className="mt-8 space-y-5">
-              {error ? (
-                <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-500/25 dark:bg-red-500/10 dark:text-red-200">
-                  {error}
-                </div>
-              ) : null}
-              {message ? (
-                <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700 dark:border-emerald-500/25 dark:bg-emerald-500/10 dark:text-emerald-200">
-                  {message}
-                </div>
-              ) : null}
-
-              {mode === "login" ? (
-                <>
-                  <form onSubmit={handleCredentialsSignIn} className="space-y-4">
-                    <div>
-                      <p className="mb-1 text-xs font-semibold uppercase tracking-[0.15em] text-slate-500 dark:text-white/48">Obligatoire</p>
-                      <label className="mb-1.5 block text-sm font-medium text-slate-800 dark:text-white/88">Email professionnel</label>
-                      <input
-                        type="email"
-                        value={email}
-                        onChange={(event) => setEmail(event.target.value)}
-                        className="w-full rounded-lg border border-slate-300 bg-white px-4 py-3 text-base text-slate-950 outline-none transition focus:border-slate-500 dark:border-white/15 dark:bg-white/5 dark:text-white dark:focus:border-white/30"
-                        placeholder="vous@thebest.com"
-                        required
-                      />
-                    </div>
-                    <div>
-                      <label className="mb-1.5 block text-sm font-medium text-slate-800 dark:text-white/88">Mot de passe</label>
-                      <input
-                        type="password"
-                        value={password}
-                        onChange={(event) => setPassword(event.target.value)}
-                        className="w-full rounded-lg border border-slate-300 bg-white px-4 py-3 text-base text-slate-950 outline-none transition focus:border-slate-500 dark:border-white/15 dark:bg-white/5 dark:text-white dark:focus:border-white/30"
-                        placeholder="Votre mot de passe"
-                        required
-                      />
-                    </div>
-
-                    <button
-                      type="submit"
-                      disabled={loading || !passwordAuthActive}
-                      className="flex w-full items-center justify-center rounded-lg bg-[#1f66d1] px-4 py-3.5 text-sm font-semibold text-white transition hover:bg-[#1857b5] disabled:cursor-not-allowed disabled:opacity-60"
-                    >
-                      {loading ? "Connexion..." : "Connexion"}
-                    </button>
-                  </form>
-
-                  <div className="border-t border-slate-200 pt-5 dark:border-white/10">
-                    <div className="flex items-start justify-between gap-3">
-                      <div>
-                        <h3 className="text-lg font-semibold text-slate-950 dark:text-white">Premiere connexion</h3>
-                        <p className="mt-1 text-sm leading-6 text-slate-600 dark:text-white/62">
-                          Si votre compte n'a pas encore de mot de passe, passez au formulaire de configuration pour commencer la premiere activation.
-                        </p>
-                      </div>
-                      <div className={`rounded-full px-3 py-1 text-[11px] font-semibold tracking-[0.16em] ${passwordAuthActive ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-200" : "bg-amber-100 text-amber-800 dark:bg-amber-500/15 dark:text-amber-200"}`}>
-                        {passwordAuthActive ? "ACTIF" : "EN ATTENTE"}
-                      </div>
-                    </div>
-
-                    <button
-                      type="button"
-                      onClick={() => openSetupMode()}
-                      className="mt-4 flex w-full items-center justify-center rounded-lg border border-slate-300 bg-white px-4 py-3.5 text-sm font-semibold text-slate-800 transition hover:bg-slate-50 dark:border-white/15 dark:bg-white/5 dark:text-white dark:hover:bg-white/10"
-                    >
-                      Creer ou configurer le mot de passe
-                    </button>
+              <div className="mt-8 space-y-5">
+                {error ? (
+                  <div className="rounded-xl border border-red-200/20 bg-red-500/10 px-4 py-3 text-sm text-red-50">
+                    {error}
                   </div>
-                </>
-              ) : null}
+                ) : null}
 
-              {mode === "setup" ? (
-                <>
-                  <div className="flex items-center justify-between gap-3">
-                    <div className="rounded-full bg-slate-100 px-3 py-1 text-[11px] font-semibold tracking-[0.16em] text-slate-600 dark:bg-white/10 dark:text-white/60">
-                      {setupRequested ? "OTP EMAIL" : "CONFIGURATION"}
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => openLoginMode()}
-                      className="text-sm font-semibold text-slate-500 transition hover:text-slate-900 dark:text-white/55 dark:hover:text-white"
-                    >
-                      Retour a la connexion
-                    </button>
+                {message ? (
+                  <div className="rounded-xl border border-emerald-200/20 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-50">
+                    {message}
                   </div>
+                ) : null}
 
-                  {!setupRequested ? (
-                    <>
-                      <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 dark:border-white/10 dark:bg-white/5">
-                        <p className="text-sm font-semibold text-slate-950 dark:text-white">Etape 1: premiere entree Google</p>
-                        <p className="mt-2 text-sm leading-6 text-slate-600 dark:text-white/62">
-                          Choisissez le bon compte Google sur cet appareil. Si votre email a deja ete reconnu, vous pouvez directement definir le mot de passe ci-dessous.
-                        </p>
-                        <button
-                          type="button"
-                          onClick={() => void startGoogleSignIn()}
-                          disabled={loading}
-                          className="mt-4 flex w-full items-center justify-center rounded-lg border border-slate-300 bg-white px-4 py-3.5 text-sm font-semibold text-slate-800 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60 dark:border-white/15 dark:bg-white/5 dark:text-white dark:hover:bg-white/10"
-                        >
-                          {loading ? "Ouverture de Google..." : "Continuer avec Google"}
-                        </button>
-                      </div>
-
-                      {!passwordAuthActive ? (
-                        <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50 px-4 py-3 text-sm text-slate-600 dark:border-white/15 dark:bg-white/5 dark:text-white/60">
-                          L'ouverture de ce parcours est planifiee pour le {launchAtLabel}.
-                        </div>
-                      ) : null}
-
-                      <form onSubmit={requestSetupCode} className="space-y-4">
-                        <div>
-                          <label className="mb-1.5 block text-sm font-medium text-slate-800 dark:text-white/88">Email</label>
-                          <input
-                            type="email"
-                            value={setupEmail}
-                            onChange={(event) => setSetupEmail(event.target.value)}
-                            className="w-full rounded-lg border border-slate-300 bg-white px-4 py-3 text-base text-slate-950 outline-none transition focus:border-slate-500 dark:border-white/15 dark:bg-white/5 dark:text-white dark:focus:border-white/30"
-                            placeholder="vous@thebest.com"
-                            required
-                            readOnly={prefilledSetupEmail}
-                          />
-                        </div>
-                        <div>
-                          <label className="mb-1.5 block text-sm font-medium text-slate-800 dark:text-white/88">Nouveau mot de passe</label>
-                          <input
-                            type="password"
-                            value={setupPassword}
-                            onChange={(event) => setSetupPassword(event.target.value)}
-                            className="w-full rounded-lg border border-slate-300 bg-white px-4 py-3 text-base text-slate-950 outline-none transition focus:border-slate-500 dark:border-white/15 dark:bg-white/5 dark:text-white dark:focus:border-white/30"
-                            placeholder="Minimum 8 caracteres avec lettres et chiffres"
-                            required
-                          />
-                        </div>
-                        <div>
-                          <label className="mb-1.5 block text-sm font-medium text-slate-800 dark:text-white/88">Confirmer le mot de passe</label>
-                          <input
-                            type="password"
-                            value={setupPasswordConfirmation}
-                            onChange={(event) => setSetupPasswordConfirmation(event.target.value)}
-                            className="w-full rounded-lg border border-slate-300 bg-white px-4 py-3 text-base text-slate-950 outline-none transition focus:border-slate-500 dark:border-white/15 dark:bg-white/5 dark:text-white dark:focus:border-white/30"
-                            placeholder="Retapez le mot de passe"
-                            required
-                          />
-                        </div>
-                        <button
-                          type="submit"
-                          disabled={loading || !passwordAuthActive}
-                          className="flex w-full items-center justify-center rounded-lg bg-[#1f66d1] px-4 py-3.5 text-sm font-semibold text-white transition hover:bg-[#1857b5] disabled:cursor-not-allowed disabled:opacity-60"
-                        >
-                          {loading ? "Verification..." : "Continuer et recevoir l'OTP"}
-                        </button>
-                      </form>
-                    </>
-                  ) : (
-                    <form onSubmit={confirmPasswordSetup} className="space-y-4 rounded-2xl border border-slate-200 bg-slate-50 p-4 dark:border-white/10 dark:bg-white/5">
-                      <div className="flex items-center justify-between gap-3">
-                        <p className="text-sm font-semibold text-slate-950 dark:text-white">Application d'authentification</p>
-                        <button
-                          type="button"
-                          onClick={() => resetSetupProgress()}
-                          className="text-xs font-semibold text-slate-500 hover:text-slate-800 dark:text-white/50 dark:hover:text-white"
-                        >
-                          Recommencer
-                        </button>
-                      </div>
+                {mode === "login" ? (
+                  <>
+                    <form onSubmit={handleCredentialsSignIn} className="space-y-4">
                       <div>
-                        <label className="mb-1.5 block text-sm font-medium text-slate-800 dark:text-white/88">Code recu par email</label>
+                        <p className="mb-1 text-xs font-semibold uppercase tracking-[0.15em] text-white/45">Obligatoire</p>
+                        <label className="mb-1.5 block text-sm font-medium text-white/88">Email professionnel</label>
                         <input
-                          type="text"
-                          inputMode="numeric"
-                          maxLength={6}
-                          value={setupCode}
-                          onChange={(event) => setSetupCode(event.target.value.replace(/\D/g, "").slice(0, 6))}
-                          className="w-full rounded-lg border border-slate-300 bg-white px-4 py-3 text-center text-lg tracking-[0.35em] text-slate-950 outline-none transition focus:border-slate-500 dark:border-white/15 dark:bg-[#0b0f14] dark:text-white dark:focus:border-white/30"
-                          placeholder="000000"
+                          type="email"
+                          value={email}
+                          onChange={(event) => setEmail(event.target.value)}
+                          className="w-full rounded-lg border border-white/15 bg-white/8 px-4 py-3 text-base text-white outline-none transition placeholder:text-white/35 focus:border-sky-300 focus:bg-white/10"
+                          placeholder="vous@thebest.com"
                           required
                         />
                       </div>
-                      <div className="rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm text-slate-600 dark:border-white/10 dark:bg-[#0b0f14] dark:text-white/70">
-                        <p className="font-medium text-slate-900 dark:text-white">Email</p>
-                        <p className="mt-1 break-all">{setupEmail}</p>
+
+                      <div>
+                        <label className="mb-1.5 block text-sm font-medium text-white/88">Mot de passe</label>
+                        <input
+                          type="password"
+                          value={password}
+                          onChange={(event) => setPassword(event.target.value)}
+                          className="w-full rounded-lg border border-white/15 bg-white/8 px-4 py-3 text-base text-white outline-none transition placeholder:text-white/35 focus:border-sky-300 focus:bg-white/10"
+                          placeholder="Votre mot de passe"
+                          required
+                        />
                       </div>
+
                       <button
                         type="submit"
                         disabled={loading || !passwordAuthActive}
                         className="flex w-full items-center justify-center rounded-lg bg-[#1f66d1] px-4 py-3.5 text-sm font-semibold text-white transition hover:bg-[#1857b5] disabled:cursor-not-allowed disabled:opacity-60"
                       >
-                        {loading ? "Validation..." : "Verifier et se connecter"}
+                        {loading ? "Connexion..." : "Connexion"}
                       </button>
                     </form>
-                  )}
-                </>
-              ) : null}
+
+                    <div className="border-t border-white/10 pt-5">
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <h3 className="text-lg font-semibold text-white">Premiere connexion</h3>
+                          <p className="mt-1 text-sm leading-6 text-white/62">
+                            Si votre compte n'a pas encore de mot de passe, passez au formulaire de configuration pour commencer la premiere activation.
+                          </p>
+                        </div>
+
+                        <div className={`rounded-full px-3 py-1 text-[11px] font-semibold tracking-[0.16em] ${passwordAuthActive ? "bg-emerald-400/15 text-emerald-100" : "bg-amber-400/15 text-amber-100"}`}>
+                          {passwordAuthActive ? "ACTIF" : "EN ATTENTE"}
+                        </div>
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={() => openSetupMode()}
+                        className="mt-4 flex w-full items-center justify-center rounded-lg border border-white/15 bg-white/8 px-4 py-3.5 text-sm font-semibold text-white transition hover:bg-white/12"
+                      >
+                        Creer ou configurer le mot de passe
+                      </button>
+                    </div>
+                  </>
+                ) : null}
+
+                {mode === "setup" ? (
+                  <>
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="rounded-full bg-white/10 px-3 py-1 text-[11px] font-semibold tracking-[0.16em] text-white/70">
+                        {setupRequested ? "OTP EMAIL" : "CONFIGURATION"}
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={() => openLoginMode()}
+                        className="text-sm font-semibold text-white/60 transition hover:text-white"
+                      >
+                        Retour a la connexion
+                      </button>
+                    </div>
+
+                    {!setupRequested ? (
+                      <>
+                        <div className="rounded-2xl border border-white/10 bg-white/6 p-4">
+                          <p className="text-sm font-semibold text-white">Etape 1: premiere entree Google</p>
+                          <p className="mt-2 text-sm leading-6 text-white/62">
+                            Choisissez le bon compte Google sur cet appareil. Si votre email a deja ete reconnu, vous pouvez directement definir le mot de passe ci-dessous.
+                          </p>
+
+                          <button
+                            type="button"
+                            onClick={() => void startGoogleSignIn()}
+                            disabled={loading}
+                            className="mt-4 flex w-full items-center justify-center rounded-lg border border-white/15 bg-white/8 px-4 py-3.5 text-sm font-semibold text-white transition hover:bg-white/12 disabled:cursor-not-allowed disabled:opacity-60"
+                          >
+                            {loading ? "Ouverture de Google..." : "Continuer avec Google"}
+                          </button>
+                        </div>
+
+                        {!passwordAuthActive ? (
+                          <div className="rounded-xl border border-dashed border-white/15 bg-white/5 px-4 py-3 text-sm text-white/65">
+                            L'ouverture de ce parcours est planifiee pour le {launchAtLabel}.
+                          </div>
+                        ) : null}
+
+                        <form onSubmit={requestSetupCode} className="space-y-4">
+                          <div>
+                            <label className="mb-1.5 block text-sm font-medium text-white/88">Email</label>
+                            <input
+                              type="email"
+                              value={setupEmail}
+                              onChange={(event) => setSetupEmail(event.target.value)}
+                              className="w-full rounded-lg border border-white/15 bg-white/8 px-4 py-3 text-base text-white outline-none transition placeholder:text-white/35 focus:border-sky-300 focus:bg-white/10"
+                              placeholder="vous@thebest.com"
+                              required
+                              readOnly={prefilledSetupEmail}
+                            />
+                          </div>
+
+                          <div>
+                            <label className="mb-1.5 block text-sm font-medium text-white/88">Nouveau mot de passe</label>
+                            <input
+                              type="password"
+                              value={setupPassword}
+                              onChange={(event) => setSetupPassword(event.target.value)}
+                              className="w-full rounded-lg border border-white/15 bg-white/8 px-4 py-3 text-base text-white outline-none transition placeholder:text-white/35 focus:border-sky-300 focus:bg-white/10"
+                              placeholder="Minimum 8 caracteres avec lettres et chiffres"
+                              required
+                            />
+                          </div>
+
+                          <div>
+                            <label className="mb-1.5 block text-sm font-medium text-white/88">Confirmer le mot de passe</label>
+                            <input
+                              type="password"
+                              value={setupPasswordConfirmation}
+                              onChange={(event) => setSetupPasswordConfirmation(event.target.value)}
+                              className="w-full rounded-lg border border-white/15 bg-white/8 px-4 py-3 text-base text-white outline-none transition placeholder:text-white/35 focus:border-sky-300 focus:bg-white/10"
+                              placeholder="Retapez le mot de passe"
+                              required
+                            />
+                          </div>
+
+                          <button
+                            type="submit"
+                            disabled={loading || !passwordAuthActive}
+                            className="flex w-full items-center justify-center rounded-lg bg-[#1f66d1] px-4 py-3.5 text-sm font-semibold text-white transition hover:bg-[#1857b5] disabled:cursor-not-allowed disabled:opacity-60"
+                          >
+                            {loading ? "Verification..." : "Continuer et recevoir l'OTP"}
+                          </button>
+                        </form>
+                      </>
+                    ) : (
+                      <form onSubmit={confirmPasswordSetup} className="space-y-4 rounded-2xl border border-white/10 bg-white/6 p-4">
+                        <div className="flex items-center justify-between gap-3">
+                          <p className="text-sm font-semibold text-white">Application d'authentification</p>
+
+                          <button
+                            type="button"
+                            onClick={() => resetSetupProgress()}
+                            className="text-xs font-semibold text-white/55 hover:text-white"
+                          >
+                            Recommencer
+                          </button>
+                        </div>
+
+                        <div>
+                          <label className="mb-1.5 block text-sm font-medium text-white/88">Code recu par email</label>
+                          <input
+                            type="text"
+                            inputMode="numeric"
+                            maxLength={6}
+                            value={setupCode}
+                            onChange={(event) => setSetupCode(event.target.value.replace(/\D/g, "").slice(0, 6))}
+                            className="w-full rounded-lg border border-white/15 bg-[#0d194f] px-4 py-3 text-center text-lg tracking-[0.35em] text-white outline-none transition placeholder:text-white/35 focus:border-sky-300"
+                            placeholder="000000"
+                            required
+                          />
+                        </div>
+
+                        <div className="rounded-lg border border-white/10 bg-[#0d194f] px-4 py-3 text-sm text-white/70">
+                          <p className="font-medium text-white">Email</p>
+                          <p className="mt-1 break-all">{setupEmail}</p>
+                        </div>
+
+                        <button
+                          type="submit"
+                          disabled={loading || !passwordAuthActive}
+                          className="flex w-full items-center justify-center rounded-lg bg-[#1f66d1] px-4 py-3.5 text-sm font-semibold text-white transition hover:bg-[#1857b5] disabled:cursor-not-allowed disabled:opacity-60"
+                        >
+                          {loading ? "Validation..." : "Verifier et se connecter"}
+                        </button>
+                      </form>
+                    )}
+                  </>
+                ) : null}
+              </div>
             </div>
           </div>
-        </section>
-      </div>
+
+          <div className="mt-10 grid max-w-2xl gap-4 xl:grid-cols-3">
+            {[
+              { step: "01", title: "Premiere entree", text: "Google n'est accepte que pour un compte sans mot de passe configure." },
+              { step: "02", title: "Mot de passe", text: "L'email recupere permet ensuite de definir et confirmer le mot de passe." },
+              { step: "03", title: "Validation OTP", text: "Le code recu par email finalise l'activation une seule fois." },
+            ].map((item) => (
+              <div key={item.step} className="rounded-2xl border border-white/12 bg-white/6 p-4 backdrop-blur-sm">
+                <p className="text-[11px] font-semibold tracking-[0.25em] text-sky-200/70">{item.step}</p>
+                <h2 className="mt-3 text-sm font-semibold text-white">{item.title}</h2>
+                <p className="mt-2 text-xs leading-5 text-white/65">{item.text}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
     </main>
   );
 }
