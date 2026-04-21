@@ -91,6 +91,8 @@ type SearchParams = {
   endDate?: string;
   airlineId?: string;
   cashMonth?: string;
+  desk?: string;
+  mode?: string;
 };
 
 function dateRangeFromParams(params: SearchParams) {
@@ -129,6 +131,14 @@ function monthRangeFromValue(rawMonth?: string) {
     endRaw: new Date(end.getTime() - 1).toISOString().slice(0, 10),
     label: `Journal de caisse du ${start.toISOString().slice(0, 10)} au ${new Date(end.getTime() - 1).toISOString().slice(0, 10)}`,
   };
+}
+
+function resolveInitialWorkspaceMode(value?: string) {
+  if (value === "tickets" || value === "cash" || value === "virtual" || value === "billetage" || value === "payment-orders" || value === "needs" || value === "float" || value === "reports") {
+    return value;
+  }
+
+  return "none";
 }
 
 function normalizeMoneyCurrency(value: string | null | undefined): "USD" | "CDF" {
@@ -444,6 +454,7 @@ export default async function PaymentsPage({
   });
   const selectedDeskKey = deskState.desk;
   const isMainDesk = isMainCashDesk(selectedDeskKey);
+  const initialWorkspaceMode = resolveInitialWorkspaceMode(resolvedSearchParams.mode);
   const scopedCashOperationsWhere = buildDeskScopedCashOperationWhere(selectedDeskKey);
   const range = dateRangeFromParams(resolvedSearchParams);
   const cashRange = monthRangeFromValue(resolvedSearchParams.cashMonth);
@@ -1296,6 +1307,7 @@ export default async function PaymentsPage({
         role={role}
         initialDesk={deskState.desk}
         initialScope={deskState.scope}
+        initialMode={initialWorkspaceMode}
         workspaceOverrides={workspaceOverrides}
         paymentOrdersWorkspace={canWrite ? (
           <section className="space-y-4 rounded-2xl border border-black/10 bg-white p-4 dark:border-white/10 dark:bg-zinc-900">
@@ -1433,6 +1445,9 @@ export default async function PaymentsPage({
           <div className="space-y-4">
             <section className="rounded-2xl border border-black/10 bg-white p-4 dark:border-white/10 dark:bg-zinc-900">
               <form method="GET" className="grid gap-3 sm:grid-cols-3 sm:items-end">
+                <input type="hidden" name="desk" value={selectedDeskKey} />
+                <input type="hidden" name="mode" value="tickets" />
+                <input type="hidden" name="cashMonth" value={cashRange.monthRaw} />
                 <div>
                   <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-black/60 dark:text-white/60">Du</label>
                   <input type="date" name="startDate" defaultValue={range.startRaw} className="w-full rounded-md border border-black/15 bg-white px-3 py-2 text-sm dark:border-white/15 dark:bg-zinc-900" />
@@ -1612,6 +1627,8 @@ export default async function PaymentsPage({
                 </div>
 
                 <form method="GET" className="flex flex-wrap items-end gap-2 text-xs">
+                  <input type="hidden" name="desk" value={selectedDeskKey} />
+                  <input type="hidden" name="mode" value="cash" />
                   <input type="hidden" name="startDate" value={range.startRaw} />
                   <input type="hidden" name="endDate" value={range.endRaw} />
                   <input type="hidden" name="airlineId" value={resolvedSearchParams.airlineId ?? "ALL"} />

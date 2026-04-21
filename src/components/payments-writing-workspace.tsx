@@ -47,6 +47,7 @@ export function PaymentsWritingWorkspace({
   role,
   initialDesk,
   initialScope,
+  initialMode,
 }: {
   ticketWorkspace?: React.ReactNode;
   cashWorkspace?: React.ReactNode;
@@ -64,8 +65,9 @@ export function PaymentsWritingWorkspace({
   role?: AppRoleLike | string | null;
   initialDesk?: CashDeskValue;
   initialScope?: AdminCashRoleScope;
+  initialMode?: WritingMode;
 }) {
-  const [mode, setMode] = useState<WritingMode>("none");
+  const [mode, setMode] = useState<WritingMode>(initialMode ?? "none");
   const scopeOptions = useMemo(() => getVisibleCashRoleOptions(jobTitle, role), [jobTitle, role]);
   const [adminScope, setAdminScope] = useState<AdminCashRoleScope>(() => initialScope ?? getDefaultCashRoleScope(jobTitle, role));
   const deskOptions = useMemo(() => getManagedCashDesks(jobTitle, role, adminScope), [jobTitle, role, adminScope]);
@@ -74,7 +76,7 @@ export function PaymentsWritingWorkspace({
   const router = useRouter();
 
   useEffect(() => {
-    // reflect selected desk in URL so server can render desk-specific data
+    // reflect selected desk and workspace in URL so GET filters can preserve context
     try {
       const url = new URL(window.location.href);
       if (selectedDesk) {
@@ -82,11 +84,16 @@ export function PaymentsWritingWorkspace({
       } else {
         url.searchParams.delete("desk");
       }
-      router.replace(url.pathname + url.search);
+      if (mode !== "none") {
+        url.searchParams.set("mode", mode);
+      } else {
+        url.searchParams.delete("mode");
+      }
+      router.replace(url.pathname + url.search, { scroll: false });
     } catch (e) {
       // ignore
     }
-  }, [selectedDesk, router]);
+  }, [mode, selectedDesk, router]);
 
   useEffect(() => {
     if (!scopeOptions.some((option) => option.value === adminScope) && scopeOptions.length > 0) {
