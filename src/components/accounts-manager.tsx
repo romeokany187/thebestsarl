@@ -419,10 +419,12 @@ export default function AccountsManager() {
       const ab = await file.arrayBuffer()
       const wb = XLSX.read(ab, { type: 'array' })
       const sheetName = wb.SheetNames.find(n => /plan comptable/i.test(n)) || wb.SheetNames[0]
-      const rows = XLSX.utils.sheet_to_json(wb.Sheets[sheetName], { defval: '' }) as Record<string, any>[]
-      accountsParsed = rows.map(r => ({
-        code: String(r['CODE'] || r['Code'] || r['Compte'] || r['N°'] || '').trim().replace(/\s+/g, ''),
-        label: String(r['COMPTE'] || r['Libellé'] || r['Intitulé'] || r['Label'] || '').trim(),
+      const matrix = XLSX.utils.sheet_to_json(wb.Sheets[sheetName], { header: 1, defval: '' }) as Array<Array<string | number>>
+      const headerIndex = matrix.findIndex((row) => row.some((cell) => String(cell || '').trim().toUpperCase() === 'CODE'))
+      const rows = headerIndex >= 0 ? matrix.slice(headerIndex + 1) : matrix
+      accountsParsed = rows.map((row) => ({
+        code: String(row[0] ?? '').trim().replace(/\s+/g, ''),
+        label: String(row[1] ?? '').trim(),
       })).filter(a => a.code && a.label)
     }
 
