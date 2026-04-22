@@ -4,6 +4,7 @@ import { z } from "zod";
 import { requireApiModuleAccess } from "@/lib/rbac";
 import { CommissionMode, TravelClass } from "@prisma/client";
 import { ensureAirlineCatalog } from "@/lib/airline-catalog";
+import { canManageTicketRecord } from "@/lib/assignment";
 
 export const dynamic = "force-dynamic";
 
@@ -38,9 +39,13 @@ export async function GET() {
 }
 
 export async function POST(request: NextRequest) {
-  const access = await requireApiModuleAccess("sales", ["ADMIN"]);
+  const access = await requireApiModuleAccess("sales", ["ADMIN", "DIRECTEUR_GENERAL", "MANAGER", "EMPLOYEE", "ACCOUNTANT"]);
   if (access.error) {
     return access.error;
+  }
+
+  if (!canManageTicketRecord(access.role, access.session.user.jobTitle)) {
+    return NextResponse.json({ error: "Accès réservé au profil admin ventes." }, { status: 403 });
   }
 
   const body = await request.json();

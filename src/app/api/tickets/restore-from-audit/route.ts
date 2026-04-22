@@ -10,6 +10,7 @@ import {
 import { prisma } from "@/lib/prisma";
 import { requireApiModuleAccess } from "@/lib/rbac";
 import { writeActivityLog } from "@/lib/activity-log";
+import { canManageTicketRecord } from "@/lib/assignment";
 
 export const runtime = "nodejs";
 
@@ -84,9 +85,13 @@ function computePaymentStatus(totalDue: number, paidTotal: number) {
 }
 
 export async function POST(request: NextRequest) {
-  const access = await requireApiModuleAccess("sales", ["ADMIN"]);
+  const access = await requireApiModuleAccess("sales", ["ADMIN", "DIRECTEUR_GENERAL", "MANAGER", "EMPLOYEE", "ACCOUNTANT"]);
   if (access.error) {
     return access.error;
+  }
+
+  if (!canManageTicketRecord(access.role, access.session.user.jobTitle)) {
+    return NextResponse.json({ error: "Accès réservé au profil admin ventes." }, { status: 403 });
   }
 
   try {

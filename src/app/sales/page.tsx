@@ -95,9 +95,10 @@ export default async function SalesPage({
   const canManageTickets = canManageTicketRecord(role, currentJobTitle);
   const canImportTickets = canImportTicketWorkbook(role, session.user.canImportTicketWorkbook, currentJobTitle);
   const canReplaceImportedPeriod = canImportTicketWorkbook(role, session.user.canImportTicketWorkbook, currentJobTitle);
+  const canUseSalesAdminDateControls = canManageTicketRecord(role, currentJobTitle);
   const accessNote = canManageTickets
-    ? "Vente: tous les profils autorisés peuvent encoder les billets; l'admin peut en plus importer Excel, modifier et supprimer les billets déjà enregistrés."
-    : "Vente: vous pouvez encoder les billets normalement. L'import Excel, la modification et la suppression restent réservés à l'administrateur.";
+    ? "Vente: tous les profils autorisés peuvent encoder les billets; le profil admin ventes peut en plus importer Excel, modifier et supprimer les billets déjà enregistrés."
+    : "Vente: vous pouvez encoder les billets normalement. L'import Excel, la modification et la suppression restent réservés au profil admin ventes.";
 
   await ensureAirlineCatalog(prisma);
 
@@ -189,7 +190,7 @@ export default async function SalesPage({
       <section className="mb-6">
         <h1 className="text-2xl font-semibold">Gestion des billets</h1>
         <p className="text-sm text-black/60 dark:text-white/60">
-          Tout profil vente habilité peut encoder un billet. Seul l&apos;administrateur peut importer un fichier Excel, modifier un billet déjà enregistré ou le supprimer.
+          Tout profil vente habilité peut encoder un billet. Seul le profil admin ventes peut importer un fichier Excel, modifier un billet déjà enregistré ou le supprimer.
         </p>
       </section>
 
@@ -238,7 +239,7 @@ export default async function SalesPage({
                 airlineCodes: account.airlineCodes,
                 balance: account.balance,
               }))}
-              allowAdminEncodingDate={role === "ADMIN"}
+              allowAdminEncodingDate={canUseSalesAdminDateControls}
             />
             {canImportTickets ? (
               <TicketImportForm
@@ -250,7 +251,7 @@ export default async function SalesPage({
           </div>
         ) : (
           <section className="rounded-xl border border-black/10 bg-white p-4 text-sm text-black/70 dark:border-white/10 dark:bg-zinc-900 dark:text-white/70">
-            Encodage des billets autorisé sur ce profil. Seul l&apos;import Excel est limité à l&apos;administrateur.
+            Encodage des billets autorisé sur ce profil. Seul l&apos;import Excel est limité au profil admin ventes.
           </section>
         )}
 

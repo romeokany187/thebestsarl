@@ -83,6 +83,7 @@ export async function PATCH(request: NextRequest, { params }: Params) {
 
   let attemptedTicketNumber = "";
   let currentTicketId = "";
+  const hasSalesAdminAccess = canManageTicketRecord(access.role, access.session.user.jobTitle);
 
   try {
     const { id } = await params;
@@ -119,13 +120,13 @@ export async function PATCH(request: NextRequest, { params }: Params) {
     const normalizedTravelDate = parsed.data.travelDate
       ? normalizeTicketDate(parsed.data.travelDate)
       : existing.travelDate;
-    const normalizedSoldAt = access.role === "ADMIN" && parsed.data.soldAt
+    const normalizedSoldAt = hasSalesAdminAccess && parsed.data.soldAt
       ? normalizeTicketDate(parsed.data.soldAt)
       : existing.soldAt;
     const normalizedPatchData = {
       ...parsed.data,
       ...(parsed.data.travelDate ? { travelDate: normalizedTravelDate } : {}),
-      ...(access.role === "ADMIN" && parsed.data.soldAt ? { soldAt: normalizedSoldAt } : {}),
+      ...(hasSalesAdminAccess && parsed.data.soldAt ? { soldAt: normalizedSoldAt } : {}),
     };
 
     const targetAirline = await prisma.airline.findUnique({
