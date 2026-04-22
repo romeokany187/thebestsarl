@@ -153,7 +153,7 @@ function decodeSqlScalar(raw: string): string | number | null {
 }
 
 function parseInsertStatements(sql: string): AccountRow[] {
-  const re = /INSERT\s+INTO\s+`?Account`?\s*(?:\(([^)]*)\))?\s*VALUES\s*(.*?);/gis;
+  const re = /INSERT\s+INTO\s+`?Account`?\s*(?:\(([^)]*)\))?\s*VALUES\s*([\s\S]*?);/gi;
   const rows: AccountRow[] = [];
 
   let match: RegExpExecArray | null = re.exec(sql);
