@@ -4,6 +4,8 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { getCsrfToken, signIn } from "next-auth/react";
 
+const DEVICE_TOKEN_STORAGE_KEY = "thebest:auth-device-token";
+
 type SignInClientPageProps = {
   initialMode: FormMode;
   passwordAuthActive: boolean;
@@ -122,6 +124,8 @@ export default function SignInClientPage({ initialMode, passwordAuthActive, laun
   const [mode, setMode] = useState<FormMode>(initialMode);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
+  const [loginChallengeId, setLoginChallengeId] = useState("");
+  const [loginOtpCode, setLoginOtpCode] = useState("");
   const launchAtLabel = useMemo(
     () => new Date(launchAtIso).toLocaleString("fr-FR", {
       timeZone: "Africa/Kinshasa",
@@ -224,8 +228,18 @@ export default function SignInClientPage({ initialMode, passwordAuthActive, laun
     setEmailLockedByGoogle(false);
   }
 
+  function resetLoginChallenge(options?: { keepFeedback?: boolean }) {
+    setLoginChallengeId("");
+    setLoginOtpCode("");
+    if (!options?.keepFeedback) {
+      setError("");
+      setMessage("");
+    }
+  }
+
   function openLoginMode(options?: { keepFeedback?: boolean }) {
     setMode("login");
+    resetLoginChallenge({ keepFeedback: options?.keepFeedback });
     resetSetupProgress(options);
   }
 
@@ -284,6 +298,43 @@ export default function SignInClientPage({ initialMode, passwordAuthActive, laun
     setLoading(false);
   }
 
+  function getOrCreateDeviceToken() {
+    if (typeof window === "undefined") {
+      return "";
+    }
+
+    const existing = window.localStorage.getItem(DEVICE_TOKEN_STORAGE_KEY)?.trim() ?? "";
+    if (existing.length >= 16) {
+      return existing;
+    }
+
+    const generated = window.crypto?.randomUUID?.()
+      ?? `${Date.now()}-${Math.random().toString(36).slice(2, 18)}-${Math.random().toString(36).slice(2, 18)}`;
+    window.localStorage.setItem(DEVICE_TOKEN_STORAGE_KEY, generated);
+    return generated;
+  }
+
+  async function completeCredentialsSignIn(params: { deviceToken: string; challengeId?: string }) {
+    const result = await signIn("credentials", {
+      email,
+      password,
+      deviceToken: params.deviceToken,
+      challengeId: params.challengeId ?? "",
+      callbackUrl: "/post-login",
+      redirect: false,
+    });
+
+    if (!result || result.error) {
+      setError("Connexion refusée. Vérifie tes identifiants ou autorise d'abord ce nouvel appareil avec l'OTP envoyé.");
+      setLoading(false);
+      return false;
+    }
+
+    resetLoginChallenge({ keepFeedback: true });
+    window.location.href = result.url || "/post-login";
+    return true;
+  }
+
   async function handleCredentialsSignIn(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
@@ -297,20 +348,63 @@ export default function SignInClientPage({ initialMode, passwordAuthActive, laun
     setError("");
     setMessage("");
 
-    const result = await signIn("credentials", {
-      email,
-      password,
-      callbackUrl: "/post-login",
-      redirect: false,
-    });
+    const deviceToken = getOrCreateDeviceToken();
 
-    if (!result || result.error) {
-      setError("Connexion refusée. Vérifie ton email et ton mot de passe, ou crée d'abord ton mot de passe.");
+    if (!loginChallengeId) {
+      try {
+        const response = await fetch("/api/auth/device-session/request", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ email, password, deviceToken }),
+        });
+        const payload = await response.json().catch(() => null);
+
+        if (!response.ok) {
+          setError(extractApiError(payload, "Impossible de vérifier l'appareil."));
+          setLoading(false);
+          return;
+        }
+
+        if (payload?.otpRequired) {
+          setLoginChallengeId(String(payload.challengeId ?? ""));
+          setMessage(payload?.message ?? "Un code OTP a été envoyé pour autoriser ce nouvel appareil.");
+          setLoading(false);
+          return;
+        }
+      } catch {
+        setError("Erreur réseau lors de la vérification de l'appareil.");
+        setLoading(false);
+        return;
+      }
+
+      await completeCredentialsSignIn({ deviceToken });
+      return;
+    }
+
+    try {
+      const response = await fetch("/api/auth/device-session/confirm", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          challengeId: loginChallengeId,
+          code: loginOtpCode,
+          deviceToken,
+        }),
+      });
+      const payload = await response.json().catch(() => null);
+
+      if (!response.ok) {
+        setError(extractApiError(payload, "Code OTP invalide."));
+        setLoading(false);
+        return;
+      }
+    } catch {
+      setError("Erreur réseau lors de la validation du code OTP.");
       setLoading(false);
       return;
     }
 
-    window.location.href = result.url || "/post-login";
+    await completeCredentialsSignIn({ deviceToken, challengeId: loginChallengeId });
   }
 
   async function requestSetupCode(event: React.FormEvent<HTMLFormElement>) {
@@ -391,10 +485,12 @@ export default function SignInClientPage({ initialMode, passwordAuthActive, laun
       setMessage(payload?.message ?? "Mot de passe créé.");
       setEmail(setupEmail);
       setPassword(setupPassword);
+      const deviceToken = getOrCreateDeviceToken();
 
       const result = await signIn("credentials", {
         email: setupEmail,
         password: setupPassword,
+        deviceToken,
         callbackUrl: "/post-login",
         redirect: false,
       });
@@ -562,12 +658,31 @@ export default function SignInClientPage({ initialMode, passwordAuthActive, laun
                             />
                           </div>
 
+                          {loginChallengeId ? (
+                            <div>
+                              <label className="mb-1.5 block text-sm font-medium text-black/88 dark:text-white/88">Code OTP nouvel appareil</label>
+                              <input
+                                type="text"
+                                inputMode="numeric"
+                                maxLength={6}
+                                value={loginOtpCode}
+                                onChange={(event) => setLoginOtpCode(event.target.value.replace(/\D/g, "").slice(0, 6))}
+                                className="w-full rounded-lg border border-black/12 bg-white px-4 py-3 text-center text-lg tracking-[0.35em] text-black outline-none transition placeholder:text-black/35 focus:border-black/30 dark:border-white/15 dark:bg-white/8 dark:text-white dark:placeholder:text-white/35 dark:focus:border-white/30 dark:focus:bg-white/10"
+                                placeholder="000000"
+                                required
+                              />
+                              <p className="mt-1 text-xs text-black/50 dark:text-white/50">
+                                Cette connexion remplace immédiatement la session active sur l'autre appareil.
+                              </p>
+                            </div>
+                          ) : null}
+
                           <button
                             type="submit"
-                            disabled={loading || !passwordAuthActive}
+                            disabled={loading || !passwordAuthActive || (Boolean(loginChallengeId) && loginOtpCode.length !== 6)}
                             className="flex w-full items-center justify-center rounded-lg bg-black px-4 py-3.5 text-sm font-semibold text-white transition hover:bg-black/85 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-white dark:text-black dark:hover:bg-white/85"
                           >
-                            {loading ? "Connexion..." : "Connexion"}
+                            {loading ? "Connexion..." : loginChallengeId ? "Verifier l'OTP et se connecter" : "Connexion"}
                           </button>
                         </form>
 
@@ -578,6 +693,7 @@ export default function SignInClientPage({ initialMode, passwordAuthActive, laun
                               setEmail("");
                               setPassword("");
                               setEmailLockedByGoogle(false);
+                              resetLoginChallenge({ keepFeedback: true });
                             }}
                             className="font-semibold text-black transition hover:text-black/70 dark:text-white dark:hover:text-white/75"
                           >

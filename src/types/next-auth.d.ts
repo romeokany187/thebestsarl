@@ -20,5 +20,6 @@ declare module "next-auth/jwt" {
     teamName?: string | null;
     canImportTicketWorkbook?: boolean;
     sessionRevoked?: boolean;
+    sessionKey?: string;
   }
 }

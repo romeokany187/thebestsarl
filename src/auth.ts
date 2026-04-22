@@ -2,8 +2,16 @@ import { type NextAuthOptions } from "next-auth";
 import CredentialsProvider from "next-auth/providers/credentials";
 import GoogleProvider from "next-auth/providers/google";
 import { isPasswordAuthActive } from "@/lib/auth-rollout";
+import {
+  activateSingleUserSession,
+  ensureAuthSessionSecurityStorage,
+  findCredentialsUser,
+  hashDeviceToken,
+  normalizeDeviceToken,
+  validateApprovedDeviceChallenge,
+} from "@/lib/auth-device-session";
 import { prisma } from "@/lib/prisma";
-import { normalizeAuthEmail, verifyUserPassword } from "@/lib/password-setup";
+import { normalizeAuthEmail } from "@/lib/password-setup";
 import { shouldForceReauthenticateSession } from "@/lib/session-security";
 
 process.env.AUTH_TRUST_HOST = process.env.AUTH_TRUST_HOST?.trim() || "true";
@@ -11,6 +19,7 @@ process.env.AUTH_TRUST_HOST = process.env.AUTH_TRUST_HOST?.trim() || "true";
 const DEFAULT_ADMIN_EMAIL = "romeokany187@gmail.com";
 const SESSION_MAX_AGE_SECONDS = 8 * 60 * 60;
 const SESSION_UPDATE_AGE_SECONDS = 30 * 60;
+const authSessionStateClient = (prisma as unknown as { authSessionState: any }).authSessionState;
 
 const adminEmails = new Set(
   `${process.env.ADMIN_EMAILS ?? ""},${process.env.ADMIN_EMAIL ?? ""},${DEFAULT_ADMIN_EMAIL}`
@@ -35,6 +44,8 @@ export const authOptions: NextAuthOptions = {
       credentials: {
         email: { label: "Email", type: "email" },
         password: { label: "Mot de passe", type: "password" },
+        deviceToken: { label: "Appareil", type: "text" },
+        challengeId: { label: "Challenge", type: "text" },
       },
       async authorize(credentials) {
         if (!isPasswordAuthActive()) {
@@ -43,33 +54,44 @@ export const authOptions: NextAuthOptions = {
 
         const email = normalizeAuthEmail(credentials?.email);
         const password = credentials?.password?.trim() ?? "";
+        const deviceToken = normalizeDeviceToken(credentials?.deviceToken);
+        const challengeId = credentials?.challengeId?.trim() ?? "";
 
-        if (!email || !password) {
+        if (!email || !password || deviceToken.length < 16) {
           return null;
         }
 
-        const user = await prisma.user.findUnique({
-          where: { email },
-          select: {
-            id: true,
-            name: true,
-            email: true,
-            passwordHash: true,
-            role: true,
-            jobTitle: true,
-            canImportTicketWorkbook: true,
-            team: { select: { name: true } },
-          },
-        });
+        await ensureAuthSessionSecurityStorage();
 
+        const user = await findCredentialsUser(email, password);
         if (!user) {
           return null;
         }
 
-        const isValid = await verifyUserPassword(password, user.passwordHash);
-        if (!isValid) {
-          return null;
+        const currentSessionState = await authSessionStateClient.findUnique({ where: { userId: user.id } });
+        const currentDeviceTokenHash = hashDeviceToken(deviceToken);
+        const requiresApprovedChallenge = Boolean(
+          currentSessionState?.activeSessionKey
+          && currentSessionState.activeDeviceTokenHash !== currentDeviceTokenHash,
+        );
+
+        if (requiresApprovedChallenge) {
+          const approved = await validateApprovedDeviceChallenge({
+            userId: user.id,
+            challengeId,
+            deviceToken,
+          });
+
+          if (!approved) {
+            return null;
+          }
         }
+
+        const sessionKey = await activateSingleUserSession({
+          userId: user.id,
+          deviceToken,
+          challengeId,
+        });
 
         return {
           id: user.id,
@@ -79,6 +101,7 @@ export const authOptions: NextAuthOptions = {
           jobTitle: user.jobTitle,
           teamName: user.team?.name ?? null,
           canImportTicketWorkbook: user.canImportTicketWorkbook,
+          sessionKey,
         };
       },
     }),
@@ -169,6 +192,7 @@ export const authOptions: NextAuthOptions = {
         jobTitle?: string;
         teamName?: string | null;
         canImportTicketWorkbook?: boolean;
+        sessionKey?: string;
       }) | undefined;
 
       if (authUser?.id) {
@@ -185,6 +209,9 @@ export const authOptions: NextAuthOptions = {
       }
       if (typeof authUser?.canImportTicketWorkbook !== "undefined") {
         token.canImportTicketWorkbook = Boolean(authUser.canImportTicketWorkbook);
+      }
+      if (typeof authUser?.sessionKey === "string") {
+        token.sessionKey = authUser.sessionKey;
       }
       if (authUser?.id) {
         token.sessionRevoked = false;
@@ -210,12 +237,22 @@ export const authOptions: NextAuthOptions = {
           });
 
           if (dbUser) {
+            const activeSessionState = await authSessionStateClient.findUnique({
+              where: { userId: dbUser.id },
+              select: { activeSessionKey: true },
+            });
+
             token.sub = dbUser.id;
             token.name = dbUser.name;
             token.role = dbUser.role;
             token.jobTitle = dbUser.jobTitle;
             token.teamName = dbUser.team?.name ?? null;
             token.canImportTicketWorkbook = dbUser.canImportTicketWorkbook;
+
+            if (token.sessionKey && activeSessionState?.activeSessionKey && token.sessionKey !== activeSessionState.activeSessionKey) {
+              token.sessionRevoked = true;
+            }
+
             if (isPasswordAuthActive() && !dbUser.passwordHash?.trim()) {
               token.sessionRevoked = true;
             }
@@ -254,6 +291,7 @@ export const authOptions: NextAuthOptions = {
         session.user.email = token.email ?? session.user.email;
         session.user.sessionRevoked = false;
       }
+
       return session;
     },
   },

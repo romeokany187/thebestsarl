@@ -199,8 +199,36 @@ model User {
   archiveUploads          ArchiveDocument[]       @relation("ArchiveUploader")
   accountingEntries       AccountingEntry[]       @relation("AccountingEntryCreator")
   passwordSetupCodes      PasswordSetupCode[]
+  authSessionState        AuthSessionState?
+  authDeviceChallenges    AuthDeviceChallenge[]
   createdAt               DateTime                @default(now())
   updatedAt               DateTime                @updatedAt
+}
+
+model AuthSessionState {
+  userId              String   @id
+  user                User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  activeSessionKey    String
+  activeDeviceTokenHash String
+  lastAuthenticatedAt DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+}
+
+model AuthDeviceChallenge {
+  id              String   @id
+  userId          String
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  email           String
+  deviceTokenHash String
+  codeHash        String
+  expiresAt       DateTime
+  approvedAt      DateTime?
+  consumedAt      DateTime?
+  createdAt       DateTime @default(now())
+
+  @@index([userId, createdAt])
+  @@index([email, createdAt])
+  @@index([expiresAt])
 }
 
 model PasswordSetupCode {
