@@ -92,9 +92,9 @@ export default async function SalesPage({
   const currentJobTitle = session.user.jobTitle ?? "AGENT_TERRAIN";
   const roleTicketFilter = {};
   const canCreateTicket = canSellTickets(currentJobTitle);
-  const canManageTickets = canManageTicketRecord(role);
+  const canManageTickets = canManageTicketRecord(role, session.user.canImportTicketWorkbook);
   const canImportTickets = canImportTicketWorkbook(role, session.user.canImportTicketWorkbook, currentJobTitle);
-  const canReplaceImportedPeriod = role === "ADMIN";
+  const canReplaceImportedPeriod = canImportTicketWorkbook(role, session.user.canImportTicketWorkbook, currentJobTitle);
   const accessNote = canManageTickets
     ? "Vente: tous les profils autorisés peuvent encoder les billets; l'admin peut en plus importer Excel, modifier et supprimer les billets déjà enregistrés."
     : "Vente: vous pouvez encoder les billets normalement. L'import Excel, la modification et la suppression restent réservés à l'administrateur.";

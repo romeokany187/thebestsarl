@@ -74,7 +74,7 @@ export async function PATCH(request: NextRequest, { params }: Params) {
     return access.error;
   }
 
-  if (!canManageTicketRecord(access.role)) {
+  if (!canManageTicketRecord(access.role, access.session.user.canImportTicketWorkbook)) {
     return NextResponse.json(
       { error: "Seul l'administrateur peut modifier un billet déjà enregistré." },
       { status: 403 },
@@ -419,7 +419,7 @@ export async function DELETE(_request: NextRequest, { params }: Params) {
     return access.error;
   }
 
-  if (!canManageTicketRecord(access.role)) {
+  if (!canManageTicketRecord(access.role, access.session.user.canImportTicketWorkbook)) {
     return NextResponse.json(
       { error: "Seul l'administrateur peut supprimer un billet déjà enregistré." },
       { status: 403 },

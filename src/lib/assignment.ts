@@ -68,12 +68,16 @@ export function canSellTickets(_jobTitle: string) {
   return true;
 }
 
-export function canManageTicketRecord(role: string) {
-  return role === "ADMIN";
+function hasSalesAdminPrivileges(role: string, explicitPermission?: boolean | null) {
+  return role === "ADMIN" || Boolean(explicitPermission);
 }
 
-export function canImportTicketWorkbook(role: string, _explicitPermission?: boolean | null, _jobTitle?: string | null) {
-  return role === "ADMIN";
+export function canManageTicketRecord(role: string, explicitPermission?: boolean | null) {
+  return hasSalesAdminPrivileges(role, explicitPermission);
+}
+
+export function canImportTicketWorkbook(role: string, explicitPermission?: boolean | null, _jobTitle?: string | null) {
+  return hasSalesAdminPrivileges(role, explicitPermission);
 }
 
 export function canProcessPayments(jobTitle: string) {

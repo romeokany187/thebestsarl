@@ -10,7 +10,7 @@ import { ensureAirlineCatalog } from "@/lib/airline-catalog";
 import { Prisma } from "@prisma/client";
 import { invoiceNumberFromChronology } from "@/lib/invoice";
 import { getTicketDepositDebitAmount } from "@/lib/ticket-pricing";
-import { canSellTickets } from "@/lib/assignment";
+import { canManageTicketRecord, canSellTickets } from "@/lib/assignment";
 import { writeActivityLog } from "@/lib/activity-log";
 import { ensureTicketNumberDuplicatesAllowed } from "@/lib/ticket-number-duplicates";
 
@@ -95,6 +95,8 @@ export async function POST(request: NextRequest) {
     return access.error;
   }
 
+  const hasSalesAdminAccess = canManageTicketRecord(access.role, access.session.user.canImportTicketWorkbook);
+
   if (!canSellTickets(access.session.user.jobTitle ?? "")) {
     return NextResponse.json(
       { error: "Le billetage est en lecture seule pour ce profil. Seul le caissier peut enregistrer un billet." },
@@ -148,10 +150,10 @@ export async function POST(request: NextRequest) {
     const isAfterDepositMode = rule?.commissionMode === CommissionMode.AFTER_DEPOSIT;
     const todayRaw = new Date().toISOString().slice(0, 10);
     const todayDate = new Date(`${todayRaw}T00:00:00.000Z`);
-    const enforcedTravelDate = access.role === "ADMIN"
+    const enforcedTravelDate = hasSalesAdminAccess
       ? normalizeTicketDate(parsed.data.travelDate)
       : todayDate;
-    const enforcedSoldAt = access.role === "ADMIN"
+    const enforcedSoldAt = hasSalesAdminAccess
       ? normalizeTicketDate(parsed.data.soldAt ?? parsed.data.travelDate)
       : todayDate;
     const consumedBeforeForAfterDeposit = isAfterDepositMode
