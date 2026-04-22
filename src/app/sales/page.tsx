@@ -92,7 +92,7 @@ export default async function SalesPage({
   const currentJobTitle = session.user.jobTitle ?? "AGENT_TERRAIN";
   const roleTicketFilter = {};
   const canCreateTicket = canSellTickets(currentJobTitle);
-  const canManageTickets = canManageTicketRecord(role, session.user.canImportTicketWorkbook);
+  const canManageTickets = canManageTicketRecord(role, currentJobTitle);
   const canImportTickets = canImportTicketWorkbook(role, session.user.canImportTicketWorkbook, currentJobTitle);
   const canReplaceImportedPeriod = canImportTicketWorkbook(role, session.user.canImportTicketWorkbook, currentJobTitle);
   const accessNote = canManageTickets

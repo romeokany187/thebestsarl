@@ -6,7 +6,7 @@ import { requireApiModuleAccess } from "@/lib/rbac";
 import { isMailConfigured, sendMailBatch } from "@/lib/mail";
 import { writeActivityLog } from "@/lib/activity-log";
 
-const CASHIER_ASSIGNMENT_JOB_TITLES = new Set(["CAISSE_2_SIEGE", "CAISSE_AGENCE"]);
+const SELF_HEAL_ASSIGNMENT_JOB_TITLES = new Set(["STAGIAIRE", "CAISSE_2_SIEGE", "CAISSE_AGENCE"]);
 
 function isMySqlFamilyDatabase() {
   const databaseUrl = process.env.DATABASE_URL?.trim().toLowerCase() ?? "";
@@ -24,6 +24,7 @@ async function ensureAssignableCashJobTitles() {
       ALTER TABLE \`User\`
       MODIFY COLUMN \`jobTitle\` ENUM(
         'COMMERCIAL',
+        'STAGIAIRE',
         'COMPTABLE',
         'AUDITEUR',
         'CAISSIER',
@@ -42,6 +43,15 @@ async function ensureAssignableCashJobTitles() {
   await prisma.$executeRawUnsafe(`
     DO $$
     BEGIN
+      IF NOT EXISTS (
+        SELECT 1
+        FROM pg_enum e
+        JOIN pg_type t ON e.enumtypid = t.oid
+        WHERE t.typname = 'JobTitle' AND e.enumlabel = 'STAGIAIRE'
+      ) THEN
+        ALTER TYPE "JobTitle" ADD VALUE 'STAGIAIRE';
+      END IF;
+
       IF NOT EXISTS (
         SELECT 1
         FROM pg_enum e
@@ -337,7 +347,7 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
       updated = await applyAssignmentUpdate();
     } catch (error) {
       const requestedJobTitle = parsed.data.jobTitle;
-      if (requestedJobTitle && CASHIER_ASSIGNMENT_JOB_TITLES.has(requestedJobTitle) && isJobTitleSchemaIssue(error)) {
+      if (requestedJobTitle && SELF_HEAL_ASSIGNMENT_JOB_TITLES.has(requestedJobTitle) && isJobTitleSchemaIssue(error)) {
         await ensureAssignableCashJobTitles();
         updated = await applyAssignmentUpdate();
       } else {

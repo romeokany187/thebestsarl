@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 
 type JobTitle =
   | "COMMERCIAL"
+  | "STAGIAIRE"
   | "COMPTABLE"
   | "AUDITEUR"
   | "CAISSIER"
@@ -37,6 +38,7 @@ const roleOptions: Array<{ value: UserRole; label: string }> = [
 
 const jobOptions: Array<{ value: JobTitle; label: string }> = [
   { value: "COMMERCIAL", label: "Commercial" },
+  { value: "STAGIAIRE", label: "Stagiaire" },
   { value: "COMPTABLE", label: "Comptable" },
   { value: "AUDITEUR", label: "Auditeur" },
   { value: "CAISSIER", label: "Caisse 1 Siège" },

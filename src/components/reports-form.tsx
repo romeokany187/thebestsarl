@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 
 type JobTitle =
   | "COMMERCIAL"
+  | "STAGIAIRE"
   | "COMPTABLE"
   | "AUDITEUR"
   | "CAISSIER"
@@ -35,6 +36,15 @@ const rubricByJobTitle: Record<JobTitle, JobTemplate> = {
       { title: "Actions de vente executees", prompt: "Billets emis, relances, devis et negociations realisees." },
       { title: "Freins commerciaux", prompt: "Annulations, objections client, impayes ou dossiers bloques." },
       { title: "Plan de progression", prompt: "Actions prevues pour augmenter les ventes sur la prochaine periode." },
+    ],
+  },
+  STAGIAIRE: {
+    intro: "Rapport stagiaire axe sur l'encodage, le suivi des ventes et les points d'apprentissage.",
+    sections: [
+      { title: "Activites de vente", prompt: "Billets encodes, clients traites, suivi des dossiers." },
+      { title: "Actions executees", prompt: "Taches realisees dans le module ventes et resultats obtenus." },
+      { title: "Difficultes rencontrees", prompt: "Blocages constates, besoins d'appui, points a clarifier." },
+      { title: "Plan de progression", prompt: "Actions prevues pour ameliorer la qualite et le rythme de traitement." },
     ],
   },
   COMPTABLE: {
@@ -131,6 +141,7 @@ const rubricByJobTitle: Record<JobTitle, JobTemplate> = {
 
 const titleByJobTitle: Record<JobTitle, string> = {
   COMMERCIAL: "Rapport de vente commerciale",
+  STAGIAIRE: "Rapport d'activite stagiaire",
   COMPTABLE: "Rapport financier comptable",
   AUDITEUR: "Rapport d'audit de conformite",
   CAISSIER: "Rapport de caisse - Caisse 1 Siège",

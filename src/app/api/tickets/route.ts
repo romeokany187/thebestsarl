@@ -95,7 +95,7 @@ export async function POST(request: NextRequest) {
     return access.error;
   }
 
-  const hasSalesAdminAccess = canManageTicketRecord(access.role, access.session.user.canImportTicketWorkbook);
+  const hasSalesAdminAccess = canManageTicketRecord(access.role, access.session.user.jobTitle);
 
   if (!canSellTickets(access.session.user.jobTitle ?? "")) {
     return NextResponse.json(

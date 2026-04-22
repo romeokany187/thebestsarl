@@ -1,5 +1,6 @@
 export type JobTitleValue =
   | "COMMERCIAL"
+  | "STAGIAIRE"
   | "COMPTABLE"
   | "AUDITEUR"
   | "CAISSIER"
@@ -21,6 +22,7 @@ export function isCashierJobTitle(jobTitle: string | null | undefined) {
 export function jobTitleLabel(jobTitle: string) {
   const labels: Record<string, string> = {
     COMMERCIAL: "Commercial",
+    STAGIAIRE: "Stagiaire",
     COMPTABLE: "Comptable",
     AUDITEUR: "Auditeur",
     CAISSIER: "Caisse 1 Siège",
@@ -39,6 +41,10 @@ export function jobTitleLabel(jobTitle: string) {
 export function assignmentCapabilities(jobTitle: string) {
   if (jobTitle === "COMMERCIAL") {
     return ["Encodage billets", "Suivi ventes", "Mise à jour de ses billets"];
+  }
+
+  if (jobTitle === "STAGIAIRE") {
+    return ["Encodage billets", "Suivi ventes", "Import Excel billets", "Modification et suppression des billets"];
   }
 
   if (isCashierJobTitle(jobTitle) || jobTitle === "COMPTABLE") {
@@ -68,16 +74,17 @@ export function canSellTickets(_jobTitle: string) {
   return true;
 }
 
-function hasSalesAdminPrivileges(role: string, explicitPermission?: boolean | null) {
-  return role === "ADMIN" || Boolean(explicitPermission);
+function hasSalesAdminPrivileges(role: string, jobTitle?: string | null) {
+  const normalizedJobTitle = (jobTitle ?? "").trim().toUpperCase();
+  return role === "ADMIN" || normalizedJobTitle === "STAGIAIRE";
 }
 
-export function canManageTicketRecord(role: string, explicitPermission?: boolean | null) {
-  return hasSalesAdminPrivileges(role, explicitPermission);
+export function canManageTicketRecord(role: string, jobTitle?: string | null) {
+  return hasSalesAdminPrivileges(role, jobTitle);
 }
 
-export function canImportTicketWorkbook(role: string, explicitPermission?: boolean | null, _jobTitle?: string | null) {
-  return hasSalesAdminPrivileges(role, explicitPermission);
+export function canImportTicketWorkbook(role: string, _explicitPermission?: boolean | null, jobTitle?: string | null) {
+  return hasSalesAdminPrivileges(role, jobTitle);
 }
 
 export function canProcessPayments(jobTitle: string) {

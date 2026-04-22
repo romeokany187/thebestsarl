@@ -19,6 +19,7 @@ enum Role {
 
 enum JobTitle {
   COMMERCIAL
+  STAGIAIRE
   COMPTABLE
   AUDITEUR
   CAISSIER
