@@ -6,6 +6,7 @@ import { cashOperationCreateSchema } from "@/lib/validators";
 import { isMailConfigured, sendMailBatch } from "@/lib/mail";
 import { inferCashDeskFromDescription } from "@/lib/payments-desk";
 import { writeActivityLog } from "@/lib/activity-log";
+import { canReviewCashOperationApprovals, createBlockedCashOutflowApprovalRequest } from "@/lib/cash-operation-approvals";
 
 const cashOperationClient = (prisma as unknown as { cashOperation: any }).cashOperation;
 const DEFAULT_SINGLE_OUTFLOW_ALERT_LIMIT_USD = 1000;
@@ -40,119 +41,7 @@ function canWriteCashOperations(role: string, jobTitle: string | null | undefine
 }
 
 function canManageCashOperations(role: string, jobTitle: string | null | undefined) {
-  return role === "ADMIN";
-}
-
-async function notifyAccountantsAboutBlockedCashOutflow(params: {
-  actorId: string;
-  actorName: string;
-  actorEmail?: string | null;
-  occurredAt: Date;
-  amount: number;
-  currency: string;
-  amountUsd: number;
-  fxRateUsdToCdf: number;
-  category: string;
-  method: string;
-  reference: string;
-  description?: string | null;
-  projectedDailyOutflowUsd: number;
-  dailyOutflowCap: number;
-  cashDesk: string;
-}) {
-  const accountants = await prisma.user.findMany({
-    where: {
-      id: { not: params.actorId },
-      OR: [{ role: "ACCOUNTANT" }, { jobTitle: "COMPTABLE" }],
-    },
-    select: { id: true, name: true, email: true },
-    take: 200,
-  });
-
-  if (accountants.length === 0) {
-    return;
-  }
-
-  const alertMessage = `Décaissement bloqué sur ${params.cashDesk}: tentative de ${params.amount.toFixed(2)} ${params.currency} (${params.amountUsd.toFixed(2)} USD) le ${params.occurredAt.toLocaleString("fr-FR")}. Cumul journalier projeté ${params.projectedDailyOutflowUsd.toFixed(2)} USD pour un plafond de ${params.dailyOutflowCap.toFixed(2)} USD.`;
-
-  await prisma.userNotification.createMany({
-    data: accountants.map((user) => ({
-      userId: user.id,
-      title: "Alerte plafond de décaissement bloqué",
-      message: alertMessage,
-      type: "CASH_OPERATION_THRESHOLD_ALERT",
-      metadata: {
-        blocked: true,
-        amount: params.amount,
-        currency: params.currency,
-        amountUsd: params.amountUsd,
-        fxRateUsdToCdf: params.fxRateUsdToCdf,
-        category: params.category,
-        method: params.method,
-        reference: params.reference,
-        description: params.description,
-        occurredAt: params.occurredAt,
-        projectedDailyOutflowUsd: params.projectedDailyOutflowUsd,
-        dailyCap: params.dailyOutflowCap,
-        actorId: params.actorId,
-        actorName: params.actorName,
-        cashDesk: params.cashDesk,
-        source: "CASH_LEDGER_POLICY",
-      },
-    })),
-  });
-
-  if (isMailConfigured()) {
-    try {
-      const appUrl = process.env.NEXTAUTH_URL?.trim() || "";
-      const paymentsUrl = appUrl ? `${appUrl}/payments` : "/payments";
-
-      await sendMailBatch({
-        recipients: accountants.map((user) => ({ email: user.email, name: user.name })),
-        subject: `Alerte comptable - Décaissement bloqué ${params.cashDesk}`,
-        text: [
-          "THEBEST SARL - Alerte plafond de décaissement",
-          "",
-          `Caisse: ${params.cashDesk}`,
-          `Date opération: ${params.occurredAt.toLocaleString("fr-FR")}`,
-          `Montant demandé: ${params.amount.toFixed(2)} ${params.currency}`,
-          `Équivalent USD: ${params.amountUsd.toFixed(2)} USD`,
-          `Taux du jour: 1 USD = ${params.fxRateUsdToCdf.toFixed(2)} CDF`,
-          `Catégorie: ${params.category}`,
-          `Méthode: ${params.method}`,
-          `Référence: ${params.reference}`,
-          `Libellé: ${params.description ?? "-"}`,
-          `Cumul journalier projeté: ${params.projectedDailyOutflowUsd.toFixed(2)} USD`,
-          `Plafond autorisé: ${params.dailyOutflowCap.toFixed(2)} USD`,
-          `Saisi par: ${params.actorName}`,
-          "",
-          `Consulter: ${paymentsUrl}`,
-        ].join("\n"),
-        html: `
-          <p><strong>THEBEST SARL - Alerte plafond de décaissement</strong></p>
-          <p><strong>Caisse:</strong> ${params.cashDesk}<br/>
-          <strong>Date opération:</strong> ${params.occurredAt.toLocaleString("fr-FR")}<br/>
-          <strong>Montant demandé:</strong> ${params.amount.toFixed(2)} ${params.currency}<br/>
-          <strong>Équivalent USD:</strong> ${params.amountUsd.toFixed(2)} USD<br/>
-          <strong>Taux du jour:</strong> 1 USD = ${params.fxRateUsdToCdf.toFixed(2)} CDF<br/>
-          <strong>Catégorie:</strong> ${params.category}<br/>
-          <strong>Méthode:</strong> ${params.method}<br/>
-          <strong>Référence:</strong> ${params.reference}<br/>
-          <strong>Libellé:</strong> ${params.description ?? "-"}<br/>
-          <strong>Cumul journalier projeté:</strong> ${params.projectedDailyOutflowUsd.toFixed(2)} USD<br/>
-          <strong>Plafond autorisé:</strong> ${params.dailyOutflowCap.toFixed(2)} USD<br/>
-          <strong>Saisi par:</strong> ${params.actorName}</p>
-          <p><a href="${paymentsUrl}">Ouvrir le module paiements</a></p>
-        `,
-        replyTo: params.actorEmail ?? undefined,
-      });
-    } catch (mailError) {
-      console.error("[cash-operations.blocked-outflow] Echec envoi email comptable", {
-        reference: params.reference,
-        error: mailError instanceof Error ? mailError.message : "Erreur inconnue",
-      });
-    }
-  }
+  return canReviewCashOperationApprovals(role, jobTitle);
 }
 
 export async function POST(request: NextRequest) {
@@ -420,13 +309,15 @@ export async function POST(request: NextRequest) {
     }
     if (error instanceof Error && error.message.startsWith("DAILY_CAP_EXCEEDED:")) {
       const [, projected, cap] = error.message.split(":");
-      await notifyAccountantsAboutBlockedCashOutflow({
+      const approvalRequest = await createBlockedCashOutflowApprovalRequest({
         actorId: access.session.user.id,
         actorName: access.session.user.name ?? "Agent financier",
         actorEmail: access.session.user.email ?? undefined,
         occurredAt,
+        direction: "OUTFLOW",
         amount: data.amount,
         currency,
+        amountCdf: normalizedAmountCdf,
         amountUsd: normalizedAmountUsd,
         fxRateUsdToCdf,
         category: data.category,
@@ -439,9 +330,11 @@ export async function POST(request: NextRequest) {
       });
       return NextResponse.json(
         {
-          error: `Plafond journalier dépassé: cumul ${projected} USD pour un plafond autorisé de ${cap} USD. Alertez le comptable avant tout nouveau décaissement.`,
+          approvalRequired: true,
+          approvalRequestId: approvalRequest.id,
+          message: `Plafond journalier dépassé: la demande ${approvalRequest.id} a été transmise au comptable. Si elle est approuvée, l'opération sera exécutée automatiquement; si elle est rejetée, elle restera bloquée.`,
         },
-        { status: 400 },
+        { status: 202 },
       );
     }
     if (error instanceof Error && error.message.startsWith("INSUFFICIENT_CURRENCY:")) {

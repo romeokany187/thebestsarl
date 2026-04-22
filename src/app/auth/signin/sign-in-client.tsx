@@ -512,14 +512,14 @@ export default function SignInClientPage({ initialMode, passwordAuthActive, laun
   }
 
   return (
-    <main className="h-screen overflow-hidden bg-background text-foreground dark:bg-[#0d111a] dark:text-white">
-      <section className="relative h-screen overflow-hidden bg-background dark:bg-[#0d111a]">
+    <main className="min-h-dvh overflow-x-hidden overflow-y-auto bg-background text-foreground dark:bg-[#0d111a] dark:text-white">
+      <section className="relative min-h-dvh overflow-x-hidden bg-background dark:bg-[#0d111a]">
         <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(245,247,251,0.96),rgba(237,241,247,0.98))] dark:bg-[linear-gradient(180deg,rgba(13,17,26,0.94),rgba(13,17,26,0.99))]" />
         <div className="absolute -left-24 top-[-6%] h-168 w-168 rounded-full border border-black/10 dark:border-white/10" />
         <div className="absolute -left-10 top-[12%] h-152 w-152 rounded-full border border-black/8 dark:border-white/8" />
         <div className="absolute left-[16%] top-[-10%] h-224 w-224 rounded-full border border-black/6 dark:border-white/7" />
 
-        <div className="relative mx-auto flex h-screen w-full max-w-[1600px] items-center px-5 py-6 text-foreground dark:text-white sm:px-8 lg:px-10 xl:px-16">
+        <div className="relative mx-auto flex min-h-dvh w-full max-w-[1600px] items-start px-5 py-6 text-foreground dark:text-white sm:px-8 lg:items-center lg:px-10 xl:px-16">
           <div className="grid w-full items-center gap-8 lg:grid-cols-[minmax(0,1.15fr)_minmax(340px,430px)] lg:gap-10 xl:gap-14">
             <div className="min-w-0 self-center">
               <Link

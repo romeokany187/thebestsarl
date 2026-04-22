@@ -195,6 +195,8 @@ model User {
   paymentOrdersApproved   PaymentOrder[]          @relation("PaymentOrderApprover")
   paymentOrdersExecuted   PaymentOrder[]          @relation("PaymentOrderExecutor")
   cashOperations          CashOperation[]         @relation("CashOperationCreator")
+  cashOperationApprovalRequests CashOperationApprovalRequest[] @relation("CashOperationApprovalRequester")
+  cashOperationApprovalReviews  CashOperationApprovalRequest[] @relation("CashOperationApprovalReviewer")
   airlineDepositMovements AirlineDepositMovement[] @relation("AirlineDepositMovementCreator")
   stockMovements          StockMovement[]         @relation("StockMovementActor")
   archiveUploads          ArchiveDocument[]       @relation("ArchiveUploader")
@@ -457,6 +459,41 @@ model CashOperation {
   @@index([category])
   @@index([createdById])
   @@index([cashDesk])
+}
+
+model CashOperationApprovalRequest {
+  id                       String                @id @default(cuid())
+  status                   String                @default("PENDING")
+  requestedById            String
+  requestedBy              User                  @relation("CashOperationApprovalRequester", fields: [requestedById], references: [id])
+  reviewedById             String?
+  reviewedBy               User?                 @relation("CashOperationApprovalReviewer", fields: [reviewedById], references: [id])
+  occurredAt               DateTime
+  direction                CashDirection
+  category                 CashOperationCategory
+  amount                   Float
+  currency                 String                @default("USD")
+  fxRateUsdToCdf           Float
+  amountUsd                Float
+  amountCdf                Float
+  method                   String
+  reference                String?
+  description              String
+  cashDesk                 String
+  projectedDailyOutflowUsd Float
+  dailyOutflowCapUsd       Float
+  reason                   String?
+  approvedAt               DateTime?
+  rejectedAt               DateTime?
+  executedAt               DateTime?
+  executedCashOperationId  String?               @unique
+  createdAt                DateTime              @default(now())
+  updatedAt                DateTime              @updatedAt
+
+  @@index([status, createdAt])
+  @@index([requestedById])
+  @@index([reviewedById])
+  @@index([cashDesk, createdAt])
 }
 
 model AirlineDepositMovement {

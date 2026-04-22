@@ -195,21 +195,20 @@ export async function AppShell({
   accessNote?: string;
 }) {
   const session = await getServerSession(authOptions);
-  const [unreadNotifications, latestNotification] = session?.user?.id
-    ? await Promise.all([
-        prisma.userNotification.count({
-          where: {
-            userId: session.user.id,
-            isRead: false,
-          },
-        }),
-        prisma.userNotification.findFirst({
-          where: { userId: session.user.id },
-          select: { id: true },
-          orderBy: { createdAt: "desc" },
-        }),
-      ])
-    : [0, null];
+  let unreadNotifications = 0;
+
+  if (session?.user?.id) {
+    try {
+      unreadNotifications = await prisma.userNotification.count({
+        where: {
+          userId: session.user.id,
+          isRead: false,
+        },
+      });
+    } catch (error) {
+      console.error("[app-shell] notification count error", error);
+    }
+  }
   const visibleLinks = links.filter((link) => {
     if (!role || !link.roles.includes(role)) {
       return false;

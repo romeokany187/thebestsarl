@@ -1,7 +1,11 @@
-// Seul l'admin peut modifier ou supprimer une opération proxy banking
+// L'administrateur et le comptable peuvent modifier ou supprimer une opération proxy banking
 export async function PATCH(request: NextRequest) {
-  const access = await requireApiModuleAccess("payments", ["ADMIN"]);
+  const access = await requireApiModuleAccess("payments", ["ADMIN", "DIRECTEUR_GENERAL", "MANAGER", "ACCOUNTANT", "EMPLOYEE"]);
   if (access.error) return access.error;
+
+  if (!canReviewCashOperationApprovals(access.role, access.session.user.jobTitle)) {
+    return NextResponse.json({ error: "Seuls l'administrateur et le comptable peuvent modifier une opération proxy banking." }, { status: 403 });
+  }
 
   const body = await request.json();
   const cashOperationId = typeof body?.cashOperationId === "string" ? body.cashOperationId.trim() : "";
@@ -349,8 +353,12 @@ export async function PATCH(request: NextRequest) {
 }
 
 export async function DELETE(request: NextRequest) {
-  const access = await requireApiModuleAccess("payments", ["ADMIN"]);
+  const access = await requireApiModuleAccess("payments", ["ADMIN", "DIRECTEUR_GENERAL", "MANAGER", "ACCOUNTANT", "EMPLOYEE"]);
   if (access.error) return access.error;
+
+  if (!canReviewCashOperationApprovals(access.role, access.session.user.jobTitle)) {
+    return NextResponse.json({ error: "Seuls l'administrateur et le comptable peuvent supprimer une opération proxy banking." }, { status: 403 });
+  }
 
   const cashOperationId = request.nextUrl.searchParams.get("cashOperationId")?.trim() ?? request.nextUrl.searchParams.get("id")?.trim() ?? "";
   if (!cashOperationId) {
@@ -378,6 +386,7 @@ export async function DELETE(request: NextRequest) {
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { isCashierJobTitle } from "@/lib/assignment";
+import { canReviewCashOperationApprovals } from "@/lib/cash-operation-approvals";
 import { prisma } from "@/lib/prisma";
 import { requireApiModuleAccess } from "@/lib/rbac";
 import { writeActivityLog } from "@/lib/activity-log";

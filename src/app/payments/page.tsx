@@ -1,6 +1,7 @@
 import { PaymentStatus } from "@prisma/client";
 import { AppShell } from "@/components/app-shell";
 import { CashBilletageWorkspace } from "@/components/cash-billetage-workspace";
+import { CashOperationApprovalActions } from "@/components/cash-operation-approval-actions";
 import { CashOperationForm } from "@/components/cash-operation-form";
 import { CashOperationRowActions } from "@/components/cash-operation-row-actions";
 import { KpiCard } from "@/components/kpi-card";
@@ -16,6 +17,7 @@ import { invoiceNumberFromChronology } from "@/lib/invoice";
 import { isCashierJobTitle } from "@/lib/assignment";
 import { requirePageModuleAccess } from "@/lib/rbac";
 import { prisma } from "@/lib/prisma";
+import { cashOperationApprovalRequestClient, canReviewCashOperationApprovals, ensureCashOperationApprovalRequestTable } from "@/lib/cash-operation-approvals";
 import { buildDeskScopedCashOperationWhere, isMainCashDesk, resolvePaymentsDeskState } from "@/lib/payments-desk";
 import { getTicketTotalAmount } from "@/lib/ticket-pricing";
 
@@ -53,6 +55,24 @@ type CashOperationRow = {
   amountUsd?: number | null;
   fxRateToUsd?: number | null;
   fxRateUsdToCdf?: number | null;
+  createdBy?: { name?: string | null; jobTitle?: string | null } | null;
+};
+
+type CashOperationApprovalRow = {
+  id: string;
+  status: string;
+  occurredAt: Date;
+  amount: number;
+  currency: string;
+  amountUsd: number;
+  method: string;
+  reference?: string | null;
+  description: string;
+  cashDesk: string;
+  projectedDailyOutflowUsd: number;
+  dailyOutflowCapUsd: number;
+  createdAt: Date;
+  requestedBy?: { name?: string | null; email?: string | null } | null;
 };
 
 type TicketSaleRow = {
@@ -444,6 +464,7 @@ export default async function PaymentsPage({
   const isAdmin = role === "ADMIN";
   const canWrite = isCashier || isAdmin || isComptable;
   const canManageLedger = isAdmin || isComptable;
+  const canReviewApprovals = canReviewCashOperationApprovals(role, session.user.jobTitle);
   const resolvedSearchParams = (await searchParams) ?? {};
   const deskState = resolvePaymentsDeskState({
     jobTitle: session.user.jobTitle,
@@ -458,6 +479,10 @@ export default async function PaymentsPage({
   const scopedCashOperationsWhere = buildDeskScopedCashOperationWhere(selectedDeskKey);
   const range = dateRangeFromParams(resolvedSearchParams);
   const cashRange = monthRangeFromValue(resolvedSearchParams.cashMonth);
+
+  if (canReviewApprovals) {
+    await ensureCashOperationApprovalRequestTable();
+  }
 
   const selectedAirlineId = resolvedSearchParams.airlineId && resolvedSearchParams.airlineId !== "ALL"
     ? resolvedSearchParams.airlineId
@@ -599,6 +624,29 @@ export default async function PaymentsPage({
       },
       take: 5000,
     }),
+    cashOperationClient.findMany({
+      where: {
+        ...scopedCashOperationsWhere,
+      },
+      include: {
+        createdBy: { select: { name: true, jobTitle: true } },
+      },
+      orderBy: { occurredAt: "desc" },
+      take: 20000,
+    }),
+    canReviewApprovals
+      ? cashOperationApprovalRequestClient.findMany({
+          where: {
+            status: "PENDING",
+            cashDesk: selectedDeskKey,
+          },
+          include: {
+            requestedBy: { select: { name: true, email: true } },
+          },
+          orderBy: { createdAt: "desc" },
+          take: 100,
+        })
+      : Promise.resolve([]),
     canWrite
       ? paymentOrderClient.findMany({
           where: { status: "APPROVED" },
@@ -641,6 +689,8 @@ export default async function PaymentsPage({
     cashOperations,
     ticketPaymentsBeforeStart,
     cashOperationsBeforeStart,
+    cashOperationsAllHistory,
+    pendingApprovalRequests,
     paymentOrdersReadyForExecution,
     needsReadyForExecutionRaw,
   ] = paymentsData as [
@@ -652,6 +702,8 @@ export default async function PaymentsPage({
     CashOperationRow[],
     Array<{ paidAt?: Date | string | null; amount: number; currency?: string | null; amountUsd?: number | null; amountCdf?: number | null; fxRateUsdToCdf?: number | null; method?: string | null }>,
     Array<{ occurredAt?: Date | string | null; category?: string | null; amount: number; direction: string; method?: string | null; currency?: string | null; amountUsd?: number | null; fxRateToUsd?: number | null; fxRateUsdToCdf?: number | null; description?: string | null }>,
+    CashOperationRow[],
+    CashOperationApprovalRow[],
     Array<{ id: string; code?: string | null; beneficiary: string; amount: number; currency?: string | null; approvedAt?: Date | null }>,
     Array<{ id: string; code?: string | null; title: string; estimatedAmount?: number | null; currency?: string | null; approvedAt?: Date | null; reviewComment?: string | null }>,
   ];
@@ -726,6 +778,8 @@ export default async function PaymentsPage({
   const generalCashOperationsBeforeStart = cashOperationsBeforeStart.filter((operation) => !isProxyBankingOperation(operation));
   const proxyCashOperations = cashOperations.filter((operation) => isProxyBankingOperation(operation));
   const proxyCashOperationsBeforeStart = cashOperationsBeforeStart.filter((operation) => isProxyBankingOperation(operation));
+  const generalCashOperationsAllHistory = cashOperationsAllHistory.filter((operation) => !isProxyBankingOperation(operation));
+  const proxyCashOperationsAllHistory = cashOperationsAllHistory.filter((operation) => isProxyBankingOperation(operation));
 
   const openingBuckets = computeOpeningBuckets(ticketPaymentsBeforeStart, generalCashOperationsBeforeStart);
   const displayOpeningBuckets = applyOpeningFallbackFromCurrentPeriod(openingBuckets, generalCashOperations);
@@ -1017,12 +1071,12 @@ export default async function PaymentsPage({
     },
   );
 
-  const proxyHistoryRows = proxyCashOperations
+  const mapProxyHistoryRows = (operations: CashOperationRow[]) => operations
     .slice()
     .sort((a, b) => new Date(b.occurredAt).getTime() - new Date(a.occurredAt).getTime())
     .map((operation) => {
       const parsedDescription = parseProxyHistoryDescription(operation.description);
-      const groupedOperations = proxyCashOperations.filter((candidate) => proxyHistoryGroupKey(candidate) === proxyHistoryGroupKey(operation));
+      const groupedOperations = operations.filter((candidate) => proxyHistoryGroupKey(candidate) === proxyHistoryGroupKey(operation));
       const sibling = groupedOperations.find((candidate) => candidate.id !== operation.id) ?? null;
 
       if (parsedDescription?.operationType === "OTHER") {
@@ -1114,9 +1168,170 @@ export default async function PaymentsPage({
       };
     });
 
+  const proxyHistoryRows = mapProxyHistoryRows(proxyCashOperations);
+  const proxyHistoryRowsAll = mapProxyHistoryRows(proxyCashOperationsAllHistory);
+
   const proxyEventCount = new Set(
     proxyCashOperationsWithoutOpeningBalance.map((operation) => `${operation.reference ?? "-"}:${proxyOperationLabel(operation.description)}`),
   ).size;
+
+  const approvalQueueSection = canReviewApprovals ? (
+    <section className="overflow-hidden rounded-2xl border border-amber-300 bg-amber-50 shadow-sm dark:border-amber-800 dark:bg-amber-950/20">
+      <div className="border-b border-amber-300 px-4 py-3 dark:border-amber-800">
+        <h2 className="text-sm font-semibold">Demandes d'approbation en attente</h2>
+        <p className="mt-1 text-xs text-black/65 dark:text-white/65">Quand le plafond journalier est dépassé, la sortie est mise ici en attente. Une approbation exécute automatiquement l'opération; un rejet la laisse bloquée.</p>
+      </div>
+      <div className="overflow-x-auto">
+        <table className="min-w-full text-sm">
+          <thead className="bg-black/5 dark:bg-white/10">
+            <tr>
+              <th className="px-4 py-3 text-left font-semibold">Demande</th>
+              <th className="px-4 py-3 text-left font-semibold">Date opération</th>
+              <th className="px-4 py-3 text-left font-semibold">Montant</th>
+              <th className="px-4 py-3 text-left font-semibold">Libellé</th>
+              <th className="px-4 py-3 text-left font-semibold">Demandeur</th>
+              <th className="px-4 py-3 text-left font-semibold">Projection</th>
+              <th className="px-4 py-3 text-left font-semibold">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {pendingApprovalRequests.map((request) => (
+              <tr key={request.id} className="border-t border-black/5 dark:border-white/10">
+                <td className="px-4 py-3 font-medium">{request.id}</td>
+                <td className="px-4 py-3">{new Date(request.occurredAt).toLocaleString("fr-FR")}</td>
+                <td className="px-4 py-3">{request.amount.toFixed(2)} {normalizeMoneyCurrency(request.currency)}<div className="text-xs text-black/50 dark:text-white/50">{request.amountUsd.toFixed(2)} USD</div></td>
+                <td className="px-4 py-3">{request.description}</td>
+                <td className="px-4 py-3">{request.requestedBy?.name ?? "-"}<div className="text-xs text-black/50 dark:text-white/50">{request.requestedBy?.email ?? ""}</div></td>
+                <td className="px-4 py-3">{request.projectedDailyOutflowUsd.toFixed(2)} / {request.dailyOutflowCapUsd.toFixed(2)} USD</td>
+                <td className="px-4 py-3"><CashOperationApprovalActions approvalRequestId={request.id} /></td>
+              </tr>
+            ))}
+            {pendingApprovalRequests.length === 0 ? (
+              <tr>
+                <td colSpan={7} className="px-4 py-8 text-center text-sm text-black/55 dark:text-white/55">Aucune demande en attente pour cette caisse.</td>
+              </tr>
+            ) : null}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  ) : null;
+
+  const fullHistorySection = (
+    <section className="overflow-hidden rounded-2xl border border-black/10 bg-white shadow-sm dark:border-white/10 dark:bg-zinc-900">
+      <div className="border-b border-black/10 px-4 py-3 dark:border-white/10">
+        <h2 className="text-sm font-semibold">Historique complet modifiable</h2>
+        <p className="mt-1 text-xs text-black/60 dark:text-white/60">Cette vue charge au-delà du mois sélectionné pour permettre au comptable de corriger ou supprimer des écritures plus anciennes.</p>
+      </div>
+      <div className="overflow-x-auto">
+        <table className="min-w-full text-sm">
+          <thead className="bg-black/5 dark:bg-white/10">
+            <tr>
+              <th className="px-4 py-3 text-left font-semibold">Date</th>
+              <th className="px-4 py-3 text-left font-semibold">Sens</th>
+              <th className="px-4 py-3 text-left font-semibold">Catégorie</th>
+              <th className="px-4 py-3 text-left font-semibold">Libellé</th>
+              <th className="px-4 py-3 text-left font-semibold">Montant</th>
+              <th className="px-4 py-3 text-left font-semibold">Méthode</th>
+              <th className="px-4 py-3 text-left font-semibold">Référence</th>
+              <th className="px-4 py-3 text-left font-semibold">Saisi par</th>
+              {canManageLedger ? <th className="px-4 py-3 text-left font-semibold">Actions</th> : null}
+            </tr>
+          </thead>
+          <tbody>
+            {generalCashOperationsAllHistory.map((operation) => (
+              <tr key={operation.id} className="border-t border-black/5 dark:border-white/10">
+                <td className="px-4 py-3">{new Date(operation.occurredAt).toLocaleString("fr-FR")}</td>
+                <td className="px-4 py-3">{operation.direction === "INFLOW" ? "Entrée" : "Sortie"}</td>
+                <td className="px-4 py-3">{operation.category ?? "-"}</td>
+                <td className="px-4 py-3">{operation.description}</td>
+                <td className="px-4 py-3">{operation.amount.toFixed(2)} {normalizeMoneyCurrency(operation.currency)}</td>
+                <td className="px-4 py-3">{operation.method ?? "-"}</td>
+                <td className="px-4 py-3">{operation.reference ?? "-"}</td>
+                <td className="px-4 py-3">{operation.createdBy?.name ?? "-"}</td>
+                {canManageLedger ? (
+                  <td className="px-4 py-3">
+                    <CashOperationRowActions
+                      cashOperationId={operation.id}
+                      amount={operation.amount}
+                      currency={normalizeMoneyCurrency(operation.currency)}
+                      method={operation.method ?? "CASH"}
+                      reference={operation.reference ?? null}
+                      description={operation.description}
+                      occurredAt={new Date(operation.occurredAt).toISOString()}
+                      direction={operation.direction}
+                      category={operation.category ?? "OTHER_SALE"}
+                    />
+                  </td>
+                ) : null}
+              </tr>
+            ))}
+            {generalCashOperationsAllHistory.length === 0 ? (
+              <tr>
+                <td colSpan={canManageLedger ? 9 : 8} className="px-4 py-8 text-center text-sm text-black/55 dark:text-white/55">Aucune écriture de caisse trouvée pour cette caisse.</td>
+              </tr>
+            ) : null}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  );
+
+  const proxyFullHistorySection = (
+    <section className="overflow-hidden rounded-2xl border border-black/10 bg-white shadow-sm dark:border-white/10 dark:bg-zinc-900">
+      <div className="border-b border-black/10 px-4 py-3 dark:border-white/10">
+        <h2 className="text-sm font-semibold">Historique complet proxy banking</h2>
+        <p className="mt-1 text-xs text-black/60 dark:text-white/60">Affiche les opérations proxy de toutes les périodes chargées pour permettre les corrections anciennes.</p>
+      </div>
+      <div className="overflow-x-auto">
+        <table className="min-w-full text-sm">
+          <thead className="bg-black/5 dark:bg-white/10">
+            <tr>
+              <th className="px-4 py-3 text-left font-semibold">Date</th>
+              <th className="px-4 py-3 text-left font-semibold">Opération</th>
+              <th className="px-4 py-3 text-left font-semibold">Canal</th>
+              <th className="px-4 py-3 text-left font-semibold">Sens</th>
+              <th className="px-4 py-3 text-left font-semibold">Montant</th>
+              <th className="px-4 py-3 text-left font-semibold">Référence</th>
+              <th className="px-4 py-3 text-left font-semibold">Saisi par</th>
+              {canManageLedger ? <th className="min-w-45 px-4 py-3 text-left font-semibold">Actions</th> : null}
+            </tr>
+          </thead>
+          <tbody>
+            {proxyHistoryRowsAll.map((row) => (
+              <tr key={row.id} className="border-t border-black/5 dark:border-white/10">
+                <td className="px-4 py-3">{new Date(row.occurredAt).toLocaleString("fr-FR")}</td>
+                <td className="px-4 py-3 font-medium">{row.operationLabel}</td>
+                <td className="px-4 py-3">{row.channelLabel}</td>
+                <td className="px-4 py-3">{row.direction === "INFLOW" ? "Entrée" : "Sortie"}</td>
+                <td className="px-4 py-3">{row.amount.toFixed(2)} {normalizeMoneyCurrency(row.currency)}</td>
+                <td className="px-4 py-3">{row.reference ?? "-"}</td>
+                <td className="px-4 py-3">{row.createdBy?.name ?? "-"}</td>
+                {canManageLedger ? (
+                  <td className="min-w-45 px-4 py-3 align-top">
+                    <div className="flex flex-wrap items-center gap-2">
+                      {row.isEditable ? (
+                        <ProxyBankingEditButton
+                          eventName={row.editEventName}
+                          payload={row.editPayload}
+                        />
+                      ) : null}
+                      <ProxyBankingDeleteButton id={row.id} />
+                    </div>
+                  </td>
+                ) : null}
+              </tr>
+            ))}
+            {proxyHistoryRowsAll.length === 0 ? (
+              <tr>
+                <td colSpan={canManageLedger ? 8 : 7} className="px-4 py-8 text-center text-sm text-black/55 dark:text-white/55">Aucune opération proxy banking trouvée pour cette caisse.</td>
+              </tr>
+            ) : null}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  );
 
   const paymentTickets = ticketsWithComputedStatus
     .filter((ticket) => ticket.computedStatus !== PaymentStatus.PAID)
@@ -1166,6 +1381,7 @@ export default async function PaymentsPage({
       ),
       cash: (
         <div className="space-y-4">
+          {approvalQueueSection}
           <ProxyBankingForm />
           <CashOperationForm
             hasInitialOpening={proxyHasInitialOpeningRecorded}
@@ -1190,7 +1406,7 @@ export default async function PaymentsPage({
                     <th className="px-4 py-3 text-left font-semibold">Sens</th>
                     <th className="px-4 py-3 text-left font-semibold">Montant</th>
                     <th className="px-4 py-3 text-left font-semibold">Référence</th>
-                    {role === "ADMIN" ? <th className="min-w-45 px-4 py-3 text-left font-semibold">Actions</th> : null}
+                    {canManageLedger ? <th className="min-w-45 px-4 py-3 text-left font-semibold">Actions</th> : null}
                   </tr>
                 </thead>
                 <tbody>
@@ -1202,7 +1418,7 @@ export default async function PaymentsPage({
                       <td className="px-4 py-3">{row.direction === "INFLOW" ? "Entrée" : "Sortie"}</td>
                       <td className="px-4 py-3">{row.amount.toFixed(2)} {normalizeMoneyCurrency(row.currency)}</td>
                       <td className="px-4 py-3">{row.reference ?? "-"}</td>
-                      {role === "ADMIN" ? (
+                      {canManageLedger ? (
                         <td className="min-w-45 px-4 py-3 align-top">
                           <div className="flex flex-wrap items-center gap-2">
                             {row.isEditable ? (
@@ -1219,7 +1435,7 @@ export default async function PaymentsPage({
                   ))}
                   {proxyHistoryRows.length === 0 ? (
                     <tr>
-                      <td colSpan={6} className="px-4 py-8 text-center text-sm text-black/55 dark:text-white/55">
+                      <td colSpan={canManageLedger ? 7 : 6} className="px-4 py-8 text-center text-sm text-black/55 dark:text-white/55">
                         Aucun dépôt, retrait, change ou solde initial proxy banking enregistré pour cette période.
                       </td>
                     </tr>
@@ -1228,6 +1444,8 @@ export default async function PaymentsPage({
               </table>
             </div>
           </section>
+
+          {proxyFullHistorySection}
         </div>
       ),
       virtual: (
@@ -1609,6 +1827,7 @@ export default async function PaymentsPage({
         )}
         cashWorkspace={(
           <div className="space-y-4">
+            {approvalQueueSection}
             <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
               <KpiCard label="Solde ouverture USD" value={`${openingUsd.toFixed(2)} USD`} />
               <KpiCard label="Solde clôture USD" value={`${closingUsd.toFixed(2)} USD`} hint={`Billets USD ${ticketPaymentInflowUsd.toFixed(2)} + autres USD ${cashInflowUsd.toFixed(2)} - sorties USD ${cashOutflowUsd.toFixed(2)}`} />
@@ -1759,6 +1978,8 @@ export default async function PaymentsPage({
                 </table>
               </div>
             </section>
+
+            {fullHistorySection}
 
           </div>
         )}

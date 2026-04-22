@@ -450,7 +450,7 @@ export function ProxyBankingForm() {
         Dépôt client : <strong>cash +</strong> et <strong>virtuel -</strong>. Retrait client : <strong>virtuel +</strong> et <strong>cash -</strong>. <strong>Change client</strong> : la caisse cash est créditée dans la devise reçue et débitée dans la devise remise au client, sans toucher aux comptes virtuels.
       </p>
       <p className="mt-1 text-xs text-amber-700 dark:text-amber-400">
-        <strong>Seul l'administrateur peut supprimer ou modifier une opération proxy banking, toutes caisses confondues.</strong>
+        <strong>Seuls l'administrateur et le comptable peuvent supprimer ou modifier une opération proxy banking, toutes caisses confondues.</strong>
       </p>
 
       <form onSubmit={onSubmit} className="mt-4 grid gap-3 lg:grid-cols-4 lg:items-end">

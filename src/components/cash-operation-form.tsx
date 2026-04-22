@@ -247,6 +247,7 @@ export function CashOperationForm({
       return;
     }
 
+    const approvalRequired = payload?.approvalRequired === true;
     const thresholdAlert = typeof payload?.thresholdAlert === "string" ? payload.thresholdAlert : null;
 
     if (editCashOperationId) {
@@ -254,7 +255,9 @@ export function CashOperationForm({
       setEditCashOperationId(null);
     } else {
       setMessage(
-        thresholdAlert
+        approvalRequired
+          ? (typeof payload?.message === "string" ? payload.message : "Demande envoyée à la comptabilité pour approbation.")
+          : thresholdAlert
           ? `Opération enregistrée. ${thresholdAlert}`
           : "Opération de caisse enregistrée et notifiée à la comptabilité.",
       );
