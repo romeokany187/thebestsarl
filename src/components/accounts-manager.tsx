@@ -430,7 +430,10 @@ export default function AccountsManager() {
 
     if (!accountsParsed.length) { showNotify('error', 'Aucun compte trouvé.'); return }
 
-    const codesSet = new Set(accountsParsed.map((a: any) => String(a.code)))
+    const codesSet = new Set([
+      ...accounts.map((account) => String(account.code)),
+      ...accountsParsed.map((a: any) => String(a.code)),
+    ])
     function inferParent(code: string): string | null {
       for (let len = code.length - 1; len >= 1; len--) {
         const c = code.slice(0, len)
