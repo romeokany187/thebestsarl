@@ -165,6 +165,8 @@ export function AccountingJournalWorkspace({
   const [pieceJustificative, setPieceJustificative] = useState("");
   const [ticketInvoiceSelection, setTicketInvoiceSelection] = useState("");
   const [ticketInvoiceQuery, setTicketInvoiceQuery] = useState("");
+  const [historySearchInput, setHistorySearchInput] = useState("");
+  const [historySearch, setHistorySearch] = useState("");
   const [rateDate, setRateDate] = useState(toLocalDateValue(new Date()));
   const [dailyRateValue, setDailyRateValue] = useState("");
   const [lines, setLines] = useState<EntryLineForm[]>([lineFactory("DEBIT"), lineFactory("CREDIT")]);
@@ -244,6 +246,32 @@ export function AccountingJournalWorkspace({
       .filter((ticket) => `${ticket.customerName} ${ticket.invoiceNumber} ${ticket.ticketNumber}`.toLowerCase().includes(query))
       .slice(0, 8);
   }, [ticketInvoiceOptions, ticketInvoiceQuery]);
+  const filteredRecentEntries = useMemo(() => {
+    const query = historySearch.trim().toLowerCase();
+
+    if (!query) {
+      return recentEntries;
+    }
+
+    return recentEntries.filter((entry) => {
+      const linesSearch = entry.lines
+        .map((line) => `${line.accountCode} ${line.accountLabel}`)
+        .join(" ");
+      const searchable = [
+        String(entry.sequence ?? ""),
+        entry.libelle,
+        entry.pieceJustificative ?? "",
+        entry.pole ?? "",
+        entry.createdBy?.name ?? "",
+        new Date(entry.entryDate).toLocaleString("fr-FR"),
+        linesSearch,
+      ]
+        .join(" ")
+        .toLowerCase();
+
+      return searchable.includes(query);
+    });
+  }, [recentEntries, historySearch]);
 
   useEffect(() => {
     const matchingRate = dailyRateMap.get(rateDate);
@@ -284,6 +312,15 @@ export function AccountingJournalWorkspace({
 
   function buildTicketSaleLabel(ticket: TicketInvoiceOption) {
     return `Vente billet ${ticket.customerName}`;
+  }
+
+  function applyHistorySearch() {
+    setHistorySearch(historySearchInput.trim());
+  }
+
+  function clearHistorySearch() {
+    setHistorySearchInput("");
+    setHistorySearch("");
   }
 
   function formatTicketInvoiceSearchLabel(ticket: TicketInvoiceOption) {
@@ -754,20 +791,61 @@ export function AccountingJournalWorkspace({
 
       {showHistory ? (
       <section className="rounded-2xl border border-black/10 bg-white p-4 shadow-sm dark:border-white/10 dark:bg-zinc-900">
-        <div className="mb-3 flex items-center justify-between gap-3">
+        <div className="mb-3 flex flex-wrap items-end justify-between gap-3">
           <div>
             <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-black/50 dark:text-white/50">Historique</p>
             <h2 className="mt-1 text-sm font-semibold">Écritures récentes du livre journal</h2>
+          </div>
+          <div className="flex w-full flex-wrap items-center gap-2 md:w-auto">
+            <input
+              type="search"
+              value={historySearchInput}
+              onChange={(event) => setHistorySearchInput(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") {
+                  event.preventDefault();
+                  applyHistorySearch();
+                }
+              }}
+              placeholder="Rechercher: n° écriture, pièce, libellé, compte..."
+              className="w-full rounded-md border border-black/15 bg-white px-3 py-2 text-sm md:w-96 dark:border-white/15 dark:bg-zinc-900"
+            />
+            <button
+              type="button"
+              onClick={applyHistorySearch}
+              className="rounded-md border border-black/15 px-3 py-2 text-sm font-semibold hover:bg-black/5 dark:border-white/15 dark:hover:bg-white/10"
+            >
+              Rechercher
+            </button>
+            {(historySearch || historySearchInput) ? (
+              <button
+                type="button"
+                onClick={clearHistorySearch}
+                className="rounded-md border border-black/15 px-3 py-2 text-sm font-semibold hover:bg-black/5 dark:border-white/15 dark:hover:bg-white/10"
+              >
+                Effacer
+              </button>
+            ) : null}
           </div>
         </div>
 
         {loading ? <p className="text-sm text-black/55 dark:text-white/55">Chargement…</p> : null}
 
+        {!loading && historySearch ? (
+          <p className="mb-3 text-xs text-black/55 dark:text-white/55">
+            Recherche active: "{historySearch}" ({filteredRecentEntries.length} résultat{filteredRecentEntries.length > 1 ? "s" : ""})
+          </p>
+        ) : null}
+
         <div className="space-y-3">
-          {recentEntries.length === 0 ? (
-            <p className="text-sm text-black/55 dark:text-white/55">Aucune écriture comptable enregistrée pour le moment.</p>
+          {filteredRecentEntries.length === 0 ? (
+            <p className="text-sm text-black/55 dark:text-white/55">
+              {historySearch
+                ? "Aucune écriture trouvée pour cette recherche."
+                : "Aucune écriture comptable enregistrée pour le moment."}
+            </p>
           ) : (
-            recentEntries.map((entry) => (
+            filteredRecentEntries.map((entry) => (
               <article key={entry.id} className="rounded-xl border border-black/10 p-3 dark:border-white/10">
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div>
