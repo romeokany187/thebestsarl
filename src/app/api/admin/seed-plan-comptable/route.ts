@@ -35,6 +35,16 @@ export async function POST() {
     return NextResponse.json({ success: false, error: `Impossible de créer la table: ${e.message}` }, { status: 500 });
   }
 
+  const existingCount = await prisma.account.count();
+  if (existingCount > 0) {
+    return NextResponse.json({
+      success: true,
+      count: existingCount,
+      source: "active",
+      message: "Plan comptable actif recharge sans reinitialisation.",
+    });
+  }
+
   const accounts = flattenStructuredPlan();
   let count = 0;
   const errors: string[] = [];
@@ -61,5 +71,5 @@ export async function POST() {
     );
   }
 
-  return NextResponse.json({ success: true, count, errors: errors.slice(0, 20) });
+  return NextResponse.json({ success: true, count, source: "initial", errors: errors.slice(0, 20) });
 }

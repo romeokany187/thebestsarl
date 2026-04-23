@@ -350,7 +350,11 @@ export default function AccountsManager() {
   }
 
   async function seedPlanComptable() {
-    if (!confirm('Charger le plan comptable SYSCOHADA (452 comptes) ? Les comptes existants seront mis à jour.')) return
+    const currentCount = totalAccounts
+    const message = currentCount > 0
+      ? `Recharger le plan comptable actif (${currentCount} comptes) sans reinitialiser vos modifications ?`
+      : 'Initialiser le plan comptable SYSCOHADA de base ?'
+    if (!confirm(message)) return
     setSeeding(true)
     try {
       const res = await fetch('/api/admin/seed-plan-comptable', { method: 'POST' })
@@ -358,7 +362,8 @@ export default function AccountsManager() {
       if (!res.ok) {
         showNotify('error', payload?.error ?? 'Erreur lors du chargement.')
       } else {
-        showNotify('success', `${payload.count} comptes chargés avec succès.`)
+        const sourceLabel = payload?.source === 'active' ? 'plan actif' : 'plan initial SYSCOHADA'
+        showNotify('success', `${payload.count} comptes synchronisés (${sourceLabel}).`)
         await fetchAccounts()
       }
     } catch {

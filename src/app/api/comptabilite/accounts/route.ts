@@ -1,5 +1,4 @@
 import { NextResponse } from 'next/server'
-import { syncStructuredPlanAccounts } from '@/lib/plan-comptable-sync'
 import { requireApiModuleAccess } from '@/lib/rbac'
 import { prisma } from '@/lib/prisma'
 
@@ -14,7 +13,6 @@ export async function GET() {
     return NextResponse.json({ error: 'Accès réservé au comptable et à l\'administrateur.' }, { status: 403 })
   }
 
-  await syncStructuredPlanAccounts()
   const accounts = await prisma.account.findMany({ orderBy: { code: 'asc' } })
   return NextResponse.json(accounts)
 }
