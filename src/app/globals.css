@@ -48,13 +48,6 @@ video {
   height: auto;
 }
 
-input,
-select,
-textarea,
-button {
-  font: inherit;
-}
-
 .overflow-x-auto,
 .tickets-scroll {
   -webkit-overflow-scrolling: touch;

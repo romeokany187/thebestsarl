@@ -167,7 +167,7 @@ export function PaymentsWritingWorkspace({
   return (
     <>
       <section className="mb-6 grid items-start gap-4 lg:grid-cols-[280px_minmax(0,1fr)] xl:grid-cols-[320px_minmax(0,1fr)]">
-        <aside className="overflow-hidden rounded-2xl border border-black/10 bg-white p-4 shadow-sm lg:sticky lg:top-24 lg:max-h-[calc(100vh-7rem)] lg:overflow-y-auto dark:border-white/10 dark:bg-zinc-900">
+        <aside className="overflow-hidden rounded-2xl border border-black/10 bg-white p-4 shadow-sm lg:sticky lg:top-28 dark:border-white/10 dark:bg-zinc-900">
           <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-black/50 dark:text-white/50">Caisses</p>
           <h2 className="mt-1 text-sm font-semibold">Sous-menu Paiements</h2>
 
