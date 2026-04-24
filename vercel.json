@@ -19,6 +19,14 @@
     {
       "path": "/api/payments/unpaid-alerts",
       "schedule": "0 7 * * *"
+    },
+    {
+      "path": "/api/payments/unpaid-alerts",
+      "schedule": "0 12 * * *"
+    },
+    {
+      "path": "/api/payments/unpaid-alerts",
+      "schedule": "0 16 * * *"
     }
   ]
 }

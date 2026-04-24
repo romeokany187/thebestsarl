@@ -1,6 +1,11 @@
 @import "tailwindcss";
 @custom-variant dark (&:where(.dark, .dark *));
 
+@keyframes stripe {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(200%); }
+}
+
 :root {
   --background: #f5f7fb;
   --foreground: #181c25;

@@ -10,7 +10,7 @@ export async function GET() {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const [unreadCount, latest] = await Promise.all([
+  const [unreadCount, latest, urgentAlertCount] = await Promise.all([
     prisma.userNotification.count({
       where: {
         userId: session.user.id,
@@ -29,10 +29,18 @@ export async function GET() {
       },
       orderBy: { createdAt: "desc" },
     }),
+    prisma.userNotification.count({
+      where: {
+        userId: session.user.id,
+        isRead: false,
+        type: "UNPAID_TICKET_ALERT",
+      },
+    }),
   ]);
 
   return NextResponse.json({
     unreadCount,
+    urgentAlertCount,
     latest: latest
       ? {
           id: latest.id,

@@ -4,6 +4,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/auth";
 import { jobTitleLabel } from "@/lib/assignment";
 import { InboxRealtimeLink } from "@/components/inbox-realtime-link";
+import { UrgentAlertBanner } from "@/components/urgent-alert-banner";
 import { LogoutButton } from "@/components/logout-button";
 import { SessionIdleGuard } from "@/components/session-idle-guard";
 import { ThemeToggle } from "@/components/theme-toggle";
@@ -196,15 +197,19 @@ export async function AppShell({
 }) {
   const session = await getServerSession(authOptions);
   let unreadNotifications = 0;
-
+  let urgentAlertCount = 0;
   if (session?.user?.id) {
     try {
-      unreadNotifications = await prisma.userNotification.count({
-        where: {
-          userId: session.user.id,
-          isRead: false,
-        },
-      });
+      const [unread, urgent] = await Promise.all([
+        prisma.userNotification.count({
+          where: { userId: session.user.id, isRead: false },
+        }),
+        prisma.userNotification.count({
+          where: { userId: session.user.id, isRead: false, type: "UNPAID_TICKET_ALERT" },
+        }),
+      ]);
+      unreadNotifications = unread;
+      urgentAlertCount = urgent;
     } catch (error) {
       console.error("[app-shell] notification count error", error);
     }
@@ -233,6 +238,7 @@ export async function AppShell({
   return (
     <div className="min-h-screen w-full bg-background text-foreground">
       {session?.user?.id ? <SessionIdleGuard sessionKey={`${session.user.id}:${session.expires}`} /> : null}
+      <UrgentAlertBanner initialUrgentCount={urgentAlertCount} />
       <div className="min-h-screen w-full">
         <aside className="fixed inset-y-0 left-0 z-40 hidden h-screen w-72 overflow-y-auto border-r border-black/10 bg-white/70 p-5 backdrop-blur md:block dark:border-white/10 dark:bg-zinc-950/70">
           <div className="mb-6">
