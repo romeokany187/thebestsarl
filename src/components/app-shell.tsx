@@ -198,18 +198,25 @@ export async function AppShell({
   const session = await getServerSession(authOptions);
   let unreadNotifications = 0;
   let urgentAlertCount = 0;
+  let latestNotificationId: string | null = null;
   if (session?.user?.id) {
     try {
-      const [unread, urgent] = await Promise.all([
+      const [unread, urgent, latest] = await Promise.all([
         prisma.userNotification.count({
           where: { userId: session.user.id, isRead: false },
         }),
         prisma.userNotification.count({
           where: { userId: session.user.id, isRead: false, type: "UNPAID_TICKET_ALERT" },
         }),
+        prisma.userNotification.findFirst({
+          where: { userId: session.user.id },
+          select: { id: true },
+          orderBy: { createdAt: "desc" },
+        }),
       ]);
       unreadNotifications = unread;
       urgentAlertCount = urgent;
+      latestNotificationId = latest?.id ?? null;
     } catch (error) {
       console.error("[app-shell] notification count error", error);
     }
@@ -279,8 +286,13 @@ export async function AppShell({
                 <p className="text-sm font-semibold tracking-tight">THEBEST SARL</p>
                 <p className="text-xs text-black/60 dark:text-white/60">Gestion de projet et opérations</p>
               </Link>
-              {/* Badge rôle et notifications supprimés de la navbar */}
               <div className="ml-auto flex flex-wrap items-center justify-end gap-2">
+                {session?.user?.id ? (
+                  <InboxRealtimeLink
+                    initialUnreadCount={unreadNotifications}
+                    initialLatestNotificationId={latestNotificationId}
+                  />
+                ) : null}
                 <ThemeToggle />
                 {session?.user?.name ? (
                   <div className="flex items-center gap-2 rounded-xl border border-black/10 bg-white px-3 py-1.5 text-right dark:border-white/10 dark:bg-zinc-900">
