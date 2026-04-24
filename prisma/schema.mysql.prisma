@@ -201,6 +201,7 @@ model User {
   stockMovements          StockMovement[]         @relation("StockMovementActor")
   archiveUploads          ArchiveDocument[]       @relation("ArchiveUploader")
   accountingEntries       AccountingEntry[]       @relation("AccountingEntryCreator")
+  cashBilletageSnapshots  CashBilletageSnapshot[] @relation("CashBilletageSnapshots")
   passwordSetupCodes      PasswordSetupCode[]
   authSessionState        AuthSessionState?
   authDeviceChallenges    AuthDeviceChallenge[]
@@ -667,4 +668,21 @@ model AccountingEntryLine {
 
   @@index([entryId, side])
   @@index([accountCode])
+}
+
+model CashBilletageSnapshot {
+  id          String   @id @default(cuid())
+  date        String   // YYYY-MM-DD
+  cashDesk    String
+  usdCounts   Json
+  cdfCounts   Json
+  expectedUsd Float    @default(0)
+  expectedCdf Float    @default(0)
+  savedById   String
+  savedBy     User     @relation("CashBilletageSnapshots", fields: [savedById], references: [id])
+  savedAt     DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([date, cashDesk])
+  @@index([cashDesk, date])
 }

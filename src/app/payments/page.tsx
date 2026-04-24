@@ -1498,7 +1498,7 @@ export default async function PaymentsPage({
           </div>
         </section>
       ),
-      billetage: <CashBilletageWorkspace expectedUsd={proxyClosingUsd} expectedCdf={proxyClosingCdf} />,
+      billetage: <CashBilletageWorkspace expectedUsd={proxyClosingUsd} expectedCdf={proxyClosingCdf} cashDesk="PROXY_BANKING" />,
     },
     CAISSE_SAFETY: {
       summary: separatedDeskSummary("Caisse Safety"),
@@ -2041,7 +2041,7 @@ export default async function PaymentsPage({
           </div>
         )}
         billetageWorkspace={canWrite ? (
-          <CashBilletageWorkspace expectedUsd={closingUsd} expectedCdf={closingCdf} />
+          <CashBilletageWorkspace expectedUsd={closingUsd} expectedCdf={closingCdf} cashDesk={selectedDeskKey} />
         ) : null}
       />
     </AppShell>

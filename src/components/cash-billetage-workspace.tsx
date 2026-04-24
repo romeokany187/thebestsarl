@@ -1,10 +1,9 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 const usdDenominations = [100, 50, 20, 10, 5, 1] as const;
 const cdfDenominations = [20000, 10000, 5000, 1000, 500, 200, 100, 50] as const;
-const STORAGE_PREFIX = "thebestsarl:cash-billetage";
 
 type CountsMap = Record<number, string>;
 
@@ -27,10 +26,6 @@ function varianceStatus(delta: number): { label: string; tone: string } {
     label: `Manquant ${Math.abs(delta).toFixed(2)}`,
     tone: "border-red-500 bg-red-50 text-red-700 dark:border-red-600 dark:bg-red-950/40 dark:text-red-300",
   };
-}
-
-function storageKey(date: string) {
-  return `${STORAGE_PREFIX}:${date}`;
 }
 
 function CountTable({
@@ -129,13 +124,48 @@ function CountTable({
   );
 }
 
-export function CashBilletageWorkspace({ expectedUsd, expectedCdf }: { expectedUsd: number; expectedCdf: number }) {
+export function CashBilletageWorkspace({ expectedUsd, expectedCdf, cashDesk }: { expectedUsd: number; expectedCdf: number; cashDesk: string }) {
   const today = new Date().toISOString().slice(0, 10);
   const [selectedDate, setSelectedDate] = useState(today);
   const [usdCounts, setUsdCounts] = useState<CountsMap>({});
   const [cdfCounts, setCdfCounts] = useState<CountsMap>({});
   const [isOpen, setIsOpen] = useState(false);
   const [statusMessage, setStatusMessage] = useState("");
+  const [isSaving, setIsSaving] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+  const [lastSavedBy, setLastSavedBy] = useState<{ name: string; at: string } | null>(null);
+
+  const loadSnapshot = useCallback(async (date: string) => {
+    setIsLoading(true);
+    setStatusMessage("");
+    setLastSavedBy(null);
+    try {
+      const resp = await fetch(`/api/payments/billetage?date=${date}&cashDesk=${encodeURIComponent(cashDesk)}`);
+      if (resp.ok) {
+        const json = await resp.json() as {
+          data: null | {
+            usdCounts: Record<string, string>;
+            cdfCounts: Record<string, string>;
+            savedBy: { name: string };
+            savedAt: string;
+          };
+        };
+        if (json.data) {
+          const saved = json.data;
+          setUsdCounts(saved.usdCounts ?? {});
+          setCdfCounts(saved.cdfCounts ?? {});
+          setLastSavedBy({ name: saved.savedBy.name, at: saved.savedAt });
+        } else {
+          setUsdCounts({});
+          setCdfCounts({});
+        }
+      }
+    } catch {
+      // ignore
+    } finally {
+      setIsLoading(false);
+    }
+  }, [cashDesk]);
 
   const usdDelta = useMemo(() => {
     const total = usdDenominations.reduce((sum, denomination) => {
@@ -169,62 +199,73 @@ export function CashBilletageWorkspace({ expectedUsd, expectedCdf }: { expectedU
       ? "Billetage conforme à la caisse"
       : "Déséquilibre détecté entre billetage et caisse";
 
-  function openBilletage() {
-    try {
-      const raw = window.localStorage.getItem(storageKey(selectedDate));
-      if (raw) {
-        const saved = JSON.parse(raw) as { usdCounts?: CountsMap; cdfCounts?: CountsMap };
-        setUsdCounts(saved.usdCounts ?? {});
-        setCdfCounts(saved.cdfCounts ?? {});
-        setStatusMessage(`Billetage du ${selectedDate} ouvert avec les dernières valeurs enregistrées.`);
-      } else {
-        setUsdCounts({});
-        setCdfCounts({});
-        setStatusMessage(`Billetage du ${selectedDate} ouvert. Vous pouvez commencer la saisie.`);
-      }
-    } catch {
-      setUsdCounts({});
-      setCdfCounts({});
-      setStatusMessage(`Billetage du ${selectedDate} ouvert.`);
-    }
+  async function openBilletage() {
+    await loadSnapshot(selectedDate);
     setIsOpen(true);
+    setStatusMessage(`Billetage du ${selectedDate} ouvert. Vous pouvez commencer la saisie.`);
   }
 
-  function saveBilletage() {
+  async function saveBilletage() {
+    setIsSaving(true);
+    setStatusMessage("Enregistrement en cours…");
     try {
-      window.localStorage.setItem(
-        storageKey(selectedDate),
-        JSON.stringify({
+      const resp = await fetch("/api/payments/billetage", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
           date: selectedDate,
-          savedAt: new Date().toISOString(),
-          expectedUsd,
-          expectedCdf,
+          cashDesk,
           usdCounts,
           cdfCounts,
+          expectedUsd,
+          expectedCdf,
         }),
-      );
-      setStatusMessage(`Billetage du ${selectedDate} enregistré et verrouillé.`);
+      });
+      if (resp.ok) {
+        const json = await resp.json() as { data: { savedBy: { name: string }; savedAt: string } };
+        setLastSavedBy({ name: json.data.savedBy.name, at: json.data.savedAt });
+        setStatusMessage(`Billetage du ${selectedDate} enregistré et visible par tous.`);
+        setIsOpen(false);
+      } else {
+        setStatusMessage("Erreur lors de l'enregistrement. Veuillez réessayer.");
+      }
     } catch {
-      setStatusMessage(`Billetage du ${selectedDate} enregistré dans la session en cours.`);
+      setStatusMessage("Erreur réseau lors de l'enregistrement.");
+    } finally {
+      setIsSaving(false);
     }
-    setIsOpen(false);
   }
 
-  function reopenBilletage() {
+  async function reopenBilletage() {
+    await loadSnapshot(selectedDate);
     setIsOpen(true);
     setStatusMessage(`Billetage du ${selectedDate} rouvert pour correction.`);
   }
+
+  // Load snapshot when date changes
+  useEffect(() => {
+    void loadSnapshot(selectedDate);
+    setIsOpen(false);
+  }, [selectedDate, loadSnapshot]);
 
   return (
     <div className="space-y-4">
       <section className="rounded-2xl border border-black/10 bg-white p-4 dark:border-white/10 dark:bg-zinc-900">
         <h2 className="text-sm font-semibold">Billetage de caisse</h2>
         <p className="mt-2 text-xs text-black/60 dark:text-white/60">
-          Pour chaque jour, choisissez la date puis cliquez sur <strong>Ouvrir</strong> pour activer la saisie. Après <strong>Enregistrer</strong>, les champs se referment automatiquement.
+          Pour chaque jour, choisissez la date puis cliquez sur <strong>Ouvrir</strong> pour activer la saisie. Après <strong>Enregistrer</strong>, le billetage est visible par tous les utilisateurs autorisés.
         </p>
-        <p className={`mt-3 inline-flex rounded-full border px-3 py-1 text-xs font-semibold ${overallTone}`}>
-          {overallLabel}
-        </p>
+
+        <div className="mt-3 flex flex-wrap items-center gap-2">
+          <p className={`inline-flex rounded-full border px-3 py-1 text-xs font-semibold ${overallTone}`}>
+            {isLoading ? "Chargement…" : overallLabel}
+          </p>
+          {lastSavedBy ? (
+            <span className="text-xs text-black/50 dark:text-white/50">
+              Dernier enregistrement par <strong>{lastSavedBy.name}</strong> le {new Date(lastSavedBy.at).toLocaleString("fr-FR")}
+            </span>
+          ) : null}
+        </div>
 
         <div className="mt-4 flex flex-wrap items-end gap-2">
           <div>
@@ -244,7 +285,8 @@ export function CashBilletageWorkspace({ expectedUsd, expectedCdf }: { expectedU
           <button
             type="button"
             onClick={openBilletage}
-            className="rounded-md border border-black/20 px-3 py-2 text-xs font-semibold hover:bg-black/5 dark:border-white/20 dark:hover:bg-white/10"
+            disabled={isLoading}
+            className="rounded-md border border-black/20 px-3 py-2 text-xs font-semibold hover:bg-black/5 disabled:opacity-60 dark:border-white/20 dark:hover:bg-white/10"
           >
             Ouvrir
           </button>
@@ -253,15 +295,17 @@ export function CashBilletageWorkspace({ expectedUsd, expectedCdf }: { expectedU
             <button
               type="button"
               onClick={saveBilletage}
-              className="rounded-md bg-black px-3 py-2 text-xs font-semibold text-white dark:bg-white dark:text-black"
+              disabled={isSaving}
+              className="rounded-md bg-black px-3 py-2 text-xs font-semibold text-white disabled:opacity-60 dark:bg-white dark:text-black"
             >
-              Enregistrer et fermer
+              {isSaving ? "Enregistrement…" : "Enregistrer et fermer"}
             </button>
           ) : (
             <button
               type="button"
               onClick={reopenBilletage}
-              className="rounded-md border border-sky-300 px-3 py-2 text-xs font-semibold text-sky-700 hover:bg-sky-50 dark:border-sky-700/60 dark:text-sky-300 dark:hover:bg-sky-950/30"
+              disabled={isLoading}
+              className="rounded-md border border-sky-300 px-3 py-2 text-xs font-semibold text-sky-700 hover:bg-sky-50 disabled:opacity-60 dark:border-sky-700/60 dark:text-sky-300 dark:hover:bg-sky-950/30"
             >
               Modifier
             </button>
