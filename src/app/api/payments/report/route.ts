@@ -969,7 +969,7 @@ export async function GET(request: NextRequest) {
       page.drawLine({ start: { x: 24, y: 451 }, end: { x: 818, y: 451 }, thickness: 0.7, color: lineGray });
     };
 
-    const headers = ["Date", "PNR", "Client", "Compagnie", "Vendeur", "Facturé", "Encaissé", "Reste", "Statut"];
+    const headers = ["Date", "PNR", "Client", "Compagnie", "Payant", "Facturé", "Encaissé", "Reste", "Statut"];
     const x = [24, 92, 170, 316, 416, 506, 578, 650, 726];
     const drawTableHeader = (topY: number) => {
       headers.forEach((header, index) => {
@@ -1005,7 +1005,7 @@ export async function GET(request: NextRequest) {
         ticket.ticketNumber.slice(0, 10),
         short(ticket.customerName, 24),
         ticket.airline.code,
-        short(ticket.seller?.name ?? "-", 12),
+        short(ticket.payerName ?? ticket.customerName ?? "-", 18),
         billedLabel,
         paidLabel,
         remainingLabel,
