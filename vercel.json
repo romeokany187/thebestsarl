@@ -15,6 +15,10 @@
     {
       "path": "/api/cron/reports/monthly",
       "schedule": "30 18 1 * *"
+    },
+    {
+      "path": "/api/payments/unpaid-alerts",
+      "schedule": "0 7 * * *"
     }
   ]
 }

@@ -13,6 +13,7 @@ import { ProxyBankingDeleteButton } from "@/components/proxy-banking-delete-butt
 import { ProxyBankingEditButton } from "@/components/proxy-banking-edit-button";
 import { PaymentsWritingWorkspace } from "@/components/payments-writing-workspace";
 import { ProcurementCashExecutionActions } from "@/components/procurement-cash-execution-actions";
+import { UnpaidAlertsButton } from "@/components/unpaid-alerts-button";
 import { invoiceNumberFromChronology } from "@/lib/invoice";
 import { isCashierJobTitle } from "@/lib/assignment";
 import { requirePageModuleAccess } from "@/lib/rbac";
@@ -1718,6 +1719,7 @@ export default async function PaymentsPage({
                 >
                   Télécharger PDF paiements
                 </a>
+                {(isAdmin || role === "DIRECTEUR_GENERAL") && <UnpaidAlertsButton />}
               </div>
               <p className="mt-3 text-xs text-black/60 dark:text-white/60">
                 {range.label}
