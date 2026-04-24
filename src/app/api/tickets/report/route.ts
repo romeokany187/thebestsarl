@@ -258,16 +258,22 @@ export async function GET(request: NextRequest) {
   let fontBold: PDFFont;
   const textBlack = rgb(0, 0, 0);
 
-  try {
-    const regularBytes = await readFile(path.join(process.cwd(), "public/fonts/Montserrat-Regular.ttf"));
-    fontRegular = await pdf.embedFont(regularBytes);
-    fontBold = fontRegular;
-  } catch {
+  const preferredFont = await readFirstExistingFile([
+    "public/fonts/MAIAN.TTF",
+    "public/branding/fonts/MAIAN.TTF",
+    "public/fonts/Montserrat-Regular.ttf",
+    "public/branding/fonts/Montserrat-Regular.ttf",
+  ]);
+
+  if (!preferredFont) {
     return NextResponse.json(
-      { error: "Police Montserrat Regular introuvable. Vérifiez public/fonts/Montserrat-Regular.ttf." },
+      { error: "Police PDF introuvable sur le serveur (MAIAN/Montserrat)." },
       { status: 500 },
     );
   }
+
+  fontRegular = await pdf.embedFont(preferredFont.bytes);
+  fontBold = fontRegular;
 
   const periodLabel = `${range.label} • ${range.start.toISOString().slice(0, 10)} au ${new Date(range.end.getTime() - 1).toISOString().slice(0, 10)}`;
   const logoImage = await embedOptionalImage(pdf, [

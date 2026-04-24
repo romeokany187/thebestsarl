@@ -59,6 +59,17 @@ function buildTableFirstColumnHeader(kind: ReportKind) {
   return "DATE / PERIODE";
 }
 
+async function readFirstExistingFile(candidates: string[]) {
+  for (const candidate of candidates) {
+    try {
+      return await readFile(path.join(process.cwd(), candidate));
+    } catch {
+      continue;
+    }
+  }
+  return null;
+}
+
 function drawFooter(page: PDFPage, fontRegular: PDFFont, reportTitle: string, generatedBy: string) {
   const { width } = page.getSize();
   const textBlack = rgb(0, 0, 0);
@@ -646,13 +657,26 @@ export async function GET(request: NextRequest) {
   pdf.registerFontkit(fontkit);
 
   const [fontFile, fontBoldFile] = await Promise.all([
-    readFile(path.join(process.cwd(), "public/fonts/Montserrat-Regular.ttf")).catch(() =>
-      readFile(path.join(process.cwd(), "public/branding/fonts/Montserrat-Regular.ttf")),
-    ),
-    readFile(path.join(process.cwd(), "public/fonts/Montserrat-Bold.ttf")).catch(() =>
-      readFile(path.join(process.cwd(), "public/branding/fonts/Montserrat-Bold.ttf")),
-    ),
+    readFirstExistingFile([
+      "public/fonts/MAIAN.TTF",
+      "public/branding/fonts/MAIAN.TTF",
+      "public/fonts/Montserrat-Regular.ttf",
+      "public/branding/fonts/Montserrat-Regular.ttf",
+    ]),
+    readFirstExistingFile([
+      "public/fonts/MAIAN.TTF",
+      "public/branding/fonts/MAIAN.TTF",
+      "public/fonts/Montserrat-Bold.ttf",
+      "public/branding/fonts/Montserrat-Bold.ttf",
+      "public/fonts/Montserrat-Regular.ttf",
+      "public/branding/fonts/Montserrat-Regular.ttf",
+    ]),
   ]);
+
+  if (!fontFile || !fontBoldFile) {
+    return NextResponse.json({ error: "Police PDF introuvable sur le serveur (MAIAN/Montserrat)." }, { status: 500 });
+  }
+
   const fontRegular = await pdf.embedFont(fontFile);
   const fontBold = await pdf.embedFont(fontBoldFile);
   const logoFile = await readFile(path.join(process.cwd(), "public/logo thebest.png")).catch(() => null);

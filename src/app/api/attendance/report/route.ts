@@ -59,10 +59,40 @@ function dateRangeFromParams(params: URLSearchParams) {
   return { start, end, label: `Rapport du ${start.toISOString().slice(0, 10)}` };
 }
 
-function short(value: string, max: number) {
-  const clean = value.trim();
-  if (clean.length <= max) return clean;
-  return `${clean.slice(0, max - 1)}…`;
+function wrapTextByWidth(text: string, font: any, fontSize: number, maxWidth: number) {
+  const clean = (text || "-").replace(/\s+/g, " ").trim() || "-";
+  const words = clean.split(" ");
+  const lines: string[] = [];
+  let current = "";
+
+  for (const word of words) {
+    const next = current ? `${current} ${word}` : word;
+    if (font.widthOfTextAtSize(next, fontSize) <= maxWidth) {
+      current = next;
+      continue;
+    }
+
+    if (current) {
+      lines.push(current);
+      current = word;
+      continue;
+    }
+
+    let chunk = "";
+    for (const char of word) {
+      const nextChunk = `${chunk}${char}`;
+      if (font.widthOfTextAtSize(nextChunk, fontSize) <= maxWidth) {
+        chunk = nextChunk;
+      } else {
+        if (chunk) lines.push(chunk);
+        chunk = char;
+      }
+    }
+    current = chunk;
+  }
+
+  if (current) lines.push(current);
+  return lines.length > 0 ? lines : ["-"];
 }
 
 async function readFirstExistingFile(candidates: string[]) {
@@ -99,16 +129,18 @@ export async function GET(request: NextRequest) {
   const pdf = await PDFDocument.create();
   pdf.registerFontkit(fontkit);
 
-  const montserratRegular = await readFirstExistingFile([
+  const preferredFont = await readFirstExistingFile([
+    "public/fonts/MAIAN.TTF",
+    "public/branding/fonts/MAIAN.TTF",
     "public/fonts/Montserrat-Regular.ttf",
     "public/branding/fonts/Montserrat-Regular.ttf",
   ]);
 
-  if (!montserratRegular) {
-    return NextResponse.json({ error: "Police Montserrat Regular introuvable sur le serveur." }, { status: 500 });
+  if (!preferredFont) {
+    return NextResponse.json({ error: "Police PDF introuvable sur le serveur (MAIAN/Montserrat)." }, { status: 500 });
   }
 
-  const font = await pdf.embedFont(montserratRegular);
+  const font = await pdf.embedFont(preferredFont);
   const fontBold = font;
   const textBlack = rgb(0, 0, 0);
   let page = pdf.addPage([842, 595]);
@@ -127,32 +159,47 @@ export async function GET(request: NextRequest) {
 
   drawHeader();
   let y = 510;
+  const x = [24, 90, 225, 290, 340, 390, 450, 525, 610];
+  const widths = [62, 131, 61, 46, 46, 56, 74, 81, 208];
+  const cellSize = 7.2;
+  const cellLineHeight = 8.8;
 
   for (const row of rows) {
-    if (y < 42) {
-      page = pdf.addPage([842, 595]);
-      drawHeader();
-      y = 510;
-    }
-
     const values = [
       new Date(row.date).toISOString().slice(0, 10),
-      short(row.user.name, 18),
+      row.user.name,
       row.status,
       row.clockIn ? new Date(row.clockIn).toISOString().slice(11, 16) : "-",
       row.clockOut ? new Date(row.clockOut).toISOString().slice(11, 16) : "-",
       `${row.latenessMins} min`,
       `${row.overtimeMins} min`,
       row.locationStatus,
-      short(row.notes ?? "-", 42),
+      row.notes ?? "-",
     ];
-    const x = [24, 90, 225, 290, 340, 390, 450, 525, 610];
 
-    values.forEach((value, index) => {
-      page.drawText(value, { x: x[index], y, size: 7.2, font, color: textBlack });
+    const wrappedCells = values.map((value, index) => wrapTextByWidth(value, font, cellSize, widths[index]));
+    const lineCount = wrappedCells.reduce((max, lines) => Math.max(max, lines.length), 1);
+    const rowHeight = Math.max(11, lineCount * cellLineHeight);
+
+    if (y - rowHeight < 42) {
+      page = pdf.addPage([842, 595]);
+      drawHeader();
+      y = 510;
+    }
+
+    wrappedCells.forEach((lines, index) => {
+      lines.forEach((line, lineIndex) => {
+        page.drawText(line, {
+          x: x[index],
+          y: y - (lineIndex * cellLineHeight),
+          size: cellSize,
+          font,
+          color: textBlack,
+        });
+      });
     });
 
-    y -= 11;
+    y -= rowHeight;
   }
 
   const pages = pdf.getPages();

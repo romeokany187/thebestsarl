@@ -82,6 +82,42 @@ function formatQty(value: number) {
   return Number.isInteger(value) ? String(value) : value.toFixed(2);
 }
 
+function wrapTextByWidth(text: string, font: any, fontSize: number, maxWidth: number) {
+  const clean = (text || "-").replace(/\s+/g, " ").trim() || "-";
+  const words = clean.split(" ");
+  const lines: string[] = [];
+  let current = "";
+
+  for (const word of words) {
+    const next = current ? `${current} ${word}` : word;
+    if (font.widthOfTextAtSize(next, fontSize) <= maxWidth) {
+      current = next;
+      continue;
+    }
+
+    if (current) {
+      lines.push(current);
+      current = word;
+      continue;
+    }
+
+    let chunk = "";
+    for (const char of word) {
+      const nextChunk = `${chunk}${char}`;
+      if (font.widthOfTextAtSize(nextChunk, fontSize) <= maxWidth) {
+        chunk = nextChunk;
+      } else {
+        if (chunk) lines.push(chunk);
+        chunk = char;
+      }
+    }
+    current = chunk;
+  }
+
+  if (current) lines.push(current);
+  return lines.length > 0 ? lines : ["-"];
+}
+
 async function readFirstExistingFile(candidates: string[]) {
   for (const candidate of candidates) {
     try {
@@ -159,16 +195,18 @@ export async function GET(request: NextRequest) {
   const pdf = await PDFDocument.create();
   pdf.registerFontkit(fontkit);
 
-  const montserratRegular = await readFirstExistingFile([
+  const preferredFont = await readFirstExistingFile([
+    "public/fonts/MAIAN.TTF",
+    "public/branding/fonts/MAIAN.TTF",
     "public/fonts/Montserrat-Regular.ttf",
     "public/branding/fonts/Montserrat-Regular.ttf",
   ]);
 
-  if (!montserratRegular) {
-    return NextResponse.json({ error: "Police Montserrat Regular introuvable sur le serveur." }, { status: 500 });
+  if (!preferredFont) {
+    return NextResponse.json({ error: "Police PDF introuvable sur le serveur (MAIAN/Montserrat)." }, { status: 500 });
   }
 
-  const font = await pdf.embedFont(montserratRegular);
+  const font = await pdf.embedFont(preferredFont);
   const fontBold = font;
 
   const textBlack = rgb(0, 0, 0);
@@ -223,6 +261,9 @@ export async function GET(request: NextRequest) {
     "Qté recommandée",
   ];
   const sx = [24, 170, 286, 362, 430, 496, 572, 650, 715];
+  const sw = [140, 110, 72, 62, 62, 70, 70, 64, 103];
+  const summarySize = 7.4;
+  const summaryLineHeight = 8.9;
 
   let y = 528;
 
@@ -256,8 +297,8 @@ export async function GET(request: NextRequest) {
     }
 
     const values = [
-      row.name.slice(0, 22),
-      row.category.slice(0, 16),
+      row.name,
+      row.category,
       `${formatQty(row.openingStock)} ${row.unit}`,
       formatQty(row.inQty),
       formatQty(row.outQty),
@@ -267,13 +308,26 @@ export async function GET(request: NextRequest) {
       row.recommended > 0 ? formatQty(row.recommended) : "-",
     ];
 
-    values.forEach((value, index) => {
-      page.drawText(value, {
-        x: sx[index],
-        y,
-        size: 7.6,
-        font,
-        color: textBlack,
+    const wrappedSummary = values.map((value, index) => wrapTextByWidth(value, font, summarySize, sw[index]));
+    const summaryLines = wrappedSummary.reduce((max, lines) => Math.max(max, lines.length), 1);
+    const summaryRowHeight = Math.max(13, summaryLines * summaryLineHeight);
+
+    if (y - summaryRowHeight < 208) {
+      page = pdf.addPage([pageWidth, pageHeight]);
+      drawTop(`${range.label} • Données exactes de stock et mouvements`, true);
+      y = 528;
+      drawSummaryHeader();
+    }
+
+    wrappedSummary.forEach((lines, index) => {
+      lines.forEach((line, lineIndex) => {
+        page.drawText(line, {
+          x: sx[index],
+          y: y - (lineIndex * summaryLineHeight),
+          size: summarySize,
+          font,
+          color: textBlack,
+        });
       });
     });
 
@@ -283,7 +337,7 @@ export async function GET(request: NextRequest) {
       thickness: 0.25,
       color: lineGray,
     });
-    y -= 13;
+    y -= summaryRowHeight;
   }
 
   if (y < 145) {
@@ -303,6 +357,9 @@ export async function GET(request: NextRequest) {
   y -= 14;
 
   const mx = [24, 90, 258, 328, 370, 448, 548, 660];
+  const mw = [62, 162, 58, 35, 72, 92, 102, 158];
+  const moveSize = 7.2;
+  const moveLineHeight = 8.7;
   const movementHeaders = ["Date", "Produit", "Type", "Qté", "Unité", "Référence", "Agent", "Justification"];
 
   const drawMovementHeader = () => {
@@ -336,26 +393,39 @@ export async function GET(request: NextRequest) {
 
     const row = [
       new Date(movement.createdAt).toISOString().slice(0, 10),
-      movement.stockItem.name.slice(0, 24),
+      movement.stockItem.name,
       movement.movementType === "IN" ? "Entrée" : "Sortie",
       formatQty(movement.quantity),
-      movement.stockItem.unit.slice(0, 8),
-      movement.referenceDoc.slice(0, 16),
-      movement.performedBy.name.slice(0, 14),
-      movement.justification.replace(/\s+/g, " ").slice(0, 28),
+      movement.stockItem.unit,
+      movement.referenceDoc,
+      movement.performedBy.name,
+      movement.justification,
     ];
 
-    row.forEach((value, index) => {
-      page.drawText(value, {
-        x: mx[index],
-        y,
-        size: 7.4,
-        font,
-        color: textBlack,
+    const wrappedMovement = row.map((value, index) => wrapTextByWidth(value, font, moveSize, mw[index]));
+    const movementLines = wrappedMovement.reduce((max, lines) => Math.max(max, lines.length), 1);
+    const movementRowHeight = Math.max(11.5, movementLines * moveLineHeight);
+
+    if (y - movementRowHeight < 40) {
+      page = pdf.addPage([pageWidth, pageHeight]);
+      drawTop(`${range.label} • Mouvements détaillés`, true);
+      y = 528;
+      drawMovementHeader();
+    }
+
+    wrappedMovement.forEach((lines, index) => {
+      lines.forEach((line, lineIndex) => {
+        page.drawText(line, {
+          x: mx[index],
+          y: y - (lineIndex * moveLineHeight),
+          size: moveSize,
+          font,
+          color: textBlack,
+        });
       });
     });
 
-    y -= 11.5;
+    y -= movementRowHeight;
   }
 
   const allPages = pdf.getPages();

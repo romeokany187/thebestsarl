@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { PaymentStatus, PresenceLocationStatus } from "@prisma/client";
 import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
+import fontkit from "@pdf-lib/fontkit";
+import { readFile } from "node:fs/promises";
+import path from "node:path";
 import { prisma } from "@/lib/prisma";
 import { isMailConfigured, sendMailBatch } from "@/lib/mail";
 import { computeCaaCommissionMap } from "@/lib/caa-commission";
@@ -81,6 +84,17 @@ function normalizeMoneyCurrency(value: string | null | undefined): "USD" | "CDF"
   return normalized === "CDF" || normalized === "XAF" || normalized === "FC" ? "CDF" : "USD";
 }
 
+async function readFirstExistingFile(candidates: string[]) {
+  for (const candidate of candidates) {
+    try {
+      return await readFile(path.join(process.cwd(), candidate));
+    } catch {
+      continue;
+    }
+  }
+  return null;
+}
+
 function isVirtualMethod(methodRaw: string | null | undefined) {
   const method = (methodRaw ?? "").trim().toUpperCase();
   return method.includes("AIRTEL")
@@ -154,9 +168,16 @@ function computeCashOpeningBalance(
 
 async function buildSimplePdfAttachment(title: string, subtitle: string, sections: Array<{ heading: string; lines: string[] }>) {
   const pdf = await PDFDocument.create();
+  pdf.registerFontkit(fontkit);
   const pageSize: [number, number] = [595, 842];
-  const font = await pdf.embedFont(StandardFonts.Helvetica);
-  const bold = await pdf.embedFont(StandardFonts.HelveticaBold);
+  const fontBytes = await readFirstExistingFile([
+    "public/fonts/MAIAN.TTF",
+    "public/branding/fonts/MAIAN.TTF",
+    "public/fonts/Montserrat-Regular.ttf",
+    "public/branding/fonts/Montserrat-Regular.ttf",
+  ]);
+  const font = fontBytes ? await pdf.embedFont(fontBytes) : await pdf.embedFont(StandardFonts.Helvetica);
+  const bold = fontBytes ? await pdf.embedFont(fontBytes) : await pdf.embedFont(StandardFonts.HelveticaBold);
   const textColor = rgb(0.1, 0.1, 0.1);
   const muted = rgb(0.4, 0.4, 0.4);
 

@@ -71,16 +71,18 @@ export async function GET(_request: Request, { params }: Params) {
   const pdf = await PDFDocument.create();
   pdf.registerFontkit(fontkit);
 
-  const montserratRegular = await readFirstExistingFile([
+  const preferredFont = await readFirstExistingFile([
+    "public/fonts/MAIAN.TTF",
+    "public/branding/fonts/MAIAN.TTF",
     "public/fonts/Montserrat-Regular.ttf",
     "public/branding/fonts/Montserrat-Regular.ttf",
   ]);
 
-  if (!montserratRegular) {
-    return NextResponse.json({ error: "Police Montserrat Regular introuvable sur le serveur." }, { status: 500 });
+  if (!preferredFont) {
+    return NextResponse.json({ error: "Police PDF introuvable sur le serveur (MAIAN/Montserrat)." }, { status: 500 });
   }
 
-  const font = await pdf.embedFont(montserratRegular.bytes);
+  const font = await pdf.embedFont(preferredFont.bytes);
   const fontBold = font;
   const textBlack = rgb(0, 0, 0);
   const lineGray = rgb(0.84, 0.84, 0.84);
