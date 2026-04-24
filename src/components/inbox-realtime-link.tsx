@@ -13,31 +13,42 @@ type RealtimePayload = {
   } | null;
 };
 
-function playNotificationTone(enabled: boolean) {
+async function playNotificationTone(enabled: boolean) {
   if (!enabled || typeof window === "undefined") return;
 
   const AudioContextClass = window.AudioContext || (window as typeof window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
   if (!AudioContextClass) return;
 
   const context = new AudioContextClass();
+  if (context.state === "suspended") {
+    try {
+      await context.resume();
+    } catch {
+      return;
+    }
+  }
+
   const oscillator = context.createOscillator();
   const gainNode = context.createGain();
 
-  oscillator.type = "sine";
-  oscillator.frequency.value = 880;
+  oscillator.type = "square";
+  oscillator.frequency.value = 1046;
   gainNode.gain.value = 0.0001;
 
   oscillator.connect(gainNode);
   gainNode.connect(context.destination);
 
   const now = context.currentTime;
-  gainNode.gain.exponentialRampToValueAtTime(0.08, now + 0.02);
-  gainNode.gain.exponentialRampToValueAtTime(0.0001, now + 0.28);
+  gainNode.gain.setValueAtTime(0.0001, now);
+  gainNode.gain.exponentialRampToValueAtTime(0.16, now + 0.02);
+  gainNode.gain.exponentialRampToValueAtTime(0.0001, now + 0.38);
 
   oscillator.start(now);
-  oscillator.stop(now + 0.3);
+  oscillator.stop(now + 0.4);
 
-  void context.close();
+  window.setTimeout(() => {
+    void context.close();
+  }, 900);
 }
 
 export function InboxRealtimeLink({
@@ -59,10 +70,14 @@ export function InboxRealtimeLink({
 
   useEffect(() => {
     const unlock = () => setSoundEnabled(true);
+    window.addEventListener("pointerdown", unlock, { once: true });
+    window.addEventListener("touchstart", unlock, { once: true });
     window.addEventListener("click", unlock, { once: true });
     window.addEventListener("keydown", unlock, { once: true });
 
     return () => {
+      window.removeEventListener("pointerdown", unlock);
+      window.removeEventListener("touchstart", unlock);
       window.removeEventListener("click", unlock);
       window.removeEventListener("keydown", unlock);
     };
@@ -99,7 +114,7 @@ export function InboxRealtimeLink({
           });
           window.setTimeout(() => setToast(null), 5000);
         }
-        playNotificationTone(soundEnabledRef.current);
+        void playNotificationTone(soundEnabledRef.current);
       }
     }
 
