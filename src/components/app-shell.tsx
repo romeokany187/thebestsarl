@@ -233,8 +233,8 @@ export async function AppShell({
   return (
     <div className="min-h-screen w-full bg-background text-foreground">
       {session?.user?.id ? <SessionIdleGuard sessionKey={`${session.user.id}:${session.expires}`} /> : null}
-      <div className="flex min-h-screen w-full">
-        <aside className="sticky top-0 hidden h-screen w-72 shrink-0 overflow-y-auto border-r border-black/10 bg-white/70 p-5 backdrop-blur md:block dark:border-white/10 dark:bg-zinc-950/70">
+      <div className="min-h-screen w-full">
+        <aside className="fixed inset-y-0 left-0 z-40 hidden h-screen w-72 overflow-y-auto border-r border-black/10 bg-white/70 p-5 backdrop-blur md:block dark:border-white/10 dark:bg-zinc-950/70">
           <div className="mb-6">
             <Link href="/" className="block rounded-lg p-1 transition hover:bg-black/5 dark:hover:bg-white/10">
               <p className="text-base font-semibold tracking-tight">THEBEST SARL</p>
@@ -266,8 +266,8 @@ export async function AppShell({
           </nav>
         </aside>
 
-        <div className="flex min-w-0 flex-1 flex-col overflow-x-hidden">
-          <header className="sticky top-0 z-40 border-b border-black/10 bg-white/75 px-4 py-4 backdrop-blur sm:px-6 lg:px-8 2xl:px-10 dark:border-white/10 dark:bg-zinc-950/75">
+        <div className="min-h-screen min-w-0 overflow-x-hidden md:pl-72">
+          <header className="fixed inset-x-0 top-0 z-50 border-b border-black/10 bg-white/75 px-4 py-4 backdrop-blur sm:px-6 lg:left-72 lg:px-8 2xl:px-10 dark:border-white/10 dark:bg-zinc-950/75 md:left-72">
             <div className="flex flex-wrap items-start justify-between gap-3 sm:items-center">
               <Link href="/" className="rounded-lg p-1 transition hover:bg-black/5 dark:hover:bg-white/10">
                 <p className="text-sm font-semibold tracking-tight">THEBEST SARL</p>
@@ -308,7 +308,7 @@ export async function AppShell({
             </nav>
           </header>
 
-          <main className="mobile-safe-area-bottom flex-1 min-w-0 px-4 py-5 pb-24 sm:px-6 lg:px-8 lg:py-8 lg:pb-8 2xl:px-10">
+          <main className="mobile-safe-area-bottom min-w-0 px-4 pt-32 pb-24 sm:px-6 md:pt-24 lg:px-8 lg:pb-8 2xl:px-10">
             {accessNote ? (
               <p className="mb-5 rounded-xl border border-black/10 bg-white px-4 py-3 text-xs text-black/70 shadow-sm dark:border-white/10 dark:bg-zinc-900 dark:text-white/70">
                 {accessNote}
