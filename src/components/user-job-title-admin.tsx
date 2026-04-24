@@ -171,7 +171,8 @@ export function UserJobTitleAdmin({ users, currentUserId }: { users: UserRow[]; 
       </div>
 
       <div className="overflow-hidden rounded-lg border border-black/10 dark:border-white/10">
-        <table className="min-w-full text-sm">
+        <div className="tickets-scroll overflow-x-auto">
+          <table className="min-w-full text-sm">
           <thead className="bg-black/5 dark:bg-white/10">
             <tr>
               <th className="px-3 py-2 text-left">Employé</th>
@@ -256,7 +257,8 @@ export function UserJobTitleAdmin({ users, currentUserId }: { users: UserRow[]; 
               </tr>
             ))}
           </tbody>
-        </table>
+          </table>
+        </div>
       </div>
 
       <p className="mt-2 text-xs text-black/60 dark:text-white/60">{hasChanges ? "Des changements sont en attente de sauvegarde." : status}</p>

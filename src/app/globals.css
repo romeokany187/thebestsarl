@@ -18,14 +18,51 @@
   --foreground: #eceff7;
 }
 
+html {
+  scroll-behavior: smooth;
+}
+
+html,
 body {
+  max-width: 100%;
+  overflow-x: hidden;
+}
+
+body {
+  min-height: 100vh;
   background: var(--background);
   color: var(--foreground);
   font-family: var(--font-montserrat), system-ui, sans-serif;
 }
 
 * {
+  box-sizing: border-box;
   -webkit-tap-highlight-color: transparent;
+}
+
+img,
+svg,
+canvas,
+video {
+  max-width: 100%;
+  height: auto;
+}
+
+input,
+select,
+textarea,
+button {
+  font: inherit;
+}
+
+.overflow-x-auto,
+.tickets-scroll {
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-x: contain;
+}
+
+.mobile-safe-area-bottom {
+  padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 1rem);
 }
 
 @keyframes floatSoft {
@@ -89,4 +126,14 @@ body {
   background: linear-gradient(180deg, rgba(236, 239, 247, 0.62), rgba(236, 239, 247, 0.42));
   border: 2px solid transparent;
   background-clip: padding-box;
+}
+
+@media (max-width: 768px) {
+  .overflow-x-auto {
+    width: 100%;
+  }
+
+  .overflow-x-auto > table {
+    min-width: 42rem;
+  }
 }

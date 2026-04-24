@@ -39,7 +39,8 @@ export function AdminOpeningBalances({ entries }: { entries: OpeningBalanceRow[]
       </div>
 
       <div className="overflow-hidden rounded-lg border border-black/10 dark:border-white/10">
-        <table className="min-w-full text-sm">
+        <div className="tickets-scroll overflow-x-auto">
+          <table className="min-w-full text-sm">
           <thead className="bg-black/5 dark:bg-white/10">
             <tr>
               <th className="px-3 py-2 text-left">Date</th>
@@ -85,7 +86,8 @@ export function AdminOpeningBalances({ entries }: { entries: OpeningBalanceRow[]
               </tr>
             ) : null}
           </tbody>
-        </table>
+          </table>
+        </div>
       </div>
     </section>
   );

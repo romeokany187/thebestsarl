@@ -230,36 +230,38 @@ export function DashboardOverview() {
             <div className="border-b border-black/10 px-4 py-3 dark:border-white/10">
               <h2 className="text-base font-semibold">Détail par employé</h2>
             </div>
-            <table className="min-w-full text-sm">
-              <thead className="bg-black/5 dark:bg-white/10">
-                <tr>
-                  <th className="px-3 py-2 text-left">Employé</th>
-                  <th className="px-3 py-2 text-left">Fonction</th>
-                  <th className="px-3 py-2 text-left">Présences</th>
-                  <th className="px-3 py-2 text-left">Absences</th>
-                  <th className="px-3 py-2 text-left">Retards</th>
-                  <th className="px-3 py-2 text-left">Rapports</th>
-                  <th className="px-3 py-2 text-left">Rapports approuvés</th>
-                  <th className="px-3 py-2 text-left">Ventes</th>
-                  <th className="px-3 py-2 text-left">Montant ventes</th>
-                </tr>
-              </thead>
-              <tbody>
-                {data.perEmployee.map((row) => (
-                  <tr key={row.userId} className="border-t border-black/5 dark:border-white/10">
-                    <td className="px-3 py-2">{row.name}</td>
-                    <td className="px-3 py-2">{row.role}</td>
-                    <td className="px-3 py-2">{row.attendance}</td>
-                    <td className="px-3 py-2">{row.absences}</td>
-                    <td className="px-3 py-2">{row.late}</td>
-                    <td className="px-3 py-2">{row.reports}</td>
-                    <td className="px-3 py-2">{row.approvedReports}</td>
-                    <td className="px-3 py-2">{row.tickets}</td>
-                    <td className="px-3 py-2">{row.salesAmount.toFixed(2)} USD</td>
+            <div className="tickets-scroll overflow-x-auto">
+              <table className="min-w-full text-sm">
+                <thead className="bg-black/5 dark:bg-white/10">
+                  <tr>
+                    <th className="px-3 py-2 text-left">Employé</th>
+                    <th className="px-3 py-2 text-left">Fonction</th>
+                    <th className="px-3 py-2 text-left">Présences</th>
+                    <th className="px-3 py-2 text-left">Absences</th>
+                    <th className="px-3 py-2 text-left">Retards</th>
+                    <th className="px-3 py-2 text-left">Rapports</th>
+                    <th className="px-3 py-2 text-left">Rapports approuvés</th>
+                    <th className="px-3 py-2 text-left">Ventes</th>
+                    <th className="px-3 py-2 text-left">Montant ventes</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {data.perEmployee.map((row) => (
+                    <tr key={row.userId} className="border-t border-black/5 dark:border-white/10">
+                      <td className="px-3 py-2">{row.name}</td>
+                      <td className="px-3 py-2">{row.role}</td>
+                      <td className="px-3 py-2">{row.attendance}</td>
+                      <td className="px-3 py-2">{row.absences}</td>
+                      <td className="px-3 py-2">{row.late}</td>
+                      <td className="px-3 py-2">{row.reports}</td>
+                      <td className="px-3 py-2">{row.approvedReports}</td>
+                      <td className="px-3 py-2">{row.tickets}</td>
+                      <td className="px-3 py-2">{row.salesAmount.toFixed(2)} USD</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
         </>
       ) : null}

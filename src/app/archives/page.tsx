@@ -230,7 +230,7 @@ export default async function ArchivesPage({
         <div className="border-b border-black/10 px-4 py-3 dark:border-white/10">
           <h2 className="text-base font-semibold">Registre des archives - {archiveFolderLabel(selectedFolder)}</h2>
         </div>
-        <div className="h-105 overflow-auto overscroll-contain">
+        <div className="tickets-scroll h-105 overflow-auto overscroll-contain">
           <table className="min-w-full text-sm">
             <thead className="bg-black/5 dark:bg-white/10">
               <tr>

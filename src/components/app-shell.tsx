@@ -228,6 +228,7 @@ export async function AppShell({
       : true;
   });
   const roleLabel = role ? `Rôle ${displayRoleLabel(role, session?.user?.jobTitle)}` : null;
+  const mobileQuickLinks = visibleLinks.filter((link) => ["/", "/sales", "/payments", "/inbox", "/profile"].includes(link.href));
 
   return (
     <div className="min-h-screen w-full bg-background text-foreground">
@@ -265,34 +266,35 @@ export async function AppShell({
           </nav>
         </aside>
 
-        <div className="flex min-w-0 flex-1 flex-col">
+        <div className="flex min-w-0 flex-1 flex-col overflow-x-hidden">
           <header className="sticky top-0 z-40 border-b border-black/10 bg-white/75 px-4 py-4 backdrop-blur sm:px-6 lg:px-8 2xl:px-10 dark:border-white/10 dark:bg-zinc-950/75">
-            <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="flex flex-wrap items-start justify-between gap-3 sm:items-center">
               <Link href="/" className="rounded-lg p-1 transition hover:bg-black/5 dark:hover:bg-white/10">
                 <p className="text-sm font-semibold tracking-tight">THEBEST SARL</p>
                 <p className="text-xs text-black/60 dark:text-white/60">Gestion de projet et opérations</p>
               </Link>
               {/* Badge rôle et notifications supprimés de la navbar */}
-              <ThemeToggle />
-              {session?.user?.name ? (
-                <div className="rounded-xl border border-black/10 bg-white px-3 py-1.5 text-right flex items-center gap-2 dark:border-white/10 dark:bg-zinc-900">
-                  <span className="text-xs font-semibold leading-tight flex items-center gap-1">
-                    {session.user.name}
-                    {/* Badge verified si rôle et équipe */}
-                    {session.user.role && session.user.teamName ? (
-                      session.user.role === "ADMIN" || session.user.role === "DIRECTEUR_GENERAL" ? (
-                        <VerifiedBadge tone="gold" />
-                      ) : (
-                        <VerifiedBadge tone="blue" />
-                      )
-                    ) : null}
-                  </span>
-                </div>
-              ) : null}
-              {session?.user?.email ? <LogoutButton /> : null}
+              <div className="ml-auto flex flex-wrap items-center justify-end gap-2">
+                <ThemeToggle />
+                {session?.user?.name ? (
+                  <div className="flex items-center gap-2 rounded-xl border border-black/10 bg-white px-3 py-1.5 text-right dark:border-white/10 dark:bg-zinc-900">
+                    <span className="text-xs font-semibold leading-tight flex items-center gap-1">
+                      {session.user.name}
+                      {session.user.role && session.user.teamName ? (
+                        session.user.role === "ADMIN" || session.user.role === "DIRECTEUR_GENERAL" ? (
+                          <VerifiedBadge tone="gold" />
+                        ) : (
+                          <VerifiedBadge tone="blue" />
+                        )
+                      ) : null}
+                    </span>
+                  </div>
+                ) : null}
+                {session?.user?.email ? <LogoutButton /> : null}
+              </div>
             </div>
 
-            <nav className="mt-4 flex gap-2 overflow-x-auto pb-1 md:hidden">
+            <nav className="tickets-scroll mt-4 flex gap-2 overflow-x-auto pb-1 md:hidden">
               {visibleLinks.map((link) => (
                 <Link
                   key={link.href}
@@ -306,7 +308,7 @@ export async function AppShell({
             </nav>
           </header>
 
-          <main className="flex-1 px-4 py-6 sm:px-6 lg:px-8 2xl:px-10 lg:py-8">
+          <main className="mobile-safe-area-bottom flex-1 min-w-0 px-4 py-5 pb-24 sm:px-6 lg:px-8 lg:py-8 lg:pb-8 2xl:px-10">
             {accessNote ? (
               <p className="mb-5 rounded-xl border border-black/10 bg-white px-4 py-3 text-xs text-black/70 shadow-sm dark:border-white/10 dark:bg-zinc-900 dark:text-white/70">
                 {accessNote}
@@ -314,6 +316,27 @@ export async function AppShell({
             ) : null}
             {children}
           </main>
+
+          {mobileQuickLinks.length > 0 ? (
+            <nav className="mobile-safe-area-bottom fixed inset-x-0 bottom-0 z-40 border-t border-black/10 bg-white/92 px-3 py-2 backdrop-blur md:hidden dark:border-white/10 dark:bg-zinc-950/92">
+              <div className="grid grid-cols-5 gap-2">
+                {mobileQuickLinks.map((link) => (
+                  <Link
+                    key={link.href}
+                    href={link.href}
+                    className="flex min-w-0 flex-col items-center justify-center rounded-xl px-2 py-2 text-center text-[11px] font-semibold text-black/75 transition hover:bg-black/5 dark:text-white/75 dark:hover:bg-white/10"
+                  >
+                    <span className="truncate">{link.label}</span>
+                    {link.href === "/inbox" && unreadNotifications > 0 ? (
+                      <span className="mt-1 rounded-full bg-red-600 px-1.5 py-0.5 text-[10px] font-semibold text-white">
+                        {unreadNotifications > 99 ? "99+" : unreadNotifications}
+                      </span>
+                    ) : null}
+                  </Link>
+                ))}
+              </div>
+            </nav>
+          ) : null}
         </div>
       </div>
     </div>
