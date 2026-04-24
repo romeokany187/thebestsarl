@@ -110,6 +110,7 @@ type SearchParams = {
   startDate?: string;
   endDate?: string;
   airlineId?: string;
+  ticketStatus?: string;
   cashMonth?: string;
   desk?: string;
   mode?: string;
@@ -487,10 +488,14 @@ export default async function PaymentsPage({
   const selectedAirlineId = resolvedSearchParams.airlineId && resolvedSearchParams.airlineId !== "ALL"
     ? resolvedSearchParams.airlineId
     : undefined;
+  const selectedTicketStatus = ["ALL", "PAID", "UNPAID", "PARTIAL"].includes((resolvedSearchParams.ticketStatus ?? "ALL").toUpperCase())
+    ? (resolvedSearchParams.ticketStatus ?? "ALL").toUpperCase()
+    : "ALL";
   const reportQuery = new URLSearchParams({
     startDate: range.startRaw,
     endDate: range.endRaw,
     desk: selectedDeskKey,
+    ticketStatus: selectedTicketStatus,
     ...(selectedAirlineId ? { airlineId: selectedAirlineId } : {}),
   }).toString();
   const cashJournalReportQuery = new URLSearchParams({
@@ -1662,7 +1667,7 @@ export default async function PaymentsPage({
         ticketWorkspace={(
           <div className="space-y-4">
             <section className="rounded-2xl border border-black/10 bg-white p-4 dark:border-white/10 dark:bg-zinc-900">
-              <form method="GET" className="grid gap-3 sm:grid-cols-3 sm:items-end">
+              <form method="GET" className="grid gap-3 sm:grid-cols-4 sm:items-end">
                 <input type="hidden" name="desk" value={selectedDeskKey} />
                 <input type="hidden" name="mode" value="tickets" />
                 <input type="hidden" name="cashMonth" value={cashRange.monthRaw} />
@@ -1683,6 +1688,16 @@ export default async function PaymentsPage({
                     {airlines.map((airline) => (
                       <option key={airline.id} value={airline.id}>{airline.code} - {airline.name}</option>
                     ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-black/60 dark:text-white/60">Statut billet</label>
+                  <select name="ticketStatus" defaultValue={selectedTicketStatus} className="w-full rounded-md border border-black/15 bg-white px-3 py-2 text-sm dark:border-white/15 dark:bg-zinc-900">
+                    <option value="ALL">Tous</option>
+                    <option value="PAID">Payés</option>
+                    <option value="UNPAID">Non payés</option>
+                    <option value="PARTIAL">Partiels</option>
                   </select>
                 </div>
 

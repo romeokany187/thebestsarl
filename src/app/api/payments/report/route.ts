@@ -10,6 +10,7 @@ import { ALL_CASH_DESKS, buildDeskScopedCashOperationWhere, normalizeCashDeskVal
 
 type ReportMode = "date" | "month" | "year";
 type ReportType = "payments" | "cash-journal" | "cash-summary";
+type TicketStatusFilter = "ALL" | "PAID" | "UNPAID" | "PARTIAL";
 type VirtualChannel = "AIRTEL_MONEY" | "ORANGE_MONEY" | "MPESA" | "EQUITY" | "RAWBANK_ILLICOCASH";
 
 const paymentClient = (prisma as unknown as { payment: any }).payment;
@@ -367,6 +368,11 @@ export async function GET(request: NextRequest) {
     return access.error;
   }
 
+  const rawTicketStatus = (request.nextUrl.searchParams.get("ticketStatus") ?? "ALL").toUpperCase();
+  const ticketStatusFilter: TicketStatusFilter = ["PAID", "UNPAID", "PARTIAL"].includes(rawTicketStatus)
+    ? rawTicketStatus as TicketStatusFilter
+    : "ALL";
+
   const reportType = (["payments", "cash-journal", "cash-summary"].includes(request.nextUrl.searchParams.get("reportType") ?? "")
     ? request.nextUrl.searchParams.get("reportType")
     : "payments") as ReportType;
@@ -405,6 +411,7 @@ export async function GET(request: NextRequest) {
       include: {
         payments: true,
         airline: { select: { code: true } },
+        seller: { select: { name: true } },
       },
       orderBy: { soldAt: "asc" },
       take: 4000,
@@ -498,15 +505,23 @@ export async function GET(request: NextRequest) {
     };
   });
 
-  const totalBilled = ticketsWithStatus.reduce((sum, ticket) => sum + ticket.amountUsd, 0);
-  const totalPaidOnTickets = ticketsWithStatus.reduce((sum, ticket) => sum + ticket.paidAmountUsd, 0);
+  const filteredTickets = ticketStatusFilter === "ALL"
+    ? ticketsWithStatus
+    : ticketsWithStatus.filter((ticket) => ticket.computedStatus === ticketStatusFilter);
+
+  const totalBilled = filteredTickets.reduce((sum, ticket) => sum + ticket.amountUsd, 0);
+  const totalPaidOnTickets = filteredTickets.reduce((sum, ticket) => sum + ticket.paidAmountUsd, 0);
   const totalOutstanding = Math.max(0, totalBilled - totalPaidOnTickets);
-  const paidTickets = ticketsWithStatus.filter((ticket) => ticket.computedStatus === "PAID");
-  const unpaidTickets = ticketsWithStatus.filter((ticket) => ticket.computedStatus === "UNPAID");
-  const partialTickets = ticketsWithStatus.filter((ticket) => ticket.computedStatus === "PARTIAL");
+  const paidTickets = filteredTickets.filter((ticket) => ticket.computedStatus === "PAID");
+  const unpaidTickets = filteredTickets.filter((ticket) => ticket.computedStatus === "UNPAID");
+  const partialTickets = filteredTickets.filter((ticket) => ticket.computedStatus === "PARTIAL");
   const partialBilled = partialTickets.reduce((sum, ticket) => sum + ticket.amountUsd, 0);
   const partialPaid = partialTickets.reduce((sum, ticket) => sum + ticket.paidAmountUsd, 0);
   const partialCoverage = partialBilled > 0 ? (partialPaid / partialBilled) * 100 : 0;
+
+  const ticketsForReport = filteredTickets
+    .slice()
+    .sort((a, b) => new Date(a.soldAt).getTime() - new Date(b.soldAt).getTime());
 
   const byMethod = (rows as Array<any>).reduce<Map<string, number>>((map, row) => {
     const key = row.method.trim() || "AUTRE";
@@ -690,6 +705,13 @@ export async function GET(request: NextRequest) {
   const subtitle = airline
     ? `${range.label} • ${airline.code} - ${airline.name} • ${selectedDeskLabel}`
     : `${range.label} • Toutes compagnies • ${selectedDeskLabel}`;
+  const ticketStatusLabel = ticketStatusFilter === "PAID"
+    ? "Billets payés"
+    : ticketStatusFilter === "UNPAID"
+      ? "Billets non payés"
+      : ticketStatusFilter === "PARTIAL"
+        ? "Billets partiels"
+        : "Tous les billets";
   let filenameBase = "rapport-paiements";
 
   if (reportType === "cash-journal") {
@@ -932,7 +954,7 @@ export async function GET(request: NextRequest) {
 
     const drawSummary = () => {
       page.drawText(detailLabel, { x: 24, y: 518, size: 8.8, font: fontBold, color: textBlack });
-      page.drawText(`Billets: ${ticketsWithStatus.length} • Transactions: ${rows.length}`, { x: 180, y: 518, size: 8.4, font, color: textBlack });
+      page.drawText(`Billets (${ticketStatusLabel}): ${ticketsForReport.length} • Transactions période: ${rows.length}`, { x: 180, y: 518, size: 8.4, font, color: textBlack });
       page.drawText(`Facturé: ${totalBilled.toFixed(2)} USD eq`, { x: 24, y: 505, size: 8.4, font: fontBold, color: textBlack });
       page.drawText(`Encaissé: ${totalPaidOnTickets.toFixed(2)} USD eq`, { x: 190, y: 505, size: 8.4, font: fontBold, color: textBlack });
       page.drawText(`Créance: ${totalOutstanding.toFixed(2)} USD eq`, { x: 360, y: 505, size: 8.4, font: fontBold, color: textBlack });
@@ -947,8 +969,8 @@ export async function GET(request: NextRequest) {
       page.drawLine({ start: { x: 24, y: 451 }, end: { x: 818, y: 451 }, thickness: 0.7, color: lineGray });
     };
 
-    const headers = ["Date", "PNR", "Client", "Compagnie", "Vendeur", "Montant payé", "Méthode", "Référence"];
-    const x = [24, 92, 170, 325, 430, 530, 620, 700];
+    const headers = ["Date", "PNR", "Client", "Compagnie", "Vendeur", "Facturé", "Encaissé", "Reste", "Statut"];
+    const x = [24, 92, 170, 316, 416, 506, 578, 650, 726];
     const drawTableHeader = (topY: number) => {
       headers.forEach((header, index) => {
         page.drawText(header, { x: x[index], y: topY, size: 8, font: fontBold, color: textBlack });
@@ -961,7 +983,7 @@ export async function GET(request: NextRequest) {
     drawTableHeader(436);
     let y = 420;
 
-    for (const row of rows) {
+    for (const ticket of ticketsForReport) {
       if (y < 38) {
         page = pdf.addPage([842, 595]);
         drawHeader(true);
@@ -969,16 +991,25 @@ export async function GET(request: NextRequest) {
         y = 500;
       }
 
-      const amountLabel = `${row.amount.toFixed(2)} ${normalizeMoneyCurrency(row.currency ?? row.ticket.currency)}`;
+      const billedLabel = `${ticket.totalTicketAmount.toFixed(2)} ${normalizeMoneyCurrency(ticket.currency)}`;
+      const paidLabel = `${ticket.paidAmount.toFixed(2)} ${normalizeMoneyCurrency(ticket.currency)}`;
+      const remaining = Math.max(0, ticket.totalTicketAmount - ticket.paidAmount);
+      const remainingLabel = `${remaining.toFixed(2)} ${normalizeMoneyCurrency(ticket.currency)}`;
+      const statusLabel = ticket.computedStatus === "PAID"
+        ? "PAYE"
+        : ticket.computedStatus === "UNPAID"
+          ? "NON PAYE"
+          : "PARTIEL";
       const values = [
-        new Date(row.paidAt).toISOString().slice(0, 10),
-        row.ticket.ticketNumber.slice(0, 10),
-        short(row.ticket.customerName, 26),
-        row.ticket.airline.code,
-        short(row.ticket.sellerName ?? row.ticket.seller?.name ?? "-", 14),
-        amountLabel,
-        short(row.method, 12),
-        short(row.reference ?? "-", 16),
+        new Date(ticket.soldAt).toISOString().slice(0, 10),
+        ticket.ticketNumber.slice(0, 10),
+        short(ticket.customerName, 24),
+        ticket.airline.code,
+        short(ticket.seller?.name ?? "-", 12),
+        billedLabel,
+        paidLabel,
+        remainingLabel,
+        statusLabel,
       ];
 
       values.forEach((value, index) => {
