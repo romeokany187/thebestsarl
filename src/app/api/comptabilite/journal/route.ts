@@ -263,7 +263,7 @@ export async function GET() {
     listAccountingChronologyRows({ accountingEntry: accountingEntryClient }),
     accountingEntryClient.findMany({
       orderBy: [{ entryDate: "desc" }, { createdAt: "desc" }, { id: "desc" }],
-      take: 40,
+      take: 500,
       include: {
         createdBy: { select: { name: true } },
         lines: {

@@ -247,7 +247,7 @@ export function AccountingJournalWorkspace({
       .slice(0, 8);
   }, [ticketInvoiceOptions, ticketInvoiceQuery]);
   const filteredRecentEntries = useMemo(() => {
-    const query = historySearch.trim().toLowerCase();
+    const query = historySearchInput.trim().toLowerCase();
 
     if (!query) {
       return recentEntries;
@@ -271,7 +271,7 @@ export function AccountingJournalWorkspace({
 
       return searchable.includes(query);
     });
-  }, [recentEntries, historySearch]);
+  }, [recentEntries, historySearchInput]);
 
   useEffect(() => {
     const matchingRate = dailyRateMap.get(rateDate);
@@ -817,7 +817,7 @@ export function AccountingJournalWorkspace({
             >
               Rechercher
             </button>
-            {(historySearch || historySearchInput) ? (
+            {historySearchInput ? (
               <button
                 type="button"
                 onClick={clearHistorySearch}
@@ -831,9 +831,9 @@ export function AccountingJournalWorkspace({
 
         {loading ? <p className="text-sm text-black/55 dark:text-white/55">Chargement…</p> : null}
 
-        {!loading && historySearch ? (
+        {!loading && historySearchInput.trim() ? (
           <p className="mb-3 text-xs text-black/55 dark:text-white/55">
-            Recherche active: "{historySearch}" ({filteredRecentEntries.length} résultat{filteredRecentEntries.length > 1 ? "s" : ""})
+            Recherche active: "{historySearchInput.trim()}" ({filteredRecentEntries.length} résultat{filteredRecentEntries.length > 1 ? "s" : ""})
           </p>
         ) : null}
 

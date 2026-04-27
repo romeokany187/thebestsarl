@@ -364,7 +364,10 @@ export function AccountingReportsWorkspace({ accounts }: { accounts: AccountOpti
                 <p className="rounded-xl border border-dashed border-black/15 px-4 py-6 text-sm text-black/55 dark:border-white/15 dark:text-white/55">
                   Aucun mouvement trouvé pour ce grand livre sur cette période.
                 </p>
-              ) : preview.groups.map((group) => (
+              ) : preview.groups.map((group) => {
+                let runningUsd = 0;
+                let runningCdf = 0;
+                return (
                 <article key={group.accountCode} className="rounded-xl border border-black/10 p-3 dark:border-white/10">
                   <div className="flex flex-wrap items-start justify-between gap-3">
                     <div>
@@ -375,20 +378,89 @@ export function AccountingReportsWorkspace({ accounts }: { accounts: AccountOpti
                       <p>USD débit {money(group.totals.debitUsd)} / crédit {money(group.totals.creditUsd)}</p>
                     </div>
                   </div>
-                  <div className="mt-3 space-y-2">
-                    {group.rows.map((row) => (
-                      <div key={`${row.entryId}-${row.sequence}-${row.side}-${row.counterparts}`} className="rounded-lg border border-black/10 px-3 py-2 text-xs dark:border-white/10">
-                        <div className="flex flex-wrap items-center justify-between gap-2">
-                          <span className="font-semibold">#{row.sequence} • {new Date(row.entryDate).toLocaleDateString("fr-FR")} • {row.side}</span>
-                          <span>USD {money(row.debitUsd || row.creditUsd)}</span>
-                        </div>
-                        <p className="mt-1 text-black/70 dark:text-white/70">{row.libelle}</p>
-                        <p className="mt-1 text-black/55 dark:text-white/55">Contreparties: {row.counterparts || "-"}</p>
-                      </div>
-                    ))}
+                  <div className="mt-3 overflow-x-auto">
+                    <table className="min-w-full text-xs">
+                      <thead className="bg-black/5 dark:bg-white/10">
+                        <tr>
+                          <th className="px-2 py-1.5 text-center font-semibold">N°</th>
+                          <th className="px-2 py-1.5 text-center font-semibold">Date</th>
+                          <th className="px-2 py-1.5 text-left font-semibold">Libellé</th>
+                          <th className="px-2 py-1.5 text-left font-semibold">Contreparties</th>
+                          <th className="px-2 py-1.5 text-right font-semibold">Débit USD</th>
+                          <th className="px-2 py-1.5 text-right font-semibold">Crédit USD</th>
+                          <th className="px-2 py-1.5 text-right font-semibold whitespace-nowrap">Solde USD</th>
+                          <th className="px-2 py-1.5 text-right font-semibold">Débit CDF</th>
+                          <th className="px-2 py-1.5 text-right font-semibold">Crédit CDF</th>
+                          <th className="px-2 py-1.5 text-right font-semibold whitespace-nowrap">Solde CDF</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {group.rows.map((row) => {
+                          runningUsd += row.debitUsd - row.creditUsd;
+                          runningCdf += row.debitCdf - row.creditCdf;
+                          const soldeUsdClass = runningUsd >= 0 ? "text-blue-700 dark:text-blue-400" : "text-red-600 dark:text-red-400";
+                          const soldeCdfClass = runningCdf >= 0 ? "text-blue-700 dark:text-blue-400" : "text-red-600 dark:text-red-400";
+                          return (
+                          <tr key={`${row.entryId}-${row.sequence}-${row.side}-${row.counterparts}`} className="border-t border-black/5 dark:border-white/10">
+                            <td className="px-2 py-1.5 text-center font-mono">{row.sequence}</td>
+                            <td className="px-2 py-1.5 text-center whitespace-nowrap">{new Date(row.entryDate).toLocaleDateString("fr-FR")}</td>
+                            <td className="px-2 py-1.5">{row.libelle}</td>
+                            <td className="px-2 py-1.5 text-black/60 dark:text-white/60">{row.counterparts || "-"}</td>
+                            <td className="px-2 py-1.5 text-right">{row.debitUsd ? money(row.debitUsd) : ""}</td>
+                            <td className="px-2 py-1.5 text-right">{row.creditUsd ? money(row.creditUsd) : ""}</td>
+                            <td className={`px-2 py-1.5 text-right font-semibold ${soldeUsdClass}`}>
+                              {money(Math.abs(runningUsd))} {runningUsd === 0 ? "" : runningUsd > 0 ? "D" : "C"}
+                            </td>
+                            <td className="px-2 py-1.5 text-right">{row.debitCdf ? money(row.debitCdf) : ""}</td>
+                            <td className="px-2 py-1.5 text-right">{row.creditCdf ? money(row.creditCdf) : ""}</td>
+                            <td className={`px-2 py-1.5 text-right font-semibold ${soldeCdfClass}`}>
+                              {money(Math.abs(runningCdf))} {runningCdf === 0 ? "" : runningCdf > 0 ? "D" : "C"}
+                            </td>
+                          </tr>
+                          );
+                        })}
+                        <tr className="border-t-2 border-black/20 dark:border-white/20 bg-black/5 dark:bg-white/5 font-semibold">
+                          <td colSpan={4} className="px-2 py-1.5">TOTAL COMPTE</td>
+                          <td className="px-2 py-1.5 text-right">{money(group.totals.debitUsd)}</td>
+                          <td className="px-2 py-1.5 text-right">{money(group.totals.creditUsd)}</td>
+                          <td className={`px-2 py-1.5 text-right ${runningUsd >= 0 ? "text-blue-700 dark:text-blue-400" : "text-red-600 dark:text-red-400"}`}>
+                            {money(Math.abs(runningUsd))} {runningUsd === 0 ? "" : runningUsd > 0 ? "D" : "C"}
+                          </td>
+                          <td className="px-2 py-1.5 text-right">{money(group.totals.debitCdf)}</td>
+                          <td className="px-2 py-1.5 text-right">{money(group.totals.creditCdf)}</td>
+                          <td className={`px-2 py-1.5 text-right ${runningCdf >= 0 ? "text-blue-700 dark:text-blue-400" : "text-red-600 dark:text-red-400"}`}>
+                            {money(Math.abs(runningCdf))} {runningCdf === 0 ? "" : runningCdf > 0 ? "D" : "C"}
+                          </td>
+                        </tr>
+                        {(() => {
+                          const soldeUsd = group.totals.debitUsd - group.totals.creditUsd;
+                          const soldeCdf = group.totals.debitCdf - group.totals.creditCdf;
+                          const labelUsd = soldeUsd > 0 ? "Solde débiteur" : soldeUsd < 0 ? "Solde créditeur" : "Solde équilibré";
+                          const labelCdf = soldeCdf > 0 ? "Solde débiteur" : soldeCdf < 0 ? "Solde créditeur" : "Solde équilibré";
+                          return (
+                            <tr className="border-t border-dashed border-black/20 dark:border-white/20 font-bold italic text-xs bg-amber-50/60 dark:bg-amber-950/20">
+                              <td colSpan={4} className="px-2 py-1.5 text-amber-800 dark:text-amber-300">
+                                {labelUsd === labelCdf ? labelUsd : `${labelUsd} (USD) / ${labelCdf} (CDF)`}
+                              </td>
+                              <td className="px-2 py-1.5" />
+                              <td className="px-2 py-1.5" />
+                              <td className={`px-2 py-1.5 text-right ${soldeUsd >= 0 ? "text-blue-700 dark:text-blue-400" : "text-red-600 dark:text-red-400"}`}>
+                                {money(Math.abs(soldeUsd))} {soldeUsd !== 0 ? (soldeUsd > 0 ? "D" : "C") : ""}
+                              </td>
+                              <td className="px-2 py-1.5" />
+                              <td className="px-2 py-1.5" />
+                              <td className={`px-2 py-1.5 text-right ${soldeCdf >= 0 ? "text-blue-700 dark:text-blue-400" : "text-red-600 dark:text-red-400"}`}>
+                                {money(Math.abs(soldeCdf))} {soldeCdf !== 0 ? (soldeCdf > 0 ? "D" : "C") : ""}
+                              </td>
+                            </tr>
+                          );
+                        })()}
+                      </tbody>
+                    </table>
                   </div>
                 </article>
-              ))}
+                );
+              })}
             </div>
           ) : preview.reportType === "trial-balance" ? (
             <div className="overflow-x-auto">
