@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type MutableRefObject } from "react";
 
 type RealtimePayload = {
   unreadCount: number;
@@ -13,13 +13,17 @@ type RealtimePayload = {
   } | null;
 };
 
-async function playNotificationTone(enabled: boolean) {
+async function playNotificationTone(enabled: boolean, contextRef: MutableRefObject<AudioContext | null>) {
   if (!enabled || typeof window === "undefined") return;
 
   const AudioContextClass = window.AudioContext || (window as typeof window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
   if (!AudioContextClass) return;
 
-  const context = new AudioContextClass();
+  if (!contextRef.current) {
+    contextRef.current = new AudioContextClass();
+  }
+  const context = contextRef.current;
+
   if (context.state === "suspended") {
     try {
       await context.resume();
@@ -28,27 +32,34 @@ async function playNotificationTone(enabled: boolean) {
     }
   }
 
-  const oscillator = context.createOscillator();
-  const gainNode = context.createGain();
-
-  oscillator.type = "square";
-  oscillator.frequency.value = 1046;
-  gainNode.gain.value = 0.0001;
-
-  oscillator.connect(gainNode);
-  gainNode.connect(context.destination);
+  const masterGain = context.createGain();
+  masterGain.gain.value = 0.13;
+  masterGain.connect(context.destination);
 
   const now = context.currentTime;
-  gainNode.gain.setValueAtTime(0.0001, now);
-  gainNode.gain.exponentialRampToValueAtTime(0.16, now + 0.02);
-  gainNode.gain.exponentialRampToValueAtTime(0.0001, now + 0.38);
+  const notes = [880, 1174, 1567];
+  notes.forEach((frequency, index) => {
+    const start = now + (index * 0.09);
+    const end = start + 0.12;
+    const osc = context.createOscillator();
+    const env = context.createGain();
 
-  oscillator.start(now);
-  oscillator.stop(now + 0.4);
+    osc.type = "sine";
+    osc.frequency.value = frequency;
+
+    env.gain.setValueAtTime(0.0001, start);
+    env.gain.exponentialRampToValueAtTime(0.35, start + 0.02);
+    env.gain.exponentialRampToValueAtTime(0.0001, end);
+
+    osc.connect(env);
+    env.connect(masterGain);
+    osc.start(start);
+    osc.stop(end);
+  });
 
   window.setTimeout(() => {
-    void context.close();
-  }, 900);
+    masterGain.disconnect();
+  }, 600);
 }
 
 export function InboxRealtimeLink({
@@ -67,9 +78,36 @@ export function InboxRealtimeLink({
   const latestIdRef = useRef<string | null>(initialLatestNotificationId);
   const unreadCountRef = useRef(initialUnreadCount);
   const soundEnabledRef = useRef(false);
+  const audioContextRef = useRef<AudioContext | null>(null);
+
+  async function unlockSoundAndSystemNotifications() {
+    setSoundEnabled(true);
+    soundEnabledRef.current = true;
+
+    if (typeof window !== "undefined") {
+      const AudioContextClass = window.AudioContext || (window as typeof window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+      if (AudioContextClass && !audioContextRef.current) {
+        audioContextRef.current = new AudioContextClass();
+      }
+
+      if (audioContextRef.current?.state === "suspended") {
+        try {
+          await audioContextRef.current.resume();
+        } catch {
+          // Ignore; next user interaction will try again.
+        }
+      }
+
+      if ("Notification" in window && Notification.permission === "default") {
+        void Notification.requestPermission();
+      }
+    }
+  }
 
   useEffect(() => {
-    const unlock = () => setSoundEnabled(true);
+    const unlock = () => {
+      void unlockSoundAndSystemNotifications();
+    };
     window.addEventListener("pointerdown", unlock, { once: true });
     window.addEventListener("touchstart", unlock, { once: true });
     window.addEventListener("click", unlock, { once: true });
@@ -80,6 +118,10 @@ export function InboxRealtimeLink({
       window.removeEventListener("touchstart", unlock);
       window.removeEventListener("click", unlock);
       window.removeEventListener("keydown", unlock);
+      if (audioContextRef.current) {
+        void audioContextRef.current.close();
+        audioContextRef.current = null;
+      }
     };
   }, []);
 
@@ -113,8 +155,25 @@ export function InboxRealtimeLink({
             message: payload.latest.message,
           });
           window.setTimeout(() => setToast(null), 5000);
+
+          // If the tab is not active, also trigger system notification (OS-level popup).
+          if (
+            document.hidden
+            && typeof window !== "undefined"
+            && "Notification" in window
+            && Notification.permission === "granted"
+          ) {
+            try {
+              new Notification(payload.latest.title, {
+                body: payload.latest.message,
+                tag: `notif-${payload.latest.id}`,
+              });
+            } catch {
+              // Ignore notification API failures.
+            }
+          }
         }
-        void playNotificationTone(soundEnabledRef.current);
+        void playNotificationTone(soundEnabledRef.current, audioContextRef);
       }
     }
 
