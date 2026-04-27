@@ -463,21 +463,30 @@ type LedgerPdfRow = {
   counterparts: string;
   debitUsd: string;
   creditUsd: string;
+  soldeUsd: string;
   debitCdf: string;
   creditCdf: string;
+  soldeCdf: string;
 };
+
+function formatSolde(val: number): string {
+  if (val === 0) return "0.00";
+  return `${formatMoneyCell(Math.abs(val))} ${val > 0 ? "D" : "C"}`;
+}
 
 const LEDGER_COLUMNS: GenericColumn<LedgerPdfRow>[] = [
   { key: "sequence", label: "N°", width: 42, align: "center" },
   { key: "entryDate", label: "DATE", width: 70, align: "center" },
-  { key: "pole", label: "POLE", width: 70, align: "center" },
-  { key: "pieceJustificative", label: "PIÈCE", width: 84, align: "center" },
-  { key: "libelle", label: "LIBELLÉ", width: 230 },
-  { key: "counterparts", label: "CONTREPARTIES", width: 300 },
+  { key: "pole", label: "POLE", width: 60, align: "center" },
+  { key: "pieceJustificative", label: "PIÈCE", width: 74, align: "center" },
+  { key: "libelle", label: "LIBELLÉ", width: 210 },
+  { key: "counterparts", label: "CONTREPARTIES", width: 150 },
   { key: "debitUsd", label: "DÉBIT USD", width: 90, align: "right" },
   { key: "creditUsd", label: "CRÉDIT USD", width: 90, align: "right" },
-  { key: "debitCdf", label: "DÉBIT CDF", width: 94, align: "right" },
-  { key: "creditCdf", label: "CRÉDIT CDF", width: 94, align: "right" },
+  { key: "soldeUsd", label: "SOLDE USD", width: 84, align: "right" },
+  { key: "debitCdf", label: "DÉBIT CDF", width: 84, align: "right" },
+  { key: "creditCdf", label: "CRÉDIT CDF", width: 84, align: "right" },
+  { key: "soldeCdf", label: "SOLDE CDF", width: 84, align: "right" },
 ];
 
 type BalancePdfRow = {
@@ -991,7 +1000,12 @@ async function buildPdf(report: ReportPayload) {
       y -= groupHeight;
       drawLedgerHeader();
 
+      let runningUsd = 0;
+      let runningCdf = 0;
+
       group.rows.forEach((row, index) => {
+        runningUsd += row.debitUsd - row.creditUsd;
+        runningCdf += row.debitCdf - row.creditCdf;
         const pdfRow: LedgerPdfRow = {
           sequence: String(row.sequence),
           entryDate: new Date(row.entryDate).toLocaleDateString("fr-FR"),
@@ -1001,8 +1015,10 @@ async function buildPdf(report: ReportPayload) {
           counterparts: row.counterparts || "-",
           debitUsd: formatMoneyCell(row.debitUsd),
           creditUsd: formatMoneyCell(row.creditUsd),
+          soldeUsd: formatSolde(runningUsd),
           debitCdf: formatMoneyCell(row.debitCdf),
           creditCdf: formatMoneyCell(row.creditCdf),
+          soldeCdf: formatSolde(runningCdf),
         };
         const rowHeight = genericRowHeight(pdfRow, LEDGER_COLUMNS, font, fontSize);
         if (y - rowHeight < 42) {
@@ -1035,8 +1051,10 @@ async function buildPdf(report: ReportPayload) {
         counterparts: `${group.rows.length} ligne(s)`,
         debitUsd: formatMoneyCell(group.totals.debitUsd),
         creditUsd: formatMoneyCell(group.totals.creditUsd),
+        soldeUsd: formatSolde(runningUsd),
         debitCdf: formatMoneyCell(group.totals.debitCdf),
         creditCdf: formatMoneyCell(group.totals.creditCdf),
+        soldeCdf: formatSolde(runningCdf),
       };
       const totalHeight = genericRowHeight(totalRow, LEDGER_COLUMNS, bold, fontSize);
       if (y - totalHeight < 42) {
@@ -1057,7 +1075,51 @@ async function buildPdf(report: ReportPayload) {
         emphasizeKeys: ["libelle", "counterparts", "debitUsd", "creditUsd", "debitCdf", "creditCdf"],
         fillColor: rgb(0.94, 0.94, 0.94),
       });
-      y -= totalHeight + 10;
+      y -= totalHeight;
+
+      // Ligne SOLDE après TOTAL COMPTE
+      const soldeUsd = group.totals.debitUsd - group.totals.creditUsd;
+      const soldeCdf = group.totals.debitCdf - group.totals.creditCdf;
+      const soldeLibelle =
+        soldeUsd > 0
+          ? "Solde débiteur"
+          : soldeUsd < 0
+            ? "Solde créditeur"
+            : "Solde équilibré";
+      const soldeRow: LedgerPdfRow = {
+        sequence: "",
+        entryDate: "",
+        pole: "",
+        pieceJustificative: "",
+        libelle: soldeLibelle,
+        counterparts: "",
+        debitUsd: "",
+        creditUsd: "",
+        soldeUsd: formatSolde(soldeUsd),
+        debitCdf: "",
+        creditCdf: "",
+        soldeCdf: formatSolde(soldeCdf),
+      };
+      const soldeHeight = genericRowHeight(soldeRow, LEDGER_COLUMNS, bold, fontSize);
+      if (y - soldeHeight < 42) {
+        addPage();
+        y -= 8;
+        drawLedgerHeader();
+      }
+      drawGenericTableRow({
+        page,
+        row: soldeRow,
+        columns: LEDGER_COLUMNS,
+        startX: tableStartX,
+        topY: y,
+        rowHeight: soldeHeight,
+        font,
+        bold,
+        fontSize,
+        emphasizeKeys: ["libelle", "soldeUsd", "soldeCdf"],
+        fillColor: rgb(0.99, 0.96, 0.88),
+      });
+      y -= soldeHeight + 10;
     }
   } else if (report.reportType === "trial-balance") {
     const rows = report.rows.map<BalancePdfRow>((row) => ({
