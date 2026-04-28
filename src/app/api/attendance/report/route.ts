@@ -106,8 +106,41 @@ async function readFirstExistingFile(candidates: string[]) {
   return null;
 }
 
+function attendanceStatusLabel(status: string): string {
+  switch (status.toUpperCase()) {
+    case "PRESENT": return "Présent";
+    case "ABSENT": return "Absent";
+    case "LATE": return "En retard";
+    case "HALF_DAY": return "Demi-journée";
+    case "REMOTE": return "Télétravail";
+    case "LEAVE": return "Congé";
+    case "SICK": return "Maladie";
+    case "HOLIDAY": return "Jour férié";
+    default: return status;
+  }
+}
+
+function locationStatusLabel(status: string): string {
+  switch (status.toUpperCase()) {
+    case "SITE_MATCH": return "Sur site";
+    case "OFF_SITE": return "Hors site";
+    case "NEAR_SITE": return "Proximité site";
+    case "UNKNOWN": return "Inconnu";
+    case "NO_LOCATION": return "Non renseigné";
+    default: return status;
+  }
+}
+
+function formatMinutes(mins: number): string {
+  if (!mins || mins <= 0) return "-";
+  if (mins < 60) return `${mins} min`;
+  const h = Math.floor(mins / 60);
+  const m = mins % 60;
+  return m > 0 ? `${h}h${String(m).padStart(2, "0")}` : `${h}h`;
+}
+
 export async function GET(request: NextRequest) {
-  const access = await requireApiModuleAccess("attendance", ["ADMIN"]);
+  const access = await requireApiModuleAccess("attendance", ["ADMIN", "DIRECTEUR_GENERAL", "ACCOUNTANT"]);
   if (access.error) {
     return access.error;
   }
@@ -166,14 +199,14 @@ export async function GET(request: NextRequest) {
 
   for (const row of rows) {
     const values = [
-      new Date(row.date).toISOString().slice(0, 10),
+      new Date(row.date).toLocaleDateString("fr-FR"),
       row.user.name,
-      row.status,
-      row.clockIn ? new Date(row.clockIn).toISOString().slice(11, 16) : "-",
-      row.clockOut ? new Date(row.clockOut).toISOString().slice(11, 16) : "-",
-      `${row.latenessMins} min`,
-      `${row.overtimeMins} min`,
-      row.locationStatus,
+      attendanceStatusLabel(row.status),
+      row.clockIn ? new Date(row.clockIn).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit", timeZone: "Africa/Lubumbashi" }) : "-",
+      row.clockOut ? new Date(row.clockOut).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit", timeZone: "Africa/Lubumbashi" }) : "-",
+      formatMinutes(row.latenessMins),
+      formatMinutes(row.overtimeMins),
+      locationStatusLabel(row.locationStatus),
       row.notes ?? "-",
     ];
 

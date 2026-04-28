@@ -38,7 +38,7 @@ export default async function AttendancePage({
   const { session, role } = await requirePageModuleAccess("attendance", ["ADMIN", "DIRECTEUR_GENERAL", "MANAGER", "EMPLOYEE", "ACCOUNTANT"]);
   const resolvedSearchParams = (await searchParams) ?? {};
   const range = dateRangeFromParams(resolvedSearchParams);
-  const canViewGlobalAttendance = role === "ADMIN" || role === "DIRECTEUR_GENERAL";
+  const canViewGlobalAttendance = role === "ADMIN" || role === "DIRECTEUR_GENERAL" || role === "ACCOUNTANT";
   const canManageAttendance = true;
   const selectedUserId = canViewGlobalAttendance
     ? resolvedSearchParams.userId && resolvedSearchParams.userId !== "ALL"
@@ -46,7 +46,9 @@ export default async function AttendancePage({
       : undefined
     : session.user.id;
   const accessNote = canViewGlobalAttendance
-    ? "Accès direction: visualisation globale et gestion des présences de toute l'équipe."
+    ? role === "ACCOUNTANT"
+      ? "Accès comptable: consultation globale des présences et téléchargement des rapports PDF."
+      : "Accès direction: visualisation globale et gestion des présences de toute l'équipe."
     : "Accès personnel: vous signez votre présence et consultez uniquement vos propres lignes.";
 
   const users = !canViewGlobalAttendance
