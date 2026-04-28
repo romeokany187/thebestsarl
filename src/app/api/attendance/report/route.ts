@@ -140,9 +140,16 @@ function formatMinutes(mins: number): string {
 }
 
 export async function GET(request: NextRequest) {
-  const access = await requireApiModuleAccess("attendance", ["ADMIN", "DIRECTEUR_GENERAL", "ACCOUNTANT"]);
+  const access = await requireApiModuleAccess("attendance", ["ADMIN", "DIRECTEUR_GENERAL", "ACCOUNTANT", "EMPLOYEE"]);
   if (access.error) {
     return access.error;
+  }
+
+  const isComptable = access.role === "ACCOUNTANT" || (access.session.user.jobTitle ?? "").trim().toUpperCase() === "COMPTABLE";
+  const canExportAttendanceReport = access.role === "ADMIN" || access.role === "DIRECTEUR_GENERAL" || isComptable;
+
+  if (!canExportAttendanceReport) {
+    return NextResponse.json({ error: "Accès refusé au rapport des présences." }, { status: 403 });
   }
 
   const range = dateRangeFromParams(request.nextUrl.searchParams);
