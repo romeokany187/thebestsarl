@@ -487,21 +487,17 @@ const LEDGER_COLUMNS: GenericColumn<LedgerPdfRow>[] = [
   { key: "creditCdf", label: "CRÉDIT CDF", width: 84, align: "right" },
 ];
 
-function formatLedgerAmountWithEquivalent(
-  primaryAmount: number,
-  secondaryAmount: number,
+function formatLedgerUsdWithCdfEquivalent(
+  usdAmount: number,
+  cdfAmount: number,
   exchangeRate: number | null | undefined,
-  targetCurrency: "USD" | "CDF",
 ) {
-  if (primaryAmount > 0) {
-    return formatMoneyCell(primaryAmount);
+  if (usdAmount > 0) {
+    return formatMoneyCell(usdAmount);
   }
 
-  if (secondaryAmount > 0 && exchangeRate && exchangeRate > 0) {
-    const converted = targetCurrency === "USD"
-      ? secondaryAmount / exchangeRate
-      : secondaryAmount * exchangeRate;
-    return `≈ ${formatMoneyCell(converted)}`;
+  if (cdfAmount > 0 && exchangeRate && exchangeRate > 0) {
+    return `≈ ${formatMoneyCell(cdfAmount / exchangeRate)}`;
   }
 
   return "";
@@ -1026,10 +1022,10 @@ async function buildPdf(report: ReportPayload) {
           pieceJustificative: row.pieceJustificative ?? "-",
           libelle: row.libelle ?? "-",
           counterparts: row.counterparts || "-",
-          debitUsd: formatLedgerAmountWithEquivalent(row.debitUsd, row.debitCdf, row.exchangeRate, "USD"),
-          creditUsd: formatLedgerAmountWithEquivalent(row.creditUsd, row.creditCdf, row.exchangeRate, "USD"),
-          debitCdf: formatLedgerAmountWithEquivalent(row.debitCdf, row.debitUsd, row.exchangeRate, "CDF"),
-          creditCdf: formatLedgerAmountWithEquivalent(row.creditCdf, row.creditUsd, row.exchangeRate, "CDF"),
+          debitUsd: formatLedgerUsdWithCdfEquivalent(row.debitUsd, row.debitCdf, row.exchangeRate),
+          creditUsd: formatLedgerUsdWithCdfEquivalent(row.creditUsd, row.creditCdf, row.exchangeRate),
+          debitCdf: row.debitCdf > 0 ? formatMoneyCell(row.debitCdf) : "",
+          creditCdf: row.creditCdf > 0 ? formatMoneyCell(row.creditCdf) : "",
         };
         const rowHeight = genericRowHeight(pdfRow, LEDGER_COLUMNS, font, fontSize);
         if (y - rowHeight < 42) {

@@ -404,16 +404,8 @@ export function AccountingReportsWorkspace({ accounts }: { accounts: AccountOpti
                             : row.creditCdf > 0 && rate
                               ? `≈ ${money(row.creditCdf / rate)}`
                               : "";
-                          const debitCdfValue = row.debitCdf > 0
-                            ? money(row.debitCdf)
-                            : row.debitUsd > 0 && rate
-                              ? `≈ ${money(row.debitUsd * rate)}`
-                              : "";
-                          const creditCdfValue = row.creditCdf > 0
-                            ? money(row.creditCdf)
-                            : row.creditUsd > 0 && rate
-                              ? `≈ ${money(row.creditUsd * rate)}`
-                              : "";
+                          const debitCdfValue = row.debitCdf > 0 ? money(row.debitCdf) : "";
+                          const creditCdfValue = row.creditCdf > 0 ? money(row.creditCdf) : "";
                           return (
                           <tr key={`${row.entryId}-${row.sequence}-${row.side}-${row.counterparts}`} className="border-t border-black/5 dark:border-white/10">
                             <td className="px-2 py-1.5 text-center font-mono">{row.sequence}</td>
