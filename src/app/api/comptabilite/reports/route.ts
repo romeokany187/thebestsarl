@@ -237,6 +237,7 @@ function buildLedgerPayload(entries: any[], label: string, selectedAccountCode: 
     libelle: string;
     pieceJustificative?: string | null;
     pole?: string | null;
+    exchangeRate?: number | null;
     side: "DEBIT" | "CREDIT";
     debitUsd: number;
     creditUsd: number;
@@ -287,6 +288,7 @@ function buildLedgerPayload(entries: any[], label: string, selectedAccountCode: 
         libelle: entry.libelle,
         pieceJustificative: entry.pieceJustificative,
         pole: entry.pole,
+        exchangeRate: entry.exchangeRate,
         side: line.side,
         debitUsd,
         creditUsd,
@@ -463,10 +465,8 @@ type LedgerPdfRow = {
   counterparts: string;
   debitUsd: string;
   creditUsd: string;
-  soldeUsd: string;
   debitCdf: string;
   creditCdf: string;
-  soldeCdf: string;
 };
 
 function formatSolde(val: number): string {
@@ -479,15 +479,33 @@ const LEDGER_COLUMNS: GenericColumn<LedgerPdfRow>[] = [
   { key: "entryDate", label: "DATE", width: 70, align: "center" },
   { key: "pole", label: "POLE", width: 60, align: "center" },
   { key: "pieceJustificative", label: "PIÈCE", width: 74, align: "center" },
-  { key: "libelle", label: "LIBELLÉ", width: 210 },
-  { key: "counterparts", label: "CONTREPARTIES", width: 150 },
+  { key: "libelle", label: "LIBELLÉ", width: 270 },
+  { key: "counterparts", label: "CONTREPARTIES", width: 210 },
   { key: "debitUsd", label: "DÉBIT USD", width: 90, align: "right" },
   { key: "creditUsd", label: "CRÉDIT USD", width: 90, align: "right" },
-  { key: "soldeUsd", label: "SOLDE USD", width: 84, align: "right" },
   { key: "debitCdf", label: "DÉBIT CDF", width: 84, align: "right" },
   { key: "creditCdf", label: "CRÉDIT CDF", width: 84, align: "right" },
-  { key: "soldeCdf", label: "SOLDE CDF", width: 84, align: "right" },
 ];
+
+function formatLedgerAmountWithEquivalent(
+  primaryAmount: number,
+  secondaryAmount: number,
+  exchangeRate: number | null | undefined,
+  targetCurrency: "USD" | "CDF",
+) {
+  if (primaryAmount > 0) {
+    return formatMoneyCell(primaryAmount);
+  }
+
+  if (secondaryAmount > 0 && exchangeRate && exchangeRate > 0) {
+    const converted = targetCurrency === "USD"
+      ? secondaryAmount / exchangeRate
+      : secondaryAmount * exchangeRate;
+    return `≈ ${formatMoneyCell(converted)}`;
+  }
+
+  return "";
+}
 
 type BalancePdfRow = {
   accountCode: string;
@@ -1000,12 +1018,7 @@ async function buildPdf(report: ReportPayload) {
       y -= groupHeight;
       drawLedgerHeader();
 
-      let runningUsd = 0;
-      let runningCdf = 0;
-
       group.rows.forEach((row, index) => {
-        runningUsd += row.debitUsd - row.creditUsd;
-        runningCdf += row.debitCdf - row.creditCdf;
         const pdfRow: LedgerPdfRow = {
           sequence: String(row.sequence),
           entryDate: new Date(row.entryDate).toLocaleDateString("fr-FR"),
@@ -1013,12 +1026,10 @@ async function buildPdf(report: ReportPayload) {
           pieceJustificative: row.pieceJustificative ?? "-",
           libelle: row.libelle ?? "-",
           counterparts: row.counterparts || "-",
-          debitUsd: formatMoneyCell(row.debitUsd),
-          creditUsd: formatMoneyCell(row.creditUsd),
-          soldeUsd: formatSolde(runningUsd),
-          debitCdf: formatMoneyCell(row.debitCdf),
-          creditCdf: formatMoneyCell(row.creditCdf),
-          soldeCdf: formatSolde(runningCdf),
+          debitUsd: formatLedgerAmountWithEquivalent(row.debitUsd, row.debitCdf, row.exchangeRate, "USD"),
+          creditUsd: formatLedgerAmountWithEquivalent(row.creditUsd, row.creditCdf, row.exchangeRate, "USD"),
+          debitCdf: formatLedgerAmountWithEquivalent(row.debitCdf, row.debitUsd, row.exchangeRate, "CDF"),
+          creditCdf: formatLedgerAmountWithEquivalent(row.creditCdf, row.creditUsd, row.exchangeRate, "CDF"),
         };
         const rowHeight = genericRowHeight(pdfRow, LEDGER_COLUMNS, font, fontSize);
         if (y - rowHeight < 42) {
@@ -1051,10 +1062,8 @@ async function buildPdf(report: ReportPayload) {
         counterparts: `${group.rows.length} ligne(s)`,
         debitUsd: formatMoneyCell(group.totals.debitUsd),
         creditUsd: formatMoneyCell(group.totals.creditUsd),
-        soldeUsd: formatSolde(runningUsd),
         debitCdf: formatMoneyCell(group.totals.debitCdf),
         creditCdf: formatMoneyCell(group.totals.creditCdf),
-        soldeCdf: formatSolde(runningCdf),
       };
       const totalHeight = genericRowHeight(totalRow, LEDGER_COLUMNS, bold, fontSize);
       if (y - totalHeight < 42) {
@@ -1091,14 +1100,12 @@ async function buildPdf(report: ReportPayload) {
         entryDate: "",
         pole: "",
         pieceJustificative: "",
-        libelle: soldeLibelle,
+        libelle: `${soldeLibelle} USD`,
         counterparts: "",
-        debitUsd: "",
-        creditUsd: "",
-        soldeUsd: formatSolde(soldeUsd),
+        debitUsd: soldeUsd > 0 ? formatMoneyCell(soldeUsd) : "",
+        creditUsd: soldeUsd < 0 ? formatMoneyCell(Math.abs(soldeUsd)) : "",
         debitCdf: "",
         creditCdf: "",
-        soldeCdf: formatSolde(soldeCdf),
       };
       const soldeHeight = genericRowHeight(soldeRow, LEDGER_COLUMNS, bold, fontSize);
       if (y - soldeHeight < 42) {
@@ -1116,10 +1123,44 @@ async function buildPdf(report: ReportPayload) {
         font,
         bold,
         fontSize,
-        emphasizeKeys: ["libelle", "soldeUsd", "soldeCdf"],
+        emphasizeKeys: ["libelle", "debitUsd", "creditUsd"],
         fillColor: rgb(0.99, 0.96, 0.88),
       });
-      y -= soldeHeight + 10;
+
+      y -= soldeHeight;
+
+      const soldeCdfRow: LedgerPdfRow = {
+        sequence: "",
+        entryDate: "",
+        pole: "",
+        pieceJustificative: "",
+        libelle: `${soldeCdf > 0 ? "Solde débiteur" : soldeCdf < 0 ? "Solde créditeur" : "Solde équilibré"} CDF`,
+        counterparts: "",
+        debitUsd: "",
+        creditUsd: "",
+        debitCdf: soldeCdf > 0 ? formatMoneyCell(soldeCdf) : "",
+        creditCdf: soldeCdf < 0 ? formatMoneyCell(Math.abs(soldeCdf)) : "",
+      };
+      const soldeCdfHeight = genericRowHeight(soldeCdfRow, LEDGER_COLUMNS, bold, fontSize);
+      if (y - soldeCdfHeight < 42) {
+        addPage();
+        y -= 8;
+        drawLedgerHeader();
+      }
+      drawGenericTableRow({
+        page,
+        row: soldeCdfRow,
+        columns: LEDGER_COLUMNS,
+        startX: tableStartX,
+        topY: y,
+        rowHeight: soldeCdfHeight,
+        font,
+        bold,
+        fontSize,
+        emphasizeKeys: ["libelle", "debitCdf", "creditCdf"],
+        fillColor: rgb(0.99, 0.96, 0.88),
+      });
+      y -= soldeCdfHeight + 10;
     }
   } else if (report.reportType === "trial-balance") {
     const rows = report.rows.map<BalancePdfRow>((row) => ({

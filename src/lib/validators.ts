@@ -397,18 +397,18 @@ export const accountingEntryCreateSchema = z.object({
   const totalDebitCdf = debitLines.reduce((sum, line) => sum + (line.amountCdf ?? 0), 0);
   const totalCreditCdf = creditLines.reduce((sum, line) => sum + (line.amountCdf ?? 0), 0);
 
-  if (Math.abs(totalDebitUsd - totalCreditUsd) > 0.0001) {
+  if (totalDebitUsd <= 0 && totalDebitCdf <= 0) {
     ctx.addIssue({
       code: z.ZodIssueCode.custom,
-      message: "Le total USD au débit doit égaler le total USD au crédit.",
+      message: "Le débit total doit contenir un montant positif (USD ou CDF).",
       path: ["lines"],
     });
   }
 
-  if (Math.abs(totalDebitCdf - totalCreditCdf) > 0.0001) {
+  if (totalCreditUsd <= 0 && totalCreditCdf <= 0) {
     ctx.addIssue({
       code: z.ZodIssueCode.custom,
-      message: "Le total CDF au débit doit égaler le total CDF au crédit.",
+      message: "Le crédit total doit contenir un montant positif (USD ou CDF).",
       path: ["lines"],
     });
   }

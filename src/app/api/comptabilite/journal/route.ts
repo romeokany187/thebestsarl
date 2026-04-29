@@ -97,6 +97,36 @@ function normalizeDeletedEntryLog(log: DeletedEntryLog) {
   };
 }
 
+function validateEntryCurrencyEquivalence(
+  lines: Array<{ side: "DEBIT" | "CREDIT"; amountUsd?: number | null; amountCdf?: number | null }>,
+  exchangeRate: number,
+) {
+  const totals = lines.reduce(
+    (sum, line) => {
+      const usd = Number(line.amountUsd ?? 0);
+      const cdf = Number(line.amountCdf ?? 0);
+      if (line.side === "DEBIT") {
+        sum.debitUsd += usd;
+        sum.debitCdf += cdf;
+      } else {
+        sum.creditUsd += usd;
+        sum.creditCdf += cdf;
+      }
+      return sum;
+    },
+    { debitUsd: 0, creditUsd: 0, debitCdf: 0, creditCdf: 0 },
+  );
+
+  const debitUsdEquivalent = totals.debitUsd + (totals.debitCdf / exchangeRate);
+  const creditUsdEquivalent = totals.creditUsd + (totals.creditCdf / exchangeRate);
+
+  if (Math.abs(debitUsdEquivalent - creditUsdEquivalent) <= 0.01) {
+    return null;
+  }
+
+  return `Écriture déséquilibrée selon le taux du jour (${exchangeRate.toFixed(2)}). Débit équiv. USD ${debitUsdEquivalent.toFixed(2)} vs Crédit équiv. USD ${creditUsdEquivalent.toFixed(2)}.`;
+}
+
 async function resolveDailyRate(client: { $queryRawUnsafe?: <T = unknown>(query: string) => Promise<T> }, entryDate: Date) {
   if (typeof client.$queryRawUnsafe !== "function") {
     throw new Error("ACCOUNTING_DAILY_RATE_QUERY_UNAVAILABLE");
@@ -352,8 +382,13 @@ export async function POST(request: NextRequest) {
   const { data, accountByCode } = builtPayload;
 
   try {
+    const dailyRate = await resolveDailyRate(prisma as unknown as AccountingTxClient, data.entryDate);
+    const balanceError = validateEntryCurrencyEquivalence(data.lines, dailyRate.exchangeRate);
+    if (balanceError) {
+      return NextResponse.json({ error: balanceError }, { status: 400 });
+    }
+
     const createdEntry = await prisma.$transaction(async (tx) => {
-      const dailyRate = await resolveDailyRate(tx as unknown as AccountingTxClient, data.entryDate);
       const entry = await (tx as unknown as AccountingTxClient).accountingEntry.create({
         data: {
           entryDate: data.entryDate,
@@ -422,8 +457,13 @@ export async function PUT(request: NextRequest) {
   const { data, accountByCode } = builtPayload;
 
   try {
+    const dailyRate = await resolveDailyRate(prisma as unknown as AccountingTxClient, data.entryDate);
+    const balanceError = validateEntryCurrencyEquivalence(data.lines, dailyRate.exchangeRate);
+    if (balanceError) {
+      return NextResponse.json({ error: balanceError }, { status: 400 });
+    }
+
     const updatedEntry = await prisma.$transaction(async (tx) => {
-      const dailyRate = await resolveDailyRate(tx as unknown as AccountingTxClient, data.entryDate);
       await (tx as unknown as { accountingEntryLine: any }).accountingEntryLine.deleteMany({
         where: { entryId },
       });
