@@ -8,7 +8,41 @@ import { requireApiModuleAccess } from "@/lib/rbac";
 
 type ReportMode = "date" | "month" | "year";
 
-const ATTENDANCE_REPORT_TIMEZONE = "Africa/Lubumbashi";
+type TeamOfficeTimezone = {
+  names: string[];
+  timeZone: string;
+};
+
+const TEAM_OFFICE_TIMEZONES: TeamOfficeTimezone[] = [
+  {
+    names: ["lubumbashi"],
+    timeZone: "Africa/Lubumbashi",
+  },
+  {
+    names: ["mbujimayi", "mbuji-mayi", "mbuji mayi"],
+    timeZone: "Africa/Lubumbashi",
+  },
+];
+
+const DEFAULT_ATTENDANCE_TIMEZONE = "Africa/Kinshasa";
+
+function normalizeTeamName(value: string) {
+  return value
+    .trim()
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "");
+}
+
+function resolveAttendanceTimeZone(teamName?: string | null) {
+  if (!teamName?.trim()) {
+    return DEFAULT_ATTENDANCE_TIMEZONE;
+  }
+
+  const normalized = normalizeTeamName(teamName);
+  const matched = TEAM_OFFICE_TIMEZONES.find((item) => item.names.includes(normalized));
+  return matched?.timeZone ?? DEFAULT_ATTENDANCE_TIMEZONE;
+}
 
 function parseYear(value: string | null) {
   if (!value) return null;
@@ -141,23 +175,23 @@ function formatMinutes(mins: number): string {
   return m > 0 ? `${h}h${String(m).padStart(2, "0")}` : `${h}h`;
 }
 
-function formatAttendanceDate(value: string | Date) {
+function formatAttendanceDate(value: string | Date, timeZone: string) {
   return new Intl.DateTimeFormat("fr-FR", {
     day: "2-digit",
     month: "2-digit",
     year: "numeric",
-    timeZone: ATTENDANCE_REPORT_TIMEZONE,
+    timeZone,
   }).format(new Date(value));
 }
 
-function formatAttendanceTime(value: string | Date | null) {
+function formatAttendanceTime(value: string | Date | null, timeZone: string) {
   if (!value) return "-";
   return new Intl.DateTimeFormat("fr-FR", {
     hour: "2-digit",
     minute: "2-digit",
     second: "2-digit",
     hour12: false,
-    timeZone: ATTENDANCE_REPORT_TIMEZONE,
+    timeZone,
   }).format(new Date(value));
 }
 
@@ -183,7 +217,7 @@ export async function GET(request: NextRequest) {
       ...roleFilter,
       date: { gte: range.start, lt: range.end },
     },
-    include: { user: { select: { name: true } } },
+    include: { user: { select: { name: true, team: { select: { name: true } } } } },
     orderBy: [{ date: "asc" }, { user: { name: "asc" } }],
     take: 1200,
   });
@@ -227,12 +261,13 @@ export async function GET(request: NextRequest) {
   const cellLineHeight = 8.8;
 
   for (const row of rows) {
+    const rowTimezone = resolveAttendanceTimeZone(row.user.team?.name);
     const values = [
-      formatAttendanceDate(row.date),
+      formatAttendanceDate(row.date, rowTimezone),
       row.user.name,
       attendanceStatusLabel(row.status),
-      formatAttendanceTime(row.clockIn),
-      formatAttendanceTime(row.clockOut),
+      formatAttendanceTime(row.clockIn, rowTimezone),
+      formatAttendanceTime(row.clockOut, rowTimezone),
       formatMinutes(row.latenessMins),
       formatMinutes(row.overtimeMins),
       locationStatusLabel(row.locationStatus),
