@@ -8,6 +8,8 @@ import { requireApiModuleAccess } from "@/lib/rbac";
 
 type ReportMode = "date" | "month" | "year";
 
+const ATTENDANCE_REPORT_TIMEZONE = "Africa/Lubumbashi";
+
 function parseYear(value: string | null) {
   if (!value) return null;
   const parsed = Number.parseInt(value, 10);
@@ -139,6 +141,26 @@ function formatMinutes(mins: number): string {
   return m > 0 ? `${h}h${String(m).padStart(2, "0")}` : `${h}h`;
 }
 
+function formatAttendanceDate(value: string | Date) {
+  return new Intl.DateTimeFormat("fr-FR", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    timeZone: ATTENDANCE_REPORT_TIMEZONE,
+  }).format(new Date(value));
+}
+
+function formatAttendanceTime(value: string | Date | null) {
+  if (!value) return "-";
+  return new Intl.DateTimeFormat("fr-FR", {
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: false,
+    timeZone: ATTENDANCE_REPORT_TIMEZONE,
+  }).format(new Date(value));
+}
+
 export async function GET(request: NextRequest) {
   const access = await requireApiModuleAccess("attendance", ["ADMIN", "DIRECTEUR_GENERAL", "ACCOUNTANT", "EMPLOYEE"]);
   if (access.error) {
@@ -206,11 +228,11 @@ export async function GET(request: NextRequest) {
 
   for (const row of rows) {
     const values = [
-      new Date(row.date).toLocaleDateString("fr-FR"),
+      formatAttendanceDate(row.date),
       row.user.name,
       attendanceStatusLabel(row.status),
-      row.clockIn ? new Date(row.clockIn).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit", timeZone: "Africa/Lubumbashi" }) : "-",
-      row.clockOut ? new Date(row.clockOut).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit", timeZone: "Africa/Lubumbashi" }) : "-",
+      formatAttendanceTime(row.clockIn),
+      formatAttendanceTime(row.clockOut),
       formatMinutes(row.latenessMins),
       formatMinutes(row.overtimeMins),
       locationStatusLabel(row.locationStatus),
