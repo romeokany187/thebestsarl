@@ -16,6 +16,7 @@ export const dynamic = "force-dynamic";
 type SearchParams = {
   startDate?: string;
   endDate?: string;
+  q?: string;
 };
 
 function rangeFromSearch(params: SearchParams) {
@@ -88,6 +89,7 @@ export default async function SalesPage({
 }) {
   const resolvedSearchParams = (await searchParams) ?? {};
   const dateRange = rangeFromSearch(resolvedSearchParams);
+  const searchQuery = resolvedSearchParams.q?.trim() ?? "";
   const { session, role } = await requirePageModuleAccess("sales", ["ADMIN", "DIRECTEUR_GENERAL", "MANAGER", "EMPLOYEE", "ACCOUNTANT"]);
   const currentJobTitle = session.user.jobTitle ?? "AGENT_TERRAIN";
   const roleTicketFilter = {};
@@ -122,6 +124,20 @@ export default async function SalesPage({
           gte: dateRange.start,
           lt: dateRange.endExclusive,
         },
+        ...(searchQuery
+          ? {
+              OR: [
+                { ticketNumber: { contains: searchQuery } },
+                { route: { contains: searchQuery } },
+                { payerName: { contains: searchQuery } },
+                { customerName: { contains: searchQuery } },
+                { sellerName: { contains: searchQuery } },
+                { airline: { code: { contains: searchQuery } } },
+                { airline: { name: { contains: searchQuery } } },
+                { seller: { name: { contains: searchQuery } } },
+              ],
+            }
+          : {}),
       },
       include: { airline: true, seller: { select: { name: true } }, payments: true, },
 
@@ -195,7 +211,7 @@ export default async function SalesPage({
       </section>
 
       <section className="mb-6 rounded-xl border border-black/10 bg-white p-4 dark:border-white/10 dark:bg-zinc-900">
-        <form method="GET" className="grid gap-3 sm:grid-cols-3 sm:items-end">
+        <form method="GET" className="grid gap-3 sm:grid-cols-[1fr,1fr,2fr,auto] sm:items-end">
           <div>
             <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-black/60 dark:text-white/60">Du</label>
             <input
@@ -211,6 +227,16 @@ export default async function SalesPage({
               type="date"
               name="endDate"
               defaultValue={dateRange.endRaw}
+              className="w-full rounded-md border border-black/15 bg-white px-3 py-2 text-sm dark:border-white/15 dark:bg-zinc-900"
+            />
+          </div>
+          <div>
+            <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-black/60 dark:text-white/60">Recherche (nom, itinéraire, PNR, compagnie…)</label>
+            <input
+              type="text"
+              name="q"
+              defaultValue={searchQuery}
+              placeholder="Ex: FIH-LBM, KENYA, DUPONT…"
               className="w-full rounded-md border border-black/15 bg-white px-3 py-2 text-sm dark:border-white/15 dark:bg-zinc-900"
             />
           </div>
