@@ -11,7 +11,7 @@ import { ALL_CASH_DESKS, buildDeskScopedCashOperationWhere, normalizeCashDeskVal
 type ReportMode = "date" | "month" | "year";
 type ReportType = "payments" | "cash-journal" | "cash-summary";
 type TicketStatusFilter = "ALL" | "PAID" | "UNPAID" | "PARTIAL";
-type VirtualChannel = "AIRTEL_MONEY" | "ORANGE_MONEY" | "MPESA" | "EQUITY" | "RAWBANK_ILLICOCASH";
+type VirtualChannel = "AIRTEL_MONEY" | "ORANGE_MONEY" | "MPESA" | "EQUITY" | "TMB" | "RAWBANK_ILLICOCASH";
 
 const paymentClient = (prisma as unknown as { payment: any }).payment;
 const cashOperationClient = (prisma as unknown as { cashOperation: any }).cashOperation;
@@ -20,6 +20,7 @@ const virtualChannels: Array<{ key: VirtualChannel; label: string }> = [
   { key: "ORANGE_MONEY", label: "Orange Money" },
   { key: "MPESA", label: "M-Pesa" },
   { key: "EQUITY", label: "Equity" },
+  { key: "TMB", label: "TMB" },
   { key: "RAWBANK_ILLICOCASH", label: "Rawbank & Illicocash" },
 ];
 
@@ -146,6 +147,7 @@ function detectVirtualChannel(methodRaw: string | null | undefined): VirtualChan
   if (method.includes("ORANGE")) return "ORANGE_MONEY";
   if (method.includes("M-PESA") || method.includes("MPESA") || method.includes("M PESA")) return "MPESA";
   if (method.includes("EQUITY")) return "EQUITY";
+  if (method.includes("TMB")) return "TMB";
   if (
     method.includes("RAWBANK")
     || method.includes("ROWBANK")
@@ -172,6 +174,7 @@ function buildEmptyOpeningBuckets(): Record<BalanceBucket, BalanceSnapshot> {
     ORANGE_MONEY: { usd: 0, cdf: 0, initializedUsd: false, initializedCdf: false },
     MPESA: { usd: 0, cdf: 0, initializedUsd: false, initializedCdf: false },
     EQUITY: { usd: 0, cdf: 0, initializedUsd: false, initializedCdf: false },
+    TMB: { usd: 0, cdf: 0, initializedUsd: false, initializedCdf: false },
     RAWBANK_ILLICOCASH: { usd: 0, cdf: 0, initializedUsd: false, initializedCdf: false },
   };
 }

@@ -188,10 +188,12 @@ export function PaymentEntryForm({ tickets }: { tickets: TicketOption[] }) {
             className="w-full rounded-md border border-black/15 bg-white px-3 py-2 text-sm dark:border-white/15 dark:bg-zinc-900"
           >
             <option value="CASH">Cash</option>
+            <option value="BILLET">Billets</option>
             <option value="AIRTEL_MONEY">Airtel Money</option>
             <option value="ORANGE_MONEY">Orange Money</option>
             <option value="MPESA">M-Pesa</option>
             <option value="EQUITY">Equity</option>
+            <option value="TMB">TMB</option>
             <option value="RAWBANK_ILLICOCASH">Rawbank & Illicocash</option>
           </select>
         </div>

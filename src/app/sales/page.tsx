@@ -42,6 +42,19 @@ function saleNatureLabel(value: string) {
   return value === "CREDIT" ? "Crédit" : "Cash";
 }
 
+function salesAgencyLabelFromTeam(teamName: string | null | undefined) {
+  if (!teamName) return "Autres";
+  const normalized = teamName
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "");
+
+  if (normalized.includes("kin")) return "Kinshasa";
+  if (normalized.includes("lushi") || normalized.includes("lubumbashi") || normalized.includes("lubum")) return "Lubumbashi";
+  if (normalized.includes("mbuji")) return "Mbuji-Mayi";
+  return "Autres";
+}
+
 function normalizeAirlineSelectionLabel(value: string) {
   return value
     .trim()
@@ -139,7 +152,7 @@ export default async function SalesPage({
             }
           : {}),
       },
-      include: { airline: true, seller: { select: { name: true } }, payments: true, },
+          include: { airline: true, seller: { select: { name: true, team: { select: { name: true } } } }, payments: true, },
 
       orderBy: { soldAt: "desc" },
       take: 200,
@@ -187,6 +200,72 @@ export default async function SalesPage({
     }
     return getTicketCommissionAmount(ticket);
   };
+
+  const agencyOrder = ["Kinshasa", "Lubumbashi", "Mbuji-Mayi", "Autres"];
+  const agencySalesMap = new Map<string, { tickets: number; totalUsd: number; totalCdf: number; sellers: Map<string, { tickets: number; totalUsd: number; totalCdf: number }> }>();
+
+  for (const ticket of tickets) {
+    const agency = salesAgencyLabelFromTeam(ticket.seller?.team?.name);
+    const seller = ticket.sellerName ?? ticket.seller?.name ?? "Émetteur inconnu";
+    const commissionAmount = commissionOf(ticket);
+    const totalTicketAmount = getTicketTotalAmount(ticket, commissionAmount);
+
+    const currentAgency = agencySalesMap.get(agency) ?? {
+      tickets: 0,
+      totalUsd: 0,
+      totalCdf: 0,
+      sellers: new Map<string, { tickets: number; totalUsd: number; totalCdf: number }>(),
+    };
+
+    currentAgency.tickets += 1;
+    if (ticket.currency === "CDF") {
+      currentAgency.totalCdf += totalTicketAmount;
+    } else {
+      currentAgency.totalUsd += totalTicketAmount;
+    }
+
+    const currentSeller = currentAgency.sellers.get(seller) ?? { tickets: 0, totalUsd: 0, totalCdf: 0 };
+    currentSeller.tickets += 1;
+    if (ticket.currency === "CDF") {
+      currentSeller.totalCdf += totalTicketAmount;
+    } else {
+      currentSeller.totalUsd += totalTicketAmount;
+    }
+    currentAgency.sellers.set(seller, currentSeller);
+    agencySalesMap.set(agency, currentAgency);
+  }
+
+  const agencySalesRows = Array.from(agencySalesMap.entries())
+    .map(([agency, stats]) => ({
+      agency,
+      tickets: stats.tickets,
+      totalUsd: stats.totalUsd,
+      totalCdf: stats.totalCdf,
+      sellers: Array.from(stats.sellers.entries())
+        .map(([seller, sellerStats]) => ({
+          seller,
+          ...sellerStats,
+        }))
+        .sort((a, b) => b.tickets - a.tickets || b.totalUsd - a.totalUsd || b.totalCdf - a.totalCdf),
+    }))
+    .sort((a, b) => {
+      const aIndex = agencyOrder.indexOf(a.agency);
+      const bIndex = agencyOrder.indexOf(b.agency);
+      if (aIndex !== -1 && bIndex !== -1) return aIndex - bIndex;
+      if (aIndex !== -1) return -1;
+      if (bIndex !== -1) return 1;
+      return a.agency.localeCompare(b.agency, "fr", { sensitivity: "base" });
+    });
+
+  const sellerSalesRows = agencySalesRows.flatMap((agency) =>
+    agency.sellers.map((seller) => ({
+      agency: agency.agency,
+      seller: seller.seller,
+      tickets: seller.tickets,
+      totalUsd: seller.totalUsd,
+      totalCdf: seller.totalCdf,
+    })),
+  );
 
   const selectableAirlines = Array.from(
     airlines.reduce((map, airline) => {
@@ -242,6 +321,82 @@ export default async function SalesPage({
           </div>
           <button type="submit" className="rounded-md bg-black px-4 py-2 text-sm font-semibold text-white dark:bg-white dark:text-black">Rechercher</button>
         </form>
+      </section>
+
+      <section className="mb-6 grid gap-4 xl:grid-cols-2">
+        <div className="overflow-hidden rounded-xl border border-black/10 bg-white dark:border-white/10 dark:bg-zinc-900">
+          <div className="border-b border-black/10 px-4 py-3 dark:border-white/10">
+            <h2 className="text-sm font-semibold">Synthèse ventes par agence</h2>
+            <p className="mt-1 text-xs text-black/60 dark:text-white/60">Billets vendus et montants sur la période filtrée.</p>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="min-w-full text-sm">
+              <thead className="bg-black/5 dark:bg-white/10">
+                <tr>
+                  <th className="px-4 py-3 text-left font-semibold">Agence</th>
+                  <th className="px-4 py-3 text-left font-semibold">Billets</th>
+                  <th className="px-4 py-3 text-left font-semibold">Montant USD</th>
+                  <th className="px-4 py-3 text-left font-semibold">Montant CDF</th>
+                </tr>
+              </thead>
+              <tbody>
+                {agencySalesRows.map((row) => (
+                  <tr key={row.agency} className="border-t border-black/5 dark:border-white/10">
+                    <td className="px-4 py-3 font-medium">{row.agency}</td>
+                    <td className="px-4 py-3">{row.tickets}</td>
+                    <td className="px-4 py-3">{row.totalUsd.toFixed(2)} USD</td>
+                    <td className="px-4 py-3">{row.totalCdf.toFixed(2)} CDF</td>
+                  </tr>
+                ))}
+                {agencySalesRows.length === 0 ? (
+                  <tr>
+                    <td colSpan={4} className="px-4 py-6 text-center text-sm text-black/55 dark:text-white/55">
+                      Aucune vente sur cette période.
+                    </td>
+                  </tr>
+                ) : null}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div className="overflow-hidden rounded-xl border border-black/10 bg-white dark:border-white/10 dark:bg-zinc-900">
+          <div className="border-b border-black/10 px-4 py-3 dark:border-white/10">
+            <h2 className="text-sm font-semibold">Qui a vendu quoi</h2>
+            <p className="mt-1 text-xs text-black/60 dark:text-white/60">Détail vendeur par agence (nombre de billets et montants).</p>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="min-w-full text-sm">
+              <thead className="bg-black/5 dark:bg-white/10">
+                <tr>
+                  <th className="px-4 py-3 text-left font-semibold">Agence</th>
+                  <th className="px-4 py-3 text-left font-semibold">Émetteur</th>
+                  <th className="px-4 py-3 text-left font-semibold">Billets</th>
+                  <th className="px-4 py-3 text-left font-semibold">Montant USD</th>
+                  <th className="px-4 py-3 text-left font-semibold">Montant CDF</th>
+                </tr>
+              </thead>
+              <tbody>
+                {sellerSalesRows.map((row) => (
+                  <tr key={`${row.agency}:${row.seller}`} className="border-t border-black/5 dark:border-white/10">
+                    <td className="px-4 py-3">{row.agency}</td>
+                    <td className="px-4 py-3 font-medium">{row.seller}</td>
+                    <td className="px-4 py-3">{row.tickets}</td>
+                    <td className="px-4 py-3">{row.totalUsd.toFixed(2)} USD</td>
+                    <td className="px-4 py-3">{row.totalCdf.toFixed(2)} CDF</td>
+                  </tr>
+                ))}
+                {sellerSalesRows.length === 0 ? (
+                  <tr>
+                    <td colSpan={5} className="px-4 py-6 text-center text-sm text-black/55 dark:text-white/55">
+                      Aucun émetteur trouvé sur cette période.
+                    </td>
+                  </tr>
+                ) : null}
+              </tbody>
+            </table>
+          </div>
+        </div>
       </section>
 
       <div className="grid gap-6 lg:grid-cols-[400px,1fr]">

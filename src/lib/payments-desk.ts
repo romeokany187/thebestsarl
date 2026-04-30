@@ -18,7 +18,7 @@ export const ALL_CASH_DESKS: CashDeskOption[] = [
   {
     value: "PROXY_BANKING",
     label: "Proxy Banking",
-    description: "Airtel Money, Orange Money, M-Pesa, Equity et Illicocash : dépôts, retraits, virtuel et billetage.",
+    description: "Airtel Money, Orange Money, M-Pesa, Equity, TMB et Illicocash : dépôts, retraits, virtuel et billetage.",
   },
   {
     value: "THE_BEST",

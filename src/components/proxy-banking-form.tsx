@@ -14,7 +14,7 @@ function toLocalDateTimeInputValue(date: Date): string {
 
 type ProxyOperationType = "OPENING_BALANCE" | "DEPOSIT" | "WITHDRAWAL";
 type FloatDirection = "FLOAT_TO_VIRTUAL" | "FLOAT_TO_CASH";
-type ProxyChannel = "CASH" | "AIRTEL_MONEY" | "ORANGE_MONEY" | "MPESA" | "EQUITY" | "RAWBANK_ILLICOCASH";
+type ProxyChannel = "CASH" | "AIRTEL_MONEY" | "ORANGE_MONEY" | "MPESA" | "EQUITY" | "TMB" | "RAWBANK_ILLICOCASH";
 
 type EditableProxyOperation =
   | {
@@ -58,6 +58,7 @@ const channelOptions: Array<{ value: ProxyChannel; label: string }> = [
   { value: "ORANGE_MONEY", label: "Orange Money" },
   { value: "MPESA", label: "M-Pesa" },
   { value: "EQUITY", label: "Equity" },
+  { value: "TMB", label: "TMB" },
   { value: "RAWBANK_ILLICOCASH", label: "Rawbank & Illicocash" },
 ];
 

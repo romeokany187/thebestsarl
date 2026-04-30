@@ -393,7 +393,7 @@ import { writeActivityLog } from "@/lib/activity-log";
 
 const proxyBankingSchema = z.object({
   operationType: z.enum(["OPENING_BALANCE", "DEPOSIT", "WITHDRAWAL", "FLOAT_TO_VIRTUAL", "FLOAT_TO_CASH"]),
-  channel: z.enum(["CASH", "AIRTEL_MONEY", "ORANGE_MONEY", "MPESA", "EQUITY", "RAWBANK_ILLICOCASH"]),
+  channel: z.enum(["CASH", "AIRTEL_MONEY", "ORANGE_MONEY", "MPESA", "EQUITY", "TMB", "RAWBANK_ILLICOCASH"]),
   amount: z.number().positive(),
   currency: z.enum(["USD", "CDF"]),
   reference: z.string().trim().min(2).max(180),
@@ -401,7 +401,7 @@ const proxyBankingSchema = z.object({
   occurredAt: z.coerce.date().optional(),
 });
 
-type ProxyChannel = "CASH" | "AIRTEL_MONEY" | "ORANGE_MONEY" | "MPESA" | "EQUITY" | "RAWBANK_ILLICOCASH";
+type ProxyChannel = "CASH" | "AIRTEL_MONEY" | "ORANGE_MONEY" | "MPESA" | "EQUITY" | "TMB" | "RAWBANK_ILLICOCASH";
 
 function canWriteProxyBanking(role: string, jobTitle: string | null | undefined) {
   return role === "ADMIN" || role === "ACCOUNTANT" || isCashierJobTitle(jobTitle) || jobTitle === "COMPTABLE";
@@ -490,6 +490,7 @@ function computeProxyBalances(operations: Array<{ direction: string; amount: num
     ORANGE_MONEY: { USD: 0, CDF: 0 },
     MPESA: { USD: 0, CDF: 0 },
     EQUITY: { USD: 0, CDF: 0 },
+    TMB: { USD: 0, CDF: 0 },
     RAWBANK_ILLICOCASH: { USD: 0, CDF: 0 },
   };
 
@@ -720,7 +721,7 @@ export async function PUT(request: NextRequest) {
   const body = await request.json();
   const floatSchema = z.object({
     direction: z.enum(["FLOAT_TO_VIRTUAL", "FLOAT_TO_CASH"]),
-    channel: z.enum(["AIRTEL_MONEY", "ORANGE_MONEY", "MPESA", "EQUITY", "RAWBANK_ILLICOCASH"]),
+    channel: z.enum(["AIRTEL_MONEY", "ORANGE_MONEY", "MPESA", "EQUITY", "TMB", "RAWBANK_ILLICOCASH"]),
     amount: z.number().positive(),
     currency: z.enum(["USD", "CDF"]),
     reference: z.string().trim().min(2).max(180),

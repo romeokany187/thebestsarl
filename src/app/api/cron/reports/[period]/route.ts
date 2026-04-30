@@ -103,6 +103,7 @@ function isVirtualMethod(methodRaw: string | null | undefined) {
     || method.includes("MPESA")
     || method.includes("M PESA")
     || method.includes("EQUITY")
+    || method.includes("TMB")
     || method.includes("RAWBANK")
     || method.includes("ROWBANK")
     || method.includes("ROW BANK")
