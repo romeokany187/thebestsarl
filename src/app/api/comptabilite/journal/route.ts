@@ -272,7 +272,7 @@ function ticketSupportRangeStart() {
   return new Date(Date.UTC(now.getUTCFullYear(), 3, 1, 0, 0, 0, 0));
 }
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   const access = await requireApiModuleAccess("payments", ["ADMIN", "DIRECTEUR_GENERAL", "ACCOUNTANT", "EMPLOYEE"]);
   if (access.error) return access.error;
 
@@ -282,8 +282,23 @@ export async function GET() {
 
   await ensureAccountingTables();
 
+  const searchQuery = new URL(request.url).searchParams.get("q")?.trim() ?? "";
+
   const supportStart = ticketSupportRangeStart();
   const yearStart = new Date(Date.UTC(supportStart.getUTCFullYear(), 0, 1, 0, 0, 0, 0));
+
+  const entryWhere = searchQuery
+    ? {
+        OR: [
+          { libelle: { contains: searchQuery } },
+          { pieceJustificative: { contains: searchQuery } },
+          { pole: { contains: searchQuery } },
+          { createdBy: { name: { contains: searchQuery } } },
+          { lines: { some: { accountCode: { contains: searchQuery } } } },
+          { lines: { some: { accountLabel: { contains: searchQuery } } } },
+        ],
+      }
+    : {};
 
   const [accounts, chronologyRows, recentEntriesRaw, yearlyTickets, dailyRates, deletedEntries] = await Promise.all([
     prisma.account.findMany({
@@ -292,8 +307,9 @@ export async function GET() {
     }),
     listAccountingChronologyRows({ accountingEntry: accountingEntryClient }),
     accountingEntryClient.findMany({
+      where: entryWhere,
       orderBy: [{ entryDate: "desc" }, { createdAt: "desc" }, { id: "desc" }],
-      take: 500,
+      ...(searchQuery ? {} : { take: 500 }),
       include: {
         createdBy: { select: { name: true } },
         lines: {

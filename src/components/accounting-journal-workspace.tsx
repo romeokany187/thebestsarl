@@ -188,12 +188,13 @@ export function AccountingJournalWorkspace({
     return response;
   }
 
-  async function loadData() {
+  async function loadData(searchQ?: string) {
     setLoading(true);
     setError("");
 
     try {
-      const response = await fetchAccounting("/api/comptabilite/journal", { cache: "no-store" });
+      const url = searchQ ? `/api/comptabilite/journal?q=${encodeURIComponent(searchQ)}` : "/api/comptabilite/journal";
+      const response = await fetchAccounting(url, { cache: "no-store" });
       const payload = await response.json().catch(() => null);
 
       if (!response.ok) {
@@ -315,12 +316,17 @@ export function AccountingJournalWorkspace({
   }
 
   function applyHistorySearch() {
-    setHistorySearch(historySearchInput.trim());
+    const query = historySearchInput.trim();
+    setHistorySearch(query);
+    if (query) {
+      loadData(query);
+    }
   }
 
   function clearHistorySearch() {
     setHistorySearchInput("");
     setHistorySearch("");
+    loadData();
   }
 
   function formatTicketInvoiceSearchLabel(ticket: TicketInvoiceOption) {
