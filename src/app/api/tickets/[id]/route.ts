@@ -433,6 +433,11 @@ export async function DELETE(_request: NextRequest, { params }: Params) {
       where: { id },
       select: {
         id: true,
+        _count: {
+          select: {
+            payments: true,
+          },
+        },
         sellerId: true,
         amount: true,
         agencyMarkupAmount: true,
@@ -455,6 +460,15 @@ export async function DELETE(_request: NextRequest, { params }: Params) {
 
     if (!existing) {
       return NextResponse.json({ error: "Billet introuvable." }, { status: 404 });
+    }
+
+    if (existing._count.payments > 0) {
+      return NextResponse.json(
+        {
+          error: "Suppression impossible: ce billet contient déjà des paiements. Supprimez d'abord les paiements liés avant de supprimer le billet.",
+        },
+        { status: 409 },
+      );
     }
 
     const depositAccount = getAirlineDepositAccountByAirlineCode(existing.airline.code);
@@ -500,6 +514,16 @@ export async function DELETE(_request: NextRequest, { params }: Params) {
     return NextResponse.json({ success: true });
   } catch (error) {
     console.error("DELETE /api/tickets/[id] failed", error);
+
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2003") {
+      return NextResponse.json(
+        {
+          error: "Suppression impossible: ce billet est référencé par d'autres enregistrements (paiements ou mouvements).",
+        },
+        { status: 409 },
+      );
+    }
+
     return NextResponse.json({ error: "Suppression impossible pour ce billet." }, { status: 500 });
   }
 }
