@@ -283,6 +283,7 @@ export async function GET(request: NextRequest) {
   await ensureAccountingTables();
 
   const searchQuery = new URL(request.url).searchParams.get("q")?.trim() ?? "";
+  const focusedEntryId = new URL(request.url).searchParams.get("entryId")?.trim() ?? "";
 
   const supportStart = ticketSupportRangeStart();
   const yearStart = new Date(Date.UTC(supportStart.getUTCFullYear(), 0, 1, 0, 0, 0, 0));
@@ -357,6 +358,29 @@ export async function GET(request: NextRequest) {
     buildAccountingChronologySequenceMap(chronologyRows),
   );
 
+  let focusedEntry = !focusedEntryId
+    ? null
+    : recentEntries.find((entry) => entry.id === focusedEntryId) ?? null;
+
+  if (!focusedEntry && focusedEntryId) {
+    const focusedEntryRaw = await accountingEntryClient.findUnique({
+      where: { id: focusedEntryId },
+      include: {
+        createdBy: { select: { name: true } },
+        lines: {
+          orderBy: [{ side: "asc" }, { orderIndex: "asc" }],
+        },
+      },
+    });
+
+    if (focusedEntryRaw) {
+      focusedEntry = applyAccountingChronologySequence(
+        [focusedEntryRaw],
+        buildAccountingChronologySequenceMap(chronologyRows),
+      )[0] ?? null;
+    }
+  }
+
   const ticketInvoiceOptions = yearlyTickets
     .map((ticket, index) => ({
       id: ticket.id,
@@ -375,6 +399,7 @@ export async function GET(request: NextRequest) {
   return NextResponse.json({
     accounts,
     recentEntries,
+    focusedEntry,
     ticketInvoiceOptions,
     dailyRates,
     deletedEntries: deletedEntries.map(normalizeDeletedEntryLog),

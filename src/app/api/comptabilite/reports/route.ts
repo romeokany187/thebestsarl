@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { PDFDocument, PDFFont, PDFPage, StandardFonts, rgb } from "pdf-lib";
 import fontkit from "@pdf-lib/fontkit";
+import { PDFHexString } from "pdf-lib/cjs/core";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { applyAccountingChronologySequence, buildAccountingChronologySequenceMap } from "@/lib/accounting-chronology";
@@ -413,6 +414,7 @@ function buildGeneralBalancePayload(entries: any[], label: string, selectedAccou
 }
 
 type JournalPdfRow = {
+  entryId: string;
   sequence: string;
   entryDate: string;
   pole: string;
@@ -457,6 +459,7 @@ const JOURNAL_COLUMNS: JournalColumn[] = [
 ];
 
 type LedgerPdfRow = {
+  entryId: string;
   sequence: string;
   entryDate: string;
   pole: string;
@@ -612,6 +615,7 @@ function flattenJournalRows(entries: any[]): JournalPdfRow[] {
       const debitLine = debitLines[index] ?? null;
       const creditLine = creditLines[index] ?? null;
       rows.push({
+        entryId: index === 0 ? String(entry.id) : "",
         sequence: index === 0 ? String(entry.sequence) : "",
         entryDate: index === 0 ? formatJournalDate(entry.entryDate) : "",
         pole: index === 0 ? entry.pole ?? "" : "",
@@ -676,6 +680,84 @@ function drawCellText(params: {
     });
     cursorY -= lineHeight;
   }
+}
+
+function addUriLinkAnnotation(params: {
+  page: PDFPage;
+  url: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}) {
+  const { page, url, x, y, width, height } = params;
+  if (!url) return;
+
+  const context = page.doc.context;
+  const linkAnnotation = context.obj({
+    Type: "Annot",
+    Subtype: "Link",
+    Rect: [x, y, x + width, y + height],
+    Border: [0, 0, 0],
+    A: {
+      Type: "Action",
+      S: "URI",
+      URI: PDFHexString.fromText(url),
+    },
+  });
+
+  const linkAnnotationRef = context.register(linkAnnotation);
+  page.node.addAnnot(linkAnnotationRef);
+}
+
+function drawLinkedCellText(params: {
+  page: PDFPage;
+  text: string;
+  url: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  font: PDFFont;
+  size: number;
+  align?: "left" | "center" | "right";
+}) {
+  const { page, text, url, x, y, width, height, font, size, align = "left" } = params;
+  const safeText = (text ?? "").trim();
+  if (!safeText || !url) return;
+
+  const textWidth = font.widthOfTextAtSize(safeText, size);
+  const textX = align === "right"
+    ? x + width - textWidth - 4
+    : align === "center"
+      ? x + (width - textWidth) / 2
+      : x + 4;
+  const lineHeight = size + 3;
+  const textY = y + ((height + lineHeight) / 2) - lineHeight + 1;
+
+  page.drawText(safeText, {
+    x: Math.max(x + 2, textX),
+    y: textY,
+    size,
+    font,
+    color: rgb(0.05, 0.28, 0.75),
+  });
+
+  page.drawLine({
+    start: { x: Math.max(x + 2, textX), y: textY - 1 },
+    end: { x: Math.max(x + 2, textX) + textWidth, y: textY - 1 },
+    thickness: 0.6,
+    color: rgb(0.05, 0.28, 0.75),
+  });
+
+  addUriLinkAnnotation({
+    page,
+    url,
+    x: Math.max(x + 1, textX - 1),
+    y: textY - 2,
+    width: textWidth + 2,
+    height: lineHeight + 2,
+  });
 }
 
 function drawJournalTableHeader(page: PDFPage, font: PDFFont, bold: PDFFont, startX: number, topY: number) {
@@ -830,7 +912,12 @@ async function loadPdfFonts(pdf: PDFDocument) {
   }
 }
 
-async function buildPdf(report: ReportPayload) {
+function buildAccountingEntryDeepLink(baseUrl: string | null, entryId: string) {
+  if (!baseUrl || !entryId) return "";
+  return `${baseUrl.replace(/\/$/, "")}/comptabilite?entryId=${encodeURIComponent(entryId)}#journal`;
+}
+
+async function buildPdf(report: ReportPayload, appBaseUrl: string | null) {
   const pdf = await PDFDocument.create();
   const { body: font, bold } = await loadPdfFonts(pdf);
   const pageWidth = 1191;
@@ -943,12 +1030,31 @@ async function buildPdf(report: ReportPayload) {
           size: fontSize,
           align: column.align,
         });
+
+        if (column.key === "sequence" && row.entryId && row.sequence) {
+          const entryUrl = buildAccountingEntryDeepLink(appBaseUrl, row.entryId);
+          if (entryUrl) {
+            drawLinkedCellText({
+              page,
+              text: row.sequence,
+              url: entryUrl,
+              x: cursorX,
+              y: y - rowHeight,
+              width: column.width,
+              height: rowHeight,
+              font: bold,
+              size: fontSize,
+              align: column.align,
+            });
+          }
+        }
         cursorX += column.width;
       }
       y -= rowHeight;
     });
 
     const totalRow: JournalPdfRow = {
+      entryId: "",
       sequence: "",
       entryDate: "",
       pole: "",
@@ -1016,6 +1122,7 @@ async function buildPdf(report: ReportPayload) {
 
       group.rows.forEach((row, index) => {
         const pdfRow: LedgerPdfRow = {
+          entryId: String(row.entryId),
           sequence: String(row.sequence),
           entryDate: new Date(row.entryDate).toLocaleDateString("fr-FR"),
           pole: row.pole ?? "-",
@@ -1046,10 +1153,29 @@ async function buildPdf(report: ReportPayload) {
           shaded: index % 2 === 1,
           emphasizeKeys: ["sequence", "entryDate"],
         });
+
+        if (pdfRow.entryId && pdfRow.sequence) {
+          const entryUrl = buildAccountingEntryDeepLink(appBaseUrl, pdfRow.entryId);
+          if (entryUrl) {
+            drawLinkedCellText({
+              page,
+              text: pdfRow.sequence,
+              url: entryUrl,
+              x: tableStartX,
+              y: y - rowHeight,
+              width: LEDGER_COLUMNS[0].width,
+              height: rowHeight,
+              font: bold,
+              size: fontSize,
+              align: "center",
+            });
+          }
+        }
         y -= rowHeight;
       });
 
       const totalRow: LedgerPdfRow = {
+        entryId: "",
         sequence: "",
         entryDate: "",
         pole: "",
@@ -1092,6 +1218,7 @@ async function buildPdf(report: ReportPayload) {
             ? "Solde créditeur"
             : "Solde équilibré";
       const soldeRow: LedgerPdfRow = {
+        entryId: "",
         sequence: "",
         entryDate: "",
         pole: "",
@@ -1126,6 +1253,7 @@ async function buildPdf(report: ReportPayload) {
       y -= soldeHeight;
 
       const soldeCdfRow: LedgerPdfRow = {
+        entryId: "",
         sequence: "",
         entryDate: "",
         pole: "",
@@ -1367,7 +1495,12 @@ export async function GET(request: NextRequest) {
     return NextResponse.json(payload);
   }
 
-  const pdfBytes = await buildPdf(payload);
+  const configuredBaseUrl = process.env.NEXTAUTH_URL?.trim();
+  const appBaseUrl = configuredBaseUrl && /^https?:\/\//i.test(configuredBaseUrl)
+    ? configuredBaseUrl
+    : request.nextUrl.origin;
+
+  const pdfBytes = await buildPdf(payload, appBaseUrl);
   const filename = reportType === "journal"
     ? `livre-journal-${range.startRaw}-${range.endRaw}.pdf`
     : reportType === "ledger"

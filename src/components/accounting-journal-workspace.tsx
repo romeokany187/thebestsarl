@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "next/navigation";
 
 type AccountOption = {
   code: string;
@@ -147,6 +148,8 @@ export function AccountingJournalWorkspace({
   showComposer?: boolean;
   showHistory?: boolean;
 }) {
+  const searchParams = useSearchParams();
+  const focusedEntryId = (searchParams.get("entryId") ?? "").trim();
   const [accounts, setAccounts] = useState<AccountOption[]>([]);
   const [recentEntries, setRecentEntries] = useState<RecentEntry[]>([]);
   const [deletedEntries, setDeletedEntries] = useState<DeletedEntry[]>([]);
@@ -188,12 +191,15 @@ export function AccountingJournalWorkspace({
     return response;
   }
 
-  async function loadData(searchQ?: string) {
+  async function loadData(searchQ?: string, targetEntryId?: string) {
     setLoading(true);
     setError("");
 
     try {
-      const url = searchQ ? `/api/comptabilite/journal?q=${encodeURIComponent(searchQ)}` : "/api/comptabilite/journal";
+      const params = new URLSearchParams();
+      if (searchQ) params.set("q", searchQ);
+      if (targetEntryId) params.set("entryId", targetEntryId);
+      const url = params.toString() ? `/api/comptabilite/journal?${params.toString()}` : "/api/comptabilite/journal";
       const response = await fetchAccounting(url, { cache: "no-store" });
       const payload = await response.json().catch(() => null);
 
@@ -203,11 +209,22 @@ export function AccountingJournalWorkspace({
         return;
       }
 
+      const loadedEntries = payload.recentEntries ?? [];
       setAccounts(payload.accounts ?? []);
-      setRecentEntries(payload.recentEntries ?? []);
+      setRecentEntries(loadedEntries);
       setDeletedEntries(payload.deletedEntries ?? []);
       setTicketInvoiceOptions(payload.ticketInvoiceOptions ?? []);
       setDailyRates(payload.dailyRates ?? []);
+
+      if (targetEntryId) {
+        const directEntry = payload.focusedEntry ?? loadedEntries.find((entry: RecentEntry) => entry.id === targetEntryId) ?? null;
+        if (directEntry) {
+          startEditEntry(directEntry);
+          setMessage(`Ouverture directe de l'écriture n° ${directEntry.sequence}.`);
+        } else {
+          setError("L'écriture demandée est introuvable ou non accessible.");
+        }
+      }
     } catch (error) {
       if (error instanceof Error && error.message === "SESSION_EXPIREE") {
         return;
@@ -219,8 +236,8 @@ export function AccountingJournalWorkspace({
   }
 
   useEffect(() => {
-    loadData();
-  }, []);
+    loadData(undefined, focusedEntryId || undefined);
+  }, [focusedEntryId]);
 
   const accountMap = useMemo(
     () => new Map(accounts.map((account) => [account.code, account])),
