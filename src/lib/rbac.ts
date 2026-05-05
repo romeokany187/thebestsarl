@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { redirect } from "next/navigation";
 import { authOptions } from "@/auth";
 import { isCashierJobTitle } from "@/lib/assignment";
+import { getUserModuleAccessMap, hasRequiredModuleAccessLevel, type ModuleAccessLevel } from "@/lib/user-module-access";
 
 export type AppRole = "ADMIN" | "DIRECTEUR_GENERAL" | "MANAGER" | "EMPLOYEE" | "ACCOUNTANT";
 export type AppModule =
@@ -190,39 +191,98 @@ export async function requirePageRoles(allowedRoles: AppRole[]) {
   };
 }
 
-export async function requirePageModuleAccess(module: AppModule, allowedRoles: AppRole[] = ALL_ROLES) {
-  const access = await requirePageRoles(allowedRoles);
+export async function requirePageModuleAccess(
+  module: AppModule,
+  allowedRoles: AppRole[] = ALL_ROLES,
+  requiredAccessLevel: ModuleAccessLevel = "READ",
+) {
+  const session = await getServerSession(authOptions);
 
-  if (!hasModuleAccess({
-    role: access.role,
-    jobTitle: access.session.user.jobTitle,
-    teamName: access.session.user.teamName,
-    module,
-  })) {
+  if (!session?.user?.id) {
+    redirect("/api/auth/signin");
+  }
+
+  const role = extractRole(session.user.role, session.user.jobTitle);
+
+  if (!role) {
     redirect("/");
   }
 
-  return access;
-}
+  const roleAllowed = isRoleAllowed(role, allowedRoles);
+  const accessMap = await getUserModuleAccessMap(session.user.id);
+  const hasCustomAccess = hasRequiredModuleAccessLevel(accessMap[module], requiredAccessLevel);
 
-export async function requireApiModuleAccess(module: AppModule, allowedRoles: AppRole[] = ALL_ROLES) {
-  const access = await requireApiRoles(allowedRoles);
-  if (access.error) {
-    return access;
+  const hasDefaultAccess = roleAllowed
+    && hasModuleAccess({
+      role,
+      jobTitle: session.user.jobTitle,
+      teamName: session.user.teamName,
+      module,
+    });
+
+  if (!hasDefaultAccess && !hasCustomAccess) {
+    redirect("/");
   }
 
-  if (!hasModuleAccess({
-    role: access.role,
-    jobTitle: access.session.user.jobTitle,
-    teamName: access.session.user.teamName,
-    module,
-  })) {
+  return {
+    session,
+    role,
+    customModuleAccess: accessMap[module] ?? null,
+  };
+}
+
+export async function requireApiModuleAccess(
+  module: AppModule,
+  allowedRoles: AppRole[] = ALL_ROLES,
+  requiredAccessLevel: ModuleAccessLevel = "READ",
+) {
+  const session = await getServerSession(authOptions);
+
+  if (!session?.user?.id) {
     return {
-      error: NextResponse.json({ error: "Forbidden" }, { status: 403 }),
-      session: access.session,
-      role: access.role,
+      error: NextResponse.json({ error: "Unauthorized" }, { status: 401 }),
+      session: null,
+      role: null,
+      customModuleAccess: null,
     };
   }
 
-  return access;
+  const role = extractRole(session.user.role, session.user.jobTitle);
+  if (!role) {
+    return {
+      error: NextResponse.json({ error: "Forbidden" }, { status: 403 }),
+      session,
+      role: null,
+      customModuleAccess: null,
+    };
+  }
+
+  const roleAllowed = isRoleAllowed(role, allowedRoles);
+  const accessMap = await getUserModuleAccessMap(session.user.id);
+  const customModuleAccess = accessMap[module] ?? null;
+  const hasCustomAccess = hasRequiredModuleAccessLevel(customModuleAccess, requiredAccessLevel);
+
+  const hasDefaultAccess = roleAllowed
+    && hasModuleAccess({
+      role,
+      jobTitle: session.user.jobTitle,
+      teamName: session.user.teamName,
+      module,
+    });
+
+  if (!hasDefaultAccess && !hasCustomAccess) {
+    return {
+      error: NextResponse.json({ error: "Forbidden" }, { status: 403 }),
+      session,
+      role,
+      customModuleAccess,
+    };
+  }
+
+  return {
+    error: null,
+    session,
+    role,
+    customModuleAccess,
+  };
 }

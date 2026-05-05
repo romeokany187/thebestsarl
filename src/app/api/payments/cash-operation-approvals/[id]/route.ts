@@ -7,46 +7,23 @@ import {
   ensureCashOperationApprovalRequestTable,
 } from "@/lib/cash-operation-approvals";
 import { writeActivityLog } from "@/lib/activity-log";
+import { getCashDeskAvailableBalances } from "@/lib/cash-balance";
 
 type Params = { params: Promise<{ id: string }> };
 
-function amountToUsd(amount: number, currency: string, fxRateUsdToCdf: number) {
-  if (currency === "USD") return amount;
-  return amount / fxRateUsdToCdf;
-}
-
 async function assertAvailableBalance(tx: any, approvalRequest: any) {
   const occurredAt = new Date(approvalRequest.occurredAt);
-  const ticketInflows = await tx.payment.aggregate({
-    where: { paidAt: { lte: occurredAt } },
-    _sum: { amount: true },
+  const deskBalances = await getCashDeskAvailableBalances({
+    client: tx,
+    occurredAt,
+    cashDesk: approvalRequest.cashDesk,
+    fxRateUsdToCdf: approvalRequest.fxRateUsdToCdf,
   });
 
-  const previousCashOperations = await (tx as unknown as { cashOperation: any }).cashOperation.findMany({
-    where: { occurredAt: { lte: occurredAt } },
-    select: {
-      direction: true,
-      amount: true,
-      currency: true,
-      amountUsd: true,
-      fxRateUsdToCdf: true,
-    },
-    take: 100000,
-  });
-
-  const availableBalance = previousCashOperations.reduce((sum: number, op: any) => {
-    const opCurrency = (op.currency ?? "USD").toUpperCase();
-    const opAmountUsd = typeof op.amountUsd === "number"
-      ? op.amountUsd
-      : amountToUsd(op.amount, opCurrency, op.fxRateUsdToCdf ?? approvalRequest.fxRateUsdToCdf);
-    return sum + (op.direction === "INFLOW" ? opAmountUsd : -opAmountUsd);
-  }, ticketInflows._sum.amount ?? 0);
-
-  const availableCurrencyBalance = previousCashOperations.reduce((sum: number, op: any) => {
-    const opCurrency = (op.currency ?? "USD").toUpperCase();
-    if (opCurrency !== approvalRequest.currency) return sum;
-    return sum + (op.direction === "INFLOW" ? op.amount : -op.amount);
-  }, approvalRequest.currency === "USD" ? (ticketInflows._sum.amount ?? 0) : 0);
+  const availableBalance = deskBalances.availableBalanceUsd;
+  const availableCurrencyBalance = approvalRequest.currency === "USD"
+    ? deskBalances.availableUsd
+    : deskBalances.availableCdf;
 
   if (approvalRequest.amountUsd > availableBalance + 0.0001) {
     throw new Error(`INSUFFICIENT_CASH:${availableBalance.toFixed(2)}`);

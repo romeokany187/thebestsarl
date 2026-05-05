@@ -9,6 +9,7 @@ import { LogoutButton } from "@/components/logout-button";
 import { SessionIdleGuard } from "@/components/session-idle-guard";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { prisma } from "@/lib/prisma";
+import { getUserModuleAccessMap, hasRequiredModuleAccessLevel } from "@/lib/user-module-access";
 
 const links = [
   { href: "/", label: "Dashboard", module: "home" as AppModule, roles: ["ADMIN", "DIRECTEUR_GENERAL", "MANAGER", "EMPLOYEE", "ACCOUNTANT"] as AppRole[] },
@@ -136,6 +137,12 @@ const links = [
     module: "admin" as AppModule,
     roles: ["ADMIN", "DIRECTEUR_GENERAL"] as AppRole[],
   },
+  {
+    href: "/autorisations",
+    label: "Autorisations",
+    module: "admin" as AppModule,
+    roles: ["ADMIN"] as AppRole[],
+  },
   { href: "/admin", label: "Admin", module: "admin" as AppModule, roles: ["ADMIN", "DIRECTEUR_GENERAL"] as AppRole[] },
 ];
 
@@ -199,6 +206,7 @@ export async function AppShell({
   let unreadNotifications = 0;
   let urgentAlertCount = 0;
   let latestNotificationId: string | null = null;
+  const moduleAccessMap = await getUserModuleAccessMap(session?.user?.id ?? null);
   if (session?.user?.id) {
     try {
       const [unread, urgent, latest] = await Promise.all([
@@ -222,16 +230,20 @@ export async function AppShell({
     }
   }
   const visibleLinks = links.filter((link) => {
-    if (!role || !link.roles.includes(role)) {
+    const hasCustomModuleRead = hasRequiredModuleAccessLevel(moduleAccessMap[link.module], "READ");
+
+    if (!role || (!link.roles.includes(role) && !hasCustomModuleRead)) {
       return false;
     }
 
-    if (!hasModuleAccess({
+    const hasDefaultModuleAccess = hasModuleAccess({
       role,
       jobTitle: session?.user?.jobTitle,
       teamName: session?.user?.teamName,
       module: link.module,
-    })) {
+    });
+
+    if (!hasDefaultModuleAccess && !hasCustomModuleRead) {
       return false;
     }
 

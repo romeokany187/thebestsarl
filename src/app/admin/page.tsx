@@ -39,6 +39,12 @@ export default async function AdminPage() {
           </div>
           <div className="flex flex-wrap gap-2">
             <a
+              href="/autorisations"
+              className="rounded-md border border-black/20 px-3 py-2 text-sm font-semibold hover:bg-black/5 dark:border-white/20 dark:hover:bg-white/10"
+            >
+              Gerer les autorisations
+            </a>
+            <a
               href="/admin/approvals"
               className="rounded-md border border-black/20 px-3 py-2 text-sm font-semibold hover:bg-black/5 dark:border-white/20 dark:hover:bg-white/10"
             >

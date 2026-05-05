@@ -7,6 +7,7 @@ import { isMailConfigured, sendMailBatch } from "@/lib/mail";
 import { inferCashDeskFromDescription } from "@/lib/payments-desk";
 import { writeActivityLog } from "@/lib/activity-log";
 import { canReviewCashOperationApprovals, createBlockedCashOutflowApprovalRequest } from "@/lib/cash-operation-approvals";
+import { getCashDeskAvailableBalances } from "@/lib/cash-balance";
 
 const cashOperationClient = (prisma as unknown as { cashOperation: any }).cashOperation;
 const DEFAULT_SINGLE_OUTFLOW_ALERT_LIMIT_USD = 1000;
@@ -138,70 +139,26 @@ export async function POST(request: NextRequest) {
   const singleOutflowAlertLimit = parsePositiveNumber(process.env.CASH_SINGLE_OUTFLOW_ALERT_LIMIT_USD, DEFAULT_SINGLE_OUTFLOW_ALERT_LIMIT_USD);
   const dailyOutflowCap = parsePositiveNumber(process.env.CASH_DAILY_OUTFLOW_CAP_USD, DEFAULT_DAILY_OUTFLOW_CAP_USD);
   const { start: dayStart, end: dayEnd } = utcDayBounds(occurredAt);
+  const description = (data.description ?? "").trim();
+  const cashDeskForOp = inferCashDeskFromDescription(description);
   let projectedDailyOutflowUsd = 0;
   let thresholdAlertMessage: string | null = null;
-  let blockedCashDesk = "THE_BEST";
 
   let operation;
 
   try {
     operation = await prisma.$transaction(async (tx) => {
       if (data.direction === "OUTFLOW") {
-        const ticketInflows = await tx.payment.aggregate({
-          where: {
-            paidAt: { lte: occurredAt },
-          },
-          _sum: {
-            amount: true,
-          },
+        const deskBalances = await getCashDeskAvailableBalances({
+          client: tx,
+          occurredAt,
+          cashDesk: cashDeskForOp,
+          fxRateUsdToCdf,
         });
 
-        const previousCashOperations = await (tx as unknown as { cashOperation: any }).cashOperation.findMany({
-          where: {
-            occurredAt: { lte: occurredAt },
-          },
-          select: {
-            direction: true,
-            amount: true,
-            currency: true,
-            amountUsd: true,
-            fxRateUsdToCdf: true,
-          },
-          take: 100000,
-        });
-
-        const cashSigned = previousCashOperations.reduce(
-          (sum: number, op: { direction: string; amount: number; currency?: string; amountUsd?: number | null; fxRateUsdToCdf?: number | null }) => {
-            const opCurrency = (op.currency ?? "USD").toUpperCase();
-            const opAmountUsd = typeof op.amountUsd === "number"
-              ? op.amountUsd
-              : amountToUsd(op.amount, opCurrency, op.fxRateUsdToCdf ?? fxRateUsdToCdf);
-            return sum + (op.direction === "INFLOW" ? opAmountUsd : -opAmountUsd);
-          },
-          0,
-        );
-
-        const signedUsdFromOps = previousCashOperations.reduce(
-          (sum: number, op: { direction: string; amount: number; currency?: string }) => {
-            const opCurrency = (op.currency ?? "USD").toUpperCase();
-            if (opCurrency !== "USD") return sum;
-            return sum + (op.direction === "INFLOW" ? op.amount : -op.amount);
-          },
-          0,
-        );
-
-        const signedCdfFromOps = previousCashOperations.reduce(
-          (sum: number, op: { direction: string; amount: number; currency?: string }) => {
-            const opCurrency = (op.currency ?? "USD").toUpperCase();
-            if (opCurrency !== "CDF") return sum;
-            return sum + (op.direction === "INFLOW" ? op.amount : -op.amount);
-          },
-          0,
-        );
-
-        const availableBalance = (ticketInflows._sum.amount ?? 0) + cashSigned;
-        const availableUsd = (ticketInflows._sum.amount ?? 0) + signedUsdFromOps;
-        const availableCdf = signedCdfFromOps;
+        const availableBalance = deskBalances.availableBalanceUsd;
+        const availableUsd = deskBalances.availableUsd;
+        const availableCdf = deskBalances.availableCdf;
 
         if (normalizedAmountUsd > availableBalance + 0.0001) {
           throw new Error(`INSUFFICIENT_CASH:${availableBalance.toFixed(2)}`);
@@ -247,9 +204,6 @@ export async function POST(request: NextRequest) {
 
         projectedDailyOutflowUsd = existingDailyOutflowUsd + normalizedAmountUsd;
 
-        const desc = (data.description ?? "").trim();
-        blockedCashDesk = inferCashDeskFromDescription(desc);
-
         if (projectedDailyOutflowUsd > dailyOutflowCap + 0.0001) {
           throw new Error(`DAILY_CAP_EXCEEDED:${projectedDailyOutflowUsd.toFixed(2)}:${dailyOutflowCap.toFixed(2)}`);
         }
@@ -258,9 +212,6 @@ export async function POST(request: NextRequest) {
           thresholdAlertMessage = `Alerte seuil décaissement: sortie ${data.amount.toFixed(2)} ${currency} (taux 1 USD = ${fxRateUsdToCdf.toFixed(2)} CDF, eq ${normalizedAmountUsd.toFixed(2)} USD), seuil ${singleOutflowAlertLimit.toFixed(2)} USD.`;
         }
       }
-
-      const desc = (data.description ?? "").trim();
-      const cashDeskForOp = inferCashDeskFromDescription(desc);
 
       return (tx as unknown as { cashOperation: any }).cashOperation.create({
         data: {
@@ -326,7 +277,7 @@ export async function POST(request: NextRequest) {
         description: data.description,
         projectedDailyOutflowUsd: Number(projected),
         dailyOutflowCap: Number(cap),
-        cashDesk: blockedCashDesk,
+        cashDesk: cashDeskForOp,
       });
       return NextResponse.json(
         {

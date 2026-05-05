@@ -5,6 +5,7 @@ import { requireApiModuleAccess } from "@/lib/rbac";
 import { inferCashDeskFromDescription } from "@/lib/payments-desk";
 import { cashConversionSchema } from "@/lib/validators";
 import { writeActivityLog } from "@/lib/activity-log";
+import { getCashDeskAvailableBalances } from "@/lib/cash-balance";
 
 function amountToUsd(amount: number, currency: "USD" | "CDF", fxRateUsdToCdf: number): number {
   if (currency === "USD") return amount;
@@ -63,45 +64,18 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const ticketInflows = await prisma.payment.aggregate({
-    where: {
-      paidAt: { lte: occurredAt },
-    },
-    _sum: {
-      amount: true,
-    },
+  const desc = (data.description ?? "").trim();
+  const cashDeskForOp = inferCashDeskFromDescription(desc);
+
+  const deskBalances = await getCashDeskAvailableBalances({
+    client: prisma,
+    occurredAt,
+    cashDesk: cashDeskForOp,
+    fxRateUsdToCdf,
   });
 
-  const previousCashOperations = await (prisma as unknown as { cashOperation: any }).cashOperation.findMany({
-    where: {
-      occurredAt: { lte: occurredAt },
-    },
-    select: {
-      direction: true,
-      amount: true,
-      currency: true,
-    },
-    take: 100000,
-  });
-
-  const signedUsdFromOps = previousCashOperations.reduce(
-    (sum: number, op: { direction: string; amount: number; currency: string }) => {
-      if ((op.currency ?? "USD").toUpperCase() !== "USD") return sum;
-      return sum + (op.direction === "INFLOW" ? op.amount : -op.amount);
-    },
-    0,
-  );
-
-  const signedCdfFromOps = previousCashOperations.reduce(
-    (sum: number, op: { direction: string; amount: number; currency: string }) => {
-      if ((op.currency ?? "USD").toUpperCase() !== "CDF") return sum;
-      return sum + (op.direction === "INFLOW" ? op.amount : -op.amount);
-    },
-    0,
-  );
-
-  const availableUsd = (ticketInflows._sum.amount ?? 0) + signedUsdFromOps;
-  const availableCdf = signedCdfFromOps;
+  const availableUsd = deskBalances.availableUsd;
+  const availableCdf = deskBalances.availableCdf;
 
   if (sourceCurrency === "USD" && sourceAmount > availableUsd + 0.0001) {
     return NextResponse.json(
@@ -119,9 +93,6 @@ export async function POST(request: NextRequest) {
 
   const ref = data.reference.trim();
   const label = data.description?.trim() || `Conversion caisse ${sourceCurrency} -> ${targetCurrency}`;
-
-  const desc = (data.description ?? "").trim();
-  const cashDeskForOp = inferCashDeskFromDescription(desc);
 
   const created = await prisma.$transaction(async (tx) => {
     const outflow = await (tx as unknown as { cashOperation: any }).cashOperation.create({

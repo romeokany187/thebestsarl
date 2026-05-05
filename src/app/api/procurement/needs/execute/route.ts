@@ -6,8 +6,7 @@ import { prisma } from "@/lib/prisma";
 import { requireApiRoles } from "@/lib/rbac";
 import { needExecutionSchema } from "@/lib/validators";
 import { writeActivityLog } from "@/lib/activity-log";
-
-const cashOperationClient = (prisma as unknown as { cashOperation: any }).cashOperation;
+import { getCashDeskAvailableBalances } from "@/lib/cash-balance";
 
 function normalizeCashCurrency(value: string | null | undefined): "USD" | "CDF" {
   const normalized = (value ?? "USD").trim().toUpperCase();
@@ -81,43 +80,15 @@ export async function POST(request: NextRequest) {
   const now = new Date();
   const needCurrency = normalizeCashCurrency(need.currency);
   const fxRateUsdToCdf = parsePositiveNumber(process.env.CASH_DEFAULT_USD_TO_CDF_RATE, 2800);
-
-  const ticketInflows = await prisma.payment.aggregate({
-    where: {
-      paidAt: { lte: now },
-    },
-    _sum: {
-      amount: true,
-    },
+  const deskBalances = await getCashDeskAvailableBalances({
+    client: prisma,
+    occurredAt: now,
+    cashDesk: executionCashDesk,
+    fxRateUsdToCdf,
   });
 
-  const previousCashOperations = await cashOperationClient.findMany({
-    where: {
-      occurredAt: { lte: now },
-    },
-    select: {
-      direction: true,
-      amount: true,
-      currency: true,
-    },
-    take: 100000,
-  });
-
-  const availableUsd = (ticketInflows._sum.amount ?? 0) + previousCashOperations.reduce(
-    (sum: number, op: { direction: string; amount: number; currency?: string }) => {
-      if (normalizeCashCurrency(op.currency) !== "USD") return sum;
-      return sum + (op.direction === "INFLOW" ? op.amount : -op.amount);
-    },
-    0,
-  );
-
-  const availableCdf = previousCashOperations.reduce(
-    (sum: number, op: { direction: string; amount: number; currency?: string }) => {
-      if (normalizeCashCurrency(op.currency) !== "CDF") return sum;
-      return sum + (op.direction === "INFLOW" ? op.amount : -op.amount);
-    },
-    0,
-  );
+  const availableUsd = deskBalances.availableUsd;
+  const availableCdf = deskBalances.availableCdf;
 
   if (needCurrency === "USD" && executionAmount > availableUsd + 0.0001) {
     return NextResponse.json(
