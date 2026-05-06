@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { PDFDocument, PDFFont, PDFPage, StandardFonts, rgb } from "pdf-lib";
 import fontkit from "@pdf-lib/fontkit";
-import { PDFHexString } from "pdf-lib/cjs/core";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { applyAccountingChronologySequence, buildAccountingChronologySequenceMap } from "@/lib/accounting-chronology";
@@ -702,7 +701,7 @@ function addUriLinkAnnotation(params: {
     A: {
       Type: "Action",
       S: "URI",
-      URI: PDFHexString.fromText(url),
+      URI: url,
     },
   });
 
