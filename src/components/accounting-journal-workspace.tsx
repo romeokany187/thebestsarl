@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 
 type AccountOption = {
@@ -170,9 +170,11 @@ export function AccountingJournalWorkspace({
   const [ticketInvoiceQuery, setTicketInvoiceQuery] = useState("");
   const [historySearchInput, setHistorySearchInput] = useState("");
   const [historySearch, setHistorySearch] = useState("");
+  const [highlightedEntryId, setHighlightedEntryId] = useState("");
   const [rateDate, setRateDate] = useState(toLocalDateValue(new Date()));
   const [dailyRateValue, setDailyRateValue] = useState("");
   const [lines, setLines] = useState<EntryLineForm[]>([lineFactory("DEBIT"), lineFactory("CREDIT")]);
+  const historySectionRef = useRef<HTMLElement | null>(null);
 
   async function fetchAccounting(input: string, init?: RequestInit) {
     const response = await fetch(input, {
@@ -210,8 +212,8 @@ export function AccountingJournalWorkspace({
       }
 
       const loadedEntries = payload.recentEntries ?? [];
+      let nextEntries = loadedEntries;
       setAccounts(payload.accounts ?? []);
-      setRecentEntries(loadedEntries);
       setDeletedEntries(payload.deletedEntries ?? []);
       setTicketInvoiceOptions(payload.ticketInvoiceOptions ?? []);
       setDailyRates(payload.dailyRates ?? []);
@@ -219,12 +221,22 @@ export function AccountingJournalWorkspace({
       if (targetEntryId) {
         const directEntry = payload.focusedEntry ?? loadedEntries.find((entry: RecentEntry) => entry.id === targetEntryId) ?? null;
         if (directEntry) {
-          startEditEntry(directEntry);
-          setMessage(`Ouverture directe de l'écriture n° ${directEntry.sequence}.`);
+          if (!nextEntries.some((entry: RecentEntry) => entry.id === directEntry.id)) {
+            nextEntries = [directEntry, ...nextEntries];
+          }
+          setHistorySearchInput("");
+          setHistorySearch("");
+          setEditingEntryId("");
+          setHighlightedEntryId(directEntry.id);
+          setMessage(`Écriture n° ${directEntry.sequence} localisée dans l'historique.`);
         } else {
           setError("L'écriture demandée est introuvable ou non accessible.");
         }
+      } else {
+        setHighlightedEntryId("");
       }
+
+      setRecentEntries(nextEntries);
     } catch (error) {
       if (error instanceof Error && error.message === "SESSION_EXPIREE") {
         return;
@@ -238,6 +250,18 @@ export function AccountingJournalWorkspace({
   useEffect(() => {
     loadData(undefined, focusedEntryId || undefined);
   }, [focusedEntryId]);
+
+  useEffect(() => {
+    if (!highlightedEntryId || typeof window === "undefined") return;
+
+    const timeoutId = window.setTimeout(() => {
+      historySectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+      const target = document.querySelector(`[data-entry-id="${highlightedEntryId}"]`) as HTMLElement | null;
+      target?.scrollIntoView({ behavior: "smooth", block: "center" });
+    }, 80);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [highlightedEntryId, recentEntries.length]);
 
   const accountMap = useMemo(
     () => new Map(accounts.map((account) => [account.code, account])),
@@ -813,7 +837,7 @@ export function AccountingJournalWorkspace({
       ) : null}
 
       {showHistory ? (
-      <section className="rounded-2xl border border-black/10 bg-white p-4 shadow-sm dark:border-white/10 dark:bg-zinc-900">
+      <section ref={historySectionRef} className="rounded-2xl border border-black/10 bg-white p-4 shadow-sm dark:border-white/10 dark:bg-zinc-900">
         <div className="mb-3 flex flex-wrap items-end justify-between gap-3">
           <div>
             <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-black/50 dark:text-white/50">Historique</p>
@@ -869,7 +893,14 @@ export function AccountingJournalWorkspace({
             </p>
           ) : (
             filteredRecentEntries.map((entry) => (
-              <article key={entry.id} className="rounded-xl border border-black/10 p-3 dark:border-white/10">
+              <article
+                key={entry.id}
+                data-entry-id={entry.id}
+                className={`rounded-xl border p-3 ${entry.id === highlightedEntryId
+                  ? "border-blue-400 bg-blue-50/50 dark:border-blue-500 dark:bg-blue-950/25"
+                  : "border-black/10 dark:border-white/10"
+                }`}
+              >
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div>
                     <p className="text-sm font-semibold">Écriture n° {entry.sequence}</p>
