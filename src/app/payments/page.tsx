@@ -14,7 +14,7 @@ import { ProxyBankingEditButton } from "@/components/proxy-banking-edit-button";
 import { PaymentsWritingWorkspace } from "@/components/payments-writing-workspace";
 import { ProcurementCashExecutionActions } from "@/components/procurement-cash-execution-actions";
 import { UnpaidAlertsButton } from "@/components/unpaid-alerts-button";
-import { invoiceNumberFromChronology } from "@/lib/invoice";
+import { buildInvoiceSequenceByTicketId, invoiceNumberFromChronology } from "@/lib/invoice";
 import { isCashierJobTitle } from "@/lib/assignment";
 import { requirePageModuleAccess } from "@/lib/rbac";
 import { prisma } from "@/lib/prisma";
@@ -79,6 +79,7 @@ type CashOperationApprovalRow = {
 type TicketSaleRow = {
   id: string;
   soldAt: Date;
+  createdAt: Date;
   airlineId: string;
   ticketNumber: string;
   customerName: string;
@@ -540,15 +541,12 @@ export default async function PaymentsPage({
       take: 5000,
     }),
     prisma.ticketSale.findMany({
-      where: {
-        soldAt: { gte: yearStart, lt: yearEnd },
-      },
       select: {
         id: true,
-        soldAt: true,
+        createdAt: true,
       },
-      orderBy: [{ soldAt: "asc" }, { id: "asc" }],
-      take: 10000,
+      orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+      take: 100000,
     }),
     // Ticket payments only belong to THE_BEST desk; for other desks we skip ticket payments
     isMainDesk
@@ -707,7 +705,7 @@ export default async function PaymentsPage({
   ] = paymentsData as [
     AirlineRow[],
     TicketSaleRow[],
-    Array<{ id: string; soldAt: Date }>,
+    Array<{ id: string; createdAt: Date }>,
     TicketPaymentRow[],
     TicketPaymentRow[],
     CashOperationRow[],
@@ -719,17 +717,7 @@ export default async function PaymentsPage({
     Array<{ id: string; code?: string | null; title: string; estimatedAmount?: number | null; currency?: string | null; approvedAt?: Date | null; reviewComment?: string | null }>,
   ];
 
-  const sequenceByTicketId = new Map<string, number>();
-  yearTickets
-    .slice()
-    .sort((a, b) => {
-      const diff = new Date(a.soldAt).getTime() - new Date(b.soldAt).getTime();
-      if (diff !== 0) return diff;
-      return String(a.id).localeCompare(String(b.id));
-    })
-    .forEach((ticket, index) => {
-      sequenceByTicketId.set(ticket.id, index + 1);
-    });
+  const sequenceByTicketId = buildInvoiceSequenceByTicketId(yearTickets);
 
   const ticketsWithComputedStatus = tickets.map((ticket) => {
     const paidAmount = ticket.payments.reduce(
@@ -755,7 +743,7 @@ export default async function PaymentsPage({
         : PaymentStatus.PARTIAL;
 
     const invoiceNumber = invoiceNumberFromChronology({
-      soldAt: new Date(ticket.soldAt),
+      soldAt: new Date(ticket.createdAt),
       sellerTeamName: ticket.seller?.team?.name ?? null,
       sequence: sequenceByTicketId.get(ticket.id) ?? 1,
     });

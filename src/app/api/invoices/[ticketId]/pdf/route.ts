@@ -80,15 +80,15 @@ export async function GET(request: NextRequest, context: RouteContext) {
   const yearEnd = new Date(Date.UTC(year + 1, 0, 1, 0, 0, 0, 0));
   const sequence = await prisma.ticketSale.count({
     where: {
-      soldAt: { gte: yearStart, lt: yearEnd },
+      createdAt: { gte: yearStart, lt: yearEnd },
       OR: [
-        { soldAt: { lt: ticket.soldAt } },
-        { soldAt: ticket.soldAt, id: { lte: ticket.id } },
+        { createdAt: { lt: ticket.createdAt } },
+        { createdAt: ticket.createdAt, id: { lte: ticket.id } },
       ],
     },
   });
   const invoiceNumber = invoiceNumberFromChronology({
-    soldAt: ticket.soldAt,
+    soldAt: ticket.createdAt,
     sellerTeamName: ticket.seller?.team?.name ?? null,
     sequence,
   });

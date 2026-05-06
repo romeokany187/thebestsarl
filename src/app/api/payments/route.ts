@@ -100,20 +100,20 @@ export async function POST(request: NextRequest) {
         throw new Error("BILLET_INTROUVABLE");
       }
 
-      const year = ticket.soldAt.getUTCFullYear();
+      const year = ticket.createdAt.getUTCFullYear();
       const yearStart = new Date(Date.UTC(year, 0, 1, 0, 0, 0, 0));
       const yearEnd = new Date(Date.UTC(year + 1, 0, 1, 0, 0, 0, 0));
       const sequence = await tx.ticketSale.count({
         where: {
-          soldAt: { gte: yearStart, lt: yearEnd },
+          createdAt: { gte: yearStart, lt: yearEnd },
           OR: [
-            { soldAt: { lt: ticket.soldAt } },
-            { soldAt: ticket.soldAt, id: { lte: ticket.id } },
+            { createdAt: { lt: ticket.createdAt } },
+            { createdAt: ticket.createdAt, id: { lte: ticket.id } },
           ],
         },
       });
       const expectedInvoiceNumber = invoiceNumberFromChronology({
-        soldAt: ticket.soldAt,
+        soldAt: ticket.createdAt,
         sellerTeamName: ticket.seller?.team?.name ?? null,
         sequence,
       });
@@ -376,20 +376,20 @@ export async function PATCH(request: NextRequest) {
     const fxRateUsdToCdf = latestRateOperation?.fxRateUsdToCdf
       ?? parsePositiveNumber(process.env.CASH_DEFAULT_USD_TO_CDF_RATE, 2800);
 
-    const year = ticket.soldAt.getUTCFullYear();
+    const year = ticket.createdAt.getUTCFullYear();
     const yearStart = new Date(Date.UTC(year, 0, 1, 0, 0, 0, 0));
     const yearEnd = new Date(Date.UTC(year + 1, 0, 1, 0, 0, 0, 0));
     const sequence = await prisma.ticketSale.count({
       where: {
-        soldAt: { gte: yearStart, lt: yearEnd },
+        createdAt: { gte: yearStart, lt: yearEnd },
         OR: [
-          { soldAt: { lt: ticket.soldAt } },
-          { soldAt: ticket.soldAt, id: { lte: ticket.id } },
+          { createdAt: { lt: ticket.createdAt } },
+          { createdAt: ticket.createdAt, id: { lte: ticket.id } },
         ],
       },
     });
     const expectedInvoiceNumber = invoiceNumberFromChronology({
-      soldAt: ticket.soldAt,
+      soldAt: ticket.createdAt,
       sellerTeamName: ticket.seller?.team?.name ?? null,
       sequence,
     });

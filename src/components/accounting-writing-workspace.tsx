@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 type AccountingView = "overview" | "pilotage" | "journal" | "reports" | "plan";
 
@@ -17,6 +17,17 @@ const VIEW_ITEMS: AccountingViewItem[] = [
   { key: "reports", label: "Rapports", tone: "blue" },
   { key: "plan", label: "Plan comptable", tone: "violet" },
 ];
+
+function resolveAccountingView(value: string | null | undefined): AccountingView | null {
+  if (!value) return null;
+  const normalized = value.replace(/^#/, "").trim().toLowerCase();
+  if (normalized === "overview") return "overview";
+  if (normalized === "pilotage") return "pilotage";
+  if (normalized === "journal") return "journal";
+  if (normalized === "reports") return "reports";
+  if (normalized === "plan") return "plan";
+  return null;
+}
 
 function toneClass(tone: AccountingViewItem["tone"], active: boolean) {
   if (!active) {
@@ -43,6 +54,26 @@ export function AccountingWritingWorkspace({
   planWorkspace: React.ReactNode;
 }) {
   const [view, setView] = useState<AccountingView>("overview");
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    const syncViewFromUrl = () => {
+      const url = new URL(window.location.href);
+      const nextView = resolveAccountingView(url.searchParams.get("view"))
+        ?? resolveAccountingView(window.location.hash)
+        ?? "overview";
+      setView(nextView);
+    };
+
+    syncViewFromUrl();
+    window.addEventListener("hashchange", syncViewFromUrl);
+    window.addEventListener("popstate", syncViewFromUrl);
+    return () => {
+      window.removeEventListener("hashchange", syncViewFromUrl);
+      window.removeEventListener("popstate", syncViewFromUrl);
+    };
+  }, []);
   const activeView = VIEW_ITEMS.find((item) => item.key === view) ?? VIEW_ITEMS[0];
 
   return (
@@ -59,7 +90,14 @@ export function AccountingWritingWorkspace({
             <button
               key={item.key}
               type="button"
-              onClick={() => setView(item.key)}
+              onClick={() => {
+                setView(item.key);
+                if (typeof window !== "undefined") {
+                  const url = new URL(window.location.href);
+                  url.hash = item.key;
+                  window.history.replaceState(window.history.state, "", url.toString());
+                }
+              }}
               className={`flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-xs font-semibold transition ${toneClass(item.tone, view === item.key)}`}
             >
               <span>{item.label}</span>

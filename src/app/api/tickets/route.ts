@@ -281,20 +281,20 @@ export async function POST(request: NextRequest) {
       return created;
     });
 
-    const year = ticket.soldAt.getUTCFullYear();
+    const year = ticket.createdAt.getUTCFullYear();
     const yearStart = new Date(Date.UTC(year, 0, 1, 0, 0, 0, 0));
     const yearEnd = new Date(Date.UTC(year + 1, 0, 1, 0, 0, 0, 0));
     const sequence = await prisma.ticketSale.count({
       where: {
-        soldAt: { gte: yearStart, lt: yearEnd },
+        createdAt: { gte: yearStart, lt: yearEnd },
         OR: [
-          { soldAt: { lt: ticket.soldAt } },
-          { soldAt: ticket.soldAt, id: { lte: ticket.id } },
+          { createdAt: { lt: ticket.createdAt } },
+          { createdAt: ticket.createdAt, id: { lte: ticket.id } },
         ],
       },
     });
     const invoiceNumber = invoiceNumberFromChronology({
-      soldAt: ticket.soldAt,
+      soldAt: ticket.createdAt,
       sellerTeamName: access.session.user.teamName ?? null,
       sequence,
     });

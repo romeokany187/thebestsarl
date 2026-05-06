@@ -1,7 +1,7 @@
 import { AppShell } from "@/components/app-shell";
 import { prisma } from "@/lib/prisma";
 import { requirePageModuleAccess } from "@/lib/rbac";
-import { invoiceNumberFromChronology } from "@/lib/invoice";
+import { buildInvoiceSequenceByTicketId, invoiceNumberFromChronology } from "@/lib/invoice";
 import { getTicketTotalAmount } from "@/lib/ticket-pricing";
 
 export const dynamic = "force-dynamic";
@@ -95,27 +95,21 @@ export default async function FacturesPage({
     take: 2000,
   }),
     prisma.ticketSale.findMany({
-      where: {
-        soldAt: { gte: yearStart, lt: yearEnd },
-      },
       select: {
         id: true,
-        soldAt: true,
+        createdAt: true,
       },
-      orderBy: [{ soldAt: "asc" }, { id: "asc" }],
-      take: 10000,
+      orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+      take: 100000,
     }),
   ]);
 
-  const sequenceByTicketId = new Map<string, number>();
-  yearTickets.forEach((ticket, index) => {
-    sequenceByTicketId.set(ticket.id, index + 1);
-  });
+  const sequenceByTicketId = buildInvoiceSequenceByTicketId(yearTickets);
 
   const invoices = tickets.map((ticket) => {
     const sequence = sequenceByTicketId.get(ticket.id) ?? 1;
     const invoiceNumber = invoiceNumberFromChronology({
-      soldAt: ticket.soldAt,
+      soldAt: ticket.createdAt,
       sellerTeamName: ticket.seller?.team?.name ?? null,
       sequence,
     });

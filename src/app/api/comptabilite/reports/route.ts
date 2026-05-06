@@ -913,7 +913,7 @@ async function loadPdfFonts(pdf: PDFDocument) {
 
 function buildAccountingEntryDeepLink(baseUrl: string | null, entryId: string) {
   if (!baseUrl || !entryId) return "";
-  return `${baseUrl.replace(/\/$/, "")}/comptabilite?entryId=${encodeURIComponent(entryId)}#journal`;
+  return `${baseUrl.replace(/\/$/, "")}/comptabilite?view=journal&entryId=${encodeURIComponent(entryId)}`;
 }
 
 async function buildPdf(report: ReportPayload, appBaseUrl: string | null) {

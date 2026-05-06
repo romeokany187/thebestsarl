@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { invoiceNumberFromChronology } from "@/lib/invoice";
+import { buildInvoiceSequenceByTicketId, invoiceNumberFromChronology } from "@/lib/invoice";
 import { applyAccountingChronologySequence, buildAccountingChronologySequenceMap } from "@/lib/accounting-chronology";
 import { prisma } from "@/lib/prisma";
 import { requireApiModuleAccess } from "@/lib/rbac";
@@ -301,7 +301,7 @@ export async function GET(request: NextRequest) {
       }
     : {};
 
-  const [accounts, chronologyRows, recentEntriesRaw, yearlyTickets, dailyRates, deletedEntries] = await Promise.all([
+  const [accounts, chronologyRows, recentEntriesRaw, yearlyTickets, ticketChronology, dailyRates, deletedEntries] = await Promise.all([
     prisma.account.findMany({
       select: { code: true, label: true, normalBalance: true },
       orderBy: { code: "asc" },
@@ -327,6 +327,7 @@ export async function GET(request: NextRequest) {
         ticketNumber: true,
         customerName: true,
         soldAt: true,
+        createdAt: true,
         seller: {
           select: {
             team: {
@@ -336,6 +337,14 @@ export async function GET(request: NextRequest) {
         },
       },
       orderBy: [{ soldAt: "asc" }, { id: "asc" }],
+    }),
+    prisma.ticketSale.findMany({
+      select: {
+        id: true,
+        createdAt: true,
+      },
+      orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+      take: 100000,
     }),
     listDailyRates(prisma, 60),
     prisma.auditLog.findMany({
@@ -381,6 +390,8 @@ export async function GET(request: NextRequest) {
     }
   }
 
+  const sequenceByTicketId = buildInvoiceSequenceByTicketId(ticketChronology);
+
   const ticketInvoiceOptions = yearlyTickets
     .map((ticket, index) => ({
       id: ticket.id,
@@ -388,9 +399,9 @@ export async function GET(request: NextRequest) {
       customerName: ticket.customerName,
       soldAt: ticket.soldAt,
       invoiceNumber: invoiceNumberFromChronology({
-        soldAt: ticket.soldAt,
+        soldAt: ticket.createdAt,
         sellerTeamName: ticket.seller?.team?.name ?? null,
-        sequence: index + 1,
+        sequence: sequenceByTicketId.get(ticket.id) ?? 1,
       }),
     }))
     .filter((ticket) => ticket.soldAt >= supportStart)
