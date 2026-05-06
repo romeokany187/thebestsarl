@@ -34,6 +34,9 @@ export async function POST(request: NextRequest) {
 
   const data = parsed.data;
   const occurredAt = data.occurredAt ?? new Date();
+  if (occurredAt.getTime() > Date.now()) {
+    return NextResponse.json({ error: "La date d'opération ne peut pas être dans le futur." }, { status: 400 });
+  }
   const sourceCurrency = data.sourceCurrency;
   const targetCurrency = sourceCurrency === "USD" ? "CDF" : "USD";
   const fxRateUsdToCdf = data.fxRateUsdToCdf;

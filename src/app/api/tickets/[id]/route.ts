@@ -123,6 +123,14 @@ export async function PATCH(request: NextRequest, { params }: Params) {
     const normalizedSoldAt = hasSalesAdminAccess && parsed.data.soldAt
       ? normalizeTicketDate(parsed.data.soldAt)
       : existing.soldAt;
+
+    if (normalizedSoldAt.getTime() > Date.now()) {
+      return NextResponse.json(
+        { error: "La date d'enregistrement de vente ne peut pas être dans le futur." },
+        { status: 400 },
+      );
+    }
+
     const normalizedPatchData = {
       ...parsed.data,
       ...(parsed.data.travelDate ? { travelDate: normalizedTravelDate } : {}),

@@ -5,7 +5,6 @@ import { prisma } from "@/lib/prisma";
 import { requireApiModuleAccess } from "@/lib/rbac";
 import { paymentCreateSchema } from "@/lib/validators";
 import { isMailConfigured, sendMailBatch } from "@/lib/mail";
-import { invoiceNumberFromChronology } from "@/lib/invoice";
 import { getTicketTotalAmount } from "@/lib/ticket-pricing";
 import { writeActivityLog } from "@/lib/activity-log";
 
@@ -100,26 +99,9 @@ export async function POST(request: NextRequest) {
         throw new Error("BILLET_INTROUVABLE");
       }
 
-      const year = ticket.createdAt.getUTCFullYear();
-      const yearStart = new Date(Date.UTC(year, 0, 1, 0, 0, 0, 0));
-      const yearEnd = new Date(Date.UTC(year + 1, 0, 1, 0, 0, 0, 0));
-      const sequence = await tx.ticketSale.count({
-        where: {
-          createdAt: { gte: yearStart, lt: yearEnd },
-          OR: [
-            { createdAt: { lt: ticket.createdAt } },
-            { createdAt: ticket.createdAt, id: { lte: ticket.id } },
-          ],
-        },
-      });
-      const expectedInvoiceNumber = invoiceNumberFromChronology({
-        soldAt: ticket.createdAt,
-        sellerTeamName: ticket.seller?.team?.name ?? null,
-        sequence,
-      });
-
-      if (parsed.data.reference.trim() !== expectedInvoiceNumber) {
-        throw new Error("REFERENCE_FACTURE_INVALIDE");
+      const justificativeReference = parsed.data.reference.trim();
+      if (!justificativeReference) {
+        throw new Error("MISSING_JUSTIFICATIVE_REFERENCE");
       }
 
       const ticketCurrency = normalizeMoneyCurrency(ticket.currency);
@@ -151,7 +133,7 @@ export async function POST(request: NextRequest) {
           amountUsd: amountToUsd(parsed.data.amount, paymentCurrency, fxRateUsdToCdf),
           amountCdf: amountToCdf(parsed.data.amount, paymentCurrency, fxRateUsdToCdf),
           method: parsed.data.method,
-          reference: expectedInvoiceNumber,
+          reference: justificativeReference,
           paidAt: parsed.data.paidAt,
         },
       });
@@ -302,8 +284,8 @@ export async function POST(request: NextRequest) {
       if (error.message === "DEPASSEMENT") {
         return NextResponse.json({ error: "Le paiement dépasse le montant facturé du billet." }, { status: 400 });
       }
-      if (error.message === "REFERENCE_FACTURE_INVALIDE") {
-        return NextResponse.json({ error: "La référence du paiement doit être exactement le numéro de facture du billet." }, { status: 400 });
+      if (error.message === "MISSING_JUSTIFICATIVE_REFERENCE") {
+        return NextResponse.json({ error: "Le numéro du bon d'entrée en caisse est obligatoire comme pièce justificative." }, { status: 400 });
       }
     }
 
@@ -364,6 +346,9 @@ export async function PATCH(request: NextRequest) {
     if (Number.isNaN(nextPaidAt.getTime())) {
       return NextResponse.json({ error: "Date de paiement invalide." }, { status: 400 });
     }
+    if (nextPaidAt.getTime() > Date.now()) {
+      return NextResponse.json({ error: "La date de paiement ne peut pas être dans le futur." }, { status: 400 });
+    }
 
     const latestRateOperation = await cashOperationClient.findFirst({
       where: {
@@ -376,30 +361,12 @@ export async function PATCH(request: NextRequest) {
     const fxRateUsdToCdf = latestRateOperation?.fxRateUsdToCdf
       ?? parsePositiveNumber(process.env.CASH_DEFAULT_USD_TO_CDF_RATE, 2800);
 
-    const year = ticket.createdAt.getUTCFullYear();
-    const yearStart = new Date(Date.UTC(year, 0, 1, 0, 0, 0, 0));
-    const yearEnd = new Date(Date.UTC(year + 1, 0, 1, 0, 0, 0, 0));
-    const sequence = await prisma.ticketSale.count({
-      where: {
-        createdAt: { gte: yearStart, lt: yearEnd },
-        OR: [
-          { createdAt: { lt: ticket.createdAt } },
-          { createdAt: ticket.createdAt, id: { lte: ticket.id } },
-        ],
-      },
-    });
-    const expectedInvoiceNumber = invoiceNumberFromChronology({
-      soldAt: ticket.createdAt,
-      sellerTeamName: ticket.seller?.team?.name ?? null,
-      sequence,
-    });
-
     const nextReference = typeof body?.reference === "string" && body.reference.trim().length > 0
       ? body.reference.trim()
-      : existingPayment.reference ?? expectedInvoiceNumber;
+      : existingPayment.reference ?? "";
 
-    if (nextReference !== expectedInvoiceNumber) {
-      return NextResponse.json({ error: "La référence du paiement doit être exactement le numéro de facture du billet." }, { status: 400 });
+    if (!nextReference) {
+      return NextResponse.json({ error: "Le numéro du bon d'entrée en caisse est obligatoire comme pièce justificative." }, { status: 400 });
     }
 
     const otherPaidTotal = ticket.payments

@@ -150,11 +150,22 @@ export async function POST(request: NextRequest) {
     const isAfterDepositMode = rule?.commissionMode === CommissionMode.AFTER_DEPOSIT;
     const todayRaw = new Date().toISOString().slice(0, 10);
     const todayDate = new Date(`${todayRaw}T00:00:00.000Z`);
+    const requestedSoldAt = parsed.data.soldAt
+      ? normalizeTicketDate(parsed.data.soldAt)
+      : todayDate;
+
+    if (requestedSoldAt.getTime() > todayDate.getTime()) {
+      return NextResponse.json(
+        { error: "La date d'enregistrement de vente ne peut pas être dans le futur." },
+        { status: 400 },
+      );
+    }
+
     const enforcedTravelDate = hasSalesAdminAccess
       ? normalizeTicketDate(parsed.data.travelDate)
       : todayDate;
     const enforcedSoldAt = hasSalesAdminAccess
-      ? normalizeTicketDate(parsed.data.soldAt ?? parsed.data.travelDate)
+      ? requestedSoldAt
       : todayDate;
     const consumedBeforeForAfterDeposit = isAfterDepositMode
       ? (

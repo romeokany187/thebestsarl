@@ -44,6 +44,9 @@ export async function PATCH(request: NextRequest) {
   if (Number.isNaN(occurredAt.getTime())) {
     return NextResponse.json({ error: "Date invalide." }, { status: 400 });
   }
+  if (occurredAt.getTime() > Date.now()) {
+    return NextResponse.json({ error: "La date d'opération ne peut pas être dans le futur." }, { status: 400 });
+  }
 
   const nextChannel = typeof body?.channel === "string"
     ? body.channel.trim().toUpperCase() as ProxyChannel
@@ -520,6 +523,9 @@ export async function POST(request: NextRequest) {
 
   const data = parsed.data;
   const occurredAt = data.occurredAt ?? new Date();
+  if (occurredAt.getTime() > Date.now()) {
+    return NextResponse.json({ error: "La date d'opération ne peut pas être dans le futur." }, { status: 400 });
+  }
   const existingProxyOperations = await prisma.cashOperation.findMany({
     where: {
       occurredAt: { lte: occurredAt },
@@ -736,6 +742,9 @@ export async function PUT(request: NextRequest) {
 
   const data = parsed.data;
   const occurredAt = data.occurredAt ?? new Date();
+  if (occurredAt.getTime() > Date.now()) {
+    return NextResponse.json({ error: "La date d'opération ne peut pas être dans le futur." }, { status: 400 });
+  }
 
   const existingOps = await prisma.cashOperation.findMany({
     where: {

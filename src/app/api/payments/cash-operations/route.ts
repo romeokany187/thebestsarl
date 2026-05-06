@@ -62,6 +62,9 @@ export async function POST(request: NextRequest) {
 
   const data = parsed.data;
   const occurredAt = data.occurredAt ?? new Date();
+  if (occurredAt.getTime() > Date.now()) {
+    return NextResponse.json({ error: "La date d'opération ne peut pas être dans le futur." }, { status: 400 });
+  }
   const currency = (data.currency ?? "USD").toUpperCase();
   if (currency !== "USD" && currency !== "CDF") {
     return NextResponse.json({ error: "Devise non supportée. Utilisez USD ou CDF." }, { status: 400 });
@@ -544,6 +547,9 @@ export async function PATCH(request: NextRequest) {
     const occurredAt = occurredAtRaw ? new Date(occurredAtRaw) : new Date(existing.occurredAt);
     if (Number.isNaN(occurredAt.getTime())) {
       return NextResponse.json({ error: "Date d'opération invalide." }, { status: 400 });
+    }
+    if (occurredAt.getTime() > Date.now()) {
+      return NextResponse.json({ error: "La date d'opération ne peut pas être dans le futur." }, { status: 400 });
     }
 
     const latestRateOperation = await cashOperationClient.findFirst({

@@ -183,6 +183,14 @@ export const ticketSchema = z.object({
   agencyMarkupPercent: z.number().min(0).max(100).optional(),
   agencyMarkupAmount: z.number().min(0).optional(),
   notes: z.string().max(4000).optional(),
+}).superRefine((value, ctx) => {
+  if (value.soldAt && value.soldAt.getTime() > Date.now()) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["soldAt"],
+      message: "La date de vente ne peut pas être dans le futur.",
+    });
+  }
 });
 
 export const ticketUpdateSchema = z.object({
@@ -203,6 +211,14 @@ export const ticketUpdateSchema = z.object({
   agencyMarkupPercent: z.number().min(0).max(100).optional(),
   agencyMarkupAmount: z.number().min(0).optional(),
   notes: z.string().max(4000).optional(),
+}).superRefine((value, ctx) => {
+  if (value.soldAt && value.soldAt.getTime() > Date.now()) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["soldAt"],
+      message: "La date de vente ne peut pas être dans le futur.",
+    });
+  }
 });
 
 export const paymentCreateSchema = z.object({
@@ -212,6 +228,14 @@ export const paymentCreateSchema = z.object({
   method: z.string().min(2).max(80),
   reference: z.string().trim().min(3).max(120),
   paidAt: z.coerce.date().optional(),
+}).superRefine((value, ctx) => {
+  if (value.paidAt && value.paidAt.getTime() > Date.now()) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["paidAt"],
+      message: "La date de paiement ne peut pas être dans le futur.",
+    });
+  }
 });
 
 export const approvalSchema = z.object({
@@ -336,6 +360,14 @@ export const cashOperationCreateSchema = z.object({
   method: z.string().trim().min(2).max(60),
   reference: z.string().trim().min(2, "La référence de la pièce justificative est obligatoire.").max(180),
   description: z.string().trim().min(5).max(500),
+}).superRefine((value, ctx) => {
+  if (value.occurredAt && value.occurredAt.getTime() > Date.now()) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["occurredAt"],
+      message: "La date d'opération ne peut pas être dans le futur.",
+    });
+  }
 });
 
 export const cashConversionSchema = z.object({
@@ -345,6 +377,14 @@ export const cashConversionSchema = z.object({
   fxRateUsdToCdf: z.number().positive(),
   reference: z.string().trim().min(2, "La référence de conversion est obligatoire.").max(180),
   description: z.string().trim().min(5).max(500).optional(),
+}).superRefine((value, ctx) => {
+  if (value.occurredAt && value.occurredAt.getTime() > Date.now()) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["occurredAt"],
+      message: "La date d'opération ne peut pas être dans le futur.",
+    });
+  }
 });
 
 export const accountingEntryLineSchema = z.object({
@@ -373,6 +413,14 @@ export const accountingEntryCreateSchema = z.object({
   exchangeRate: z.number().positive().optional(),
   lines: z.array(accountingEntryLineSchema).min(2),
 }).superRefine((value, ctx) => {
+  if (value.entryDate.getTime() > Date.now()) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "La date d'écriture ne peut pas être dans le futur.",
+      path: ["entryDate"],
+    });
+  }
+
   const debitLines = value.lines.filter((line) => line.side === "DEBIT");
   const creditLines = value.lines.filter((line) => line.side === "CREDIT");
 

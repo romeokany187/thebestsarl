@@ -433,6 +433,10 @@ export async function POST(request: NextRequest) {
 
   const { data, accountByCode } = builtPayload;
 
+  if (data.entryDate.getTime() > Date.now()) {
+    return NextResponse.json({ error: "La date d'écriture ne peut pas être dans le futur." }, { status: 400 });
+  }
+
   try {
     const dailyRate = await resolveDailyRate(prisma as unknown as AccountingTxClient, data.entryDate);
     const balanceError = validateEntryCurrencyEquivalence(data.lines, dailyRate.exchangeRate);
@@ -507,6 +511,10 @@ export async function PUT(request: NextRequest) {
   if ("error" in builtPayload) return builtPayload.error;
 
   const { data, accountByCode } = builtPayload;
+
+  if (data.entryDate.getTime() > Date.now()) {
+    return NextResponse.json({ error: "La date d'écriture ne peut pas être dans le futur." }, { status: 400 });
+  }
 
   try {
     const dailyRate = await resolveDailyRate(prisma as unknown as AccountingTxClient, data.entryDate);
