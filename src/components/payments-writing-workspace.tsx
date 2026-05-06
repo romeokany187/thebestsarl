@@ -11,6 +11,8 @@ import {
   type CashDeskValue,
 } from "@/lib/payments-desk";
 
+type ModuleAccessLevelLike = "READ" | "WRITE" | "FULL" | null | undefined;
+
 type WritingMode = "none" | "tickets" | "cash" | "virtual" | "billetage" | "payment-orders" | "needs" | "float" | "reports";
 type DeskWorkspaceOverride = Partial<Record<Exclude<WritingMode, "none"> | "summary", React.ReactNode>>;
 
@@ -45,6 +47,7 @@ export function PaymentsWritingWorkspace({
   workspaceOverrides,
   jobTitle,
   role,
+  customModuleAccessLevel,
   initialDesk,
   initialScope,
   initialMode,
@@ -63,14 +66,23 @@ export function PaymentsWritingWorkspace({
   workspaceOverrides?: Partial<Record<CashDeskValue, DeskWorkspaceOverride>>;
   jobTitle?: string | null;
   role?: AppRoleLike | string | null;
+  customModuleAccessLevel?: ModuleAccessLevelLike;
   initialDesk?: CashDeskValue;
   initialScope?: AdminCashRoleScope;
   initialMode?: WritingMode;
 }) {
   const [mode, setMode] = useState<WritingMode>(initialMode ?? "none");
-  const scopeOptions = useMemo(() => getVisibleCashRoleOptions(jobTitle, role), [jobTitle, role]);
-  const [adminScope, setAdminScope] = useState<AdminCashRoleScope>(() => initialScope ?? getDefaultCashRoleScope(jobTitle, role));
-  const deskOptions = useMemo(() => getManagedCashDesks(jobTitle, role, adminScope), [jobTitle, role, adminScope]);
+  const scopeOptions = useMemo(
+    () => getVisibleCashRoleOptions(jobTitle, role, customModuleAccessLevel),
+    [jobTitle, role, customModuleAccessLevel],
+  );
+  const [adminScope, setAdminScope] = useState<AdminCashRoleScope>(
+    () => initialScope ?? getDefaultCashRoleScope(jobTitle, role, customModuleAccessLevel),
+  );
+  const deskOptions = useMemo(
+    () => getManagedCashDesks(jobTitle, role, adminScope, customModuleAccessLevel),
+    [jobTitle, role, adminScope, customModuleAccessLevel],
+  );
   const [selectedDesk, setSelectedDesk] = useState<CashDeskValue | "">(initialDesk ?? deskOptions[0]?.value ?? "");
 
   const router = useRouter();

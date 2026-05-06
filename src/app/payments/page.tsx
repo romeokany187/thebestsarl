@@ -464,7 +464,7 @@ export default async function PaymentsPage({
 }: {
   searchParams?: Promise<SearchParams>;
 }) {
-  const { role, session } = await requirePageModuleAccess("payments", ["ADMIN", "DIRECTEUR_GENERAL", "ACCOUNTANT", "EMPLOYEE", "MANAGER"]);
+  const { role, session, customModuleAccess } = await requirePageModuleAccess("payments", ["ADMIN", "DIRECTEUR_GENERAL", "ACCOUNTANT", "EMPLOYEE", "MANAGER"]);
   const isCashier = isCashierJobTitle(session.user.jobTitle);
   const isComptable = role === "ACCOUNTANT" || session.user.jobTitle === "COMPTABLE";
   const isAdmin = role === "ADMIN";
@@ -475,6 +475,7 @@ export default async function PaymentsPage({
   const deskState = resolvePaymentsDeskState({
     jobTitle: session.user.jobTitle,
     role,
+    customModuleAccessLevel: customModuleAccess,
     requestedDesk: typeof (resolvedSearchParams as { desk?: unknown }).desk === "string"
       ? (resolvedSearchParams as { desk?: string }).desk
       : null,
@@ -1533,6 +1534,7 @@ export default async function PaymentsPage({
       <PaymentsWritingWorkspace
         jobTitle={session.user.jobTitle ?? null}
         role={role}
+        customModuleAccessLevel={customModuleAccess}
         initialDesk={deskState.desk}
         initialScope={deskState.scope}
         initialMode={initialWorkspaceMode}

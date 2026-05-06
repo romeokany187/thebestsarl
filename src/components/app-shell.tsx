@@ -66,10 +66,6 @@ const links = [
     label: "Comptabilité",
     module: "payments" as AppModule,
     roles: ["ADMIN", "ACCOUNTANT", "EMPLOYEE"] as AppRole[],
-    show: ({ role, jobTitle }: { role: AppRole; jobTitle?: string | null }) => {
-      const normalizedJobTitle = (jobTitle ?? "").trim().toUpperCase();
-      return role === "ADMIN" || role === "ACCOUNTANT" || normalizedJobTitle === "COMPTABLE";
-    },
   },
   {
     href: "/deposit",
@@ -247,9 +243,7 @@ export async function AppShell({
       return false;
     }
 
-    return typeof link.show === "function"
-      ? link.show({ role, jobTitle: session?.user?.jobTitle })
-      : true;
+    return true;
   });
   const roleLabel = role ? `Rôle ${displayRoleLabel(role, session?.user?.jobTitle)}` : null;
   const mobileQuickLinks = visibleLinks.filter((link) => ["/", "/sales", "/payments", "/inbox", "/profile"].includes(link.href));
