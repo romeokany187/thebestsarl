@@ -3,10 +3,6 @@ import { randomUUID } from "crypto";
 import { prisma } from "@/lib/prisma";
 import { requireApiModuleAccess } from "@/lib/rbac";
 
-function canManageAccounting(role: string, jobTitle: string | null | undefined) {
-  return role === "ADMIN" || role === "ACCOUNTANT" || (jobTitle ?? "") === "COMPTABLE";
-}
-
 function toUtcDay(date: Date) {
   return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate(), 0, 0, 0, 0));
 }
@@ -33,12 +29,8 @@ async function ensureAccountingDailyRateTable() {
 }
 
 export async function POST(request: NextRequest) {
-  const access = await requireApiModuleAccess("payments", ["ADMIN", "DIRECTEUR_GENERAL", "ACCOUNTANT", "EMPLOYEE"]);
+  const access = await requireApiModuleAccess("payments", ["ADMIN", "DIRECTEUR_GENERAL", "MANAGER", "ACCOUNTANT", "EMPLOYEE"], "WRITE");
   if (access.error) return access.error;
-
-  if (!canManageAccounting(access.role, access.session.user.jobTitle)) {
-    return NextResponse.json({ error: "Accès réservé au comptable et à l'administrateur." }, { status: 403 });
-  }
 
   await ensureAccountingDailyRateTable();
 

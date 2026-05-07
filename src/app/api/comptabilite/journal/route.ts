@@ -39,10 +39,6 @@ type AccountingChronologyRow = {
   sequence: number;
 };
 
-function canManageAccounting(role: string, jobTitle: string | null | undefined) {
-  return role === "ADMIN" || role === "ACCOUNTANT" || (jobTitle ?? "") === "COMPTABLE";
-}
-
 function toUtcDay(date: Date) {
   return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate(), 0, 0, 0, 0));
 }
@@ -273,12 +269,8 @@ function ticketSupportRangeStart() {
 }
 
 export async function GET(request: NextRequest) {
-  const access = await requireApiModuleAccess("payments", ["ADMIN", "DIRECTEUR_GENERAL", "ACCOUNTANT", "EMPLOYEE"]);
+  const access = await requireApiModuleAccess("payments", ["ADMIN", "DIRECTEUR_GENERAL", "MANAGER", "ACCOUNTANT", "EMPLOYEE"], "READ");
   if (access.error) return access.error;
-
-  if (!canManageAccounting(access.role, access.session.user.jobTitle)) {
-    return NextResponse.json({ error: "Accès réservé au comptable et à l'administrateur." }, { status: 403 });
-  }
 
   await ensureAccountingTables();
 
@@ -418,12 +410,8 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
-  const access = await requireApiModuleAccess("payments", ["ADMIN", "DIRECTEUR_GENERAL", "ACCOUNTANT", "EMPLOYEE"]);
+  const access = await requireApiModuleAccess("payments", ["ADMIN", "DIRECTEUR_GENERAL", "MANAGER", "ACCOUNTANT", "EMPLOYEE"], "WRITE");
   if (access.error) return access.error;
-
-  if (!canManageAccounting(access.role, access.session.user.jobTitle)) {
-    return NextResponse.json({ error: "Accès réservé au comptable et à l'administrateur." }, { status: 403 });
-  }
 
   await ensureAccountingTables();
 
@@ -492,12 +480,8 @@ export async function POST(request: NextRequest) {
 }
 
 export async function PUT(request: NextRequest) {
-  const access = await requireApiModuleAccess("payments", ["ADMIN", "DIRECTEUR_GENERAL", "ACCOUNTANT", "EMPLOYEE"]);
+  const access = await requireApiModuleAccess("payments", ["ADMIN", "DIRECTEUR_GENERAL", "MANAGER", "ACCOUNTANT", "EMPLOYEE"], "WRITE");
   if (access.error) return access.error;
-
-  if (!canManageAccounting(access.role, access.session.user.jobTitle)) {
-    return NextResponse.json({ error: "Accès réservé au comptable et à l'administrateur." }, { status: 403 });
-  }
 
   await ensureAccountingTables();
 
@@ -575,12 +559,8 @@ export async function PUT(request: NextRequest) {
 }
 
 export async function DELETE(request: NextRequest) {
-  const access = await requireApiModuleAccess("payments", ["ADMIN", "DIRECTEUR_GENERAL", "ACCOUNTANT", "EMPLOYEE"]);
+  const access = await requireApiModuleAccess("payments", ["ADMIN", "DIRECTEUR_GENERAL", "MANAGER", "ACCOUNTANT", "EMPLOYEE"], "WRITE");
   if (access.error) return access.error;
-
-  if (!canManageAccounting(access.role, access.session.user.jobTitle)) {
-    return NextResponse.json({ error: "Accès réservé au comptable et à l'administrateur." }, { status: 403 });
-  }
 
   await ensureAccountingTables();
 

@@ -17,10 +17,6 @@ type TrialBalancePayload = ReturnType<typeof buildTrialBalancePayload>;
 type GeneralBalancePayload = ReturnType<typeof buildGeneralBalancePayload>;
 type ReportPayload = JournalPayload | LedgerPayload | TrialBalancePayload | GeneralBalancePayload;
 
-function canManageAccounting(role: string, jobTitle: string | null | undefined) {
-  return role === "ADMIN" || role === "ACCOUNTANT" || (jobTitle ?? "") === "COMPTABLE";
-}
-
 async function ensureAccountingTables() {
   await prisma.$executeRawUnsafe(`
     CREATE TABLE IF NOT EXISTS \
@@ -1435,12 +1431,8 @@ async function buildPdf(report: ReportPayload, appBaseUrl: string | null) {
 }
 
 export async function GET(request: NextRequest) {
-  const access = await requireApiModuleAccess("payments", ["ADMIN", "DIRECTEUR_GENERAL", "ACCOUNTANT", "EMPLOYEE"]);
+  const access = await requireApiModuleAccess("payments", ["ADMIN", "DIRECTEUR_GENERAL", "MANAGER", "ACCOUNTANT", "EMPLOYEE"], "READ");
   if (access.error) return access.error;
-
-  if (!canManageAccounting(access.role, access.session.user.jobTitle)) {
-    return NextResponse.json({ error: "Accès réservé au comptable et à l'administrateur." }, { status: 403 });
-  }
 
   await ensureAccountingTables();
 
