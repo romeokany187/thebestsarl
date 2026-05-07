@@ -36,7 +36,7 @@ export function PaymentEntryForm({ tickets }: { tickets: TicketOption[] }) {
   const [amount, setAmount] = useState<string>("");
   const [currency, setCurrency] = useState<string>(normalizeCurrency(tickets[0]?.currency));
   const [method, setMethod] = useState<string>("CASH");
-  const [reference, setReference] = useState<string>(tickets[0]?.invoiceNumber ?? "");
+  const [supportingReference, setSupportingReference] = useState<string>("");
   const [paidAt, setPaidAt] = useState<string>(toLocalDateTimeInputValue(new Date()));
   const [loading, setLoading] = useState<boolean>(false);
   const [message, setMessage] = useState<string>("");
@@ -48,8 +48,7 @@ export function PaymentEntryForm({ tickets }: { tickets: TicketOption[] }) {
       const payload = e.detail;
       if (!payload) return;
 
-      // Try to find ticket by invoice/reference
-      const ticketMatch = tickets.find((t) => (t.invoiceNumber ?? "") === (payload.reference ?? ""));
+      const ticketMatch = tickets.find((t) => t.id === payload.ticketId);
       if (ticketMatch) {
         setTicketId(ticketMatch.id);
       }
@@ -57,7 +56,7 @@ export function PaymentEntryForm({ tickets }: { tickets: TicketOption[] }) {
       if (payload.amount !== undefined) setAmount(String(payload.amount));
       if (payload.currency) setCurrency(normalizeCurrency(payload.currency));
       if (payload.method) setMethod(payload.method);
-      if (payload.reference) setReference(payload.reference);
+      if (payload.reference) setSupportingReference(payload.reference);
       if (payload.paidAt) setPaidAt(payload.paidAt.slice(0, 16));
 
       window.scrollTo({ top: 0, behavior: "smooth" });
@@ -76,11 +75,8 @@ export function PaymentEntryForm({ tickets }: { tickets: TicketOption[] }) {
   useEffect(() => {
     if (selected) {
       setCurrency(normalizeCurrency(selected.currency));
-      setReference(selected.invoiceNumber);
-    } else {
-      setReference("");
     }
-  }, [selected?.id, selected?.currency, selected?.invoiceNumber]);
+  }, [selected?.id, selected?.currency]);
 
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -96,14 +92,8 @@ export function PaymentEntryForm({ tickets }: { tickets: TicketOption[] }) {
       return;
     }
 
-    if (!reference.trim()) {
-      setError("Le numéro de facture est obligatoire pour encaisser un billet.");
-      setLoading(false);
-      return;
-    }
-
-    if (selected && reference.trim() !== selectedInvoiceNumber) {
-      setError(`La référence du paiement doit être le numéro de facture ${selectedInvoiceNumber}.`);
+    if (!supportingReference.trim()) {
+      setError("Le numéro du bon d'entrée en caisse ou du reçu est obligatoire.");
       setLoading(false);
       return;
     }
@@ -116,7 +106,7 @@ export function PaymentEntryForm({ tickets }: { tickets: TicketOption[] }) {
         amount: numericAmount,
         currency: paymentCurrency,
         method,
-        reference: reference.trim(),
+        reference: supportingReference.trim(),
         paidAt: paidAt ? new Date(paidAt).toISOString() : undefined,
       }),
     });
@@ -131,7 +121,7 @@ export function PaymentEntryForm({ tickets }: { tickets: TicketOption[] }) {
 
     setMessage("Paiement enregistré et statut billet mis à jour.");
     setAmount("");
-    setReference(selected?.invoiceNumber ?? "");
+    setSupportingReference("");
     setLoading(false);
     router.refresh();
   }
@@ -201,12 +191,22 @@ export function PaymentEntryForm({ tickets }: { tickets: TicketOption[] }) {
         <div>
           <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-black/60 dark:text-white/60">N° facture</label>
           <input
-            value={reference}
-            title={reference}
+            value={selectedInvoiceNumber}
+            title={selectedInvoiceNumber}
             readOnly
-            required
             className="w-full rounded-md border border-black/15 bg-black/5 px-3 py-2 text-xs font-medium dark:border-white/15 dark:bg-white/10"
             placeholder="Numéro de facture"
+          />
+        </div>
+
+        <div>
+          <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-black/60 dark:text-white/60">Pièce justificative (BEC / reçu)</label>
+          <input
+            value={supportingReference}
+            onChange={(event) => setSupportingReference(event.target.value)}
+            required
+            className="w-full rounded-md border border-black/15 bg-white px-3 py-2 text-sm dark:border-white/15 dark:bg-zinc-900"
+            placeholder="Ex: BEC-2026-001 ou REC-145"
           />
         </div>
 
@@ -235,7 +235,7 @@ export function PaymentEntryForm({ tickets }: { tickets: TicketOption[] }) {
             Facturé: {selected.amount.toFixed(2)} {ticketCurrency} • Déjà encaissé: {selected.paidAmount.toFixed(2)} {ticketCurrency} • Reste: {remaining.toFixed(2)} {ticketCurrency} • Statut: {selected.paymentStatus}
           </p>
           <p className="mt-2 text-xs text-black/60 dark:text-white/60">
-            Référence obligatoire: <strong>{selected.invoiceNumber}</strong>. {paymentCurrency !== ticketCurrency ? `La conversion vers ${ticketCurrency} se fait automatiquement au taux du jour.` : `Le billet est actuellement libellé en ${ticketCurrency}.`}
+            La facture du billet est affichée automatiquement. Saisissez ensuite la pièce justificative d'encaissement (n° BEC ou reçu). {paymentCurrency !== ticketCurrency ? `La conversion vers ${ticketCurrency} se fait automatiquement au taux du jour.` : `Le billet est actuellement libellé en ${ticketCurrency}.`}
           </p>
         </>
       ) : null}

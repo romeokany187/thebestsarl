@@ -35,6 +35,7 @@ type TicketPaymentRow = {
   method?: string | null;
   reference?: string | null;
   ticket: {
+    id: string;
     ticketNumber: string;
     customerName: string;
     amount: number;
@@ -558,6 +559,7 @@ export default async function PaymentsPage({
         include: {
           ticket: {
             select: {
+              id: true,
               ticketNumber: true,
               customerName: true,
               amount: true,
@@ -577,6 +579,7 @@ export default async function PaymentsPage({
         include: {
           ticket: {
             select: {
+              id: true,
               ticketNumber: true,
               customerName: true,
               currency: true,
@@ -865,6 +868,7 @@ export default async function PaymentsPage({
         cdfOut: 0,
         actionType: "payment" as const,
         paymentId: payment.id,
+        ticketId: payment.ticket?.id ?? "",
         paymentAmount: payment.amount,
         paymentCurrency: currency,
         paymentMethod: payment.method ?? "CASH",
@@ -1813,6 +1817,7 @@ export default async function PaymentsPage({
                           <td className="px-4 py-3">
                             <PaymentRowAdminActions
                               paymentId={payment.id}
+                              ticketId={payment.ticket?.id ?? ""}
                               amount={payment.amount}
                               currency={normalizeMoneyCurrency(payment.currency ?? payment.ticket?.currency)}
                               method={payment.method ?? "CASH"}
@@ -1955,6 +1960,7 @@ export default async function PaymentsPage({
                             {row.actionType === "payment" ? (
                               <PaymentRowAdminActions
                                 paymentId={row.paymentId}
+                                ticketId={row.ticketId}
                                 amount={row.paymentAmount}
                                 currency={row.paymentCurrency}
                                 method={row.paymentMethod}

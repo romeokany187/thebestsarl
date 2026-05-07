@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 
 type Props = {
   paymentId: string;
+  ticketId: string;
   amount: number;
   currency: string;
   method: string;
@@ -12,7 +13,7 @@ type Props = {
   paidAt: string;
 };
 
-export function PaymentRowAdminActions({ paymentId, amount, currency, method, reference, paidAt }: Props) {
+export function PaymentRowAdminActions({ paymentId, ticketId, amount, currency, method, reference, paidAt }: Props) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
@@ -20,6 +21,7 @@ export function PaymentRowAdminActions({ paymentId, amount, currency, method, re
   async function editPayment() {
     const payload = {
       paymentId,
+      ticketId,
       amount,
       currency,
       method,
