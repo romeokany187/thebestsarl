@@ -554,7 +554,7 @@ model NeedRequest {
   code            String?           @unique
   title           String
   category        String
-  details         String
+  details         String            @db.LongText
   quantity        Float
   unit            String
   estimatedAmount Float?

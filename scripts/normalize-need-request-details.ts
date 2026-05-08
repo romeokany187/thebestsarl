@@ -63,10 +63,13 @@ async function main() {
 
     if (!quote || quote.items.length === 0) {
       parseFailed += 1;
+      const detailsRaw = (row.details ?? "").trim();
       suspicious.push({
         code: row.code,
         id: row.id,
         reason: "parse_failed",
+        detailsLength: detailsRaw.length,
+        likelyTruncated: detailsRaw.length === 191,
         estimatedAmount: row.estimatedAmount,
         quantity: row.quantity,
       });
