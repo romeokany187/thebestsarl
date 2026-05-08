@@ -118,6 +118,16 @@ function hasCashExecutionMarker(value?: string | null) {
   return (value ?? "").includes("EXECUTION_CAISSE:");
 }
 
+function parseDecimal(value: string | number | null | undefined) {
+  if (typeof value === "number") return Number.isFinite(value) ? value : 0;
+  const normalized = String(value ?? "")
+    .trim()
+    .replace(/\s+/g, "")
+    .replace(/,/g, ".");
+  const parsed = Number(normalized);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
 function normalizeMoneyCurrency(value?: string | null): "USD" | "CDF" {
   const normalized = (value ?? "CDF").trim().toUpperCase();
   return normalized === "USD" ? "USD" : "CDF";
@@ -184,7 +194,7 @@ export function ProcurementHub({
   );
 
   const quoteTotal = useMemo(
-    () => needLines.reduce((sum, line) => sum + ((Number(line.quantity) || 0) * (Number(line.unitPrice) || 0)), 0),
+    () => needLines.reduce((sum, line) => sum + (parseDecimal(line.quantity) * parseDecimal(line.unitPrice)), 0),
     [needLines],
   );
 
@@ -309,8 +319,8 @@ export function ProcurementHub({
       .map((line) => ({
         designation: line.designation.trim(),
         description: line.description.trim(),
-        quantity: Number(line.quantity),
-        unitPrice: Number(line.unitPrice),
+        quantity: parseDecimal(line.quantity),
+        unitPrice: parseDecimal(line.unitPrice),
       }))
       .filter((line) => line.designation.length > 0 && line.quantity > 0 && line.unitPrice >= 0);
 
@@ -545,7 +555,7 @@ export function ProcurementHub({
 
                   <div className="mt-2 max-h-64 space-y-2 overflow-y-auto pr-1">
                     {needLines.map((line, index) => {
-                      const lineTotal = (Number(line.quantity) || 0) * (Number(line.unitPrice) || 0);
+                      const lineTotal = parseDecimal(line.quantity) * parseDecimal(line.unitPrice);
 
                       return (
                         <div key={`line-${index}`} className="rounded-md border border-black/10 p-2.5 dark:border-white/10">

@@ -3,13 +3,52 @@ import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { requireApiModuleAccess } from "@/lib/rbac";
 import { needRequestSchema, needRequestUpdateSchema } from "@/lib/validators";
-import { quoteFromItems, serializeNeedQuote } from "@/lib/need-lines";
+import { parseNeedQuote, quoteFromItems, serializeNeedQuote } from "@/lib/need-lines";
 import { writeActivityLog } from "@/lib/activity-log";
 import { normalizeWorkflowAssignment } from "@/lib/workflow-assignment";
 
 function normalizeMoneyCurrency(value: string | null | undefined): "USD" | "CDF" {
   const normalized = (value ?? "CDF").trim().toUpperCase();
   return normalized === "USD" ? "USD" : "CDF";
+}
+
+function resolveQuoteFromPayload(
+  payload: {
+    title: string;
+    details?: string;
+    items?: Array<{ designation: string; description?: string; quantity: number; unitPrice: number }>;
+    urgencyLevel: "CRITIQUE" | "ELEVEE" | "NORMALE" | "FAIBLE";
+    beneficiaryTeam: "KINSHASA" | "LUBUMBASHI" | "MBUJIMAYI";
+    beneficiaryPersonId?: string;
+    beneficiaryPersonName?: string;
+    assignment: string;
+  },
+) {
+  const quoteOptions = {
+    urgencyLevel: payload.urgencyLevel,
+    beneficiaryTeam: payload.beneficiaryTeam,
+    beneficiaryPersonId: payload.beneficiaryPersonId,
+    beneficiaryPersonName: payload.beneficiaryPersonName,
+    assignment: normalizeWorkflowAssignment(payload.assignment),
+  };
+
+  if (payload.items?.length) {
+    return quoteFromItems(payload.items, quoteOptions);
+  }
+
+  const parsedDetailsQuote = parseNeedQuote(payload.details);
+  if (parsedDetailsQuote?.items?.length) {
+    return {
+      ...parsedDetailsQuote,
+      urgencyLevel: payload.urgencyLevel,
+      beneficiaryTeam: payload.beneficiaryTeam,
+      beneficiaryPersonId: payload.beneficiaryPersonId,
+      beneficiaryPersonName: payload.beneficiaryPersonName,
+      assignment: normalizeWorkflowAssignment(payload.assignment),
+    };
+  }
+
+  return null;
 }
 
 export async function GET(request: NextRequest) {
@@ -56,29 +95,15 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Seul le service approvisionnement peut émettre un état de besoin." }, { status: 403 });
   }
 
-  const quoteOptions = {
-    urgencyLevel: parsed.data.urgencyLevel,
-    beneficiaryTeam: parsed.data.beneficiaryTeam,
-    beneficiaryPersonId: parsed.data.beneficiaryPersonId,
-    beneficiaryPersonName: parsed.data.beneficiaryPersonName,
-    assignment: normalizeWorkflowAssignment(parsed.data.assignment),
-  };
-
-  const quote = parsed.data.items?.length
-    ? quoteFromItems(parsed.data.items, quoteOptions)
-    : quoteFromItems([
-      {
-        designation: parsed.data.title,
-        description: parsed.data.details ?? parsed.data.title,
-        quantity: parsed.data.quantity ?? 1,
-        unitPrice: parsed.data.estimatedAmount ?? 0,
-      },
-    ], quoteOptions);
+  const quote = resolveQuoteFromPayload(parsed.data);
 
   const requestCurrency = normalizeMoneyCurrency(parsed.data.currency);
 
-  if (quote.items.length === 0) {
-    return NextResponse.json({ error: "Ajoutez au moins une ligne valide dans le devis (désignation, quantité, prix unitaire)." }, { status: 400 });
+  if (!quote || quote.items.length === 0) {
+    return NextResponse.json(
+      { error: "Ajoutez au moins une ligne valide dans le devis (désignation, quantité, prix unitaire)." },
+      { status: 400 },
+    );
   }
 
   // Generate codification: TB-{TEAM3}-EB-{YEAR}-{SEQ}
@@ -218,29 +243,15 @@ export async function PATCH(request: NextRequest) {
     );
   }
 
-  const quoteOptions = {
-    urgencyLevel: parsed.data.urgencyLevel,
-    beneficiaryTeam: parsed.data.beneficiaryTeam,
-    beneficiaryPersonId: parsed.data.beneficiaryPersonId,
-    beneficiaryPersonName: parsed.data.beneficiaryPersonName,
-    assignment: normalizeWorkflowAssignment(parsed.data.assignment),
-  };
-
-  const quote = parsed.data.items?.length
-    ? quoteFromItems(parsed.data.items, quoteOptions)
-    : quoteFromItems([
-      {
-        designation: parsed.data.title,
-        description: parsed.data.details ?? parsed.data.title,
-        quantity: parsed.data.quantity ?? 1,
-        unitPrice: parsed.data.estimatedAmount ?? 0,
-      },
-    ], quoteOptions);
+  const quote = resolveQuoteFromPayload(parsed.data);
 
   const requestCurrency = normalizeMoneyCurrency(parsed.data.currency);
 
-  if (quote.items.length === 0) {
-    return NextResponse.json({ error: "Ajoutez au moins une ligne valide dans le devis (désignation, quantité, prix unitaire)." }, { status: 400 });
+  if (!quote || quote.items.length === 0) {
+    return NextResponse.json(
+      { error: "Ajoutez au moins une ligne valide dans le devis (désignation, quantité, prix unitaire)." },
+      { status: 400 },
+    );
   }
 
   const updated = await prisma.needRequest.update({
