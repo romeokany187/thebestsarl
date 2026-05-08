@@ -97,6 +97,138 @@ function extractLooseNumber(details: string, keys: string[]) {
   return undefined;
 }
 
+function splitTopLevelObjects(source: string) {
+  const objects: string[] = [];
+  let inString = false;
+  let escaped = false;
+  let depth = 0;
+  let start = -1;
+
+  for (let i = 0; i < source.length; i += 1) {
+    const char = source[i];
+
+    if (escaped) {
+      escaped = false;
+      continue;
+    }
+
+    if (char === "\\") {
+      escaped = true;
+      continue;
+    }
+
+    if (char === '"') {
+      inString = !inString;
+      continue;
+    }
+
+    if (inString) continue;
+
+    if (char === "{") {
+      if (depth === 0) {
+        start = i;
+      }
+      depth += 1;
+      continue;
+    }
+
+    if (char === "}") {
+      depth -= 1;
+      if (depth === 0 && start >= 0) {
+        objects.push(source.slice(start, i + 1));
+        start = -1;
+      }
+    }
+  }
+
+  return objects;
+}
+
+function extractItemsArraySource(details: string) {
+  const itemsKeyMatch = details.match(/"items"\s*:\s*\[/i);
+  if (!itemsKeyMatch || itemsKeyMatch.index === undefined) return null;
+
+  const start = details.indexOf("[", itemsKeyMatch.index);
+  if (start < 0) return null;
+
+  let inString = false;
+  let escaped = false;
+  let depth = 0;
+
+  for (let i = start; i < details.length; i += 1) {
+    const char = details[i];
+
+    if (escaped) {
+      escaped = false;
+      continue;
+    }
+
+    if (char === "\\") {
+      escaped = true;
+      continue;
+    }
+
+    if (char === '"') {
+      inString = !inString;
+      continue;
+    }
+
+    if (inString) continue;
+
+    if (char === "[") depth += 1;
+    if (char === "]") {
+      depth -= 1;
+      if (depth === 0) {
+        return details.slice(start + 1, i);
+      }
+    }
+  }
+
+  return null;
+}
+
+function parseItemsFromLooseArray(details: string) {
+  const arraySource = extractItemsArraySource(details);
+  if (!arraySource) return [];
+
+  const objectChunks = splitTopLevelObjects(arraySource);
+  const parsed: Array<{
+    designation?: string;
+    description?: string;
+    quantity?: number;
+    unitPrice?: number;
+    lineTotal?: number;
+  }> = [];
+
+  for (const chunk of objectChunks) {
+    try {
+      const obj = JSON.parse(sanitizeQuoteJsonCandidate(chunk)) as Record<string, unknown>;
+
+      const designation = String(obj.designation ?? obj.designationn ?? "").trim();
+      const description = String(obj.description ?? "").trim();
+      const quantity = Number(obj.quantity ?? 0);
+      const unitPrice = Number(obj.unitPrice ?? 0);
+      const lineTotal = Number(obj.lineTotal ?? (quantity * unitPrice));
+
+      if (!designation || !Number.isFinite(quantity) || !Number.isFinite(unitPrice)) {
+        continue;
+      }
+
+      parsed.push({
+        designation,
+        description,
+        quantity,
+        unitPrice,
+        lineTotal: Number.isFinite(lineTotal) ? lineTotal : quantity * unitPrice,
+      });
+    } catch {
+      continue;
+    }
+  }
+
+  return parsed;
+}
+
 function parseLooseQuotePayload(details: string) {
   if (!details.includes('"QUOTE_V1"')) {
     return null;
@@ -122,6 +254,11 @@ function parseLooseQuotePayload(details: string) {
       unitPrice: Number.isFinite(unitPrice) ? unitPrice : undefined,
       lineTotal: Number.isFinite(lineTotal) ? lineTotal : undefined,
     });
+  }
+
+  if (items.length === 0) {
+    const itemsFromArray = parseItemsFromLooseArray(details);
+    items.push(...itemsFromArray);
   }
 
   if (items.length === 0) {
