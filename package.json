@@ -30,6 +30,7 @@
     "db:dedup:airlines": "tsx scripts/dedup-airlines.ts",
     "db:normalize:ticket-payers": "tsx scripts/normalize-ticket-payers.ts",
     "db:normalize:cash-desks": "tsx scripts/normalize-cash-desks.ts",
+    "db:normalize:need-details": "tsx scripts/normalize-need-request-details.ts",
     "db:reset:operational": "tsx scripts/reset-operational-data.ts",
     "db:restore:accounts:backup": "tsx scripts/restore-account-plan-from-sql-backup.ts"
   },
