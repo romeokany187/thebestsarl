@@ -67,7 +67,7 @@ export function CashOperationForm({
   const [reference, setReference] = useState<string>("");
   const [description, setDescription] = useState<string>("");
   const [occurredAt, setOccurredAt] = useState<string>(toLocalDateTimeInputValue(new Date()));
-  const [fxRateUsdToCdf, setFxRateUsdToCdf] = useState<string>("2800");
+  const [fxRateUsdToCdf, setFxRateUsdToCdf] = useState<string>("");
   const [conversionSourceCurrency, setConversionSourceCurrency] = useState<"USD" | "CDF">("USD");
   const [conversionSourceAmount, setConversionSourceAmount] = useState<string>("");
   const [conversionReference, setConversionReference] = useState<string>("");

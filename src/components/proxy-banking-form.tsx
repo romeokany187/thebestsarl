@@ -107,7 +107,7 @@ export function ProxyBankingForm() {
   const [changeReference, setChangeReference] = useState("");
   const [changeDescription, setChangeDescription] = useState("");
   const [changeOccurredAt, setChangeOccurredAt] = useState(toLocalDateTimeInputValue(new Date()));
-  const [changeRateUsdToCdf, setChangeRateUsdToCdf] = useState("2800");
+  const [changeRateUsdToCdf, setChangeRateUsdToCdf] = useState("");
   const [loading, setLoading] = useState(false);
   const [changeLoading, setChangeLoading] = useState(false);
   const [changeEditingOperationId, setChangeEditingOperationId] = useState<string | null>(null);
@@ -132,7 +132,7 @@ export function ProxyBankingForm() {
     setChangeReference("");
     setChangeDescription("");
     setChangeOccurredAt(toLocalDateTimeInputValue(new Date()));
-    setChangeRateUsdToCdf("2800");
+    setChangeRateUsdToCdf("");
   }
 
   function resetFloatForm() {
@@ -176,7 +176,7 @@ export function ProxyBankingForm() {
         setChangeEditingOperationId(payload.id);
         setChangeReceivedCurrency(payload.receivedCurrency);
         setChangeReceivedAmount(String(payload.receivedAmount ?? ""));
-        setChangeRateUsdToCdf(String(payload.fxRateUsdToCdf ?? "2800"));
+        setChangeRateUsdToCdf(payload.fxRateUsdToCdf != null ? String(payload.fxRateUsdToCdf) : "");
         setChangeReference(payload.reference ?? "");
         setChangeDescription(payload.description ?? "");
         setChangeOccurredAt(toLocalDateTimeInputValue(payload.occurredAt ? new Date(payload.occurredAt) : new Date()));

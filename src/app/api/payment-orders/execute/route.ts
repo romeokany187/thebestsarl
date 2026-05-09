@@ -16,12 +16,6 @@ function normalizeCashCurrency(value: string | null | undefined): "USD" | "CDF" 
   return "USD";
 }
 
-function parsePositiveNumber(raw: string | undefined, fallback: number): number {
-  if (!raw) return fallback;
-  const parsed = Number(raw);
-  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
-}
-
 export async function PATCH(request: NextRequest) {
   const access = await requireApiRoles(["ADMIN", "MANAGER", "EMPLOYEE", "ACCOUNTANT"]);
   if (access.error) return access.error;
@@ -76,7 +70,28 @@ export async function PATCH(request: NextRequest) {
 
   const now = new Date();
   const paymentCurrency = normalizeCashCurrency(paymentOrder.currency);
-  const fxRateUsdToCdf = parsePositiveNumber(process.env.CASH_DEFAULT_USD_TO_CDF_RATE, 2800);
+  const latestRateOperation = await (prisma as unknown as { cashOperation: any }).cashOperation.findFirst({
+    where: {
+      occurredAt: { lte: now },
+      fxRateUsdToCdf: { not: null },
+    },
+    select: {
+      fxRateUsdToCdf: true,
+      fxRateToUsd: true,
+    },
+    orderBy: { occurredAt: "desc" },
+  });
+
+  const fxRateUsdToCdf = latestRateOperation?.fxRateUsdToCdf
+    ?? (latestRateOperation?.fxRateToUsd && latestRateOperation.fxRateToUsd > 0 ? 1 / latestRateOperation.fxRateToUsd : undefined);
+
+  if (!fxRateUsdToCdf || fxRateUsdToCdf <= 0) {
+    return NextResponse.json(
+      { error: "Le taux du jour (1 USD = X CDF) est obligatoire. Le comptable doit d'abord enregistrer le taux du jour en caisse." },
+      { status: 400 },
+    );
+  }
+
   const executionCashDesk = resolveExecutionCashDesk({
     requestedDesk: parsed.data.cashDesk,
     jobTitle: me.jobTitle,

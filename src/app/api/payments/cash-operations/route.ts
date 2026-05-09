@@ -111,12 +111,11 @@ export async function POST(request: NextRequest) {
   });
 
   const fxRateUsdToCdf = latestRateOperation?.fxRateUsdToCdf
-    ?? (latestRateOperation?.fxRateToUsd && latestRateOperation.fxRateToUsd > 0 ? 1 / latestRateOperation.fxRateToUsd : undefined)
-    ?? parsePositiveNumber(process.env.CASH_DEFAULT_USD_TO_CDF_RATE, 2800);
+    ?? (latestRateOperation?.fxRateToUsd && latestRateOperation.fxRateToUsd > 0 ? 1 / latestRateOperation.fxRateToUsd : undefined);
 
   if (!fxRateUsdToCdf || fxRateUsdToCdf <= 0) {
     return NextResponse.json(
-      { error: "Le taux du jour (1 USD = X CDF) est obligatoire et doit être positif." },
+      { error: "Le taux du jour (1 USD = X CDF) est obligatoire. Le comptable doit d'abord enregistrer le taux du jour en caisse." },
       { status: 400 },
     );
   }
@@ -563,8 +562,14 @@ export async function PATCH(request: NextRequest) {
 
     const fxRateUsdToCdf = latestRateOperation?.fxRateUsdToCdf
       ?? (latestRateOperation?.fxRateToUsd && latestRateOperation.fxRateToUsd > 0 ? 1 / latestRateOperation.fxRateToUsd : undefined)
-      ?? existing.fxRateUsdToCdf
-      ?? parsePositiveNumber(process.env.CASH_DEFAULT_USD_TO_CDF_RATE, 2800);
+      ?? existing.fxRateUsdToCdf;
+
+    if (!fxRateUsdToCdf || fxRateUsdToCdf <= 0) {
+      return NextResponse.json(
+        { error: "Le taux du jour (1 USD = X CDF) est obligatoire. Le comptable doit d'abord enregistrer le taux du jour en caisse." },
+        { status: 400 },
+      );
+    }
 
     const updated = await cashOperationClient.update({
       where: { id: cashOperationId },

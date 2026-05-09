@@ -21,12 +21,6 @@ function normalizeMoneyCurrency(value: string | null | undefined): "USD" | "CDF"
   return normalized === "CDF" || normalized === "XAF" || normalized === "FC" ? "CDF" : "USD";
 }
 
-function parsePositiveNumber(raw: string | undefined, fallback: number): number {
-  if (!raw) return fallback;
-  const parsed = Number(raw);
-  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
-}
-
 function amountToUsd(amount: number, currency: "USD" | "CDF", fxRateUsdToCdf: number): number {
   return currency === "USD" ? amount : amount / fxRateUsdToCdf;
 }
@@ -79,11 +73,10 @@ export async function POST(request: NextRequest) {
       select: { fxRateUsdToCdf: true },
     });
 
-    const fxRateUsdToCdf = latestRateOperation?.fxRateUsdToCdf
-      ?? parsePositiveNumber(process.env.CASH_DEFAULT_USD_TO_CDF_RATE, 2800);
+    const fxRateUsdToCdf = latestRateOperation?.fxRateUsdToCdf ?? null;
 
     if (!fxRateUsdToCdf || fxRateUsdToCdf <= 0) {
-      return NextResponse.json({ error: "Taux USD/CDF indisponible pour enregistrer le paiement." }, { status: 400 });
+      return NextResponse.json({ error: "Taux USD/CDF indisponible. Le comptable doit d'abord enregistrer le taux du jour en caisse." }, { status: 400 });
     }
 
     const result = await prisma.$transaction(async (tx) => {
@@ -358,8 +351,11 @@ export async function PATCH(request: NextRequest) {
       select: { fxRateUsdToCdf: true },
     });
 
-    const fxRateUsdToCdf = latestRateOperation?.fxRateUsdToCdf
-      ?? parsePositiveNumber(process.env.CASH_DEFAULT_USD_TO_CDF_RATE, 2800);
+    const fxRateUsdToCdf = latestRateOperation?.fxRateUsdToCdf ?? null;
+
+    if (!fxRateUsdToCdf || fxRateUsdToCdf <= 0) {
+      return NextResponse.json({ error: "Taux USD/CDF indisponible. Le comptable doit d'abord enregistrer le taux du jour en caisse." }, { status: 400 });
+    }
 
     const nextReference = typeof body?.reference === "string" && body.reference.trim().length > 0
       ? body.reference.trim()
@@ -461,6 +457,19 @@ export async function DELETE(request: NextRequest) {
       return NextResponse.json({ error: "Paiement introuvable." }, { status: 404 });
     }
 
+    const latestRateOperation = await cashOperationClient.findFirst({
+      where: {
+        fxRateUsdToCdf: { not: null },
+      },
+      orderBy: { occurredAt: "desc" },
+      select: { fxRateUsdToCdf: true },
+    });
+
+    const fallbackRateUsdToCdf = latestRateOperation?.fxRateUsdToCdf ?? null;
+    if (!fallbackRateUsdToCdf || fallbackRateUsdToCdf <= 0) {
+      return NextResponse.json({ error: "Taux USD/CDF indisponible. Le comptable doit d'abord enregistrer le taux du jour en caisse." }, { status: 400 });
+    }
+
     const ticket = existingPayment.ticket;
     const ticketCurrency = normalizeMoneyCurrency(ticket.currency);
     const totalDue = getTicketTotalAmount(ticket);
@@ -468,7 +477,7 @@ export async function DELETE(request: NextRequest) {
       .filter((payment) => payment.id !== paymentId)
       .reduce((sum, payment) => {
         const existingCurrency = normalizeMoneyCurrency(payment.currency ?? ticket.currency);
-        const existingRate = payment.fxRateUsdToCdf ?? parsePositiveNumber(process.env.CASH_DEFAULT_USD_TO_CDF_RATE, 2800);
+        const existingRate = payment.fxRateUsdToCdf ?? fallbackRateUsdToCdf;
         return sum + amountToTicketCurrency(payment.amount, existingCurrency, ticketCurrency, existingRate);
       }, 0);
 
