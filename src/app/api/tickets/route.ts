@@ -38,32 +38,27 @@ async function recordAirlineDepositMovementWithoutBlocking(
   }
 }
 
-async function buildTicketConflictMessage(ticketNumber: string) {
+async function fetchConflictingTickets(ticketNumber: string) {
   const normalizedTicketNumber = ticketNumber.trim();
-  if (!normalizedTicketNumber) {
-    return "Conflit de données: vérifiez les informations uniques déjà existantes, puis réessayez.";
-  }
+  if (!normalizedTicketNumber) return [];
 
-  const existingTickets = await prisma.ticketSale.findMany({
+  return prisma.ticketSale.findMany({
     where: { ticketNumber: normalizedTicketNumber },
     select: {
+      id: true,
       ticketNumber: true,
       customerName: true,
+      route: true,
+      amount: true,
+      currency: true,
       soldAt: true,
+      travelDate: true,
       airline: { select: { name: true } },
+      seller: { select: { name: true } },
     },
     orderBy: [{ soldAt: "desc" }, { createdAt: "desc" }],
-    take: 3,
+    take: 10,
   });
-
-  if (!existingTickets.length) {
-    return `Conflit de données sur le PNR ${normalizedTicketNumber}. Vérifiez si ce billet existe déjà.`;
-  }
-
-  const [firstTicket, ...otherTickets] = existingTickets;
-  const otherDates = otherTickets.map((ticket) => ticket.soldAt.toLocaleDateString("fr-FR"));
-
-  return `Le PNR ${normalizedTicketNumber} existe déjà pour ${firstTicket.customerName} sur ${firstTicket.airline.name} à la date du ${firstTicket.soldAt.toLocaleDateString("fr-FR")}.${otherDates.length ? ` Autres dates trouvées: ${otherDates.join(", ")}.` : ""}`;
 }
 
 export async function GET() {
@@ -123,6 +118,17 @@ export async function POST(request: NextRequest) {
 
     const normalizedTicketNumber = parsed.data.ticketNumber.trim();
     attemptedTicketNumber = normalizedTicketNumber;
+
+    // PNR duplicate pre-check (only for new tickets, not edits)
+    if (!parsed.data.forceCreate) {
+      const conflictingTickets = await fetchConflictingTickets(normalizedTicketNumber);
+      if (conflictingTickets.length > 0) {
+        return NextResponse.json(
+          { conflict: true, existingTickets: conflictingTickets },
+          { status: 409 },
+        );
+      }
+    }
 
     const airline = await prisma.airline.findUnique({
       where: { id: parsed.data.airlineId },
@@ -339,9 +345,16 @@ export async function POST(request: NextRequest) {
 
     if (error instanceof Prisma.PrismaClientKnownRequestError) {
       if (error.code === "P2002") {
+        const conflictingTickets = await fetchConflictingTickets(attemptedTicketNumber);
+        if (conflictingTickets.length > 0) {
+          return NextResponse.json(
+            { conflict: true, existingTickets: conflictingTickets },
+            { status: 409 },
+          );
+        }
         return NextResponse.json(
-          { error: await buildTicketConflictMessage(attemptedTicketNumber) },
-          { status: 400 },
+          { error: "Conflit de données sur ce PNR. Vérifiez si ce billet existe déjà." },
+          { status: 409 },
         );
       }
 

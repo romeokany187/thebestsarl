@@ -9,6 +9,19 @@ type AirlineOption = { id: string; name: string; code: string };
 type TeamOption = { id: string; name: string; kind: "AGENCE" | "PARTENAIRE" };
 type DepositAccountOption = { key: string; label: string; airlineCodes: string[]; balance: number };
 
+type ConflictTicket = {
+  id: string;
+  ticketNumber: string;
+  customerName: string;
+  route: string;
+  amount: number;
+  currency: string;
+  soldAt: string;
+  travelDate: string;
+  airline: { name: string };
+  seller: { name: string } | null;
+};
+
 type EditableTicket = {
   id: string;
   ticketNumber: string;
@@ -148,6 +161,8 @@ export function TicketForm({
   const [itineraryForm, setItineraryForm] = useState<ItineraryFormState>(buildItineraryForm());
   const [isItineraryOpen, setIsItineraryOpen] = useState(false);
   const [isSavingItinerary, setIsSavingItinerary] = useState(false);
+  const [conflictTickets, setConflictTickets] = useState<ConflictTicket[]>([]);
+  const [showConflictModal, setShowConflictModal] = useState(false);
 
   useEffect(() => {
     function openItineraryModal(ticket: EditableTicket) {
@@ -315,17 +330,13 @@ export function TicketForm({
     window.location.reload();
   }
 
-  async function onSubmit(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    setStatusType("loading");
-    setStatus(editTicketId ? "Mise à jour..." : "Enregistrement...");
-
+  async function submitTicket(extraFields?: { forceCreate?: boolean }) {
     const amount = Number(form.amount);
     const baseFareAmount = form.baseFareAmount.trim() ? Number(form.baseFareAmount) : undefined;
     const agencyMarkupAmount = form.agencyMarkupAmount.trim() ? Number(form.agencyMarkupAmount) : 0;
 
     const mergedNotes = mergeTicketNotesWithItinerary(form.notes || undefined, storedItinerary);
-    const payload = {
+    const payload: Record<string, unknown> = {
       ticketNumber: form.ticketNumber,
       customerName: form.customerName,
       route: form.route,
@@ -343,6 +354,7 @@ export function TicketForm({
       agencyMarkupPercent: 0,
       agencyMarkupAmount,
       ...(mergedNotes ? { notes: mergedNotes } : {}),
+      ...(extraFields ?? {}),
     };
 
     const response = await fetch(editTicketId ? `/api/tickets/${editTicketId}` : "/api/tickets", {
@@ -376,9 +388,35 @@ export function TicketForm({
       return;
     }
 
+    // Handle PNR conflict (409)
+    if (response.status === 409) {
+      const conflictPayload = await response.json().catch(() => null);
+      if (conflictPayload?.conflict && Array.isArray(conflictPayload.existingTickets)) {
+        setConflictTickets(conflictPayload.existingTickets as ConflictTicket[]);
+        setShowConflictModal(true);
+        setStatusType("idle");
+        setStatus("");
+        return;
+      }
+    }
+
     const errorPayload = await response.json().catch(() => null);
     setStatusType("error");
     setStatus(formatApiError(errorPayload?.error, "Erreur de validation."));
+  }
+
+  async function onSubmit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setStatusType("loading");
+    setStatus(editTicketId ? "Mise à jour..." : "Enregistrement...");
+    await submitTicket();
+  }
+
+  async function confirmForceCreate() {
+    setShowConflictModal(false);
+    setStatusType("loading");
+    setStatus("Enregistrement forcé...");
+    await submitTicket({ forceCreate: true });
   }
 
   return (
@@ -755,6 +793,75 @@ export function TicketForm({
                 className="rounded-md bg-black px-3 py-2 text-sm text-white disabled:opacity-60 dark:bg-white dark:text-black"
               >
                 {isSavingItinerary ? "Enregistrement..." : "Enregistrer l'itinérance"}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {showConflictModal ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
+          <div className="w-full max-w-2xl rounded-xl border border-black/10 bg-white shadow-2xl dark:border-white/10 dark:bg-zinc-900">
+            <div className="border-b border-black/10 p-4 dark:border-white/10">
+              <h2 className="text-base font-semibold text-red-600 dark:text-red-400">
+                ⚠️ PNR déjà enregistré
+              </h2>
+              <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">
+                Le PNR <span className="font-mono font-bold">{form.ticketNumber}</span> existe déjà dans le système.
+                Voici les billets associés à ce PNR :
+              </p>
+            </div>
+
+            <div className="max-h-80 overflow-auto p-4">
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="border-b border-black/10 text-left text-zinc-500 dark:border-white/10 dark:text-zinc-400">
+                    <th className="pb-2 pr-3">Client</th>
+                    <th className="pb-2 pr-3">Compagnie</th>
+                    <th className="pb-2 pr-3">Itinéraire</th>
+                    <th className="pb-2 pr-3 text-right">Montant</th>
+                    <th className="pb-2 pr-3">Date vente</th>
+                    <th className="pb-2">Date voyage</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {conflictTickets.map((ticket) => (
+                    <tr key={ticket.id} className="border-b border-black/5 dark:border-white/5">
+                      <td className="py-2 pr-3 font-medium">{ticket.customerName}</td>
+                      <td className="py-2 pr-3">{ticket.airline.name}</td>
+                      <td className="py-2 pr-3 text-zinc-500 dark:text-zinc-400">{ticket.route}</td>
+                      <td className="py-2 pr-3 text-right font-mono">
+                        {ticket.amount.toLocaleString("fr-FR")} {ticket.currency}
+                      </td>
+                      <td className="py-2 pr-3 text-zinc-500 dark:text-zinc-400">
+                        {new Date(ticket.soldAt).toLocaleDateString("fr-FR")}
+                      </td>
+                      <td className="py-2 text-zinc-500 dark:text-zinc-400">
+                        {new Date(ticket.travelDate).toLocaleDateString("fr-FR")}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            <div className="flex items-center justify-end gap-3 border-t border-black/10 p-4 dark:border-white/10">
+              <button
+                type="button"
+                onClick={() => {
+                  setShowConflictModal(false);
+                  setConflictTickets([]);
+                }}
+                className="rounded-md border border-black/15 px-4 py-2 text-sm hover:bg-black/5 dark:border-white/20 dark:hover:bg-white/10"
+              >
+                Annuler l&apos;encodage
+              </button>
+              <button
+                type="button"
+                onClick={confirmForceCreate}
+                className="rounded-md bg-orange-600 px-4 py-2 text-sm font-medium text-white hover:bg-orange-700"
+              >
+                Enregistrer quand même
               </button>
             </div>
           </div>

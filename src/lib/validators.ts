@@ -183,6 +183,7 @@ export const ticketSchema = z.object({
   agencyMarkupPercent: z.number().min(0).max(100).optional(),
   agencyMarkupAmount: z.number().min(0).optional(),
   notes: z.string().max(4000).optional(),
+  forceCreate: z.boolean().optional(),
 }).superRefine((value, ctx) => {
   if (value.soldAt && value.soldAt.getTime() > Date.now()) {
     ctx.addIssue({
