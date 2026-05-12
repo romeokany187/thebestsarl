@@ -240,8 +240,9 @@ export default async function TicketsPage({
   const currentDate = now.toISOString().slice(0, 10);
   const currentStartDate = resolvedSearchParams.startDate ?? `${now.getUTCFullYear()}-01-01`;
   const currentEndDate = resolvedSearchParams.endDate ?? currentDate;
-  const { session, role } = await requirePageModuleAccess("tickets", ["DIRECTEUR_GENERAL"]);
-  const roleTicketFilter = role === "EMPLOYEE" ? { sellerId: session.user.id } : {};
+  const { session, role, customModuleAccess } = await requirePageModuleAccess("tickets", ["DIRECTEUR_GENERAL"]);
+  const hasCustomTicketsAccess = Boolean(customModuleAccess);
+  const roleTicketFilter = role === "EMPLOYEE" && !hasCustomTicketsAccess ? { sellerId: session.user.id } : {};
 
   await ensureAirlineCatalog(prisma);
 
@@ -579,7 +580,7 @@ export default async function TicketsPage({
   const airFastBonusReached = airFastAirline ? Math.floor(airFastTicketCount / 13) : 0;
 
   const accessNote =
-    role === "EMPLOYEE"
+    role === "EMPLOYEE" && !hasCustomTicketsAccess
       ? "Accès personnel: visualisation de vos billets vendus."
       : "Accès opérationnel: visualisation complète des billets de l'agence.";
 
