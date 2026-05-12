@@ -4,6 +4,7 @@ import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { prisma } from "@/lib/prisma";
 import { requireApiModuleAccess } from "@/lib/rbac";
+import { getUserModuleAccessMap } from "@/lib/user-module-access";
 import { getTicketCommissionAmount, getTicketTotalAmount } from "@/lib/ticket-pricing";
 
 type SearchParams = {
@@ -474,12 +475,15 @@ export async function GET(request: NextRequest) {
   const access = await requireApiModuleAccess("sales", ["ADMIN", "MANAGER", "EMPLOYEE", "ACCOUNTANT"]);
   if (access.error) return access.error;
 
+  const moduleAccessMap = await getUserModuleAccessMap(access.session.user.id);
+  const hasCustomTicketsAccess = Boolean(moduleAccessMap.tickets);
+
   const params = parseSearchParams(request.nextUrl);
   const range = dateRangeFromParams(params);
 
   const tickets = await prisma.ticketSale.findMany({
     where: {
-      ...(access.role === "EMPLOYEE" ? { sellerId: access.session.user.id } : {}),
+      ...(access.role === "EMPLOYEE" && !hasCustomTicketsAccess ? { sellerId: access.session.user.id } : {}),
       soldAt: { gte: range.start, lt: range.end },
     },
     include: {
