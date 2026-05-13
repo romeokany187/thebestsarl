@@ -9,7 +9,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import fs from 'fs';
 import path from 'path';
-import { denyIfLabDisabled } from '@/lib/security-lab-guard';
 
 const dataFile = path.join(process.cwd(), '.tmp', 'xss-stored-comments.json');
 
@@ -40,21 +39,18 @@ function saveComment(comment: string) {
   fs.writeFileSync(dataFile, JSON.stringify(comments, null, 2));
 }
 
-export async function GET(request: NextRequest) {
-  const blocked = denyIfLabDisabled(request);
-  if (blocked) return blocked;
-
+export async function GET() {
   const comments = getComments();
 
   const html = `
     <!DOCTYPE html>
     <html>
     <head>
-      <title>Flux commentaires interne</title>
+      <title>Stored XSS Demo</title>
       <style>
         body { font-family: Arial; padding: 20px; }
         .container { max-width: 600px; margin: 0 auto; }
-        .warning { background: #e8f4ff; border: 1px solid #9fd0ff; padding: 10px; border-radius: 5px; margin-bottom: 20px; }
+        .warning { background: #fff3cd; border: 1px solid #ffc107; padding: 10px; border-radius: 5px; margin-bottom: 20px; }
         .vulnerable { background: #f8d7da; border: 1px solid #f5c6cb; padding: 10px; margin: 10px 0; border-radius: 5px; }
         input, textarea { width: 100%; padding: 8px; margin: 10px 0; }
         button { padding: 10px 20px; background: #007bff; color: white; border: none; cursor: pointer; border-radius: 5px; }
@@ -64,24 +60,24 @@ export async function GET(request: NextRequest) {
     <body>
       <div class="container">
         <div class="warning">
-          <strong>Recette locale:</strong> publication de commentaires sur flux interne
+          ⚠️ <strong>Security Demo:</strong> This endpoint stores user input without sanitization
         </div>
 
-        <h1>Journal interne - Commentaires</h1>
+        <h1>Stored XSS Vulnerability Demo</h1>
 
         <form action="/api/security-demo/xss-stored" method="POST">
-          <textarea name="comment" placeholder="Saisir un commentaire operationnel..." rows="4" required></textarea>
-          <button type="submit">Publier</button>
+          <textarea name="comment" placeholder="Enter a comment..." rows="4" required></textarea>
+          <button type="submit">Post Comment</button>
         </form>
 
-        <h3>Commentaires recents:</h3>
+        <h3>Comments:</h3>
         ${
           comments.length === 0
-            ? '<p>Aucun commentaire pour le moment.</p>'
+            ? '<p>No comments yet. Try posting: &lt;img src=x onerror="alert(\'XSS\')"&gt;</p>'
             : comments.map((c: any) => `<div class="comment"><strong>#${c.id}</strong><p>${c.content}</p><small>${c.timestamp}</small></div>`).join('')
         }
 
-        <h3>Payloads de verification:</h3>
+        <h3>Test Payloads:</h3>
         <ul>
           <li><code>&lt;img src=x onerror="alert('XSS')"&gt;</code></li>
           <li><code>&lt;svg onload="alert('XSS')"&gt;&lt;/svg&gt;</code></li>
@@ -99,9 +95,6 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
-    const blocked = denyIfLabDisabled(request);
-    if (blocked) return blocked;
-
     const formData = await request.formData();
     const comment = formData.get('comment') as string;
 
