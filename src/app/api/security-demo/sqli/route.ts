@@ -7,6 +7,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
+import { denyIfLabDisabled } from '@/lib/security-lab-guard';
 
 // Mock database for demo
 const mockDatabase = [
@@ -16,6 +17,9 @@ const mockDatabase = [
 ];
 
 export async function GET(request: NextRequest) {
+  const blocked = denyIfLabDisabled(request);
+  if (blocked) return blocked;
+
   const searchParams = request.nextUrl.searchParams;
   const username = searchParams.get('username') || '';
 
@@ -45,11 +49,11 @@ export async function GET(request: NextRequest) {
     <!DOCTYPE html>
     <html>
     <head>
-      <title>SQL Injection Demo</title>
+      <title>Recherche annuaire comptes</title>
       <style>
         body { font-family: Arial; padding: 20px; }
         .container { max-width: 800px; margin: 0 auto; }
-        .warning { background: #fff3cd; border: 1px solid #ffc107; padding: 10px; border-radius: 5px; margin-bottom: 20px; }
+        .warning { background: #e8f4ff; border: 1px solid #9fd0ff; padding: 10px; border-radius: 5px; margin-bottom: 20px; }
         .vulnerable { background: #f8d7da; border: 1px solid #f5c6cb; padding: 10px; margin: 10px 0; border-radius: 5px; }
         input { width: 100%; padding: 8px; margin: 10px 0; box-sizing: border-box; }
         button { padding: 10px 20px; background: #007bff; color: white; border: none; cursor: pointer; border-radius: 5px; }
@@ -63,32 +67,32 @@ export async function GET(request: NextRequest) {
     <body>
       <div class="container">
         <div class="warning">
-          ⚠️ <strong>Security Demo:</strong> This search is vulnerable to SQL Injection attacks
+          <strong>Recette locale:</strong> recherche rapide sur annuaire comptes.
         </div>
 
-        <h1>SQL Injection Vulnerability Demo</h1>
+        <h1>Annuaire utilisateurs</h1>
 
-        <h3>Search Users (Vulnerable)</h3>
+        <h3>Recherche utilisateur</h3>
         <form action="/api/security-demo/sqli" method="GET">
           <input 
             type="text" 
             name="username" 
-            placeholder="Search by username..." 
+            placeholder="Nom utilisateur..." 
             value="${username.replace(/"/g, '&quot;')}"
           >
-          <button type="submit">Search</button>
+          <button type="submit">Rechercher</button>
         </form>
 
-        <h3>Executed Query (Unsafe):</h3>
+        <h3>Requete executee:</h3>
         <div class="vulnerable">
           <strong>SQL:</strong> <code>${query}</code><br>
           <span class="danger">⚠️ User input directly concatenated!</span>
         </div>
 
-        <h3>Search Results:</h3>
+        <h3>Resultats:</h3>
         ${
           results.length === 0
-            ? '<p>No users found</p>'
+            ? '<p>Aucun utilisateur trouve</p>'
             : `
           <table>
             <thead>
@@ -117,7 +121,7 @@ export async function GET(request: NextRequest) {
         `
         }
 
-        <h3>SQL Injection Payloads to Try:</h3>
+        <h3>Payloads de verification:</h3>
         <ul>
           <li><code>' OR '1'='1</code> - Returns all users (bypasses WHERE clause)</li>
           <li><code>' OR '1'='1' --</code> - Comment out rest of query</li>
@@ -125,7 +129,7 @@ export async function GET(request: NextRequest) {
           <li><code>' UNION SELECT * FROM users --</code> - Extract different data</li>
         </ul>
 
-        <h3>How to Fix:</h3>
+        <h3>Piste de correction:</h3>
         <div class="code">
 // ✅ SAFE: Use parameterized queries
 const query = 'SELECT * FROM users WHERE username = $1';

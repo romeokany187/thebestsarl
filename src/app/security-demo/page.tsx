@@ -3,94 +3,92 @@ import React from 'react';
 export default function SecurityDemo() {
   return (
     <div style={{ padding: '20px', maxWidth: '800px', margin: '0 auto', fontFamily: 'Arial, sans-serif' }}>
-      <div style={{ background: '#fff3cd', border: '1px solid #ffc107', padding: '15px', borderRadius: '5px', marginBottom: '20px' }}>
-        <h2 style={{ margin: '0 0 10px 0', color: '#856404' }}>⚠️ SECURITY DEMONSTRATION ENDPOINTS</h2>
-        <p style={{ margin: '0', color: '#856404' }}>
-          These endpoints are intentionally vulnerable for educational purposes. They demonstrate common web vulnerabilities that will be detected by OWASP ZAP and other security scanning tools.
+      <div style={{ background: '#eef8ff', border: '1px solid #9fd0ff', padding: '15px', borderRadius: '5px', marginBottom: '20px' }}>
+        <h2 style={{ margin: '0 0 10px 0', color: '#0a4a76' }}>Local Security Audit Workspace</h2>
+        <p style={{ margin: '0', color: '#0a4a76' }}>
+          Environnement de recette local pour reproduire des faiblesses applicatives dans des flux metier proches du systeme reel.
         </p>
       </div>
 
-      <h1>Web Security Vulnerabilities - Live Demonstrations</h1>
+      <h1>Recette Securite - Parcours Metier</h1>
 
       <section style={{ marginBottom: '30px' }}>
-        <h2>1. XSS (Cross-Site Scripting) - Reflected</h2>
+        <h2>1. Notes ticket - Apercu navigateur</h2>
         <p>
-          <strong>What it is:</strong> An attacker injects malicious JavaScript code that gets executed in the victim's browser.
+          <strong>Contexte:</strong> Le texte saisi dans une note est renvoye tel quel dans la previsualisation.
         </p>
         <p>
-          <strong>Attack Type:</strong> User input directly rendered in HTML response without sanitization
+          <strong>Risque observe:</strong> Injection de script cote client si le contenu n'est pas neutralise.
         </p>
-        <a href="/api/security-demo/xss-reflected?message=Hello" style={{ display: 'inline-block', padding: '10px 20px', background: '#007bff', color: 'white', textDecoration: 'none', borderRadius: '5px', marginBottom: '10px' }}>
-          🎯 Open XSS Reflected Demo
+        <a href="/api/operations/tickets/note-preview?message=Hello" style={{ display: 'inline-block', padding: '10px 20px', background: '#007bff', color: 'white', textDecoration: 'none', borderRadius: '5px', marginBottom: '10px' }}>
+          Ouvrir la previsualisation des notes
         </a>
         <p>
-          <strong>Try this payload:</strong>
+          <strong>Payload de test:</strong>
           <code>&lt;img src=x onerror="alert('XSS Vulnerability')"&gt;</code>
         </p>
       </section>
 
       <section style={{ marginBottom: '30px' }}>
-        <h2>2. XSS (Cross-Site Scripting) - Stored</h2>
+        <h2>2. Fil d'actualites interne - Commentaires</h2>
         <p>
-          <strong>What it is:</strong> Malicious code is stored in the database and executed for every user who views it.
+          <strong>Contexte:</strong> Les commentaires sont persistants et affiches dans le flux commun.
         </p>
         <p>
-          <strong>Attack Type:</strong> Form input stored without sanitization, displayed to all visitors
+          <strong>Risque observe:</strong> Une charge malveillante en base est executee pour chaque visiteur.
         </p>
-        <a href="/api/security-demo/xss-stored" style={{ display: 'inline-block', padding: '10px 20px', background: '#007bff', color: 'white', textDecoration: 'none', borderRadius: '5px', marginBottom: '10px' }}>
-          🎯 Open XSS Stored Demo
+        <a href="/api/operations/news/comments" style={{ display: 'inline-block', padding: '10px 20px', background: '#007bff', color: 'white', textDecoration: 'none', borderRadius: '5px', marginBottom: '10px' }}>
+          Ouvrir le flux commentaires
         </a>
         <p>
-          <strong>Try this payload:</strong>
+          <strong>Payload de test:</strong>
           <code>&lt;svg onload="alert('Stored XSS')"&gt;&lt;/svg&gt;</code>
         </p>
       </section>
 
       <section style={{ marginBottom: '30px' }}>
-        <h2>3. CSRF (Cross-Site Request Forgery)</h2>
+        <h2>3. Ordre de transfert - Validation rapide</h2>
         <p>
-          <strong>What it is:</strong> An attacker tricks a user into performing unwanted actions on another site where they're logged in.
+          <strong>Contexte:</strong> Un formulaire operationnel accepte une soumission sans verification d'intention.
         </p>
         <p>
-          <strong>Attack Type:</strong> Form submission without CSRF token validation or origin checking
+          <strong>Risque observe:</strong> Un site tiers peut forcer une action si la session est ouverte.
         </p>
-        <a href="/api/security-demo/csrf" style={{ display: 'inline-block', padding: '10px 20px', background: '#007bff', color: 'white', textDecoration: 'none', borderRadius: '5px', marginBottom: '10px' }}>
-          🎯 Open CSRF Demo
+        <a href="/api/operations/transfers/quick" style={{ display: 'inline-block', padding: '10px 20px', background: '#007bff', color: 'white', textDecoration: 'none', borderRadius: '5px', marginBottom: '10px' }}>
+          Ouvrir le formulaire de transfert
         </a>
         <p>
-          <strong>Scenario:</strong> While logged in, if you visit an attacker's website, they could submit a hidden form to transfer your funds without your knowledge.
+          <strong>Scenario de test:</strong> Soumission automatique d'un formulaire cache depuis un domaine externe.
         </p>
       </section>
 
       <section style={{ marginBottom: '30px' }}>
-        <h2>4. SQL Injection</h2>
+        <h2>4. Recherche annuaire comptes</h2>
         <p>
-          <strong>What it is:</strong> An attacker injects SQL code to manipulate database queries and extract/modify data.
+          <strong>Contexte:</strong> Le critere de recherche est concatene dans une requete SQL.
         </p>
         <p>
-          <strong>Attack Type:</strong> User input directly concatenated into SQL queries
+          <strong>Risque observe:</strong> Contournement des filtres et extraction de donnees.
         </p>
-        <a href="/api/security-demo/sqli?username=" style={{ display: 'inline-block', padding: '10px 20px', background: '#007bff', color: 'white', textDecoration: 'none', borderRadius: '5px', marginBottom: '10px' }}>
-          🎯 Open SQL Injection Demo
+        <a href="/api/operations/users/search?username=" style={{ display: 'inline-block', padding: '10px 20px', background: '#007bff', color: 'white', textDecoration: 'none', borderRadius: '5px', marginBottom: '10px' }}>
+          Ouvrir la recherche annuaire
         </a>
         <p>
-          <strong>Try this payload:</strong>
+          <strong>Payload de test:</strong>
           <code>' OR '1'='1</code>
         </p>
       </section>
 
       <section style={{ background: '#e7f3ff', border: '1px solid #b3d9ff', padding: '15px', borderRadius: '5px', marginBottom: '30px' }}>
-        <h2>How to Test with Security Scanners</h2>
+        <h2>Execution Scan Outils</h2>
         <p>
           <strong>OWASP ZAP:</strong>
         </p>
         <code style={{ display: 'block', background: '#f0f0f0', padding: '10px', overflow: 'auto', borderRadius: '3px', marginBottom: '10px' }}>
-          /Applications/ZAP.app/Contents/Java/zap.sh -cmd -config api.disablekey=true -dir /tmp/zap-demo -quickurl http://localhost:3000/security-demo -quickout /tmp/zap-report-vulnerabilities.html
+          /Applications/ZAP.app/Contents/Java/zap.sh -cmd -config api.disablekey=true -dir /tmp/zap-lab -quickurl http://localhost:3000/operations/controle -quickout /tmp/zap-report-lab.html
         </code>
 
-        <p>
-          <strong>Expected Findings:</strong>
-        </p>
+        <p><strong>Constats attendus:</strong></p>
         <ul>
           <li>✔ Cross Site Scripting (Reflected) - High Risk</li>
           <li>✔ Cross Site Scripting (Stored) - High Risk</li>
@@ -100,19 +98,15 @@ export default function SecurityDemo() {
       </section>
 
       <section style={{ background: '#f0f0f0', border: '1px solid #ddd', padding: '15px', borderRadius: '5px' }}>
-        <h2>📚 Educational Notes</h2>
-        <p>
-          These vulnerabilities are intentionally created for:
-        </p>
+        <h2>Cadre Academique</h2>
+        <p>Cet espace sert a presenter un cycle complet:</p>
         <ul>
-          <li>📋 Demonstrating how security scanners detect vulnerabilities</li>
-          <li>📋 Understanding the impact of each vulnerability type</li>
-          <li>📋 Learning how to remediate and prevent attacks</li>
-          <li>📋 Academic security audit documentation</li>
+          <li>Detection des failles via outils standard du marche</li>
+          <li>Analyse technique des causes racines</li>
+          <li>Mise en place des contre-mesures</li>
+          <li>Verification post-correction</li>
         </ul>
-        <p>
-          <strong>⚠️ DO NOT</strong> use these in production or against external systems without explicit permission.
-        </p>
+        <p><strong>Note:</strong> execution reservee au clone local de recette.</p>
       </section>
     </div>
   );
