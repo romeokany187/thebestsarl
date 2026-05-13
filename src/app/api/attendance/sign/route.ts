@@ -39,6 +39,9 @@ const DEFAULT_REFERENCE_SITE = {
   timeZone: "Africa/Kinshasa",
 };
 
+const TEMP_ATTENDANCE_SHIFT_DATE = "2026-05-13";
+const TEMP_ATTENDANCE_SHIFT_MINUTES = 60;
+
 function normalizeTeamName(value: string) {
   return value
     .trim()
@@ -107,6 +110,26 @@ function getZonedDateParts(date: Date, timeZone: string) {
     second: Number.parseInt(readPart("second"), 10),
     weekday: readPart("weekday").toLowerCase(),
   };
+}
+
+function formatDateInTimeZone(date: Date, timeZone: string) {
+  const formatter = new Intl.DateTimeFormat("en-CA", {
+    timeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  });
+
+  return formatter.format(date);
+}
+
+function applyTemporaryAttendanceShift(signTime: Date, timeZone: string) {
+  const dateKey = formatDateInTimeZone(signTime, timeZone);
+  if (dateKey !== TEMP_ATTENDANCE_SHIFT_DATE) {
+    return signTime;
+  }
+
+  return new Date(signTime.getTime() - (TEMP_ATTENDANCE_SHIFT_MINUTES * 60 * 1000));
 }
 
 function buildAttendanceDay(signTime: Date, timeZone: string) {
@@ -314,7 +337,7 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const signTime = new Date();
+  const now = new Date();
   const { latitude, longitude, accuracyM, action } = parsed.data;
   const requestedUserId = parsed.data.userId?.trim();
   const canManageTeamAttendance = access.role === "ADMIN" || access.role === "DIRECTEUR_GENERAL";
@@ -344,6 +367,7 @@ export async function POST(request: NextRequest) {
   }
 
   const attendanceTimeZone = resolveAttendanceTimeZone(targetUser.team?.name);
+  const signTime = applyTemporaryAttendanceShift(now, attendanceTimeZone);
   const day = buildAttendanceDay(signTime, attendanceTimeZone);
   const teamGeofence = resolveTeamGeofence(targetUser.team?.name);
   const referenceSite = teamGeofence
