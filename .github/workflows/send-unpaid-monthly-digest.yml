@@ -37,28 +37,16 @@ jobs:
           sshpass -p "$HOSTINGER_PASSWORD" ssh -o StrictHostKeyChecking=no -p "$HOSTINGER_PORT" "$HOSTINGER_USER@$HOSTINGER_HOST" '
             set -e
             APP_DIR="'$HOSTINGER_APP_DIR'"
-            APP_PID="$(pgrep -fa "next start" | head -n1 | awk "{print \$1}")"
-            if [[ -z "$APP_PID" ]]; then
-              APP_PID="$(pgrep -fa "node" | head -n1 | awk "{print \$1}")"
-            fi
-            if [[ -z "$APP_PID" ]]; then
-              echo "[digest] Impossible de trouver le processus applicatif Hostinger."
-              exit 1
-            fi
-
-            ENV_FILE="$(mktemp)"
-            tr '\''\0'\'' '\''\n'\'' < "/proc/$APP_PID/environ" | grep -E "^(DATABASE_URL|DIRECT_URL|PRISMA_DATABASE_URL|PRISMA_SCHEMA_FILE|SMTP_HOST|SMTP_PORT|SMTP_USER|SMTP_PASS|MAIL_FROM_EMAIL|MAIL_FROM_NAME|REPORTS_TO_EMAIL)=" > "$ENV_FILE"
-            if ! grep -q '^DATABASE_URL=' "$ENV_FILE"; then
-              echo "[digest] DATABASE_URL introuvable dans l'environnement du processus applicatif."
-              cat "$ENV_FILE"
-              rm -f "$ENV_FILE"
-              exit 1
-            fi
-
             cd "$APP_DIR"
-            set -a
-            source "$ENV_FILE"
-            set +a
+            if [ -f "$APP_DIR/.env" ]; then
+              set -a && source "$APP_DIR/.env" && set +a
+              echo "[digest] Variables chargées depuis $APP_DIR/.env"
+            elif [ -n "$DATABASE_URL" ]; then
+              echo "[digest] DATABASE_URL déjà disponible via l'environnement Hostinger"
+            else
+              echo "[digest] ERREUR: DATABASE_URL introuvable (.env absent et non défini par hPanel)"
+              exit 1
+            fi
+
             npm run db:send:unpaid-monthly-digest
-            rm -f "$ENV_FILE"
           '
