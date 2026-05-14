@@ -705,3 +705,19 @@ model CashBilletageSnapshot {
   @@unique([date, cashDesk])
   @@index([cashDesk, date])
 }
+
+model UnpaidMonthlyDigestDispatch {
+  id             String   @id @default(cuid())
+  monthKey       String
+  teamKey        String
+  teamName       String
+  recipientEmail String
+  ticketCount    Int
+  unpaidCount    Int
+  partialCount   Int
+  sentAt         DateTime @default(now())
+
+  @@unique([monthKey, teamKey, recipientEmail])
+  @@index([monthKey, teamKey])
+  @@index([recipientEmail, sentAt])
+}

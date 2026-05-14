@@ -24,6 +24,7 @@
     "db:seed": "tsx prisma/seed.ts",
     "db:seed:accounts": "node scripts/seed-plan-comptable.js",
     "db:seed:attendance:random": "tsx scripts/seed-random-attendance.ts",
+    "db:send:unpaid-monthly-digest": "tsx scripts/send-unpaid-monthly-digest.ts",
     "export:plan-comptable": "node scripts/export-plan-comptable.js",
     "db:import:tickets:excel": "tsx scripts/import-tickets-excel.ts",
     "db:reset:airline-deposits": "tsx scripts/reset-airline-deposits.ts",
