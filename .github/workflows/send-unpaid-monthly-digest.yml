@@ -33,7 +33,11 @@ jobs:
         env:
           HOSTINGER_PASSWORD: ${{ secrets.HOSTINGER_PASSWORD }}
         run: |
-          test -n "$HOSTINGER_PASSWORD"
+          if [ -z "$HOSTINGER_PASSWORD" ]; then
+            echo "[digest] ERREUR: Secret GitHub HOSTINGER_PASSWORD manquant ou vide."
+            echo "[digest] Va dans Settings > Secrets and variables > Actions puis ajoute HOSTINGER_PASSWORD."
+            exit 1
+          fi
           sshpass -p "$HOSTINGER_PASSWORD" ssh -o StrictHostKeyChecking=no -p "$HOSTINGER_PORT" "$HOSTINGER_USER@$HOSTINGER_HOST" '
             set -e
             APP_DIR="'$HOSTINGER_APP_DIR'"

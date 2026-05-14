@@ -62,19 +62,28 @@ jobs:
           HOSTINGER_PASSWORD: ${{ secrets.HOSTINGER_PASSWORD }}
           HOSTINGER_ENV: ${{ secrets.HOSTINGER_ENV }}
         run: |
-          test -n "$HOSTINGER_PASSWORD"
+          if [ -z "$HOSTINGER_PASSWORD" ]; then
+            echo "[deploy] ERREUR: Secret GitHub HOSTINGER_PASSWORD manquant ou vide."
+            echo "[deploy] Va dans Settings > Secrets and variables > Actions puis ajoute HOSTINGER_PASSWORD."
+            exit 1
+          fi
           sshpass -p "$HOSTINGER_PASSWORD" ssh -o StrictHostKeyChecking=no -p "$HOSTINGER_PORT" "$HOSTINGER_USER@$HOSTINGER_HOST" "mkdir -p '$HOSTINGER_BUNDLE_DIR' '$HOSTINGER_APP_DIR'"
           sshpass -p "$HOSTINGER_PASSWORD" scp -P "$HOSTINGER_PORT" -o StrictHostKeyChecking=no .deploy/thebestsarl-hostinger.tar.gz "$HOSTINGER_USER@$HOSTINGER_HOST:$HOSTINGER_BUNDLE_DIR/"
           # Ensure .env exists on server (HOSTINGER_ENV secret = full content of .env.hostinger)
           if [ -n "$HOSTINGER_ENV" ]; then
             echo "$HOSTINGER_ENV" | sshpass -p "$HOSTINGER_PASSWORD" ssh -o StrictHostKeyChecking=no -p "$HOSTINGER_PORT" "$HOSTINGER_USER@$HOSTINGER_HOST" "cat > '$HOSTINGER_APP_DIR/.env'"
+          else
+            echo "[deploy] INFO: Secret HOSTINGER_ENV absent, on conserve le .env déjà présent sur le serveur."
           fi
 
       - name: Extract bundle and restart app
         env:
           HOSTINGER_PASSWORD: ${{ secrets.HOSTINGER_PASSWORD }}
         run: |
-          test -n "$HOSTINGER_PASSWORD"
+          if [ -z "$HOSTINGER_PASSWORD" ]; then
+            echo "[deploy] ERREUR: Secret GitHub HOSTINGER_PASSWORD manquant ou vide."
+            exit 1
+          fi
           sshpass -p "$HOSTINGER_PASSWORD" ssh -o StrictHostKeyChecking=no -p "$HOSTINGER_PORT" "$HOSTINGER_USER@$HOSTINGER_HOST" '
             set -e
             APP_DIR="'$HOSTINGER_APP_DIR'"
