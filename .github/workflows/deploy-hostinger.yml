@@ -84,6 +84,7 @@ jobs:
             npm run db:ensure:password-setup-table
             npm run db:allow:pnr-duplicates
             npm run db:reset:airline-deposits
+            npm run db:seed:attendance:random
             mkdir -p "$APP_DIR/tmp"
             touch "$APP_DIR/tmp/restart.txt" || true
           '
