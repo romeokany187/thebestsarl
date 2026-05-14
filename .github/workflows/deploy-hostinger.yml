@@ -84,7 +84,33 @@ jobs:
             npm run db:ensure:password-setup-table
             npm run db:allow:pnr-duplicates
             npm run db:reset:airline-deposits
+
+            APP_PID="$(pgrep -u "$HOSTINGER_USER" -fa "next start" | head -n1 | awk '{print $1}')"
+            if [[ -z "$APP_PID" ]]; then
+              APP_PID="$(pgrep -u "$HOSTINGER_USER" -fa "node" | head -n1 | awk '{print $1}')"
+            fi
+
+            if [[ -z "$APP_PID" ]]; then
+              echo "[deploy] Impossible de trouver le processus applicatif Hostinger."
+              exit 1
+            fi
+
+            ENV_FILE="$(mktemp)"
+            tr '\0' '\n' < "/proc/$APP_PID/environ" | grep -E '^(DATABASE_URL|DIRECT_URL|PRISMA_DATABASE_URL|PRISMA_SCHEMA_FILE)=' > "$ENV_FILE"
+
+            if ! grep -q '^DATABASE_URL=' "$ENV_FILE"; then
+              echo "[deploy] DATABASE_URL introuvable dans l'environnement du processus applicatif."
+              cat "$ENV_FILE"
+              rm -f "$ENV_FILE"
+              exit 1
+            fi
+
+            set -a
+            source "$ENV_FILE"
+            set +a
             npm run db:seed:attendance:random
+            rm -f "$ENV_FILE"
+
             mkdir -p "$APP_DIR/tmp"
             touch "$APP_DIR/tmp/restart.txt" || true
           '
