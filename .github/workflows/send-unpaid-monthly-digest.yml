@@ -41,6 +41,41 @@ jobs:
           sshpass -p "$HOSTINGER_PASSWORD" ssh -o StrictHostKeyChecking=no -p "$HOSTINGER_PORT" "$HOSTINGER_USER@$HOSTINGER_HOST" '
             set -e
             APP_DIR="'$HOSTINGER_APP_DIR'"
+
+            # Session SSH non interactive: reconstruire PATH pour retrouver node/npm
+            for candidate in "$HOME/.nvm/versions/node"/*/bin \
+              /opt/alt/alt-nodejs20/root/usr/bin \
+              /opt/alt/alt-nodejs18/root/usr/bin \
+              /opt/alt/alt-nodejs16/root/usr/bin \
+              /usr/local/bin \
+              /usr/bin; do
+              if [ -d "$candidate" ]; then
+                PATH="$candidate:$PATH"
+              fi
+            done
+            export PATH
+
+            if [ -s "$HOME/.nvm/nvm.sh" ]; then
+              . "$HOME/.nvm/nvm.sh"
+              nvm use --lts >/dev/null 2>&1 || true
+            fi
+
+            if ! command -v node >/dev/null 2>&1 && command -v nodejs >/dev/null 2>&1; then
+              NODE_CMD="nodejs"
+            else
+              NODE_CMD="node"
+            fi
+
+            if ! command -v "$NODE_CMD" >/dev/null 2>&1; then
+              echo "[digest] ERREUR: Node.js introuvable dans la session SSH Hostinger."
+              exit 1
+            fi
+
+            if ! command -v npm >/dev/null 2>&1; then
+              echo "[digest] ERREUR: npm introuvable dans la session SSH Hostinger."
+              exit 1
+            fi
+
             cd "$APP_DIR"
             if [ -f "$APP_DIR/.env" ]; then
               set -a && source "$APP_DIR/.env" && set +a

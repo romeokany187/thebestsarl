@@ -90,14 +90,44 @@ jobs:
             BUNDLE_DIR="'$HOSTINGER_BUNDLE_DIR'"
             BUNDLE="$BUNDLE_DIR/thebestsarl-hostinger.tar.gz"
 
+            # Session SSH non interactive: reconstruire PATH pour retrouver node/npm
+            for candidate in "$HOME/.nvm/versions/node"/*/bin \
+              /opt/alt/alt-nodejs20/root/usr/bin \
+              /opt/alt/alt-nodejs18/root/usr/bin \
+              /opt/alt/alt-nodejs16/root/usr/bin \
+              /usr/local/bin \
+              /usr/bin; do
+              if [ -d "$candidate" ]; then
+                PATH="$candidate:$PATH"
+              fi
+            done
+            export PATH
+
+            if [ -s "$HOME/.nvm/nvm.sh" ]; then
+              . "$HOME/.nvm/nvm.sh"
+              nvm use --lts >/dev/null 2>&1 || true
+            fi
+
+            if ! command -v node >/dev/null 2>&1 && command -v nodejs >/dev/null 2>&1; then
+              NODE_CMD="nodejs"
+            else
+              NODE_CMD="node"
+            fi
+
+            if ! command -v "$NODE_CMD" >/dev/null 2>&1; then
+              echo "[deploy] ERREUR: Node.js introuvable dans la session SSH Hostinger."
+              exit 1
+            fi
+
+            if ! command -v npm >/dev/null 2>&1; then
+              echo "[deploy] ERREUR: npm introuvable dans la session SSH Hostinger."
+              exit 1
+            fi
+
             mkdir -p "$APP_DIR" "$BUNDLE_DIR"
             find "$APP_DIR" -mindepth 1 -maxdepth 1 ! -name tmp -exec rm -rf {} +
             tar -xzf "$BUNDLE" -C "$APP_DIR"
             cd "$APP_DIR"
-            if ! command -v npm >/dev/null 2>&1; then
-              echo "[deploy] ERREUR: npm introuvable dans cette session SSH. Configure Node.js sur Hostinger ou charge le PATH avant deploy."
-              exit 1
-            fi
             npm exec -- prisma db push --schema prisma/schema.mysql.prisma --accept-data-loss
             npm run db:ensure:password-setup-table
             npm run db:allow:pnr-duplicates
