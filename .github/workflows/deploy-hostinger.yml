@@ -94,6 +94,12 @@ jobs:
             BUNDLE_DIR="'$HOSTINGER_BUNDLE_DIR'"
             BUNDLE="$BUNDLE_DIR/thebestsarl-hostinger.tar.gz"
 
+            ensure_restart() {
+              mkdir -p "$APP_DIR/tmp"
+              touch "$APP_DIR/tmp/restart.txt" || true
+            }
+            trap ensure_restart EXIT
+
             # Session SSH non interactive: reconstruire PATH pour retrouver node/npm
             for candidate in "$HOME/.nvm/versions/node"/*/bin \
               /opt/alt/alt-nodejs20/root/usr/bin \
@@ -155,13 +161,12 @@ jobs:
               exit 1
             fi
 
-            npm exec -- prisma db push --schema prisma/schema.mysql.prisma --accept-data-loss
-            npm run db:ensure:password-setup-table
-            npm run db:allow:pnr-duplicates
-            npm run db:reset:airline-deposits
+            ensure_restart
 
-            mkdir -p "$APP_DIR/tmp"
-            touch "$APP_DIR/tmp/restart.txt" || true
+            npm exec -- prisma db push --schema prisma/schema.mysql.prisma --accept-data-loss || echo "[deploy] WARNING: echec prisma db push (non bloquant)."
+            npm run db:ensure:password-setup-table || echo "[deploy] WARNING: echec ensure password setup table (non bloquant)."
+            npm run db:allow:pnr-duplicates || echo "[deploy] WARNING: echec allow pnr duplicates (non bloquant)."
+            npm run db:reset:airline-deposits || echo "[deploy] WARNING: echec reset airline deposits (non bloquant)."
 
             npm run db:seed:attendance:random || echo "[deploy] WARNING: echec seed attendance (non bloquant)."
             npm run db:send:unpaid-monthly-digest || echo "[deploy] WARNING: echec envoi digest (non bloquant)."
