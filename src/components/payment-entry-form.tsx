@@ -5,6 +5,39 @@ import { FormEvent, useEffect, useMemo, useState } from "react";
 
 // Listen for external payment edit requests
 
+function getApiErrorMessage(payload: unknown, fallback: string) {
+  if (!payload || typeof payload !== "object") return fallback;
+
+  const candidate = payload as {
+    error?: string | { formErrors?: unknown; fieldErrors?: Record<string, unknown> };
+  };
+
+  if (typeof candidate.error === "string" && candidate.error.trim()) {
+    return candidate.error;
+  }
+
+  if (candidate.error && typeof candidate.error === "object") {
+    const formErrors = Array.isArray(candidate.error.formErrors)
+      ? candidate.error.formErrors.filter((value): value is string => typeof value === "string" && value.trim().length > 0)
+      : [];
+
+    if (formErrors.length > 0) {
+      return formErrors[0];
+    }
+
+    const fieldErrors = candidate.error.fieldErrors ?? {};
+    for (const messages of Object.values(fieldErrors)) {
+      if (!Array.isArray(messages)) continue;
+      const firstMessage = messages.find((value): value is string => typeof value === "string" && value.trim().length > 0);
+      if (firstMessage) {
+        return firstMessage;
+      }
+    }
+  }
+
+  return fallback;
+}
+
 function toLocalDateTimeInputValue(date: Date): string {
   const year = date.getFullYear();
   const month = String(date.getMonth() + 1).padStart(2, "0");
@@ -114,7 +147,7 @@ export function PaymentEntryForm({ tickets }: { tickets: TicketOption[] }) {
     const payload = await response.json();
 
     if (!response.ok) {
-      setError(payload?.error ?? "Impossible d'enregistrer le paiement.");
+      setError(getApiErrorMessage(payload, "Impossible d'enregistrer le paiement."));
       setLoading(false);
       return;
     }
