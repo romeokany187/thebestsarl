@@ -61,7 +61,6 @@ jobs:
         env:
           HOSTINGER_PASSWORD: ${{ secrets.HOSTINGER_PASSWORD }}
           HOSTINGER_ENV: ${{ secrets.HOSTINGER_ENV }}
-          HOSTINGER_ENV_FORCE_SYNC: ${{ secrets.HOSTINGER_ENV_FORCE_SYNC }}
         run: |
           if [ -z "$HOSTINGER_PASSWORD" ]; then
             echo "[deploy] ERREUR: Secret GitHub HOSTINGER_PASSWORD manquant ou vide."
@@ -70,23 +69,12 @@ jobs:
           fi
           sshpass -p "$HOSTINGER_PASSWORD" ssh -o StrictHostKeyChecking=no -p "$HOSTINGER_PORT" "$HOSTINGER_USER@$HOSTINGER_HOST" "mkdir -p '$HOSTINGER_BUNDLE_DIR' '$HOSTINGER_APP_DIR'"
           sshpass -p "$HOSTINGER_PASSWORD" scp -P "$HOSTINGER_PORT" -o StrictHostKeyChecking=no .deploy/thebestsarl-hostinger.tar.gz "$HOSTINGER_USER@$HOSTINGER_HOST:$HOSTINGER_BUNDLE_DIR/"
-          REMOTE_ENV_EXISTS=$(sshpass -p "$HOSTINGER_PASSWORD" ssh -o StrictHostKeyChecking=no -p "$HOSTINGER_PORT" "$HOSTINGER_USER@$HOSTINGER_HOST" "if [ -s '$HOSTINGER_APP_DIR/.env' ]; then echo 1; else echo 0; fi")
-
-          # Sync .env when forced, or bootstrap it automatically if missing on server.
-          if [ "$HOSTINGER_ENV_FORCE_SYNC" = "1" ] && [ -n "$HOSTINGER_ENV" ]; then
-            echo "$HOSTINGER_ENV" | sshpass -p "$HOSTINGER_PASSWORD" ssh -o StrictHostKeyChecking=no -p "$HOSTINGER_PORT" "$HOSTINGER_USER@$HOSTINGER_HOST" "cat > '$HOSTINGER_APP_DIR/.env'"
-            echo "[deploy] .env synchronise depuis HOSTINGER_ENV (mode force)."
-          elif [ "$REMOTE_ENV_EXISTS" = "0" ] && [ -n "$HOSTINGER_ENV" ]; then
-            echo "$HOSTINGER_ENV" | sshpass -p "$HOSTINGER_PASSWORD" ssh -o StrictHostKeyChecking=no -p "$HOSTINGER_PORT" "$HOSTINGER_USER@$HOSTINGER_HOST" "cat > '$HOSTINGER_APP_DIR/.env'"
-            echo "[deploy] .env absent sur serveur: synchronise automatiquement depuis HOSTINGER_ENV."
-          elif [ "$REMOTE_ENV_EXISTS" = "0" ]; then
-            echo "[deploy] ERREUR: .env absent sur serveur et secret HOSTINGER_ENV non defini."
-            echo "[deploy] Ajoute HOSTINGER_ENV (contenu complet du .env production), ou active l'environnement hPanel avec DATABASE_URL/DIRECT_URL."
-            exit 1
-          elif [ -n "$HOSTINGER_ENV" ]; then
-            echo "[deploy] HOSTINGER_ENV present mais ignore (set HOSTINGER_ENV_FORCE_SYNC=1 pour forcer la synchro)."
+          # Toujours synchroniser le .env depuis HOSTINGER_ENV si defini
+          if [ -n "$HOSTINGER_ENV" ]; then
+            printf '%s' "$HOSTINGER_ENV" | sshpass -p "$HOSTINGER_PASSWORD" ssh -o StrictHostKeyChecking=no -p "$HOSTINGER_PORT" "$HOSTINGER_USER@$HOSTINGER_HOST" "cat > '$HOSTINGER_APP_DIR/.env'"
+            echo "[deploy] .env synchronise depuis HOSTINGER_ENV."
           else
-            echo "[deploy] INFO: Secret HOSTINGER_ENV absent, on conserve le .env déjà présent sur le serveur."
+            echo "[deploy] INFO: HOSTINGER_ENV absent, .env conserve tel quel sur le serveur."
           fi
 
       - name: Extract bundle and restart app
@@ -181,42 +169,23 @@ jobs:
         env:
           HOSTINGER_PASSWORD: ${{ secrets.HOSTINGER_PASSWORD }}
         run: |
-          SSH="sshpass -p '$HOSTINGER_PASSWORD' ssh -o StrictHostKeyChecking=no -o ServerAliveInterval=30 -o ServerAliveCountMax=20 -p $HOSTINGER_PORT $HOSTINGER_USER@$HOSTINGER_HOST"
+          do_ssh() {
+            sshpass -p "$HOSTINGER_PASSWORD" ssh \
+              -o StrictHostKeyChecking=no \
+              -o ServerAliveInterval=30 \
+              -o ServerAliveCountMax=20 \
+              -p "$HOSTINGER_PORT" "$HOSTINGER_USER@$HOSTINGER_HOST" "$@"
+          }
 
-          $SSH '
-            set -e
-            APP_DIR="'$HOSTINGER_APP_DIR'"
-            for candidate in "$HOME/.nvm/versions/node"/*/bin \
-              /opt/alt/alt-nodejs20/root/usr/bin \
-              /opt/alt/alt-nodejs18/root/usr/bin \
-              /usr/local/bin /usr/bin; do
-              [ -d "$candidate" ] && PATH="$candidate:$PATH"
-            done
-            export PATH
-            [ -s "$HOME/.nvm/nvm.sh" ] && . "$HOME/.nvm/nvm.sh" && nvm use --lts >/dev/null 2>&1 || true
-            cd "$APP_DIR"
-            [ -f "$APP_DIR/.env" ] && set -a && source "$APP_DIR/.env" && set +a
-            [ -z "$DIRECT_URL" ] && [ -n "$DATABASE_URL" ] && export DIRECT_URL="$DATABASE_URL"
-            npm exec -- prisma db push --schema prisma/schema.mysql.prisma --accept-data-loss || echo "[deploy] WARNING: echec prisma db push (non bloquant)."
-          '
+          APP_DIR="$HOSTINGER_APP_DIR"
+          SETUP_PATH='for c in "$HOME/.nvm/versions/node"/*/bin /opt/alt/alt-nodejs20/root/usr/bin /opt/alt/alt-nodejs18/root/usr/bin /usr/local/bin /usr/bin; do [ -d "$c" ] && PATH="$c:$PATH"; done; export PATH; [ -s "$HOME/.nvm/nvm.sh" ] && . "$HOME/.nvm/nvm.sh" && nvm use --lts >/dev/null 2>&1 || true'
+          LOAD_ENV="[ -f '$APP_DIR/.env' ] && set -a && . '$APP_DIR/.env' && set +a; [ -z \"\$DIRECT_URL\" ] && [ -n \"\$DATABASE_URL\" ] && export DIRECT_URL=\"\$DATABASE_URL\""
 
-          $SSH '
-            set -e
-            APP_DIR="'$HOSTINGER_APP_DIR'"
-            for candidate in "$HOME/.nvm/versions/node"/*/bin \
-              /opt/alt/alt-nodejs20/root/usr/bin \
-              /opt/alt/alt-nodejs18/root/usr/bin \
-              /usr/local/bin /usr/bin; do
-              [ -d "$candidate" ] && PATH="$candidate:$PATH"
-            done
-            export PATH
-            [ -s "$HOME/.nvm/nvm.sh" ] && . "$HOME/.nvm/nvm.sh" && nvm use --lts >/dev/null 2>&1 || true
-            cd "$APP_DIR"
-            [ -f "$APP_DIR/.env" ] && set -a && source "$APP_DIR/.env" && set +a
-            [ -z "$DIRECT_URL" ] && [ -n "$DATABASE_URL" ] && export DIRECT_URL="$DATABASE_URL"
-            npm run db:ensure:password-setup-table || echo "[deploy] WARNING: echec ensure password setup table (non bloquant)."
-            npm run db:allow:pnr-duplicates || echo "[deploy] WARNING: echec allow pnr duplicates (non bloquant)."
-            npm run db:reset:airline-deposits || echo "[deploy] WARNING: echec reset airline deposits (non bloquant)."
-            npm run db:seed:attendance:random || echo "[deploy] WARNING: echec seed attendance (non bloquant)."
-            npm run db:send:unpaid-monthly-digest || echo "[deploy] WARNING: echec envoi digest (non bloquant)."
-          '
+          do_ssh "$SETUP_PATH; cd '$APP_DIR'; $LOAD_ENV; npm exec -- prisma db push --schema prisma/schema.mysql.prisma --accept-data-loss || echo '[deploy] WARNING: echec prisma db push (non bloquant).'"
+
+          do_ssh "$SETUP_PATH; cd '$APP_DIR'; $LOAD_ENV; \
+            npm run db:ensure:password-setup-table || echo '[deploy] WARNING: echec ensure password setup table (non bloquant).'; \
+            npm run db:allow:pnr-duplicates || echo '[deploy] WARNING: echec allow pnr duplicates (non bloquant).'; \
+            npm run db:reset:airline-deposits || echo '[deploy] WARNING: echec reset airline deposits (non bloquant).'; \
+            npm run db:seed:attendance:random || echo '[deploy] WARNING: echec seed attendance (non bloquant).'; \
+            npm run db:send:unpaid-monthly-digest || echo '[deploy] WARNING: echec envoi digest (non bloquant).'"
