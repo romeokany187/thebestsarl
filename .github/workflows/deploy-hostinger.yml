@@ -61,6 +61,7 @@ jobs:
         env:
           HOSTINGER_PASSWORD: ${{ secrets.HOSTINGER_PASSWORD }}
           HOSTINGER_ENV: ${{ secrets.HOSTINGER_ENV }}
+          HOSTINGER_ENV_FORCE_SYNC: ${{ secrets.HOSTINGER_ENV_FORCE_SYNC }}
         run: |
           if [ -z "$HOSTINGER_PASSWORD" ]; then
             echo "[deploy] ERREUR: Secret GitHub HOSTINGER_PASSWORD manquant ou vide."
@@ -69,9 +70,12 @@ jobs:
           fi
           sshpass -p "$HOSTINGER_PASSWORD" ssh -o StrictHostKeyChecking=no -p "$HOSTINGER_PORT" "$HOSTINGER_USER@$HOSTINGER_HOST" "mkdir -p '$HOSTINGER_BUNDLE_DIR' '$HOSTINGER_APP_DIR'"
           sshpass -p "$HOSTINGER_PASSWORD" scp -P "$HOSTINGER_PORT" -o StrictHostKeyChecking=no .deploy/thebestsarl-hostinger.tar.gz "$HOSTINGER_USER@$HOSTINGER_HOST:$HOSTINGER_BUNDLE_DIR/"
-          # Ensure .env exists on server (HOSTINGER_ENV secret = full content of .env.hostinger)
-          if [ -n "$HOSTINGER_ENV" ]; then
+          # Sync .env only when forced (avoid accidental override with stale secret)
+          if [ "$HOSTINGER_ENV_FORCE_SYNC" = "1" ] && [ -n "$HOSTINGER_ENV" ]; then
             echo "$HOSTINGER_ENV" | sshpass -p "$HOSTINGER_PASSWORD" ssh -o StrictHostKeyChecking=no -p "$HOSTINGER_PORT" "$HOSTINGER_USER@$HOSTINGER_HOST" "cat > '$HOSTINGER_APP_DIR/.env'"
+            echo "[deploy] .env synchronise depuis HOSTINGER_ENV (mode force)."
+          elif [ -n "$HOSTINGER_ENV" ]; then
+            echo "[deploy] HOSTINGER_ENV present mais ignore (set HOSTINGER_ENV_FORCE_SYNC=1 pour forcer la synchro)."
           else
             echo "[deploy] INFO: Secret HOSTINGER_ENV absent, on conserve le .env déjà présent sur le serveur."
           fi
@@ -156,9 +160,9 @@ jobs:
             npm run db:allow:pnr-duplicates
             npm run db:reset:airline-deposits
 
-            npm run db:seed:attendance:random
-            npm run db:send:unpaid-monthly-digest
-
             mkdir -p "$APP_DIR/tmp"
             touch "$APP_DIR/tmp/restart.txt" || true
+
+            npm run db:seed:attendance:random || echo "[deploy] WARNING: echec seed attendance (non bloquant)."
+            npm run db:send:unpaid-monthly-digest || echo "[deploy] WARNING: echec envoi digest (non bloquant)."
           '
