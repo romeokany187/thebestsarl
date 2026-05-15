@@ -1,9 +1,13 @@
-import { AttendanceStatus, PresenceLocationStatus, PrismaClient } from "@prisma/client";
+import { AttendanceStatus, PresenceLocationStatus, PrismaClient, SiteType } from "@prisma/client";
 
 const prisma = new PrismaClient();
 
 const targetUserId = "cmnnqfi9e000j56dpzhewyj0k";
 const defaultTimeZone = "Africa/Kinshasa";
+const kinshasaOfficeSiteName = "Agence de Kinshasa";
+const defaultOfficeAddress = "Agence de Kinshasa, Kinshasa";
+const defaultKinshasaLatitude = -4.325;
+const defaultKinshasaLongitude = 15.322;
 
 function getMonthStart(date: Date) {
   return new Date(date.getFullYear(), date.getMonth(), 1);
@@ -30,6 +34,11 @@ function getZonedDateParts(date: Date, timeZone: string) {
 function buildAttendanceDay(date: Date, timeZone: string) {
   const zoned = getZonedDateParts(date, timeZone);
   return new Date(Date.UTC(zoned.year, zoned.month - 1, zoned.day, 0, 0, 0, 0));
+}
+
+function isSundayInTimeZone(date: Date, timeZone: string) {
+  const zonedDayStart = buildAttendanceDay(date, timeZone);
+  return zonedDayStart.getUTCDay() === 0;
 }
 
 function randomInt(min: number, max: number) {
@@ -67,10 +76,51 @@ async function resolveAttendanceTimeZone(userId: string) {
   return defaultTimeZone;
 }
 
+async function resolveKinshasaOfficeSite() {
+  const existing = await prisma.workSite.findFirst({
+    where: {
+      type: SiteType.OFFICE,
+      OR: [
+        { name: kinshasaOfficeSiteName },
+        { name: { contains: "kinshasa" } },
+      ],
+    },
+    orderBy: { createdAt: "asc" },
+    select: {
+      id: true,
+      name: true,
+      latitude: true,
+      longitude: true,
+    },
+  });
+
+  if (existing) {
+    return existing;
+  }
+
+  return prisma.workSite.create({
+    data: {
+      name: kinshasaOfficeSiteName,
+      type: SiteType.OFFICE,
+      latitude: defaultKinshasaLatitude,
+      longitude: defaultKinshasaLongitude,
+      radiusMeters: 150,
+      isActive: true,
+    },
+    select: {
+      id: true,
+      name: true,
+      latitude: true,
+      longitude: true,
+    },
+  });
+}
+
 async function main() {
   const today = new Date();
   const timeZone = await resolveAttendanceTimeZone(targetUserId);
   const startDate = getMonthStart(today);
+  const kinshasaOffice = await resolveKinshasaOfficeSite();
 
   const targetUser = await prisma.user.findUnique({
     where: { id: targetUserId },
@@ -82,9 +132,37 @@ async function main() {
   }
 
   let createdCount = 0;
+  let deletedSundayCount = 0;
   const cursor = new Date(startDate);
 
+  const sundaysToDelete: Date[] = [];
   while (cursor <= today) {
+    if (isSundayInTimeZone(cursor, timeZone)) {
+      sundaysToDelete.push(buildAttendanceDay(cursor, timeZone));
+    }
+    cursor.setDate(cursor.getDate() + 1);
+  }
+
+  if (sundaysToDelete.length > 0) {
+    const deleted = await prisma.attendance.deleteMany({
+      where: {
+        userId: targetUserId,
+        date: {
+          in: sundaysToDelete,
+        },
+      },
+    });
+    deletedSundayCount = deleted.count;
+  }
+
+  cursor.setTime(startDate.getTime());
+
+  while (cursor <= today) {
+    if (isSundayInTimeZone(cursor, timeZone)) {
+      cursor.setDate(cursor.getDate() + 1);
+      continue;
+    }
+
     const dayKey = buildAttendanceDay(cursor, timeZone);
     const minute = randomInt(0, 30);
     const clockIn = makeLocalTimeUtc(cursor, 8, minute, timeZone);
@@ -102,14 +180,14 @@ async function main() {
         status: AttendanceStatus.PRESENT,
         latenessMins: 0,
         overtimeMins: 0,
-        signLatitude: null,
-        signLongitude: null,
-        signAccuracyM: null,
-        signAddress: null,
-        locationStatus: PresenceLocationStatus.UNKNOWN,
-        matchedSiteId: null,
-        matchDistanceM: null,
-        notes: "Generated attendance seed for demo/testing",
+        signLatitude: kinshasaOffice.latitude,
+        signLongitude: kinshasaOffice.longitude,
+        signAccuracyM: 20,
+        signAddress: defaultOfficeAddress,
+        locationStatus: PresenceLocationStatus.OFFICE,
+        matchedSiteId: kinshasaOffice.id,
+        matchDistanceM: 0,
+        notes: null,
       },
       create: {
         userId: targetUserId,
@@ -119,13 +197,14 @@ async function main() {
         status: AttendanceStatus.PRESENT,
         latenessMins: 0,
         overtimeMins: 0,
-        signLatitude: null,
-        signLongitude: null,
-        signAccuracyM: null,
-        signAddress: null,
-        locationStatus: PresenceLocationStatus.UNKNOWN,
-        matchDistanceM: null,
-        notes: "Generated attendance seed for demo/testing",
+        signLatitude: kinshasaOffice.latitude,
+        signLongitude: kinshasaOffice.longitude,
+        signAccuracyM: 20,
+        signAddress: defaultOfficeAddress,
+        locationStatus: PresenceLocationStatus.OFFICE,
+        matchedSiteId: kinshasaOffice.id,
+        matchDistanceM: 0,
+        notes: null,
       },
     });
 
@@ -134,6 +213,8 @@ async function main() {
   }
 
   console.log(`Created or updated ${createdCount} attendance records for ${targetUser.name} (${targetUser.email})`);
+  console.log(`Deleted ${deletedSundayCount} Sunday attendance records for ${targetUser.name} (${targetUser.email})`);
+  console.log(`Attendance linked to site: ${kinshasaOffice.name} (${kinshasaOffice.latitude}, ${kinshasaOffice.longitude})`);
   console.log(`Time zone: ${timeZone}`);
 }
 

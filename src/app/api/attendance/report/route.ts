@@ -158,6 +158,9 @@ function attendanceStatusLabel(status: string): string {
 
 function locationStatusLabel(status: string): string {
   switch (status.toUpperCase()) {
+    case "OFFICE": return "Bureau";
+    case "ASSIGNMENT": return "Mission";
+    case "OFFSITE": return "Hors site";
     case "SITE_MATCH": return "Sur site";
     case "OFF_SITE": return "Hors site";
     case "NEAR_SITE": return "Proximité site";
@@ -217,7 +220,10 @@ export async function GET(request: NextRequest) {
       ...roleFilter,
       date: { gte: range.start, lt: range.end },
     },
-    include: { user: { select: { name: true, team: { select: { name: true } } } } },
+    include: {
+      user: { select: { name: true, team: { select: { name: true } } } },
+      matchedSite: { select: { name: true } },
+    },
     orderBy: [{ date: "asc" }, { user: { name: "asc" } }],
     take: 1200,
   });
@@ -270,7 +276,7 @@ export async function GET(request: NextRequest) {
       formatAttendanceTime(row.clockOut, rowTimezone),
       formatMinutes(row.latenessMins),
       formatMinutes(row.overtimeMins),
-      locationStatusLabel(row.locationStatus),
+      row.matchedSite?.name ?? locationStatusLabel(row.locationStatus),
       row.notes ?? "-",
     ];
 
