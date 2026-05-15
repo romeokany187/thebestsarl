@@ -94,7 +94,11 @@ jobs:
             find "$APP_DIR" -mindepth 1 -maxdepth 1 ! -name tmp -exec rm -rf {} +
             tar -xzf "$BUNDLE" -C "$APP_DIR"
             cd "$APP_DIR"
-            npx prisma db push --schema prisma/schema.mysql.prisma --accept-data-loss
+            if ! command -v npm >/dev/null 2>&1; then
+              echo "[deploy] ERREUR: npm introuvable dans cette session SSH. Configure Node.js sur Hostinger ou charge le PATH avant deploy."
+              exit 1
+            fi
+            npm exec -- prisma db push --schema prisma/schema.mysql.prisma --accept-data-loss
             npm run db:ensure:password-setup-table
             npm run db:allow:pnr-duplicates
             npm run db:reset:airline-deposits
