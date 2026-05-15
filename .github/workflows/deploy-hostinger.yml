@@ -70,10 +70,19 @@ jobs:
           fi
           sshpass -p "$HOSTINGER_PASSWORD" ssh -o StrictHostKeyChecking=no -p "$HOSTINGER_PORT" "$HOSTINGER_USER@$HOSTINGER_HOST" "mkdir -p '$HOSTINGER_BUNDLE_DIR' '$HOSTINGER_APP_DIR'"
           sshpass -p "$HOSTINGER_PASSWORD" scp -P "$HOSTINGER_PORT" -o StrictHostKeyChecking=no .deploy/thebestsarl-hostinger.tar.gz "$HOSTINGER_USER@$HOSTINGER_HOST:$HOSTINGER_BUNDLE_DIR/"
-          # Sync .env only when forced (avoid accidental override with stale secret)
+          REMOTE_ENV_EXISTS=$(sshpass -p "$HOSTINGER_PASSWORD" ssh -o StrictHostKeyChecking=no -p "$HOSTINGER_PORT" "$HOSTINGER_USER@$HOSTINGER_HOST" "if [ -s '$HOSTINGER_APP_DIR/.env' ]; then echo 1; else echo 0; fi")
+
+          # Sync .env when forced, or bootstrap it automatically if missing on server.
           if [ "$HOSTINGER_ENV_FORCE_SYNC" = "1" ] && [ -n "$HOSTINGER_ENV" ]; then
             echo "$HOSTINGER_ENV" | sshpass -p "$HOSTINGER_PASSWORD" ssh -o StrictHostKeyChecking=no -p "$HOSTINGER_PORT" "$HOSTINGER_USER@$HOSTINGER_HOST" "cat > '$HOSTINGER_APP_DIR/.env'"
             echo "[deploy] .env synchronise depuis HOSTINGER_ENV (mode force)."
+          elif [ "$REMOTE_ENV_EXISTS" = "0" ] && [ -n "$HOSTINGER_ENV" ]; then
+            echo "$HOSTINGER_ENV" | sshpass -p "$HOSTINGER_PASSWORD" ssh -o StrictHostKeyChecking=no -p "$HOSTINGER_PORT" "$HOSTINGER_USER@$HOSTINGER_HOST" "cat > '$HOSTINGER_APP_DIR/.env'"
+            echo "[deploy] .env absent sur serveur: synchronise automatiquement depuis HOSTINGER_ENV."
+          elif [ "$REMOTE_ENV_EXISTS" = "0" ]; then
+            echo "[deploy] ERREUR: .env absent sur serveur et secret HOSTINGER_ENV non defini."
+            echo "[deploy] Ajoute HOSTINGER_ENV (contenu complet du .env production), ou active l'environnement hPanel avec DATABASE_URL/DIRECT_URL."
+            exit 1
           elif [ -n "$HOSTINGER_ENV" ]; then
             echo "[deploy] HOSTINGER_ENV present mais ignore (set HOSTINGER_ENV_FORCE_SYNC=1 pour forcer la synchro)."
           else
