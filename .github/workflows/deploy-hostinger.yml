@@ -128,21 +128,33 @@ jobs:
             find "$APP_DIR" -mindepth 1 -maxdepth 1 ! -name tmp -exec rm -rf {} +
             tar -xzf "$BUNDLE" -C "$APP_DIR"
             cd "$APP_DIR"
+
+            # Charger DATABASE_URL/DIRECT_URL avant toute commande Prisma
+            if [ -f "$APP_DIR/.env" ]; then
+              set -a && source "$APP_DIR/.env" && set +a
+              echo "[deploy] Variables chargees depuis $APP_DIR/.env"
+            elif [ -n "$DATABASE_URL" ]; then
+              echo "[deploy] DATABASE_URL deja disponible via environnement Hostinger"
+            else
+              echo "[deploy] ERREUR: DATABASE_URL introuvable (.env absent et non defini par hPanel)"
+              exit 1
+            fi
+
+            if [ -z "$DIRECT_URL" ] && [ -n "$DATABASE_URL" ]; then
+              DIRECT_URL="$DATABASE_URL"
+              export DIRECT_URL
+              echo "[deploy] INFO: DIRECT_URL absent, fallback sur DATABASE_URL"
+            fi
+
+            if [ -z "$DIRECT_URL" ]; then
+              echo "[deploy] ERREUR: DIRECT_URL introuvable pour Prisma"
+              exit 1
+            fi
+
             npm exec -- prisma db push --schema prisma/schema.mysql.prisma --accept-data-loss
             npm run db:ensure:password-setup-table
             npm run db:allow:pnr-duplicates
             npm run db:reset:airline-deposits
-
-            # Charger DATABASE_URL : depuis .env persistant ou depuis environnement Hostinger (hPanel)
-            if [ -f "$APP_DIR/.env" ]; then
-              set -a && source "$APP_DIR/.env" && set +a
-              echo "[deploy] Variables chargées depuis $APP_DIR/.env"
-            elif [ -n "$DATABASE_URL" ]; then
-              echo "[deploy] DATABASE_URL déjà disponible via environnement Hostinger"
-            else
-              echo "[deploy] ERREUR: DATABASE_URL introuvable (.env absent et non défini par hPanel)"
-              exit 1
-            fi
 
             npm run db:seed:attendance:random
             npm run db:send:unpaid-monthly-digest
