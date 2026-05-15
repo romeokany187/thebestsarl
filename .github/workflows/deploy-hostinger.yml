@@ -140,6 +140,11 @@ jobs:
             tar -xzf "$BUNDLE" -C "$APP_DIR"
             cd "$APP_DIR"
 
+            # Copier les assets statiques dans le dossier standalone (Next.js standalone les attend la)
+            mkdir -p "$APP_DIR/.next/standalone/.next"
+            cp -r "$APP_DIR/.next/static" "$APP_DIR/.next/standalone/.next/static" 2>/dev/null || true
+            echo "[deploy] Assets statiques copies dans standalone"
+
             # Charger DATABASE_URL/DIRECT_URL avant toute commande Prisma
             if [ -f "$APP_DIR/.env" ]; then
               set -a && source "$APP_DIR/.env" && set +a
