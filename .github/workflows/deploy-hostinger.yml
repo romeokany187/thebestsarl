@@ -99,12 +99,12 @@ jobs:
             npm run db:allow:pnr-duplicates
             npm run db:reset:airline-deposits
 
-            # Charger DATABASE_URL : depuis .env persistant ou depuis l'environnement Hostinger (hPanel)
+            # Charger DATABASE_URL : depuis .env persistant ou depuis environnement Hostinger (hPanel)
             if [ -f "$APP_DIR/.env" ]; then
               set -a && source "$APP_DIR/.env" && set +a
               echo "[deploy] Variables chargées depuis $APP_DIR/.env"
             elif [ -n "$DATABASE_URL" ]; then
-              echo "[deploy] DATABASE_URL déjà disponible via l'environnement Hostinger"
+              echo "[deploy] DATABASE_URL déjà disponible via environnement Hostinger"
             else
               echo "[deploy] ERREUR: DATABASE_URL introuvable (.env absent et non défini par hPanel)"
               exit 1

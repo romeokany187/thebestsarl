@@ -46,7 +46,7 @@ jobs:
               set -a && source "$APP_DIR/.env" && set +a
               echo "[digest] Variables chargées depuis $APP_DIR/.env"
             elif [ -n "$DATABASE_URL" ]; then
-              echo "[digest] DATABASE_URL déjà disponible via l'environnement Hostinger"
+              echo "[digest] DATABASE_URL déjà disponible via environnement Hostinger"
             else
               echo "[digest] ERREUR: DATABASE_URL introuvable (.env absent et non défini par hPanel)"
               exit 1
