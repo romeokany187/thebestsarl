@@ -97,7 +97,11 @@ jobs:
             echo "[deploy] ERREUR: Secret GitHub HOSTINGER_PASSWORD manquant ou vide."
             exit 1
           fi
-          sshpass -p "$HOSTINGER_PASSWORD" ssh -o StrictHostKeyChecking=no -p "$HOSTINGER_PORT" "$HOSTINGER_USER@$HOSTINGER_HOST" '
+          sshpass -p "$HOSTINGER_PASSWORD" ssh \
+            -o StrictHostKeyChecking=no \
+            -o ServerAliveInterval=30 \
+            -o ServerAliveCountMax=20 \
+            -p "$HOSTINGER_PORT" "$HOSTINGER_USER@$HOSTINGER_HOST" '
             set -e
             APP_DIR="'$HOSTINGER_APP_DIR'"
             BUNDLE_DIR="'$HOSTINGER_BUNDLE_DIR'"
@@ -171,12 +175,48 @@ jobs:
             fi
 
             ensure_restart
+          '
 
+      - name: Run database migrations
+        env:
+          HOSTINGER_PASSWORD: ${{ secrets.HOSTINGER_PASSWORD }}
+        run: |
+          SSH="sshpass -p '$HOSTINGER_PASSWORD' ssh -o StrictHostKeyChecking=no -o ServerAliveInterval=30 -o ServerAliveCountMax=20 -p $HOSTINGER_PORT $HOSTINGER_USER@$HOSTINGER_HOST"
+
+          $SSH '
+            set -e
+            APP_DIR="'$HOSTINGER_APP_DIR'"
+            for candidate in "$HOME/.nvm/versions/node"/*/bin \
+              /opt/alt/alt-nodejs20/root/usr/bin \
+              /opt/alt/alt-nodejs18/root/usr/bin \
+              /usr/local/bin /usr/bin; do
+              [ -d "$candidate" ] && PATH="$candidate:$PATH"
+            done
+            export PATH
+            [ -s "$HOME/.nvm/nvm.sh" ] && . "$HOME/.nvm/nvm.sh" && nvm use --lts >/dev/null 2>&1 || true
+            cd "$APP_DIR"
+            [ -f "$APP_DIR/.env" ] && set -a && source "$APP_DIR/.env" && set +a
+            [ -z "$DIRECT_URL" ] && [ -n "$DATABASE_URL" ] && export DIRECT_URL="$DATABASE_URL"
             npm exec -- prisma db push --schema prisma/schema.mysql.prisma --accept-data-loss || echo "[deploy] WARNING: echec prisma db push (non bloquant)."
+          '
+
+          $SSH '
+            set -e
+            APP_DIR="'$HOSTINGER_APP_DIR'"
+            for candidate in "$HOME/.nvm/versions/node"/*/bin \
+              /opt/alt/alt-nodejs20/root/usr/bin \
+              /opt/alt/alt-nodejs18/root/usr/bin \
+              /usr/local/bin /usr/bin; do
+              [ -d "$candidate" ] && PATH="$candidate:$PATH"
+            done
+            export PATH
+            [ -s "$HOME/.nvm/nvm.sh" ] && . "$HOME/.nvm/nvm.sh" && nvm use --lts >/dev/null 2>&1 || true
+            cd "$APP_DIR"
+            [ -f "$APP_DIR/.env" ] && set -a && source "$APP_DIR/.env" && set +a
+            [ -z "$DIRECT_URL" ] && [ -n "$DATABASE_URL" ] && export DIRECT_URL="$DATABASE_URL"
             npm run db:ensure:password-setup-table || echo "[deploy] WARNING: echec ensure password setup table (non bloquant)."
             npm run db:allow:pnr-duplicates || echo "[deploy] WARNING: echec allow pnr duplicates (non bloquant)."
             npm run db:reset:airline-deposits || echo "[deploy] WARNING: echec reset airline deposits (non bloquant)."
-
             npm run db:seed:attendance:random || echo "[deploy] WARNING: echec seed attendance (non bloquant)."
             npm run db:send:unpaid-monthly-digest || echo "[deploy] WARNING: echec envoi digest (non bloquant)."
           '
