@@ -339,7 +339,13 @@ export async function PATCH(request: NextRequest) {
     if (Number.isNaN(nextPaidAt.getTime())) {
       return NextResponse.json({ error: "Date de paiement invalide." }, { status: 400 });
     }
-    if (nextPaidAt.getTime() > Date.now()) {
+    const kinshasaDateKey = (date: Date) => new Intl.DateTimeFormat("en-CA", {
+      timeZone: "Africa/Kinshasa",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    }).format(date);
+    if (kinshasaDateKey(nextPaidAt) > kinshasaDateKey(new Date())) {
       return NextResponse.json({ error: "La date de paiement ne peut pas être dans le futur." }, { status: 400 });
     }
 

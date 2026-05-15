@@ -230,12 +230,24 @@ export const paymentCreateSchema = z.object({
   reference: z.string().trim().min(3).max(120),
   paidAt: z.coerce.date().optional(),
 }).superRefine((value, ctx) => {
-  if (value.paidAt && value.paidAt.getTime() > Date.now()) {
-    ctx.addIssue({
-      code: z.ZodIssueCode.custom,
-      path: ["paidAt"],
-      message: "La date de paiement ne peut pas être dans le futur.",
-    });
+  if (value.paidAt) {
+    const kinshasaDateKey = (date: Date) => new Intl.DateTimeFormat("en-CA", {
+      timeZone: "Africa/Kinshasa",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    }).format(date);
+
+    const paymentDay = kinshasaDateKey(value.paidAt);
+    const todayDay = kinshasaDateKey(new Date());
+
+    if (paymentDay > todayDay) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["paidAt"],
+        message: "La date de paiement ne peut pas être dans le futur.",
+      });
+    }
   }
 });
 
