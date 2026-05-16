@@ -171,6 +171,7 @@ jobs:
           '
 
       - name: Run database migrations
+        if: ${{ false }}
         env:
           HOSTINGER_PASSWORD: ${{ secrets.HOSTINGER_PASSWORD }}
         run: |
