@@ -72,6 +72,7 @@ jobs:
           # Toujours synchroniser le .env depuis HOSTINGER_ENV si defini
           if [ -n "$HOSTINGER_ENV" ]; then
             printf '%s' "$HOSTINGER_ENV" | sshpass -p "$HOSTINGER_PASSWORD" ssh -o StrictHostKeyChecking=no -p "$HOSTINGER_PORT" "$HOSTINGER_USER@$HOSTINGER_HOST" "cat > '$HOSTINGER_APP_DIR/.env'"
+            printf '%s' "$HOSTINGER_ENV" | sshpass -p "$HOSTINGER_PASSWORD" ssh -o StrictHostKeyChecking=no -p "$HOSTINGER_PORT" "$HOSTINGER_USER@$HOSTINGER_HOST" "cat > '$HOSTINGER_BUNDLE_DIR/.env'"
             echo "[deploy] .env synchronise depuis HOSTINGER_ENV."
           else
             echo "[deploy] INFO: HOSTINGER_ENV absent, .env conserve tel quel sur le serveur."
@@ -94,6 +95,8 @@ jobs:
             APP_DIR="'$HOSTINGER_APP_DIR'"
             BUNDLE_DIR="'$HOSTINGER_BUNDLE_DIR'"
             BUNDLE="$BUNDLE_DIR/thebestsarl-hostinger.tar.gz"
+            NEW_APP_DIR="$BUNDLE_DIR/nodejs-new"
+            PREV_APP_DIR="$BUNDLE_DIR/nodejs-prev"
 
             ensure_restart() {
               mkdir -p "$APP_DIR/tmp"
@@ -136,9 +139,24 @@ jobs:
             fi
 
             mkdir -p "$APP_DIR" "$BUNDLE_DIR"
-            find "$APP_DIR" -mindepth 1 -maxdepth 1 ! -name tmp ! -name .env -exec rm -rf {} +
-            tar -xzf "$BUNDLE" -C "$APP_DIR"
-            cd "$APP_DIR"
+            rm -rf "$NEW_APP_DIR"
+            mkdir -p "$NEW_APP_DIR"
+            tar -xzf "$BUNDLE" -C "$NEW_APP_DIR"
+
+            if [ -f "$APP_DIR/.env" ]; then
+              cp "$APP_DIR/.env" "$NEW_APP_DIR/.env"
+              echo "[deploy] .env repris depuis app courante"
+            elif [ -f "$BUNDLE_DIR/.env" ]; then
+              cp "$BUNDLE_DIR/.env" "$NEW_APP_DIR/.env"
+              echo "[deploy] .env repris depuis cache deploy"
+            elif [ -n "$DATABASE_URL" ]; then
+              echo "[deploy] DATABASE_URL deja disponible via environnement Hostinger"
+            else
+              echo "[deploy] ERREUR: DATABASE_URL introuvable (.env absent et non defini par hPanel)"
+              exit 1
+            fi
+
+            cd "$NEW_APP_DIR"
 
             # Copier les assets statiques dans le dossier standalone (Next.js standalone les attend la)
             mkdir -p "$APP_DIR/.next/standalone/.next"
@@ -146,14 +164,9 @@ jobs:
             echo "[deploy] Assets statiques copies dans standalone"
 
             # Charger DATABASE_URL/DIRECT_URL avant toute commande Prisma
-            if [ -f "$APP_DIR/.env" ]; then
-              set -a && source "$APP_DIR/.env" && set +a
-              echo "[deploy] Variables chargees depuis $APP_DIR/.env"
-            elif [ -n "$DATABASE_URL" ]; then
-              echo "[deploy] DATABASE_URL deja disponible via environnement Hostinger"
-            else
-              echo "[deploy] ERREUR: DATABASE_URL introuvable (.env absent et non defini par hPanel)"
-              exit 1
+            if [ -f "$NEW_APP_DIR/.env" ]; then
+              set -a && source "$NEW_APP_DIR/.env" && set +a
+              echo "[deploy] Variables chargees depuis $NEW_APP_DIR/.env"
             fi
 
             if [ -z "$DIRECT_URL" ] && [ -n "$DATABASE_URL" ]; then
@@ -166,6 +179,12 @@ jobs:
               echo "[deploy] ERREUR: DIRECT_URL introuvable pour Prisma"
               exit 1
             fi
+
+            rm -rf "$PREV_APP_DIR"
+            if [ -d "$APP_DIR" ]; then
+              mv "$APP_DIR" "$PREV_APP_DIR"
+            fi
+            mv "$NEW_APP_DIR" "$APP_DIR"
 
             ensure_restart
           '
