@@ -4,6 +4,7 @@ import { sendMailBatch } from "@/lib/mail";
 import { prisma } from "@/lib/prisma";
 
 const PASSWORD_SETUP_PURPOSE = "PASSWORD_SETUP";
+const PASSWORD_RESET_PURPOSE = "PASSWORD_RESET";
 const PASSWORD_SETUP_CODE_TTL_MINUTES = 15;
 const PASSWORD_SETUP_REQUEST_COOLDOWN_SECONDS = 60;
 const PASSWORD_SETUP_MAX_REQUESTS_PER_WINDOW = 3;
@@ -35,6 +36,10 @@ export function passwordSetupExpiryDate() {
 
 export function passwordSetupPurpose() {
   return PASSWORD_SETUP_PURPOSE;
+}
+
+export function passwordResetPurpose() {
+  return PASSWORD_RESET_PURPOSE;
 }
 
 export function passwordSetupRequestCooldownSeconds() {
@@ -105,6 +110,37 @@ export async function sendPasswordSetupCodeEmail(params: {
       <p style="font-size:28px;font-weight:700;letter-spacing:0.28em;margin:16px 0;">${params.code}</p>
       <p>Ce code est à usage unique et expire dans <strong>${expiresIn}</strong>.</p>
       <p>Si vous n'êtes pas à l'origine de cette demande, ignorez simplement cet email.</p>
+    `,
+  });
+}
+
+export async function sendPasswordResetCodeEmail(params: {
+  email: string;
+  name?: string | null;
+  code: string;
+}) {
+  const recipientName = params.name?.trim() || "Utilisateur";
+  const expiresIn = `${PASSWORD_SETUP_CODE_TTL_MINUTES} minutes`;
+
+  return sendMailBatch({
+    recipients: [{ email: params.email, name: recipientName }],
+    subject: "Code de confirmation - mot de passe oublie",
+    text: [
+      `Bonjour ${recipientName},`,
+      "",
+      `Vous avez demande une reinitialisation de mot de passe.`,
+      `Votre code de confirmation THEBEST SARL est : ${params.code}`,
+      "",
+      `Ce code est a usage unique et expire dans ${expiresIn}.`,
+      "Si vous n'etes pas a l'origine de cette demande, ignorez cet email.",
+    ].join("\n"),
+    html: `
+      <p>Bonjour ${recipientName},</p>
+      <p>Vous avez demande une reinitialisation de mot de passe.</p>
+      <p>Votre code de confirmation THEBEST SARL est :</p>
+      <p style="font-size:28px;font-weight:700;letter-spacing:0.28em;margin:16px 0;">${params.code}</p>
+      <p>Ce code est a usage unique et expire dans <strong>${expiresIn}</strong>.</p>
+      <p>Si vous n'etes pas a l'origine de cette demande, ignorez cet email.</p>
     `,
   });
 }

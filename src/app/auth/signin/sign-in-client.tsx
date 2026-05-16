@@ -12,7 +12,7 @@ type SignInClientPageProps = {
   launchAtIso: string;
 };
 
-type FormMode = "google" | "login" | "setup";
+type FormMode = "google" | "login" | "setup" | "forgot";
 
 function validateSetupPassword(password: string, confirmation: string) {
   const normalizedPassword = password.trim();
@@ -118,6 +118,11 @@ export default function SignInClientPage({ initialMode, passwordAuthActive, laun
   const [setupCode, setSetupCode] = useState("");
   const [setupPassword, setSetupPassword] = useState("");
   const [setupPasswordConfirmation, setSetupPasswordConfirmation] = useState("");
+  const [resetEmail, setResetEmail] = useState("");
+  const [resetCode, setResetCode] = useState("");
+  const [resetPassword, setResetPassword] = useState("");
+  const [resetPasswordConfirmation, setResetPasswordConfirmation] = useState("");
+  const [resetRequested, setResetRequested] = useState(false);
   const [loading, setLoading] = useState(false);
   const [setupRequested, setSetupRequested] = useState(false);
   const [emailLockedByGoogle, setEmailLockedByGoogle] = useState(false);
@@ -158,6 +163,16 @@ export default function SignInClientPage({ initialMode, passwordAuthActive, laun
       setPassword("");
       setEmailLockedByGoogle(false);
     }
+
+    if (initialMode !== "forgot") {
+      setResetRequested(false);
+      setResetCode("");
+      setResetPassword("");
+      setResetPasswordConfirmation("");
+      if (initialMode === "google") {
+        setResetEmail("");
+      }
+    }
   }, [initialMode]);
 
   useEffect(() => {
@@ -168,6 +183,8 @@ export default function SignInClientPage({ initialMode, passwordAuthActive, laun
       ? "setup"
       : params.get("mode") === "login"
         ? "login"
+        : params.get("mode") === "forgot"
+          ? "forgot"
         : "google";
     const googleDone = params.get("google") === "done";
     const authError = params.get("error")?.trim() ?? "";
@@ -245,6 +262,28 @@ export default function SignInClientPage({ initialMode, passwordAuthActive, laun
 
   function openSetupMode(options?: { keepFeedback?: boolean }) {
     setMode("setup");
+    if (!options?.keepFeedback) {
+      setError("");
+      setMessage("");
+    }
+  }
+
+  function resetForgotProgress(options?: { keepFeedback?: boolean }) {
+    setResetRequested(false);
+    setResetCode("");
+    setResetPassword("");
+    setResetPasswordConfirmation("");
+    if (!options?.keepFeedback) {
+      setError("");
+      setMessage("");
+    }
+  }
+
+  function openForgotMode(options?: { keepFeedback?: boolean }) {
+    setMode("forgot");
+    setResetEmail(normalizeEmailValue(email || setupEmail || resetEmail));
+    resetLoginChallenge({ keepFeedback: true });
+    resetSetupProgress({ keepFeedback: true });
     if (!options?.keepFeedback) {
       setError("");
       setMessage("");
@@ -511,6 +550,93 @@ export default function SignInClientPage({ initialMode, passwordAuthActive, laun
     setLoading(false);
   }
 
+  async function requestPasswordResetCode(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    if (!passwordAuthActive) {
+      setError(`La reinitialisation de mot de passe sera ouverte le ${launchAtLabel}.`);
+      setMessage("");
+      return;
+    }
+
+    const passwordValidationError = validateSetupPassword(resetPassword, resetPasswordConfirmation);
+    if (passwordValidationError) {
+      setError(passwordValidationError);
+      setMessage("");
+      return;
+    }
+
+    setLoading(true);
+    setError("");
+    setMessage("");
+
+    try {
+      const response = await fetch("/api/auth/password-reset/request", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: resetEmail }),
+      });
+      const payload = await response.json().catch(() => null);
+
+      if (!response.ok) {
+        setError(extractApiError(payload, "Impossible d'envoyer le code de reinitialisation."));
+        setLoading(false);
+        return;
+      }
+
+      setResetRequested(true);
+      setMessage(payload?.message ?? "Si ce compte existe, un code de reinitialisation a ete envoye.");
+    } catch {
+      setError("Erreur reseau lors de l'envoi du code de reinitialisation.");
+    }
+
+    setLoading(false);
+  }
+
+  async function confirmPasswordReset(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    if (!passwordAuthActive) {
+      setError(`La reinitialisation de mot de passe sera ouverte le ${launchAtLabel}.`);
+      setMessage("");
+      return;
+    }
+
+    setLoading(true);
+    setError("");
+    setMessage("");
+
+    try {
+      const response = await fetch("/api/auth/password-reset/confirm", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email: resetEmail,
+          code: resetCode,
+          password: resetPassword,
+          passwordConfirmation: resetPasswordConfirmation,
+        }),
+      });
+      const payload = await response.json().catch(() => null);
+
+      if (!response.ok) {
+        setError(extractApiError(payload, "Impossible de reinitialiser le mot de passe."));
+        setLoading(false);
+        return;
+      }
+
+      setMessage(payload?.message ?? "Mot de passe reinitialise.");
+      setEmail(resetEmail);
+      setPassword(resetPassword);
+      openLoginMode({ keepFeedback: true });
+      setEmailLockedByGoogle(false);
+    } catch {
+      setError("Erreur reseau lors de la reinitialisation du mot de passe.");
+    }
+
+    setLoading(false);
+  }
+
   return (
     <main className="min-h-dvh overflow-x-hidden overflow-y-auto bg-background text-foreground dark:bg-[#0d111a] dark:text-white">
       <section className="relative min-h-dvh overflow-x-hidden bg-background dark:bg-[#0d111a]">
@@ -577,6 +703,8 @@ export default function SignInClientPage({ initialMode, passwordAuthActive, laun
                     ? "Connectez-vous avec Google"
                     : mode === "login"
                     ? "Connexion"
+                    : mode === "forgot"
+                    ? (resetRequested ? "Validation OTP" : "Mot de passe oublie")
                     : setupRequested
                       ? "Validation OTP"
                       : "Configuration du mot de passe"}
@@ -586,6 +714,8 @@ export default function SignInClientPage({ initialMode, passwordAuthActive, laun
                     ? "Commencez toujours par Google. Le systeme recupere ensuite votre email et vous envoie vers la bonne etape."
                     : mode === "login"
                     ? "Email et mot de passe pour les comptes deja actifs."
+                    : mode === "forgot"
+                    ? (resetRequested ? "Entrez le code OTP recu par email pour finaliser la reinitialisation." : "Saisissez votre email pour recevoir un code de reinitialisation.")
                     : setupRequested
                       ? "Entrez le code OTP recu par email."
                       : "Premier acces: Google puis creation du mot de passe."}
@@ -621,6 +751,14 @@ export default function SignInClientPage({ initialMode, passwordAuthActive, laun
                       className="flex w-full items-center justify-center rounded-lg bg-black px-4 py-3.5 text-sm font-semibold text-white transition hover:bg-black/85 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-white dark:text-black dark:hover:bg-white/85"
                     >
                       {loading ? "Ouverture de Google..." : "Continuer avec Google"}
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => openForgotMode()}
+                      className="w-full text-center text-sm font-semibold text-black/65 transition hover:text-black dark:text-white/70 dark:hover:text-white"
+                    >
+                      Mot de passe oublie ?
                     </button>
                   </div>
                 ) : null}
@@ -687,6 +825,14 @@ export default function SignInClientPage({ initialMode, passwordAuthActive, laun
                         </form>
 
                         <div className="border-t border-black/10 pt-4 text-sm text-black/62 dark:border-white/10 dark:text-white/62">
+                          <button
+                            type="button"
+                            onClick={() => openForgotMode()}
+                            className="mb-3 block font-semibold text-black transition hover:text-black/70 dark:text-white dark:hover:text-white/75"
+                          >
+                            Mot de passe oublie ?
+                          </button>
+
                           <Link
                             href="/auth/signin"
                             onClick={() => {
@@ -708,6 +854,112 @@ export default function SignInClientPage({ initialMode, passwordAuthActive, laun
                       >
                         Continuer avec Google
                       </Link>
+                    )}
+                  </>
+                ) : null}
+
+                {mode === "forgot" ? (
+                  <>
+                    {!resetRequested ? (
+                      <form onSubmit={requestPasswordResetCode} className="space-y-4">
+                        <div>
+                          <label className="mb-1.5 block text-sm font-medium text-black/88 dark:text-white/88">Email professionnel</label>
+                          <input
+                            type="email"
+                            value={resetEmail}
+                            onChange={(event) => setResetEmail(event.target.value)}
+                            autoComplete="off"
+                            className="w-full rounded-lg border border-black/12 bg-white px-4 py-3 text-base text-black outline-none transition placeholder:text-black/35 focus:border-black/30 dark:border-white/15 dark:bg-white/8 dark:text-white dark:placeholder:text-white/35 dark:focus:border-white/30 dark:focus:bg-white/10"
+                            placeholder="vous@thebest.com"
+                            required
+                          />
+                        </div>
+
+                        <div>
+                          <label className="mb-1.5 block text-sm font-medium text-black/88 dark:text-white/88">Nouveau mot de passe</label>
+                          <input
+                            type="password"
+                            value={resetPassword}
+                            onChange={(event) => setResetPassword(event.target.value)}
+                            autoComplete="new-password"
+                            className="w-full rounded-lg border border-black/12 bg-white px-4 py-3 text-base text-black outline-none transition placeholder:text-black/35 focus:border-black/30 dark:border-white/15 dark:bg-white/8 dark:text-white dark:placeholder:text-white/35 dark:focus:border-white/30 dark:focus:bg-white/10"
+                            placeholder="Minimum 8 caracteres avec lettres et chiffres"
+                            required
+                          />
+                        </div>
+
+                        <div>
+                          <label className="mb-1.5 block text-sm font-medium text-black/88 dark:text-white/88">Confirmer le mot de passe</label>
+                          <input
+                            type="password"
+                            value={resetPasswordConfirmation}
+                            onChange={(event) => setResetPasswordConfirmation(event.target.value)}
+                            autoComplete="new-password"
+                            className="w-full rounded-lg border border-black/12 bg-white px-4 py-3 text-base text-black outline-none transition placeholder:text-black/35 focus:border-black/30 dark:border-white/15 dark:bg-white/8 dark:text-white dark:placeholder:text-white/35 dark:focus:border-white/30 dark:focus:bg-white/10"
+                            placeholder="Retapez le mot de passe"
+                            required
+                          />
+                        </div>
+
+                        <button
+                          type="submit"
+                          disabled={loading || !passwordAuthActive}
+                          className="flex w-full items-center justify-center rounded-lg bg-black px-4 py-3.5 text-sm font-semibold text-white transition hover:bg-black/85 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-white dark:text-black dark:hover:bg-white/85"
+                        >
+                          {loading ? "Envoi..." : "Recevoir le code de reinitialisation"}
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => {
+                            resetForgotProgress();
+                            openLoginMode({ keepFeedback: true });
+                          }}
+                          className="w-full text-center text-sm font-semibold text-black/65 transition hover:text-black dark:text-white/70 dark:hover:text-white"
+                        >
+                          Retour a la connexion
+                        </button>
+                      </form>
+                    ) : (
+                      <form onSubmit={confirmPasswordReset} className="space-y-4 rounded-2xl border border-black/10 bg-white/72 p-4 dark:border-white/10 dark:bg-white/6">
+                        <div className="flex items-center justify-between gap-3">
+                          <p className="text-sm font-semibold text-black dark:text-white">Code de reinitialisation</p>
+                          <button
+                            type="button"
+                            onClick={() => resetForgotProgress()}
+                            className="text-xs font-semibold text-black/55 hover:text-black dark:text-white/55 dark:hover:text-white"
+                          >
+                            Recommencer
+                          </button>
+                        </div>
+
+                        <div>
+                          <label className="mb-1.5 block text-sm font-medium text-black/88 dark:text-white/88">Code recu par email</label>
+                          <input
+                            type="text"
+                            inputMode="numeric"
+                            maxLength={6}
+                            value={resetCode}
+                            onChange={(event) => setResetCode(event.target.value.replace(/\D/g, "").slice(0, 6))}
+                            className="w-full rounded-lg border border-black/12 bg-white px-4 py-3 text-center text-lg tracking-[0.35em] text-black outline-none transition placeholder:text-black/35 focus:border-black/30 dark:border-white/15 dark:bg-[#161b26] dark:text-white dark:placeholder:text-white/35 dark:focus:border-white/30"
+                            placeholder="000000"
+                            required
+                          />
+                        </div>
+
+                        <div className="rounded-lg border border-black/10 bg-white px-4 py-3 text-sm text-black/70 dark:border-white/10 dark:bg-[#161b26] dark:text-white/70">
+                          <p className="font-medium text-black dark:text-white">Email</p>
+                          <p className="mt-1 break-all">{resetEmail}</p>
+                        </div>
+
+                        <button
+                          type="submit"
+                          disabled={loading || !passwordAuthActive}
+                          className="flex w-full items-center justify-center rounded-lg bg-black px-4 py-3.5 text-sm font-semibold text-white transition hover:bg-black/85 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-white dark:text-black dark:hover:bg-white/85"
+                        >
+                          {loading ? "Validation..." : "Reinitialiser le mot de passe"}
+                        </button>
+                      </form>
                     )}
                   </>
                 ) : null}

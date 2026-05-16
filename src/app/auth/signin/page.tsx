@@ -13,6 +13,8 @@ export default async function SignInPage({ searchParams }: SignInPageProps) {
     ? "setup"
     : resolvedSearchParams?.mode === "login"
       ? "login"
+      : resolvedSearchParams?.mode === "forgot"
+        ? "forgot"
       : "google";
 
   return (
