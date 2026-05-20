@@ -225,7 +225,7 @@ function buildBalanceRows(entries: any[], selectedAccountCode: string, includeSu
   return [...rows.values()].sort((left, right) => left.accountCode.localeCompare(right.accountCode));
 }
 
-function buildLedgerPayload(entries: any[], label: string, selectedAccountCode: string, includeSubaccounts: boolean) {
+function buildLedgerPayload(entries: any[], priorEntries: any[], periodStart: Date, label: string, selectedAccountCode: string, includeSubaccounts: boolean) {
   type LedgerRow = {
     entryId: string;
     sequence: number;
@@ -298,6 +298,65 @@ function buildLedgerPayload(entries: any[], label: string, selectedAccountCode: 
       existing.totals.creditCdf += creditCdf;
       groups.set(key, existing);
     }
+  }
+
+  // --- Soldes à nouveau : solde final du mois précédent = solde initial du mois courant ---
+  const openingUsd = new Map<string, number>();
+  const openingCdf = new Map<string, number>();
+  const openingMeta = new Map<string, { accountCode: string; accountLabel: string }>();
+
+  for (const entry of priorEntries) {
+    for (const line of entry.lines) {
+      if (!matchesAccount(line.accountCode, selectedAccountCode, includeSubaccounts)) continue;
+      const sign = line.side === "DEBIT" ? 1 : -1;
+      openingUsd.set(line.accountCode, (openingUsd.get(line.accountCode) ?? 0) + sign * numberValue(line.amountUsd));
+      openingCdf.set(line.accountCode, (openingCdf.get(line.accountCode) ?? 0) + sign * numberValue(line.amountCdf));
+      if (!openingMeta.has(line.accountCode)) {
+        openingMeta.set(line.accountCode, { accountCode: line.accountCode, accountLabel: line.accountLabel });
+      }
+    }
+  }
+
+  for (const [code, meta] of openingMeta) {
+    const balUsd = openingUsd.get(code) ?? 0;
+    const balCdf = openingCdf.get(code) ?? 0;
+    if (balUsd === 0 && balCdf === 0) continue;
+
+    let group = groups.get(code);
+    if (!group) {
+      group = {
+        accountCode: meta.accountCode,
+        accountLabel: meta.accountLabel,
+        rows: [],
+        totals: { debitUsd: 0, creditUsd: 0, debitCdf: 0, creditCdf: 0 },
+      };
+      groups.set(code, group);
+    }
+
+    const obDebitUsd = balUsd > 0 ? balUsd : 0;
+    const obCreditUsd = balUsd < 0 ? Math.abs(balUsd) : 0;
+    const obDebitCdf = balCdf > 0 ? balCdf : 0;
+    const obCreditCdf = balCdf < 0 ? Math.abs(balCdf) : 0;
+
+    group.rows.unshift({
+      entryId: "",
+      sequence: 0,
+      entryDate: periodStart.toISOString(),
+      libelle: "Solde à nouveau",
+      pieceJustificative: null,
+      pole: null,
+      exchangeRate: null,
+      side: balUsd >= 0 ? "DEBIT" : "CREDIT",
+      debitUsd: obDebitUsd,
+      creditUsd: obCreditUsd,
+      debitCdf: obDebitCdf,
+      creditCdf: obCreditCdf,
+      counterparts: "",
+    });
+    group.totals.debitUsd += obDebitUsd;
+    group.totals.creditUsd += obCreditUsd;
+    group.totals.debitCdf += obDebitCdf;
+    group.totals.creditCdf += obCreditCdf;
   }
 
   const ledgerGroups = [...groups.values()].sort((left, right) => left.accountCode.localeCompare(right.accountCode));
@@ -1118,7 +1177,7 @@ async function buildPdf(report: ReportPayload, appBaseUrl: string | null) {
       group.rows.forEach((row, index) => {
         const pdfRow: LedgerPdfRow = {
           entryId: String(row.entryId),
-          sequence: String(row.sequence),
+          sequence: row.sequence === 0 ? "A.N." : String(row.sequence),
           entryDate: new Date(row.entryDate).toLocaleDateString("fr-FR"),
           pole: row.pole ?? "-",
           pieceJustificative: row.pieceJustificative ?? "-",
@@ -1443,7 +1502,7 @@ export async function GET(request: NextRequest) {
   const includeSubaccounts = searchParams.get("includeSubaccounts") === "1";
   const range = parseDateRange(searchParams);
 
-  const [chronologyRows, entriesRaw] = await Promise.all([
+  const [chronologyRows, entriesRaw, priorEntriesRaw] = await Promise.all([
     accountingEntryClient.findMany({
       select: {
         id: true,
@@ -1467,6 +1526,12 @@ export async function GET(request: NextRequest) {
         },
       },
     }),
+    reportType === "ledger"
+      ? accountingEntryClient.findMany({
+          where: { entryDate: { lt: range.start } },
+          include: { lines: { orderBy: [{ side: "asc" }, { orderIndex: "asc" }] } },
+        })
+      : Promise.resolve([]),
   ]);
 
   const entries = applyAccountingChronologySequence(
@@ -1477,7 +1542,7 @@ export async function GET(request: NextRequest) {
   const payload = reportType === "journal"
     ? buildJournalPayload(entries, range.label)
     : reportType === "ledger"
-      ? buildLedgerPayload(entries, range.label, selectedAccountCode, includeSubaccounts)
+      ? buildLedgerPayload(entries, priorEntriesRaw, range.start, range.label, selectedAccountCode, includeSubaccounts)
       : reportType === "trial-balance"
         ? buildTrialBalancePayload(entries, range.label, selectedAccountCode, includeSubaccounts)
         : buildGeneralBalancePayload(entries, range.label, selectedAccountCode, includeSubaccounts);

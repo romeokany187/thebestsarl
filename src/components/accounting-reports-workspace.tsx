@@ -406,12 +406,13 @@ export function AccountingReportsWorkspace({ accounts }: { accounts: AccountOpti
                               : "";
                           const debitCdfValue = row.debitCdf > 0 ? money(row.debitCdf) : "";
                           const creditCdfValue = row.creditCdf > 0 ? money(row.creditCdf) : "";
+                          const isOpeningBalance = row.sequence === 0;
                           return (
-                          <tr key={`${row.entryId}-${row.sequence}-${row.side}-${row.counterparts}`} className="border-t border-black/5 dark:border-white/10">
-                            <td className="px-2 py-1.5 text-center font-mono">{row.sequence}</td>
+                          <tr key={`${row.entryId}-${row.sequence}-${row.side}-${row.counterparts}`} className={`border-t border-black/5 dark:border-white/10 ${isOpeningBalance ? "bg-blue-50/70 dark:bg-blue-950/30 font-medium" : ""}`}>
+                            <td className="px-2 py-1.5 text-center font-mono">{isOpeningBalance ? "A.N." : row.sequence}</td>
                             <td className="px-2 py-1.5 text-center whitespace-nowrap">{new Date(row.entryDate).toLocaleDateString("fr-FR")}</td>
                             <td className="px-2 py-1.5">{row.libelle}</td>
-                            <td className="px-2 py-1.5 text-black/60 dark:text-white/60">{row.counterparts || "-"}</td>
+                            <td className="px-2 py-1.5 text-black/60 dark:text-white/60">{row.counterparts || (isOpeningBalance ? "Solde reporté" : "-")}</td>
                             <td className="px-2 py-1.5 text-right">{debitUsdValue}</td>
                             <td className="px-2 py-1.5 text-right">{creditUsdValue}</td>
                             <td className="px-2 py-1.5 text-right">{debitCdfValue}</td>
