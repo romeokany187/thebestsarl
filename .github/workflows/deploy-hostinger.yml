@@ -158,10 +158,12 @@ jobs:
 
             cd "$NEW_APP_DIR"
 
-            # Copier les assets statiques dans le dossier standalone (Next.js standalone les attend la)
-            mkdir -p "$APP_DIR/.next/standalone/.next"
-            cp -r "$APP_DIR/.next/static" "$APP_DIR/.next/standalone/.next/static" 2>/dev/null || true
-            echo "[deploy] Assets statiques copies dans standalone"
+            # Copier les assets statiques dans le dossier standalone du NOUVEAU bundle
+            # (Next.js standalone ne les inclut pas automatiquement)
+            mkdir -p "$NEW_APP_DIR/.next/standalone/.next"
+            cp -r "$NEW_APP_DIR/.next/static" "$NEW_APP_DIR/.next/standalone/.next/static" 2>/dev/null || true
+            cp -r "$NEW_APP_DIR/public" "$NEW_APP_DIR/.next/standalone/public" 2>/dev/null || true
+            echo "[deploy] Assets statiques et public copies dans le standalone du nouveau bundle"
 
             # Charger DATABASE_URL/DIRECT_URL avant toute commande Prisma
             if [ -f "$NEW_APP_DIR/.env" ]; then
