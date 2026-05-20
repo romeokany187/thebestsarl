@@ -1,7 +1,6 @@
 generator client {
-  provider      = "prisma-client-js"
-  engineType    = "library"
-  binaryTargets = ["native", "debian-openssl-1.1.x"]
+  provider   = "prisma-client-js"
+  engineType = "library"
 }
 
 datasource db {
@@ -173,6 +172,21 @@ model Team {
   updatedAt DateTime @updatedAt
 }
 
+model UnpaidMonthlyDigestDispatch {
+  id             String   @id @default(cuid())
+  monthKey       String
+  teamKey        String
+  teamName       String
+  recipientEmail String
+  ticketCount    Int
+  unpaidCount    Int
+  partialCount   Int
+  sentAt         DateTime @default(now())
+
+  @@unique([monthKey, teamKey, recipientEmail])
+  @@index([sentAt])
+}
+
 model User {
   id                      String                  @id @default(cuid())
   name                    String
@@ -198,35 +212,16 @@ model User {
   cashOperations          CashOperation[]         @relation("CashOperationCreator")
   cashOperationApprovalRequests CashOperationApprovalRequest[] @relation("CashOperationApprovalRequester")
   cashOperationApprovalReviews  CashOperationApprovalRequest[] @relation("CashOperationApprovalReviewer")
+  cashBilletageSnapshots  CashBilletageSnapshot[]
   airlineDepositMovements AirlineDepositMovement[] @relation("AirlineDepositMovementCreator")
   stockMovements          StockMovement[]         @relation("StockMovementActor")
   archiveUploads          ArchiveDocument[]       @relation("ArchiveUploader")
   accountingEntries       AccountingEntry[]       @relation("AccountingEntryCreator")
-  cashBilletageSnapshots  CashBilletageSnapshot[] @relation("CashBilletageSnapshots")
   passwordSetupCodes      PasswordSetupCode[]
   authSessionState        AuthSessionState?
   authDeviceChallenges    AuthDeviceChallenge[]
-  moduleAccesses          UserModuleAccess[]
-  moduleAccessesGranted   UserModuleAccess[]      @relation("UserModuleAccessGrantor")
   createdAt               DateTime                @default(now())
   updatedAt               DateTime                @updatedAt
-}
-
-model UserModuleAccess {
-  id          String   @id @default(cuid())
-  userId      String
-  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  module      String
-  accessLevel String   @default("READ")
-  createdById String?
-  createdBy   User?    @relation("UserModuleAccessGrantor", fields: [createdById], references: [id], onDelete: SetNull)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-
-  @@unique([userId, module])
-  @@index([userId])
-  @@index([module])
-  @@index([createdById])
 }
 
 model AuthSessionState {
@@ -455,6 +450,24 @@ model Payment {
   @@index([currency])
 }
 
+model CashBilletageSnapshot {
+  id         String   @id @default(cuid())
+  date       String
+  cashDesk   String
+  usdCounts  Json
+  cdfCounts  Json
+  expectedUsd Float    @default(0)
+  expectedCdf Float    @default(0)
+  savedById  String
+  savedBy    User     @relation(fields: [savedById], references: [id])
+  savedAt    DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@unique([date, cashDesk])
+  @@index([cashDesk, date])
+  @@index([savedById])
+}
+
 model CashOperation {
   id               String                @id @default(cuid())
   occurredAt       DateTime              @default(now())
@@ -555,7 +568,7 @@ model NeedRequest {
   code            String?           @unique
   title           String
   category        String
-  details         String            @db.LongText
+  details         String
   quantity        Float
   unit            String
   estimatedAmount Float?
@@ -688,37 +701,4 @@ model AccountingEntryLine {
 
   @@index([entryId, side])
   @@index([accountCode])
-}
-
-model CashBilletageSnapshot {
-  id          String   @id @default(cuid())
-  date        String   // YYYY-MM-DD
-  cashDesk    String
-  usdCounts   Json
-  cdfCounts   Json
-  expectedUsd Float    @default(0)
-  expectedCdf Float    @default(0)
-  savedById   String
-  savedBy     User     @relation("CashBilletageSnapshots", fields: [savedById], references: [id])
-  savedAt     DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-
-  @@unique([date, cashDesk])
-  @@index([cashDesk, date])
-}
-
-model UnpaidMonthlyDigestDispatch {
-  id             String   @id @default(cuid())
-  monthKey       String
-  teamKey        String
-  teamName       String
-  recipientEmail String
-  ticketCount    Int
-  unpaidCount    Int
-  partialCount   Int
-  sentAt         DateTime @default(now())
-
-  @@unique([monthKey, teamKey, recipientEmail])
-  @@index([monthKey, teamKey])
-  @@index([recipientEmail, sentAt])
 }

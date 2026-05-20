@@ -71,6 +71,25 @@ async function fetchUnpaidTickets() {
   });
 }
 
+async function ensureDigestDispatchTable() {
+  await prisma.$executeRawUnsafe(`
+    CREATE TABLE IF NOT EXISTS \`UnpaidMonthlyDigestDispatch\` (
+      \`id\` VARCHAR(191) NOT NULL,
+      \`monthKey\` VARCHAR(191) NOT NULL,
+      \`teamKey\` VARCHAR(191) NOT NULL,
+      \`teamName\` VARCHAR(191) NOT NULL,
+      \`recipientEmail\` VARCHAR(191) NOT NULL,
+      \`ticketCount\` INT NOT NULL,
+      \`unpaidCount\` INT NOT NULL,
+      \`partialCount\` INT NOT NULL,
+      \`sentAt\` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      PRIMARY KEY (\`id\`),
+      UNIQUE INDEX \`UnpaidMonthlyDigestDispatch_monthKey_teamKey_recipientEmail_key\` (\`monthKey\`, \`teamKey\`, \`recipientEmail\`),
+      INDEX \`UnpaidMonthlyDigestDispatch_sentAt_idx\` (\`sentAt\`)
+    ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+  `);
+}
+
 function remainingAmountUsd(ticket: TicketRow) {
   const paidUsd = ticket.payments.reduce((sum, payment) => {
     if (payment.currency !== "USD") return sum;
@@ -197,6 +216,8 @@ async function sendDigest() {
   if (!SYSTEM_EMAIL) {
     throw new Error("REPORTS_TO_EMAIL ou MAIL_FROM_EMAIL doit être défini.");
   }
+
+  await ensureDigestDispatchTable();
 
   const tickets = await fetchUnpaidTickets();
   if (tickets.length === 0) {

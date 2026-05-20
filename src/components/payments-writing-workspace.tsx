@@ -11,8 +11,6 @@ import {
   type CashDeskValue,
 } from "@/lib/payments-desk";
 
-type ModuleAccessLevelLike = "READ" | "WRITE" | "FULL" | null | undefined;
-
 type WritingMode = "none" | "tickets" | "cash" | "virtual" | "billetage" | "payment-orders" | "needs" | "float" | "reports";
 type DeskWorkspaceOverride = Partial<Record<Exclude<WritingMode, "none"> | "summary", React.ReactNode>>;
 
@@ -47,7 +45,6 @@ export function PaymentsWritingWorkspace({
   workspaceOverrides,
   jobTitle,
   role,
-  customModuleAccessLevel,
   initialDesk,
   initialScope,
   initialMode,
@@ -66,23 +63,14 @@ export function PaymentsWritingWorkspace({
   workspaceOverrides?: Partial<Record<CashDeskValue, DeskWorkspaceOverride>>;
   jobTitle?: string | null;
   role?: AppRoleLike | string | null;
-  customModuleAccessLevel?: ModuleAccessLevelLike;
   initialDesk?: CashDeskValue;
   initialScope?: AdminCashRoleScope;
   initialMode?: WritingMode;
 }) {
   const [mode, setMode] = useState<WritingMode>(initialMode ?? "none");
-  const scopeOptions = useMemo(
-    () => getVisibleCashRoleOptions(jobTitle, role, customModuleAccessLevel),
-    [jobTitle, role, customModuleAccessLevel],
-  );
-  const [adminScope, setAdminScope] = useState<AdminCashRoleScope>(
-    () => initialScope ?? getDefaultCashRoleScope(jobTitle, role, customModuleAccessLevel),
-  );
-  const deskOptions = useMemo(
-    () => getManagedCashDesks(jobTitle, role, adminScope, customModuleAccessLevel),
-    [jobTitle, role, adminScope, customModuleAccessLevel],
-  );
+  const scopeOptions = useMemo(() => getVisibleCashRoleOptions(jobTitle, role), [jobTitle, role]);
+  const [adminScope, setAdminScope] = useState<AdminCashRoleScope>(() => initialScope ?? getDefaultCashRoleScope(jobTitle, role));
+  const deskOptions = useMemo(() => getManagedCashDesks(jobTitle, role, adminScope), [jobTitle, role, adminScope]);
   const [selectedDesk, setSelectedDesk] = useState<CashDeskValue | "">(initialDesk ?? deskOptions[0]?.value ?? "");
 
   const router = useRouter();
@@ -179,7 +167,7 @@ export function PaymentsWritingWorkspace({
   return (
     <>
       <section className="mb-6 grid items-start gap-4 lg:grid-cols-[280px_minmax(0,1fr)] xl:grid-cols-[320px_minmax(0,1fr)]">
-        <aside className="overflow-hidden rounded-2xl border border-black/10 bg-white p-4 shadow-sm lg:sticky lg:top-28 dark:border-white/10 dark:bg-zinc-900">
+        <aside className="rounded-2xl border border-black/10 bg-white p-4 shadow-sm lg:sticky lg:top-24 lg:max-h-[calc(100vh-7rem)] lg:overflow-y-auto dark:border-white/10 dark:bg-zinc-900">
           <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-black/50 dark:text-white/50">Caisses</p>
           <h2 className="mt-1 text-sm font-semibold">Sous-menu Paiements</h2>
 
@@ -218,7 +206,7 @@ export function PaymentsWritingWorkspace({
             </select>
           </div>
 
-          <div className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-1">
+          <div className="mt-4 space-y-2">
             {visibleActionItems.map((item) => (
               <button
                 key={item.key}
@@ -253,7 +241,7 @@ export function PaymentsWritingWorkspace({
           ) : null}
         </aside>
 
-        <div className="min-w-0 overflow-x-hidden">
+        <div className="min-w-0">
           <section className="mb-4 rounded-2xl border border-black/10 bg-white p-4 shadow-sm dark:border-white/10 dark:bg-zinc-900">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>

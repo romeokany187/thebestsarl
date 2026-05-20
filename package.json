@@ -23,8 +23,6 @@
     "deploy:hostinger": "bash scripts/deploy-hostinger.sh",
     "db:seed": "tsx prisma/seed.ts",
     "db:seed:accounts": "node scripts/seed-plan-comptable.js",
-    "db:seed:attendance:random": "tsx scripts/seed-random-attendance.ts",
-    "db:send:unpaid-monthly-digest": "tsx scripts/send-unpaid-monthly-digest.ts",
     "export:plan-comptable": "node scripts/export-plan-comptable.js",
     "db:import:tickets:excel": "tsx scripts/import-tickets-excel.ts",
     "db:reset:airline-deposits": "tsx scripts/reset-airline-deposits.ts",
@@ -32,7 +30,6 @@
     "db:dedup:airlines": "tsx scripts/dedup-airlines.ts",
     "db:normalize:ticket-payers": "tsx scripts/normalize-ticket-payers.ts",
     "db:normalize:cash-desks": "tsx scripts/normalize-cash-desks.ts",
-    "db:normalize:need-details": "tsx scripts/normalize-need-request-details.ts",
     "db:reset:operational": "tsx scripts/reset-operational-data.ts",
     "db:restore:accounts:backup": "tsx scripts/restore-account-plan-from-sql-backup.ts"
   },

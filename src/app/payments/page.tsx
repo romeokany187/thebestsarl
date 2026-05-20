@@ -13,8 +13,7 @@ import { ProxyBankingDeleteButton } from "@/components/proxy-banking-delete-butt
 import { ProxyBankingEditButton } from "@/components/proxy-banking-edit-button";
 import { PaymentsWritingWorkspace } from "@/components/payments-writing-workspace";
 import { ProcurementCashExecutionActions } from "@/components/procurement-cash-execution-actions";
-import { UnpaidAlertsButton } from "@/components/unpaid-alerts-button";
-import { buildInvoiceSequenceByTicketId, invoiceNumberFromChronology } from "@/lib/invoice";
+import { invoiceNumberFromChronology } from "@/lib/invoice";
 import { isCashierJobTitle } from "@/lib/assignment";
 import { requirePageModuleAccess } from "@/lib/rbac";
 import { prisma } from "@/lib/prisma";
@@ -35,7 +34,6 @@ type TicketPaymentRow = {
   method?: string | null;
   reference?: string | null;
   ticket: {
-    id: string;
     ticketNumber: string;
     customerName: string;
     amount: number;
@@ -80,7 +78,6 @@ type CashOperationApprovalRow = {
 type TicketSaleRow = {
   id: string;
   soldAt: Date;
-  createdAt: Date;
   airlineId: string;
   ticketNumber: string;
   customerName: string;
@@ -113,7 +110,6 @@ type SearchParams = {
   startDate?: string;
   endDate?: string;
   airlineId?: string;
-  ticketStatus?: string;
   cashMonth?: string;
   desk?: string;
   mode?: string;
@@ -222,14 +218,13 @@ function normalizePaymentAmountForTicket(payment: {
   return ticketCurrency === "USD" ? normalizeCashAmountUsd(payment) : normalizeCashAmountCdf(payment);
 }
 
-type VirtualChannel = "AIRTEL_MONEY" | "ORANGE_MONEY" | "MPESA" | "EQUITY" | "TMB" | "RAWBANK_ILLICOCASH";
+type VirtualChannel = "AIRTEL_MONEY" | "ORANGE_MONEY" | "MPESA" | "EQUITY" | "RAWBANK_ILLICOCASH";
 
 const virtualChannels: Array<{ key: VirtualChannel; label: string }> = [
   { key: "AIRTEL_MONEY", label: "Airtel Money" },
   { key: "ORANGE_MONEY", label: "Orange Money" },
   { key: "MPESA", label: "M-Pesa" },
   { key: "EQUITY", label: "Equity" },
-  { key: "TMB", label: "TMB" },
   { key: "RAWBANK_ILLICOCASH", label: "Rawbank & Illicocash" },
 ];
 
@@ -240,7 +235,6 @@ function detectVirtualChannel(methodRaw: string | null | undefined): VirtualChan
   if (method.includes("ORANGE")) return "ORANGE_MONEY";
   if (method.includes("M-PESA") || method.includes("MPESA") || method.includes("M PESA")) return "MPESA";
   if (method.includes("EQUITY")) return "EQUITY";
-  if (method.includes("TMB")) return "TMB";
   if (
     method.includes("RAWBANK")
     || method.includes("ROWBANK")
@@ -261,7 +255,6 @@ function proxyChannelLabel(channel: string) {
   if (channel === "ORANGE_MONEY") return "Orange Money";
   if (channel === "MPESA") return "M-Pesa";
   if (channel === "EQUITY") return "Equity";
-  if (channel === "TMB") return "TMB";
   if (channel === "RAWBANK_ILLICOCASH") return "Rawbank & Illicocash";
   return "Cash";
 }
@@ -350,7 +343,6 @@ function buildEmptyOpeningBuckets(): Record<BalanceBucket, BalanceSnapshot> {
     ORANGE_MONEY: { usd: 0, cdf: 0, initializedUsd: false, initializedCdf: false },
     MPESA: { usd: 0, cdf: 0, initializedUsd: false, initializedCdf: false },
     EQUITY: { usd: 0, cdf: 0, initializedUsd: false, initializedCdf: false },
-    TMB: { usd: 0, cdf: 0, initializedUsd: false, initializedCdf: false },
     RAWBANK_ILLICOCASH: { usd: 0, cdf: 0, initializedUsd: false, initializedCdf: false },
   };
 }
@@ -466,7 +458,7 @@ export default async function PaymentsPage({
 }: {
   searchParams?: Promise<SearchParams>;
 }) {
-  const { role, session, customModuleAccess } = await requirePageModuleAccess("payments", ["ADMIN", "DIRECTEUR_GENERAL", "ACCOUNTANT", "EMPLOYEE", "MANAGER"]);
+  const { role, session } = await requirePageModuleAccess("payments", ["ADMIN", "DIRECTEUR_GENERAL", "ACCOUNTANT", "EMPLOYEE", "MANAGER"]);
   const isCashier = isCashierJobTitle(session.user.jobTitle);
   const isComptable = role === "ACCOUNTANT" || session.user.jobTitle === "COMPTABLE";
   const isAdmin = role === "ADMIN";
@@ -477,7 +469,6 @@ export default async function PaymentsPage({
   const deskState = resolvePaymentsDeskState({
     jobTitle: session.user.jobTitle,
     role,
-    customModuleAccessLevel: customModuleAccess,
     requestedDesk: typeof (resolvedSearchParams as { desk?: unknown }).desk === "string"
       ? (resolvedSearchParams as { desk?: string }).desk
       : null,
@@ -496,14 +487,10 @@ export default async function PaymentsPage({
   const selectedAirlineId = resolvedSearchParams.airlineId && resolvedSearchParams.airlineId !== "ALL"
     ? resolvedSearchParams.airlineId
     : undefined;
-  const selectedTicketStatus = ["ALL", "PAID", "UNPAID", "PARTIAL"].includes((resolvedSearchParams.ticketStatus ?? "ALL").toUpperCase())
-    ? (resolvedSearchParams.ticketStatus ?? "ALL").toUpperCase()
-    : "ALL";
   const reportQuery = new URLSearchParams({
     startDate: range.startRaw,
     endDate: range.endRaw,
     desk: selectedDeskKey,
-    ticketStatus: selectedTicketStatus,
     ...(selectedAirlineId ? { airlineId: selectedAirlineId } : {}),
   }).toString();
   const cashJournalReportQuery = new URLSearchParams({
@@ -542,12 +529,15 @@ export default async function PaymentsPage({
       take: 5000,
     }),
     prisma.ticketSale.findMany({
+      where: {
+        soldAt: { gte: yearStart, lt: yearEnd },
+      },
       select: {
         id: true,
-        createdAt: true,
+        soldAt: true,
       },
-      orderBy: [{ createdAt: "asc" }, { id: "asc" }],
-      take: 100000,
+      orderBy: [{ soldAt: "asc" }, { id: "asc" }],
+      take: 10000,
     }),
     // Ticket payments only belong to THE_BEST desk; for other desks we skip ticket payments
     isMainDesk
@@ -559,7 +549,6 @@ export default async function PaymentsPage({
         include: {
           ticket: {
             select: {
-              id: true,
               ticketNumber: true,
               customerName: true,
               amount: true,
@@ -579,7 +568,6 @@ export default async function PaymentsPage({
         include: {
           ticket: {
             select: {
-              id: true,
               ticketNumber: true,
               customerName: true,
               currency: true,
@@ -708,7 +696,7 @@ export default async function PaymentsPage({
   ] = paymentsData as [
     AirlineRow[],
     TicketSaleRow[],
-    Array<{ id: string; createdAt: Date }>,
+    Array<{ id: string; soldAt: Date }>,
     TicketPaymentRow[],
     TicketPaymentRow[],
     CashOperationRow[],
@@ -720,7 +708,17 @@ export default async function PaymentsPage({
     Array<{ id: string; code?: string | null; title: string; estimatedAmount?: number | null; currency?: string | null; approvedAt?: Date | null; reviewComment?: string | null }>,
   ];
 
-  const sequenceByTicketId = buildInvoiceSequenceByTicketId(yearTickets);
+  const sequenceByTicketId = new Map<string, number>();
+  yearTickets
+    .slice()
+    .sort((a, b) => {
+      const diff = new Date(a.soldAt).getTime() - new Date(b.soldAt).getTime();
+      if (diff !== 0) return diff;
+      return String(a.id).localeCompare(String(b.id));
+    })
+    .forEach((ticket, index) => {
+      sequenceByTicketId.set(ticket.id, index + 1);
+    });
 
   const ticketsWithComputedStatus = tickets.map((ticket) => {
     const paidAmount = ticket.payments.reduce(
@@ -746,7 +744,7 @@ export default async function PaymentsPage({
         : PaymentStatus.PARTIAL;
 
     const invoiceNumber = invoiceNumberFromChronology({
-      soldAt: new Date(ticket.createdAt),
+      soldAt: new Date(ticket.soldAt),
       sellerTeamName: ticket.seller?.team?.name ?? null,
       sequence: sequenceByTicketId.get(ticket.id) ?? 1,
     });
@@ -868,11 +866,11 @@ export default async function PaymentsPage({
         cdfOut: 0,
         actionType: "payment" as const,
         paymentId: payment.id,
-        ticketId: payment.ticket?.id ?? "",
         paymentAmount: payment.amount,
         paymentCurrency: currency,
         paymentMethod: payment.method ?? "CASH",
         paymentPaidAt: new Date(payment.paidAt).toISOString(),
+        paymentTicketId: (payment as any).ticketId ?? "",
       };
     }),
     ...cashOperationsWithoutOpeningBalance.map((operation) => {
@@ -1161,7 +1159,7 @@ export default async function PaymentsPage({
           kind: "STANDARD" as const,
           id: operation.id,
           operationType: (parsedDescription?.operationType ?? "DEPOSIT") as "OPENING_BALANCE" | "DEPOSIT" | "WITHDRAWAL",
-          channel: (parsedDescription?.channel ?? "CASH") as "CASH" | "AIRTEL_MONEY" | "ORANGE_MONEY" | "MPESA" | "EQUITY" | "TMB" | "RAWBANK_ILLICOCASH",
+          channel: (parsedDescription?.channel ?? "CASH") as "CASH" | "AIRTEL_MONEY" | "ORANGE_MONEY" | "MPESA" | "EQUITY" | "RAWBANK_ILLICOCASH",
           amount: operation.amount,
           currency: normalizeMoneyCurrency(operation.currency),
           reference: operation.reference ?? "",
@@ -1388,7 +1386,7 @@ export default async function PaymentsPage({
           <ProxyBankingForm />
           <CashOperationForm
             hasInitialOpening={proxyHasInitialOpeningRecorded}
-            allowedMethods={["CASH", "BILLET", "AIRTEL_MONEY", "ORANGE_MONEY", "MPESA", "EQUITY", "TMB", "RAWBANK_ILLICOCASH"]}
+            allowedMethods={["CASH", "AIRTEL_MONEY", "ORANGE_MONEY", "MPESA", "EQUITY", "RAWBANK_ILLICOCASH"]}
             title="Autres opérations cash et virtuel du proxy banking"
             showConversionSection={false}
             descriptionPrefix="PROXY_BANKING:OTHER:"
@@ -1526,7 +1524,6 @@ export default async function PaymentsPage({
       <PaymentsWritingWorkspace
         jobTitle={session.user.jobTitle ?? null}
         role={role}
-        customModuleAccessLevel={customModuleAccess}
         initialDesk={deskState.desk}
         initialScope={deskState.scope}
         initialMode={initialWorkspaceMode}
@@ -1666,7 +1663,7 @@ export default async function PaymentsPage({
         ticketWorkspace={(
           <div className="space-y-4">
             <section className="rounded-2xl border border-black/10 bg-white p-4 dark:border-white/10 dark:bg-zinc-900">
-              <form method="GET" className="grid gap-3 sm:grid-cols-4 sm:items-end">
+              <form method="GET" className="grid gap-3 sm:grid-cols-3 sm:items-end">
                 <input type="hidden" name="desk" value={selectedDeskKey} />
                 <input type="hidden" name="mode" value="tickets" />
                 <input type="hidden" name="cashMonth" value={cashRange.monthRaw} />
@@ -1690,16 +1687,6 @@ export default async function PaymentsPage({
                   </select>
                 </div>
 
-                <div>
-                  <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-black/60 dark:text-white/60">Statut billet</label>
-                  <select name="ticketStatus" defaultValue={selectedTicketStatus} className="w-full rounded-md border border-black/15 bg-white px-3 py-2 text-sm dark:border-white/15 dark:bg-zinc-900">
-                    <option value="ALL">Tous</option>
-                    <option value="PAID">Payés</option>
-                    <option value="UNPAID">Non payés</option>
-                    <option value="PARTIAL">Partiels</option>
-                  </select>
-                </div>
-
                 <button type="submit" className="rounded-md bg-black px-4 py-2 text-sm font-semibold text-white dark:bg-white dark:text-black">Filtrer</button>
               </form>
               <div className="mt-3 flex flex-wrap items-center gap-2 text-xs">
@@ -1717,7 +1704,6 @@ export default async function PaymentsPage({
                 >
                   Télécharger PDF paiements
                 </a>
-                {(isAdmin || role === "DIRECTEUR_GENERAL") && <UnpaidAlertsButton />}
               </div>
               <p className="mt-3 text-xs text-black/60 dark:text-white/60">
                 {range.label}
@@ -1817,7 +1803,7 @@ export default async function PaymentsPage({
                           <td className="px-4 py-3">
                             <PaymentRowAdminActions
                               paymentId={payment.id}
-                              ticketId={payment.ticket?.id ?? ""}
+                              ticketId={(payment as any).ticketId ?? ""}
                               amount={payment.amount}
                               currency={normalizeMoneyCurrency(payment.currency ?? payment.ticket?.currency)}
                               method={payment.method ?? "CASH"}
@@ -1960,7 +1946,7 @@ export default async function PaymentsPage({
                             {row.actionType === "payment" ? (
                               <PaymentRowAdminActions
                                 paymentId={row.paymentId}
-                                ticketId={row.ticketId}
+                                ticketId={row.paymentTicketId}
                                 amount={row.paymentAmount}
                                 currency={row.paymentCurrency}
                                 method={row.paymentMethod}
@@ -2005,7 +1991,7 @@ export default async function PaymentsPage({
             <section className="rounded-2xl border border-black/10 bg-white p-4 dark:border-white/10 dark:bg-zinc-900">
               <h2 className="text-sm font-semibold">Comptes virtuels</h2>
               <p className="mt-2 text-xs text-black/60 dark:text-white/60">
-                Conformément à la feuille VIRTUEL, suivi des canaux Airtel Money, Orange Money, M-Pesa, Equity, TMB et Rawbank & Illicocash avec soldes par devise.
+                Conformément à la feuille VIRTUEL, suivi des canaux Airtel Money, Orange Money, M-Pesa, Equity, et Rawbank & Illicocash avec soldes par devise.
               </p>
             </section>
 
