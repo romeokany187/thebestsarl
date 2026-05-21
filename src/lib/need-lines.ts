@@ -446,7 +446,7 @@ export function parseNeedQuote(details: string | null | undefined): NeedDetailsQ
   return {
     format: "QUOTE_V1",
     items,
-    totalGeneral: round2(Number(payload.totalGeneral ?? items.reduce((sum, item) => sum + item.lineTotal, 0))),
+    totalGeneral: round2(items.reduce((sum, item) => sum + item.lineTotal, 0)),
     urgencyLevel:
       payload.urgencyLevel === "CRITIQUE"
       || payload.urgencyLevel === "ELEVEE"
