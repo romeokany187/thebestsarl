@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { requireApiModuleAccess } from "@/lib/rbac";
 import { stockItemCreateSchema } from "@/lib/validators";
 import { writeActivityLog } from "@/lib/activity-log";
+import { hasRequiredModuleAccessLevel } from "@/lib/user-module-access";
 
 export async function GET() {
   const access = await requireApiModuleAccess("procurement", ["ADMIN", "MANAGER", "EMPLOYEE", "ACCOUNTANT"]);
@@ -45,7 +46,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Utilisateur introuvable." }, { status: 404 });
   }
 
-  if (me.role === "EMPLOYEE" && me.jobTitle !== "APPROVISIONNEMENT") {
+  if (me.role === "EMPLOYEE" && me.jobTitle !== "APPROVISIONNEMENT" && !hasRequiredModuleAccessLevel(access.customModuleAccess, "FULL")) {
     return NextResponse.json({ error: "Seul le service approvisionnement peut enrichir la fiche stock." }, { status: 403 });
   }
 

@@ -1,15 +1,16 @@
 import { NextResponse } from 'next/server'
 import { requireApiModuleAccess } from '@/lib/rbac'
 import { prisma } from '@/lib/prisma'
+import { hasRequiredModuleAccessLevel, type ModuleAccessLevel } from '@/lib/user-module-access'
 
-function canManageAccounting(role: string, jobTitle: string | null | undefined) {
-  return role === 'ADMIN' || role === 'ACCOUNTANT' || (jobTitle ?? '').trim().toUpperCase() === 'COMPTABLE'
+function canManageAccounting(role: string, jobTitle: string | null | undefined, customModuleAccessLevel?: ModuleAccessLevel | null) {
+  return hasRequiredModuleAccessLevel(customModuleAccessLevel, 'FULL') || role === 'ADMIN' || role === 'ACCOUNTANT' || (jobTitle ?? '').trim().toUpperCase() === 'COMPTABLE'
 }
 
 export async function GET() {
   const access = await requireApiModuleAccess('payments', ['ADMIN', 'ACCOUNTANT', 'EMPLOYEE'])
   if (access.error) return access.error
-  if (!canManageAccounting(access.role, access.session.user.jobTitle)) {
+  if (!canManageAccounting(access.role, access.session.user.jobTitle, access.customModuleAccess)) {
     return NextResponse.json({ error: 'Accès réservé au comptable et à l\'administrateur.' }, { status: 403 })
   }
 
@@ -20,7 +21,7 @@ export async function GET() {
 export async function POST(req: Request) {
   const access = await requireApiModuleAccess('payments', ['ADMIN', 'ACCOUNTANT', 'EMPLOYEE'])
   if (access.error) return access.error
-  if (!canManageAccounting(access.role, access.session.user.jobTitle)) {
+  if (!canManageAccounting(access.role, access.session.user.jobTitle, access.customModuleAccess)) {
     return NextResponse.json({ error: 'Accès réservé au comptable et à l\'administrateur.' }, { status: 403 })
   }
 
@@ -47,7 +48,7 @@ export async function POST(req: Request) {
 export async function PUT(req: Request) {
   const access = await requireApiModuleAccess('payments', ['ADMIN', 'ACCOUNTANT', 'EMPLOYEE'])
   if (access.error) return access.error
-  if (!canManageAccounting(access.role, access.session.user.jobTitle)) {
+  if (!canManageAccounting(access.role, access.session.user.jobTitle, access.customModuleAccess)) {
     return NextResponse.json({ error: 'Accès réservé au comptable et à l\'administrateur.' }, { status: 403 })
   }
 
@@ -75,7 +76,7 @@ export async function PUT(req: Request) {
 export async function DELETE(req: Request) {
   const access = await requireApiModuleAccess('payments', ['ADMIN', 'ACCOUNTANT', 'EMPLOYEE'])
   if (access.error) return access.error
-  if (!canManageAccounting(access.role, access.session.user.jobTitle)) {
+  if (!canManageAccounting(access.role, access.session.user.jobTitle, access.customModuleAccess)) {
     return NextResponse.json({ error: 'Accès réservé au comptable et à l\'administrateur.' }, { status: 403 })
   }
 

@@ -18,6 +18,7 @@ import { isCashierJobTitle } from "@/lib/assignment";
 import { requirePageModuleAccess } from "@/lib/rbac";
 import { prisma } from "@/lib/prisma";
 import { cashOperationApprovalRequestClient, canReviewCashOperationApprovals, ensureCashOperationApprovalRequestTable } from "@/lib/cash-operation-approvals";
+import { hasRequiredModuleAccessLevel } from "@/lib/user-module-access";
 import { buildDeskScopedCashOperationWhere, isMainCashDesk, resolvePaymentsDeskState } from "@/lib/payments-desk";
 import { getTicketTotalAmount } from "@/lib/ticket-pricing";
 
@@ -458,17 +459,19 @@ export default async function PaymentsPage({
 }: {
   searchParams?: Promise<SearchParams>;
 }) {
-  const { role, session } = await requirePageModuleAccess("payments", ["ADMIN", "DIRECTEUR_GENERAL", "ACCOUNTANT", "EMPLOYEE", "MANAGER"]);
+  const { role, session, customModuleAccess } = await requirePageModuleAccess("payments", ["ADMIN", "DIRECTEUR_GENERAL", "ACCOUNTANT", "EMPLOYEE", "MANAGER"]);
   const isCashier = isCashierJobTitle(session.user.jobTitle);
   const isComptable = role === "ACCOUNTANT" || session.user.jobTitle === "COMPTABLE";
   const isAdmin = role === "ADMIN";
-  const canWrite = isCashier || isAdmin || isComptable;
-  const canManageLedger = isAdmin || isComptable;
-  const canReviewApprovals = canReviewCashOperationApprovals(role, session.user.jobTitle);
+  const hasPaymentsFullAccess = hasRequiredModuleAccessLevel(customModuleAccess, "FULL");
+  const canWrite = isCashier || isAdmin || isComptable || hasPaymentsFullAccess;
+  const canManageLedger = isAdmin || isComptable || hasPaymentsFullAccess;
+  const canReviewApprovals = canReviewCashOperationApprovals(role, session.user.jobTitle) || hasPaymentsFullAccess;
   const resolvedSearchParams = (await searchParams) ?? {};
   const deskState = resolvePaymentsDeskState({
     jobTitle: session.user.jobTitle,
     role,
+    customModuleAccessLevel: customModuleAccess,
     requestedDesk: typeof (resolvedSearchParams as { desk?: unknown }).desk === "string"
       ? (resolvedSearchParams as { desk?: string }).desk
       : null,
@@ -1524,6 +1527,7 @@ export default async function PaymentsPage({
       <PaymentsWritingWorkspace
         jobTitle={session.user.jobTitle ?? null}
         role={role}
+        customModuleAccessLevel={customModuleAccess}
         initialDesk={deskState.desk}
         initialScope={deskState.scope}
         initialMode={initialWorkspaceMode}

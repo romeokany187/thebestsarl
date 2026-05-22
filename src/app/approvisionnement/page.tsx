@@ -2,11 +2,12 @@ import { AppShell } from "@/components/app-shell";
 import { ProcurementHub } from "@/components/procurement-hub";
 import { prisma } from "@/lib/prisma";
 import { requirePageModuleAccess } from "@/lib/rbac";
+import { hasRequiredModuleAccessLevel } from "@/lib/user-module-access";
 
 export const dynamic = "force-dynamic";
 
 export default async function ApprovisionnementPage() {
-  const { role, session } = await requirePageModuleAccess("procurement", ["ADMIN", "MANAGER", "EMPLOYEE", "ACCOUNTANT"]);
+  const { role, session, customModuleAccess } = await requirePageModuleAccess("procurement", ["ADMIN", "MANAGER", "EMPLOYEE", "ACCOUNTANT"]);
 
   const me = await prisma.user.findUnique({
     where: { id: session.user.id },
@@ -44,15 +45,18 @@ export default async function ApprovisionnementPage() {
 
   const allUsers = allUsersRaw.map((u) => ({ id: u.id, name: u.name, teamName: u.team?.name ?? null }));
 
-  const canCreateNeed = role === "ADMIN" || role === "MANAGER" || me?.jobTitle === "APPROVISIONNEMENT";
-  const canApproveNeed = role === "ADMIN" || role === "DIRECTEUR_GENERAL";
-  const canManageStock = role === "ADMIN" || role === "MANAGER" || me?.jobTitle === "APPROVISIONNEMENT";
+  const hasProcurementFullAccess = hasRequiredModuleAccessLevel(customModuleAccess, "FULL");
+  const canCreateNeed = role === "ADMIN" || role === "MANAGER" || me?.jobTitle === "APPROVISIONNEMENT" || hasProcurementFullAccess;
+  const canApproveNeed = role === "ADMIN" || role === "DIRECTEUR_GENERAL" || hasProcurementFullAccess;
+  const canManageStock = role === "ADMIN" || role === "MANAGER" || me?.jobTitle === "APPROVISIONNEMENT" || hasProcurementFullAccess;
 
   return (
     <AppShell
       role={role}
       accessNote={role === "ADMIN"
         ? "Admin: accès complet à l’émission, la validation, l’exécution et la gestion de stock avec traçabilité."
+          : hasProcurementFullAccess
+            ? "Accès complet: émission, validation, exécution et gestion de stock avec traçabilité."
         : "Approvisionnement: émission des états de besoin, validation via inbox, exécution financière et suivi stock avec traçabilité."}
     >
       <section className="mb-6">

@@ -1,12 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { CASH_JOB_TITLES } from "@/lib/assignment";
 import { prisma } from "@/lib/prisma";
-import { requireApiRoles } from "@/lib/rbac";
+import { requireApiModuleAccess } from "@/lib/rbac";
 import { needApprovalSchema } from "@/lib/validators";
 import { writeActivityLog } from "@/lib/activity-log";
+import { hasRequiredModuleAccessLevel } from "@/lib/user-module-access";
 
 export async function POST(request: NextRequest) {
-  const access = await requireApiRoles(["DIRECTEUR_GENERAL", "ADMIN"]);
+  const access = await requireApiModuleAccess("procurement", ["DIRECTEUR_GENERAL", "ADMIN", "ACCOUNTANT", "MANAGER", "EMPLOYEE"], "WRITE");
   if (access.error) return access.error;
 
   const me = await prisma.user.findUnique({
@@ -18,7 +19,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Utilisateur introuvable." }, { status: 404 });
   }
 
-  const canValidate = access.role === "DIRECTEUR_GENERAL" || access.role === "ADMIN";
+  const canValidate = access.role === "DIRECTEUR_GENERAL" || access.role === "ADMIN" || hasRequiredModuleAccessLevel(access.customModuleAccess, "FULL");
   if (!canValidate) {
     return NextResponse.json({ error: "Validation réservée au Directeur Général." }, { status: 403 });
   }

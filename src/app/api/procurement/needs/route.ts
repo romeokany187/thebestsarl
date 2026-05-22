@@ -6,6 +6,7 @@ import { needRequestSchema, needRequestUpdateSchema } from "@/lib/validators";
 import { parseNeedQuote, quoteFromItems, serializeNeedQuote } from "@/lib/need-lines";
 import { writeActivityLog } from "@/lib/activity-log";
 import { normalizeWorkflowAssignment } from "@/lib/workflow-assignment";
+import { hasRequiredModuleAccessLevel } from "@/lib/user-module-access";
 
 function normalizeMoneyCurrency(value: string | null | undefined): "USD" | "CDF" {
   const normalized = (value ?? "CDF").trim().toUpperCase();
@@ -91,7 +92,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Utilisateur introuvable." }, { status: 404 });
   }
 
-  if (me.role === "EMPLOYEE" && me.jobTitle !== "APPROVISIONNEMENT") {
+  if (me.role === "EMPLOYEE" && me.jobTitle !== "APPROVISIONNEMENT" && !hasRequiredModuleAccessLevel(access.customModuleAccess, "FULL")) {
     return NextResponse.json({ error: "Seul le service approvisionnement peut émettre un état de besoin." }, { status: 403 });
   }
 
@@ -197,7 +198,7 @@ export async function PATCH(request: NextRequest) {
     return NextResponse.json({ error: "Utilisateur introuvable." }, { status: 404 });
   }
 
-  if (me.role === "EMPLOYEE" && me.jobTitle !== "APPROVISIONNEMENT") {
+  if (me.role === "EMPLOYEE" && me.jobTitle !== "APPROVISIONNEMENT" && !hasRequiredModuleAccessLevel(access.customModuleAccess, "FULL")) {
     return NextResponse.json({ error: "Seul le service approvisionnement peut modifier un état de besoin." }, { status: 403 });
   }
 

@@ -7,6 +7,7 @@ import { paymentCreateSchema } from "@/lib/validators";
 import { isMailConfigured, sendMailBatch } from "@/lib/mail";
 import { getTicketTotalAmount } from "@/lib/ticket-pricing";
 import { writeActivityLog } from "@/lib/activity-log";
+import { hasRequiredModuleAccessLevel, type ModuleAccessLevel } from "@/lib/user-module-access";
 
 const cashOperationClient = (prisma as unknown as { cashOperation: any }).cashOperation;
 
@@ -41,19 +42,19 @@ function amountToTicketCurrency(
     : amountToCdf(amount, paymentCurrency, fxRateUsdToCdf);
 }
 
-function canWritePayments(role: string, jobTitle: string | null | undefined) {
-  return role === "ADMIN" || role === "ACCOUNTANT" || isCashierJobTitle(jobTitle) || jobTitle === "COMPTABLE";
+function canWritePayments(role: string, jobTitle: string | null | undefined, customModuleAccessLevel?: ModuleAccessLevel | null) {
+  return hasRequiredModuleAccessLevel(customModuleAccessLevel, "FULL") || role === "ADMIN" || role === "ACCOUNTANT" || isCashierJobTitle(jobTitle) || jobTitle === "COMPTABLE";
 }
 
-function canManagePayments(role: string, jobTitle: string | null | undefined) {
-  return role === "ADMIN" || role === "ACCOUNTANT" || jobTitle === "COMPTABLE";
+function canManagePayments(role: string, jobTitle: string | null | undefined, customModuleAccessLevel?: ModuleAccessLevel | null) {
+  return hasRequiredModuleAccessLevel(customModuleAccessLevel, "FULL") || role === "ADMIN" || role === "ACCOUNTANT" || jobTitle === "COMPTABLE";
 }
 
 export async function POST(request: NextRequest) {
   const access = await requireApiModuleAccess("payments", ["ADMIN", "DIRECTEUR_GENERAL", "MANAGER", "ACCOUNTANT", "EMPLOYEE"]);
   if (access.error) return access.error;
 
-  if (!canWritePayments(access.role, access.session.user.jobTitle)) {
+  if (!canWritePayments(access.role, access.session.user.jobTitle, access.customModuleAccess)) {
     return NextResponse.json({ error: "Seuls l'administrateur, le comptable et les profils caisse autorisés peuvent enregistrer des paiements." }, { status: 403 });
   }
 
@@ -294,7 +295,7 @@ export async function PATCH(request: NextRequest) {
   const access = await requireApiModuleAccess("payments", ["ADMIN", "DIRECTEUR_GENERAL", "MANAGER", "ACCOUNTANT", "EMPLOYEE"]);
   if (access.error) return access.error;
 
-  if (!canManagePayments(access.role, access.session.user.jobTitle)) {
+  if (!canManagePayments(access.role, access.session.user.jobTitle, access.customModuleAccess)) {
     return NextResponse.json({ error: "Seuls l'administrateur et le comptable peuvent modifier un paiement." }, { status: 403 });
   }
 
@@ -438,7 +439,7 @@ export async function DELETE(request: NextRequest) {
   const access = await requireApiModuleAccess("payments", ["ADMIN", "DIRECTEUR_GENERAL", "MANAGER", "ACCOUNTANT", "EMPLOYEE"]);
   if (access.error) return access.error;
 
-  if (!canManagePayments(access.role, access.session.user.jobTitle)) {
+  if (!canManagePayments(access.role, access.session.user.jobTitle, access.customModuleAccess)) {
     return NextResponse.json({ error: "Seuls l'administrateur et le comptable peuvent supprimer un paiement." }, { status: 403 });
   }
 

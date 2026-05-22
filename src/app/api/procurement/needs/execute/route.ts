@@ -3,10 +3,11 @@ import { Prisma } from "@prisma/client";
 import { isCashierJobTitle } from "@/lib/assignment";
 import { resolveExecutionCashDesk } from "@/lib/payments-desk";
 import { prisma } from "@/lib/prisma";
-import { requireApiRoles } from "@/lib/rbac";
+import { requireApiModuleAccess } from "@/lib/rbac";
 import { needExecutionSchema } from "@/lib/validators";
 import { writeActivityLog } from "@/lib/activity-log";
 import { getCashDeskAvailableBalances } from "@/lib/cash-balance";
+import { hasRequiredModuleAccessLevel } from "@/lib/user-module-access";
 
 function normalizeCashCurrency(value: string | null | undefined): "USD" | "CDF" {
   const normalized = (value ?? "USD").trim().toUpperCase();
@@ -16,7 +17,7 @@ function normalizeCashCurrency(value: string | null | undefined): "USD" | "CDF" 
 }
 
 export async function POST(request: NextRequest) {
-  const access = await requireApiRoles(["ADMIN", "MANAGER", "EMPLOYEE", "ACCOUNTANT"]);
+  const access = await requireApiModuleAccess("procurement", ["ADMIN", "MANAGER", "EMPLOYEE", "ACCOUNTANT"], "WRITE");
   if (access.error) return access.error;
 
   const me = await prisma.user.findUnique({
@@ -28,7 +29,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Utilisateur introuvable." }, { status: 404 });
   }
 
-  if (access.role !== "ADMIN" && access.role !== "ACCOUNTANT" && !isCashierJobTitle(me.jobTitle) && me.jobTitle !== "COMPTABLE") {
+  if (access.role !== "ADMIN" && access.role !== "ACCOUNTANT" && !hasRequiredModuleAccessLevel(access.customModuleAccess, "FULL") && !isCashierJobTitle(me.jobTitle) && me.jobTitle !== "COMPTABLE") {
     return NextResponse.json({ error: "Exécution réservée à l'administrateur, au comptable ou aux profils caisse autorisés." }, { status: 403 });
   }
 
@@ -69,6 +70,7 @@ export async function POST(request: NextRequest) {
     requestedDesk: parsed.data.cashDesk,
     jobTitle: me.jobTitle,
     role: access.role,
+    customModuleAccessLevel: access.customModuleAccess,
   });
 
   const now = new Date();
