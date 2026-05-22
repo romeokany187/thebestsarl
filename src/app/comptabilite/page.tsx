@@ -6,7 +6,8 @@ import { AccountingReportsWorkspace } from '@/components/accounting-reports-work
 import { AccountingWritingWorkspace } from '@/components/accounting-writing-workspace'
 import { KpiCard } from '@/components/kpi-card'
 import { prisma } from '@/lib/prisma'
-import { requirePageRoles } from '@/lib/rbac'
+import { requirePageModuleAccess } from '@/lib/rbac'
+import { hasRequiredModuleAccessLevel } from '@/lib/user-module-access'
 
 export const metadata = {
   title: 'Comptabilité — Plan comptable',
@@ -19,10 +20,11 @@ function formatClassLabel(cls: string) {
 }
 
 export default async function Page() {
-  const { role, session } = await requirePageRoles(['ADMIN', 'ACCOUNTANT', 'EMPLOYEE'])
+  const { role, session, customModuleAccess } = await requirePageModuleAccess('payments', ['ADMIN', 'ACCOUNTANT', 'EMPLOYEE'])
+  const hasFullAccess = hasRequiredModuleAccessLevel(customModuleAccess, 'FULL')
   const normalizedJobTitle = (session.user.jobTitle ?? '').trim().toUpperCase()
 
-  if (role !== 'ADMIN' && role !== 'ACCOUNTANT' && normalizedJobTitle !== 'COMPTABLE') {
+  if (!hasFullAccess && role !== 'ADMIN' && role !== 'ACCOUNTANT' && normalizedJobTitle !== 'COMPTABLE') {
     redirect('/')
   }
 
@@ -58,7 +60,12 @@ export default async function Page() {
     .slice(0, 3)
 
   return (
-    <AppShell role={role} accessNote="Référentiel comptable central: structure des comptes, import, ajustements et chargement du plan SYSCOHADA dans le cadre standard de l'application.">
+    <AppShell
+      role={role}
+      accessNote={hasFullAccess
+        ? "Accès complet à la comptabilité: plan, journal, rapports et ajustements sont ouverts selon vos attributions complètes."
+        : "Référentiel comptable central: structure des comptes, import, ajustements et chargement du plan SYSCOHADA dans le cadre standard de l'application."}
+    >
       <div className="mx-auto w-full max-w-6xl">
         <section className="mb-6">
           <h1 className="text-2xl font-semibold tracking-tight">Comptabilite</h1>
