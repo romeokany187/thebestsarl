@@ -17,7 +17,7 @@ function normalizeCashCurrency(value: string | null | undefined): "USD" | "CDF" 
 }
 
 export async function POST(request: NextRequest) {
-  const access = await requireApiModuleAccess("procurement", ["ADMIN", "MANAGER", "EMPLOYEE", "ACCOUNTANT"], "WRITE");
+  const access = await requireApiModuleAccess("payments", ["ADMIN", "MANAGER", "EMPLOYEE", "ACCOUNTANT"], "WRITE");
   if (access.error) return access.error;
 
   const me = await prisma.user.findUnique({
