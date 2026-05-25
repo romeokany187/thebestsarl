@@ -11,6 +11,12 @@ import { hasRequiredModuleAccessLevel, type ModuleAccessLevel } from "@/lib/user
 
 const cashOperationClient = (prisma as unknown as { cashOperation: any }).cashOperation;
 
+type AccountingDailyRateRow = {
+  id: string;
+  rateDate: Date | string;
+  exchangeRate: number;
+};
+
 function computePaymentStatus(totalDue: number, totalPaid: number): PaymentStatus {
   if (totalPaid <= 0) return PaymentStatus.UNPAID;
   if (totalPaid + 0.0001 >= totalDue) return PaymentStatus.PAID;
@@ -42,6 +48,60 @@ function amountToTicketCurrency(
     : amountToCdf(amount, paymentCurrency, fxRateUsdToCdf);
 }
 
+function toKinshasaDateKey(date: Date) {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Africa/Kinshasa",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(date);
+}
+
+function toUtcDay(date: Date) {
+  return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate(), 0, 0, 0, 0));
+}
+
+function toSqlDateTime(date: Date) {
+  return date.toISOString().slice(0, 23).replace("T", " ");
+}
+
+async function ensureAccountingDailyRateTable() {
+  await prisma.$executeRawUnsafe(`
+    CREATE TABLE IF NOT EXISTS \
+    \`AccountingDailyRate\` (
+      \`id\` VARCHAR(191) NOT NULL,
+      \`rateDate\` DATETIME(3) NOT NULL,
+      \`exchangeRate\` DOUBLE NOT NULL,
+      \`createdById\` VARCHAR(191) NOT NULL,
+      \`createdAt\` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      \`updatedAt\` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      PRIMARY KEY (\`id\`),
+      UNIQUE INDEX \`AccountingDailyRate_rateDate_key\` (\`rateDate\`),
+      INDEX \`AccountingDailyRate_createdById_idx\` (\`createdById\`)
+    ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+  `);
+}
+
+async function resolveAccountingDailyRate(effectiveAt: Date) {
+  await ensureAccountingDailyRateTable();
+  const businessDate = toKinshasaDateKey(effectiveAt);
+  const rateDate = toUtcDay(new Date(`${businessDate}T00:00:00.000Z`));
+
+  const rows = await prisma.$queryRawUnsafe<AccountingDailyRateRow[]>(`
+    SELECT id, rateDate, exchangeRate
+    FROM \`AccountingDailyRate\`
+    WHERE rateDate = '${toSqlDateTime(rateDate)}'
+    LIMIT 1
+  `);
+
+  const match = rows[0] ?? null;
+  if (!match) {
+    throw new Error(`MISSING_ACCOUNTING_DAILY_RATE:${businessDate}`);
+  }
+
+  return Number(match.exchangeRate);
+}
+
 function canWritePayments(role: string, jobTitle: string | null | undefined, customModuleAccessLevel?: ModuleAccessLevel | null) {
   return hasRequiredModuleAccessLevel(customModuleAccessLevel, "FULL") || role === "ADMIN" || role === "ACCOUNTANT" || isCashierJobTitle(jobTitle) || jobTitle === "COMPTABLE";
 }
@@ -66,19 +126,8 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
     }
 
-    const latestRateOperation = await cashOperationClient.findFirst({
-      where: {
-        fxRateUsdToCdf: { not: null },
-      },
-      orderBy: { occurredAt: "desc" },
-      select: { fxRateUsdToCdf: true },
-    });
-
-    const fxRateUsdToCdf = latestRateOperation?.fxRateUsdToCdf ?? null;
-
-    if (!fxRateUsdToCdf || fxRateUsdToCdf <= 0) {
-      return NextResponse.json({ error: "Taux USD/CDF indisponible. Le comptable doit d'abord enregistrer le taux du jour en caisse." }, { status: 400 });
-    }
+    const effectivePaidAt = parsed.data.paidAt ?? new Date();
+    const fxRateUsdToCdf = await resolveAccountingDailyRate(effectivePaidAt);
 
     const result = await prisma.$transaction(async (tx) => {
       const ticket = await tx.ticketSale.findUnique({
@@ -128,7 +177,7 @@ export async function POST(request: NextRequest) {
           amountCdf: amountToCdf(parsed.data.amount, paymentCurrency, fxRateUsdToCdf),
           method: parsed.data.method,
           reference: justificativeReference,
-          paidAt: parsed.data.paidAt,
+          paidAt: effectivePaidAt,
         },
       });
 
@@ -281,6 +330,10 @@ export async function POST(request: NextRequest) {
       if (error.message === "MISSING_JUSTIFICATIVE_REFERENCE") {
         return NextResponse.json({ error: "Le numéro du bon d'entrée en caisse est obligatoire comme pièce justificative." }, { status: 400 });
       }
+      if (error.message.startsWith("MISSING_ACCOUNTING_DAILY_RATE:")) {
+        const [, businessDate = "la date demandee"] = error.message.split(":");
+        return NextResponse.json({ error: `Aucun taux du jour comptable n'est enregistré pour le ${businessDate}. Le comptable doit d'abord le saisir.` }, { status: 400 });
+      }
     }
 
     if (error instanceof Prisma.PrismaClientKnownRequestError) {
@@ -340,29 +393,11 @@ export async function PATCH(request: NextRequest) {
     if (Number.isNaN(nextPaidAt.getTime())) {
       return NextResponse.json({ error: "Date de paiement invalide." }, { status: 400 });
     }
-    const kinshasaDateKey = (date: Date) => new Intl.DateTimeFormat("en-CA", {
-      timeZone: "Africa/Kinshasa",
-      year: "numeric",
-      month: "2-digit",
-      day: "2-digit",
-    }).format(date);
-    if (kinshasaDateKey(nextPaidAt) > kinshasaDateKey(new Date())) {
+    if (toKinshasaDateKey(nextPaidAt) > toKinshasaDateKey(new Date())) {
       return NextResponse.json({ error: "La date de paiement ne peut pas être dans le futur." }, { status: 400 });
     }
 
-    const latestRateOperation = await cashOperationClient.findFirst({
-      where: {
-        fxRateUsdToCdf: { not: null },
-      },
-      orderBy: { occurredAt: "desc" },
-      select: { fxRateUsdToCdf: true },
-    });
-
-    const fxRateUsdToCdf = latestRateOperation?.fxRateUsdToCdf ?? null;
-
-    if (!fxRateUsdToCdf || fxRateUsdToCdf <= 0) {
-      return NextResponse.json({ error: "Taux USD/CDF indisponible. Le comptable doit d'abord enregistrer le taux du jour en caisse." }, { status: 400 });
-    }
+    const fxRateUsdToCdf = await resolveAccountingDailyRate(nextPaidAt);
 
     const nextReference = typeof body?.reference === "string" && body.reference.trim().length > 0
       ? body.reference.trim()
@@ -430,7 +465,11 @@ export async function PATCH(request: NextRequest) {
     });
 
     return NextResponse.json({ data: updated }, { status: 200 });
-  } catch {
+  } catch (error) {
+    if (error instanceof Error && error.message.startsWith("MISSING_ACCOUNTING_DAILY_RATE:")) {
+      const [, businessDate = "la date demandee"] = error.message.split(":");
+      return NextResponse.json({ error: `Aucun taux du jour comptable n'est enregistré pour le ${businessDate}. Le comptable doit d'abord le saisir.` }, { status: 400 });
+    }
     return NextResponse.json({ error: "Erreur serveur lors de la modification du paiement." }, { status: 500 });
   }
 }
