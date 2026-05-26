@@ -388,11 +388,15 @@ export function TicketForm({
       return;
     }
 
+    const errorPayload = await response.json().catch(() => null);
+
     // Handle PNR conflict (409)
     if (response.status === 409) {
-      const conflictPayload = await response.json().catch(() => null);
-      if (conflictPayload?.conflict && Array.isArray(conflictPayload.existingTickets)) {
-        setConflictTickets(conflictPayload.existingTickets as ConflictTicket[]);
+      const existingTickets = Array.isArray(errorPayload?.existingTickets)
+        ? (errorPayload.existingTickets as ConflictTicket[])
+        : [];
+      if (errorPayload?.conflict || existingTickets.length > 0) {
+        setConflictTickets(existingTickets);
         setShowConflictModal(true);
         setStatusType("idle");
         setStatus("");
@@ -400,7 +404,6 @@ export function TicketForm({
       }
     }
 
-    const errorPayload = await response.json().catch(() => null);
     setStatusType("error");
     setStatus(formatApiError(errorPayload?.error, "Erreur de validation."));
   }

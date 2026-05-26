@@ -346,14 +346,12 @@ export async function POST(request: NextRequest) {
     if (error instanceof Prisma.PrismaClientKnownRequestError) {
       if (error.code === "P2002") {
         const conflictingTickets = await fetchConflictingTickets(attemptedTicketNumber);
-        if (conflictingTickets.length > 0) {
-          return NextResponse.json(
-            { conflict: true, existingTickets: conflictingTickets },
-            { status: 409 },
-          );
-        }
         return NextResponse.json(
-          { error: "Conflit de données sur ce PNR. Vérifiez si ce billet existe déjà." },
+          {
+            conflict: true,
+            existingTickets: conflictingTickets,
+            error: "Conflit de données sur ce PNR. Vérifiez si ce billet existe déjà.",
+          },
           { status: 409 },
         );
       }
