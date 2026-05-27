@@ -58,6 +58,11 @@ function roleLabel(role: UserRole) {
   return "Collaborateur";
 }
 
+function isTeamLeader(user: Pick<UserRow, "role" | "jobTitle">) {
+  if (user.role === "MANAGER") return true;
+  return (user.role === "ADMIN" || user.role === "DIRECTEUR_GENERAL") && user.jobTitle === "CHEF_AGENCE";
+}
+
 function getApiErrorMessage(payload: unknown, fallback: string) {
   if (!payload || typeof payload !== "object") return fallback;
 
@@ -122,7 +127,7 @@ export function TeamAssignmentAdmin({
   const canManageSelectedTeam = isExecutiveManager || isManagerOfSelectedTeam;
 
   const currentLeader = useMemo(
-    () => teamMembers.find((member) => member.role === "MANAGER") ?? null,
+    () => teamMembers.find((member) => isTeamLeader(member)) ?? null,
     [teamMembers],
   );
 
@@ -205,7 +210,7 @@ export function TeamAssignmentAdmin({
     setSavingId("");
   }
 
-  async function switchLeaderRole(userId: string, makeLeader: boolean, currentJobTitle: JobTitle, currentTeamId: string | null) {
+  async function switchLeaderRole(userId: string, makeLeader: boolean, currentRole: UserRole, currentJobTitle: JobTitle, currentTeamId: string | null) {
     if (!isExecutiveManager) {
       setStatus("Seuls l'administrateur et le Directeur Général peuvent changer le chef d'équipe.");
       return;
@@ -214,14 +219,22 @@ export function TeamAssignmentAdmin({
     setSavingId(userId);
     setStatus(makeLeader ? "Nomination du chef..." : "Retrait des privilèges chef...");
 
+    const nextPayload = makeLeader
+      ? {
+        teamId: currentTeamId,
+        jobTitle: "CHEF_AGENCE" as JobTitle,
+        role: (currentRole === "ADMIN" || currentRole === "DIRECTEUR_GENERAL") ? currentRole : "MANAGER" as UserRole,
+      }
+      : {
+        teamId: currentTeamId,
+        jobTitle: currentJobTitle === "CHEF_AGENCE" ? "AGENT_TERRAIN" as JobTitle : currentJobTitle,
+        role: (currentRole === "ADMIN" || currentRole === "DIRECTEUR_GENERAL") ? currentRole : "EMPLOYEE" as UserRole,
+      };
+
     const response = await fetch(`/api/users/${userId}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        teamId: currentTeamId,
-        jobTitle: currentJobTitle,
-        role: makeLeader ? "MANAGER" : "EMPLOYEE",
-      }),
+      body: JSON.stringify(nextPayload),
     });
 
     const payload = await response.json().catch(() => null);
@@ -545,11 +558,11 @@ export function TeamAssignmentAdmin({
                     </button>
                     <button
                       type="button"
-                      onClick={() => switchLeaderRole(user.id, user.role !== "MANAGER", user.jobTitle, user.teamId)}
+                      onClick={() => switchLeaderRole(user.id, !isTeamLeader(user), user.role, user.jobTitle, user.teamId)}
                       disabled={!isExecutiveManager || savingId === user.id}
                       className="rounded-md border border-black/15 px-2.5 py-1 text-[11px] font-semibold hover:bg-black/5 disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/20 dark:hover:bg-white/10"
                     >
-                      {user.role === "MANAGER" ? "Retirer chef" : "Nommer chef"}
+                      {isTeamLeader(user) ? "Retirer chef" : "Nommer chef"}
                     </button>
                   </div>
                 </li>
