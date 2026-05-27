@@ -1490,7 +1490,7 @@ async function buildPdf(report: ReportPayload, appBaseUrl: string | null) {
 }
 
 export async function GET(request: NextRequest) {
-  const access = await requireApiModuleAccess("payments", ["ADMIN", "DIRECTEUR_GENERAL", "MANAGER", "ACCOUNTANT", "EMPLOYEE"], "READ");
+  const access = await requireApiModuleAccess("comptabilite", ["ADMIN", "DIRECTEUR_GENERAL", "MANAGER", "ACCOUNTANT", "EMPLOYEE"], "READ");
   if (access.error) return access.error;
 
   await ensureAccountingTables();

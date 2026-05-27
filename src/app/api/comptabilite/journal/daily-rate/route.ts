@@ -29,7 +29,7 @@ async function ensureAccountingDailyRateTable() {
 }
 
 export async function POST(request: NextRequest) {
-  const access = await requireApiModuleAccess("payments", ["ADMIN", "DIRECTEUR_GENERAL", "MANAGER", "ACCOUNTANT", "EMPLOYEE"], "WRITE");
+  const access = await requireApiModuleAccess("comptabilite", ["ADMIN", "DIRECTEUR_GENERAL", "MANAGER", "ACCOUNTANT", "EMPLOYEE"], "WRITE");
   if (access.error) return access.error;
 
   await ensureAccountingDailyRateTable();

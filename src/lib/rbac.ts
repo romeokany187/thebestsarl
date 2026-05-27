@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 import { redirect } from "next/navigation";
 import { authOptions } from "@/auth";
 import { isCashierJobTitle } from "@/lib/assignment";
-import { getUserModuleAccessMap, hasRequiredModuleAccessLevel, type ModuleAccessLevel } from "@/lib/user-module-access";
+import { getEffectiveModuleAccessLevel, getUserModuleAccessMap, hasRequiredModuleAccessLevel, type ModuleAccessLevel } from "@/lib/user-module-access";
 
 export type AppRole = "ADMIN" | "DIRECTEUR_GENERAL" | "MANAGER" | "EMPLOYEE" | "ACCOUNTANT";
 export type AppModule =
@@ -17,6 +17,10 @@ export type AppModule =
   | "sales"
   | "tickets"
   | "invoices"
+  | "caisse_1_siege"
+  | "caisse_2_siege"
+  | "caisse_agence"
+  | "comptabilite"
   | "payments"
   | "procurement"
   | "archives"
@@ -68,6 +72,26 @@ export function hasModuleAccess(params: {
     }
 
     return role === "ACCOUNTANT" || isCashierJobTitle(jobTitle) || jobTitle === "COMPTABLE";
+  }
+
+  if (module === "caisse_1_siege") {
+    if (role === "ADMIN") return true;
+    return role === "ACCOUNTANT" || jobTitle === "COMPTABLE" || jobTitle === "CAISSIER";
+  }
+
+  if (module === "caisse_2_siege") {
+    if (role === "ADMIN") return true;
+    return role === "ACCOUNTANT" || jobTitle === "COMPTABLE" || jobTitle === "CAISSE_2_SIEGE";
+  }
+
+  if (module === "caisse_agence") {
+    if (role === "ADMIN") return true;
+    return role === "ACCOUNTANT" || jobTitle === "COMPTABLE" || jobTitle === "CAISSE_AGENCE";
+  }
+
+  if (module === "comptabilite") {
+    if (role === "ADMIN") return true;
+    return role === "ACCOUNTANT" || jobTitle === "COMPTABLE";
   }
 
   if (role === "ADMIN") {
@@ -210,7 +234,8 @@ export async function requirePageModuleAccess(
 
   const roleAllowed = isRoleAllowed(role, allowedRoles);
   const accessMap = await getUserModuleAccessMap(session.user.id);
-  const hasCustomAccess = hasRequiredModuleAccessLevel(accessMap[module], requiredAccessLevel);
+  const effectiveModuleAccess = getEffectiveModuleAccessLevel(accessMap, module);
+  const hasCustomAccess = hasRequiredModuleAccessLevel(effectiveModuleAccess, requiredAccessLevel);
 
   const hasDefaultAccess = roleAllowed
     && hasModuleAccess({
@@ -227,7 +252,7 @@ export async function requirePageModuleAccess(
   return {
     session,
     role,
-    customModuleAccess: accessMap[module] ?? null,
+    customModuleAccess: effectiveModuleAccess,
   };
 }
 
@@ -259,7 +284,7 @@ export async function requireApiModuleAccess(
 
   const roleAllowed = isRoleAllowed(role, allowedRoles);
   const accessMap = await getUserModuleAccessMap(session.user.id);
-  const customModuleAccess = accessMap[module] ?? null;
+  const customModuleAccess = getEffectiveModuleAccessLevel(accessMap, module);
   const hasCustomAccess = hasRequiredModuleAccessLevel(customModuleAccess, requiredAccessLevel);
 
   const hasDefaultAccess = roleAllowed

@@ -8,7 +8,7 @@ function canManageAccounting(role: string, jobTitle: string | null | undefined) 
 }
 
 export async function POST() {
-  const access = await requireApiModuleAccess("payments", ["ADMIN", "ACCOUNTANT", "EMPLOYEE"]);
+  const access = await requireApiModuleAccess("comptabilite", ["ADMIN", "ACCOUNTANT", "EMPLOYEE"]);
   if (access.error) return access.error;
   if (!canManageAccounting(access.role, access.session.user.jobTitle)) {
     return NextResponse.json({ error: "Accès réservé au comptable et à l'administrateur." }, { status: 403 });

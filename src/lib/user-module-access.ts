@@ -13,6 +13,10 @@ export type AuthorizationModule =
   | "sales"
   | "tickets"
   | "invoices"
+  | "caisse_1_siege"
+  | "caisse_2_siege"
+  | "caisse_agence"
+  | "comptabilite"
   | "payments"
   | "procurement"
   | "archives"
@@ -20,12 +24,38 @@ export type AuthorizationModule =
   | "settings"
   | "audit";
 
+const AUTHORIZATION_MODULE_VALUES: AuthorizationModule[] = [
+  "home",
+  "dashboard",
+  "admin",
+  "teams",
+  "profile",
+  "reports",
+  "attendance",
+  "sales",
+  "tickets",
+  "invoices",
+  "caisse_1_siege",
+  "caisse_2_siege",
+  "caisse_agence",
+  "comptabilite",
+  "payments",
+  "procurement",
+  "archives",
+  "news",
+  "settings",
+  "audit",
+];
+
 export const AUTHORIZATION_MODULE_OPTIONS: Array<{ value: AuthorizationModule; label: string }> = [
   { value: "dashboard", label: "Dashboard" },
   { value: "sales", label: "Ventes" },
   { value: "tickets", label: "Billets" },
   { value: "invoices", label: "Factures" },
-  { value: "payments", label: "Paiements / Comptabilite" },
+  { value: "caisse_1_siege", label: "Caisse 1 siege" },
+  { value: "caisse_2_siege", label: "Caisse 2 siege" },
+  { value: "caisse_agence", label: "Caisse agence" },
+  { value: "comptabilite", label: "Comptabilite" },
   { value: "procurement", label: "Approvisionnement" },
   { value: "reports", label: "Rapports" },
   { value: "attendance", label: "Presences" },
@@ -41,6 +71,29 @@ export const AUTHORIZATION_MODULE_OPTIONS: Array<{ value: AuthorizationModule; l
 
 const userModuleAccessClient = (prisma as unknown as { userModuleAccess: any }).userModuleAccess;
 
+const MODULE_ACCESS_ALIASES: Record<AuthorizationModule, AuthorizationModule[]> = {
+  home: ["home"],
+  dashboard: ["dashboard"],
+  admin: ["admin"],
+  teams: ["teams"],
+  profile: ["profile"],
+  reports: ["reports"],
+  attendance: ["attendance"],
+  sales: ["sales"],
+  tickets: ["tickets"],
+  invoices: ["invoices"],
+  caisse_1_siege: ["caisse_1_siege", "payments"],
+  caisse_2_siege: ["caisse_2_siege", "payments"],
+  caisse_agence: ["caisse_agence", "payments"],
+  comptabilite: ["comptabilite", "payments"],
+  payments: ["payments", "caisse_1_siege", "caisse_2_siege", "caisse_agence"],
+  procurement: ["procurement"],
+  archives: ["archives"],
+  news: ["news"],
+  settings: ["settings"],
+  audit: ["audit"],
+};
+
 function levelRank(level: ModuleAccessLevel) {
   if (level === "FULL") return 3;
   if (level === "WRITE") return 2;
@@ -49,8 +102,8 @@ function levelRank(level: ModuleAccessLevel) {
 
 function normalizeModule(raw: string): AuthorizationModule | null {
   const value = raw.trim().toLowerCase();
-  const found = AUTHORIZATION_MODULE_OPTIONS.find((item) => item.value === value);
-  return found?.value ?? null;
+  const found = AUTHORIZATION_MODULE_VALUES.find((item) => item === value);
+  return found ?? null;
 }
 
 function normalizeLevel(raw: string): ModuleAccessLevel | null {
@@ -65,6 +118,24 @@ export function hasRequiredModuleAccessLevel(
 ) {
   if (!level) return false;
   return levelRank(level) >= levelRank(required);
+}
+
+export function getEffectiveModuleAccessLevel(
+  accessMap: Partial<Record<AuthorizationModule, ModuleAccessLevel>>,
+  module: AuthorizationModule,
+): ModuleAccessLevel | null {
+  const aliases = MODULE_ACCESS_ALIASES[module] ?? [module];
+  let strongest: ModuleAccessLevel | null = null;
+
+  for (const alias of aliases) {
+    const level = accessMap[alias];
+    if (!level) continue;
+    if (!strongest || levelRank(level) > levelRank(strongest)) {
+      strongest = level;
+    }
+  }
+
+  return strongest;
 }
 
 export async function ensureUserModuleAccessTable() {

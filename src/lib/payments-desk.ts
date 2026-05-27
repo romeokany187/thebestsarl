@@ -72,7 +72,7 @@ export const ADMIN_CASH_ROLE_OPTIONS: Array<{ value: AdminCashRoleScope; label: 
 ];
 
 function hasCustomPaymentsModuleAccess(level?: ModuleAccessLevelLike) {
-  return level === "READ" || level === "WRITE" || level === "FULL";
+  return level === "FULL";
 }
 
 export function getManagedCashDesksForScope(scope?: string | null) {

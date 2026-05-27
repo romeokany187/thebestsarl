@@ -9,7 +9,7 @@ import { LogoutButton } from "@/components/logout-button";
 import { SessionIdleGuard } from "@/components/session-idle-guard";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { prisma } from "@/lib/prisma";
-import { getUserModuleAccessMap, hasRequiredModuleAccessLevel } from "@/lib/user-module-access";
+import { getEffectiveModuleAccessLevel, getUserModuleAccessMap, hasRequiredModuleAccessLevel } from "@/lib/user-module-access";
 
 const links = [
   { href: "/", label: "Dashboard", module: "home" as AppModule, roles: ["ADMIN", "DIRECTEUR_GENERAL", "MANAGER", "EMPLOYEE", "ACCOUNTANT"] as AppRole[] },
@@ -64,7 +64,7 @@ const links = [
   {
     href: "/comptabilite",
     label: "Comptabilité",
-    module: "payments" as AppModule,
+    module: "comptabilite" as AppModule,
     roles: ["ADMIN", "ACCOUNTANT", "EMPLOYEE"] as AppRole[],
   },
   {
@@ -226,7 +226,7 @@ export async function AppShell({
     }
   }
   const visibleLinks = links.filter((link) => {
-    const hasCustomModuleRead = hasRequiredModuleAccessLevel(moduleAccessMap[link.module], "READ");
+    const hasCustomModuleRead = hasRequiredModuleAccessLevel(getEffectiveModuleAccessLevel(moduleAccessMap, link.module), "READ");
 
     if (!role || (!link.roles.includes(role) && !hasCustomModuleRead)) {
       return false;

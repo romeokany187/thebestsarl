@@ -269,7 +269,7 @@ function ticketSupportRangeStart() {
 }
 
 export async function GET(request: NextRequest) {
-  const access = await requireApiModuleAccess("payments", ["ADMIN", "DIRECTEUR_GENERAL", "MANAGER", "ACCOUNTANT", "EMPLOYEE"], "READ");
+  const access = await requireApiModuleAccess("comptabilite", ["ADMIN", "DIRECTEUR_GENERAL", "MANAGER", "ACCOUNTANT", "EMPLOYEE"], "READ");
   if (access.error) return access.error;
 
   await ensureAccountingTables();
@@ -410,7 +410,7 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
-  const access = await requireApiModuleAccess("payments", ["ADMIN", "DIRECTEUR_GENERAL", "MANAGER", "ACCOUNTANT", "EMPLOYEE"], "WRITE");
+  const access = await requireApiModuleAccess("comptabilite", ["ADMIN", "DIRECTEUR_GENERAL", "MANAGER", "ACCOUNTANT", "EMPLOYEE"], "WRITE");
   if (access.error) return access.error;
 
   await ensureAccountingTables();
@@ -480,7 +480,7 @@ export async function POST(request: NextRequest) {
 }
 
 export async function PUT(request: NextRequest) {
-  const access = await requireApiModuleAccess("payments", ["ADMIN", "DIRECTEUR_GENERAL", "MANAGER", "ACCOUNTANT", "EMPLOYEE"], "WRITE");
+  const access = await requireApiModuleAccess("comptabilite", ["ADMIN", "DIRECTEUR_GENERAL", "MANAGER", "ACCOUNTANT", "EMPLOYEE"], "WRITE");
   if (access.error) return access.error;
 
   await ensureAccountingTables();
@@ -559,7 +559,7 @@ export async function PUT(request: NextRequest) {
 }
 
 export async function DELETE(request: NextRequest) {
-  const access = await requireApiModuleAccess("payments", ["ADMIN", "DIRECTEUR_GENERAL", "MANAGER", "ACCOUNTANT", "EMPLOYEE"], "WRITE");
+  const access = await requireApiModuleAccess("comptabilite", ["ADMIN", "DIRECTEUR_GENERAL", "MANAGER", "ACCOUNTANT", "EMPLOYEE"], "WRITE");
   if (access.error) return access.error;
 
   await ensureAccountingTables();
