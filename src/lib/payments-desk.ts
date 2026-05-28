@@ -77,11 +77,11 @@ function hasModuleReadAccess(level?: ModuleAccessLevelLike) {
   return level === "READ" || level === "WRITE" || level === "FULL";
 }
 
-function resolveCustomCashScopes(customModuleAccessMap?: CashModuleAccessMap) {
+function resolveCustomCashScopes(customModuleAccessMap?: CashModuleAccessMap): AdminCashRoleScope[] {
   if (!customModuleAccessMap) return [] as AdminCashRoleScope[];
 
   if (hasModuleReadAccess(customModuleAccessMap.payments)) {
-    return ["CAISSIER", "CAISSE_2_SIEGE", "CAISSE_AGENCE"];
+    return ["CAISSIER", "CAISSE_2_SIEGE", "CAISSE_AGENCE"] as AdminCashRoleScope[];
   }
 
   const scopes: AdminCashRoleScope[] = [];
