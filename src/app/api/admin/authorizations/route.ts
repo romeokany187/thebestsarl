@@ -69,89 +69,94 @@ export async function GET() {
 }
 
 export async function PATCH(request: NextRequest) {
-  const access = await requireApiModuleAccess("admin", ["ADMIN"]);
-  if (access.error) return access.error;
+  try {
+    const access = await requireApiModuleAccess("admin", ["ADMIN"]);
+    if (access.error) return access.error;
 
-  await ensureUserModuleAccessTable();
+    await ensureUserModuleAccessTable();
 
-  const body = await request.json().catch(() => null);
-  const parsed = updateSchema.safeParse(body);
+    const body = await request.json().catch(() => null);
+    const parsed = updateSchema.safeParse(body);
 
-  if (!parsed.success) {
-    return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
-  }
+    if (!parsed.success) {
+      return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
+    }
 
-  const { userId, module, accessLevel } = parsed.data;
+    const { userId, module, accessLevel } = parsed.data;
 
-  const user = await prisma.user.findUnique({ where: { id: userId }, select: { id: true, name: true, email: true } });
-  if (!user) {
-    return NextResponse.json({ error: "Employe introuvable." }, { status: 404 });
-  }
+    const user = await prisma.user.findUnique({ where: { id: userId }, select: { id: true, name: true, email: true } });
+    if (!user) {
+      return NextResponse.json({ error: "Employe introuvable." }, { status: 404 });
+    }
 
-  if (accessLevel === null) {
-    await userModuleAccessClient.deleteMany({ where: { userId, module } });
+    if (accessLevel === null) {
+      await userModuleAccessClient.deleteMany({ where: { userId, module } });
 
-    await writeActivityLog({
-      actorId: access.session.user.id,
-      action: "USER_MODULE_ACCESS_REMOVED",
-      entityType: "USER",
-      entityId: userId,
-      summary: `Autorisation retiree pour ${user.name} sur ${module}.`,
-      payload: {
+      await writeActivityLog({
+        actorId: access.session.user.id,
+        action: "USER_MODULE_ACCESS_REMOVED",
+        entityType: "USER",
+        entityId: userId,
+        summary: `Autorisation retiree pour ${user.name} sur ${module}.`,
+        payload: {
+          module,
+          removedBy: access.session.user.name ?? "Administrateur",
+        },
+      });
+
+      return NextResponse.json({ data: { userId, module, accessLevel: null } });
+    }
+
+    const saved = await userModuleAccessClient.upsert({
+      where: {
+        userId_module: {
+          userId,
+          module,
+        },
+      },
+      update: {
+        accessLevel,
+        createdById: access.session.user.id,
+      },
+      create: {
+        userId,
         module,
-        removedBy: access.session.user.name ?? "Administrateur",
+        accessLevel,
+        createdById: access.session.user.id,
+      },
+      select: {
+        id: true,
+        userId: true,
+        module: true,
+        accessLevel: true,
+        updatedAt: true,
       },
     });
 
-    return NextResponse.json({ data: { userId, module, accessLevel: null } });
-  }
-
-  const saved = await userModuleAccessClient.upsert({
-    where: {
-      userId_module: {
-        userId,
+    await writeActivityLog({
+      actorId: access.session.user.id,
+      action: "USER_MODULE_ACCESS_UPDATED",
+      entityType: "USER",
+      entityId: userId,
+      summary: `Autorisation ${accessLevel} accordee pour ${user.name} sur ${module}.`,
+      payload: {
         module,
+        accessLevel: accessLevel as ModuleAccessLevel,
+        grantedBy: access.session.user.name ?? "Administrateur",
       },
-    },
-    update: {
-      accessLevel,
-      createdById: access.session.user.id,
-    },
-    create: {
-      userId,
-      module,
-      accessLevel,
-      createdById: access.session.user.id,
-    },
-    select: {
-      id: true,
-      userId: true,
-      module: true,
-      accessLevel: true,
-      updatedAt: true,
-    },
-  });
+    });
 
-  await writeActivityLog({
-    actorId: access.session.user.id,
-    action: "USER_MODULE_ACCESS_UPDATED",
-    entityType: "USER",
-    entityId: userId,
-    summary: `Autorisation ${accessLevel} accordee pour ${user.name} sur ${module}.`,
-    payload: {
-      module,
-      accessLevel: accessLevel as ModuleAccessLevel,
-      grantedBy: access.session.user.name ?? "Administrateur",
-    },
-  });
-
-  return NextResponse.json({
-    data: {
-      id: saved.id,
-      userId: saved.userId,
-      module: saved.module,
-      accessLevel: saved.accessLevel,
-      updatedAt: saved.updatedAt.toISOString(),
-    },
-  });
+    return NextResponse.json({
+      data: {
+        id: saved.id,
+        userId: saved.userId,
+        module: saved.module,
+        accessLevel: saved.accessLevel,
+        updatedAt: saved.updatedAt.toISOString(),
+      },
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Erreur serveur lors de la mise à jour de l'autorisation.";
+    return NextResponse.json({ error: message }, { status: 500 });
+  }
 }

@@ -5,8 +5,9 @@ import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { prisma } from "@/lib/prisma";
 import { requireApiModuleAccess } from "@/lib/rbac";
+import { getUserModuleAccessMap } from "@/lib/user-module-access";
 import { getTicketTotalAmount } from "@/lib/ticket-pricing";
-import { ALL_CASH_DESKS, buildDeskScopedCashOperationWhere, normalizeCashDeskValue } from "@/lib/payments-desk";
+import { ALL_CASH_DESKS, buildDeskScopedCashOperationWhere, isDeskAllowedForUser, normalizeCashDeskValue } from "@/lib/payments-desk";
 
 type ReportMode = "date" | "month" | "year";
 type ReportType = "payments" | "cash-journal" | "cash-summary";
@@ -379,8 +380,18 @@ export async function GET(request: NextRequest) {
   const reportType = (["payments", "cash-journal", "cash-summary"].includes(request.nextUrl.searchParams.get("reportType") ?? "")
     ? request.nextUrl.searchParams.get("reportType")
     : "payments") as ReportType;
+  const moduleAccessMap = await getUserModuleAccessMap(access.session.user.id);
   const requestedDesk = normalizeCashDeskValue(request.nextUrl.searchParams.get("desk"));
   const selectedDesk = requestedDesk ?? "THE_BEST";
+  if (!isDeskAllowedForUser({
+    desk: selectedDesk,
+    jobTitle: access.session.user.jobTitle,
+    role: access.role,
+    customModuleAccessLevel: access.customModuleAccess,
+    customModuleAccessMap: moduleAccessMap,
+  })) {
+    return NextResponse.json({ error: "Accès refusé pour cette caisse." }, { status: 403 });
+  }
   const mainDesk = selectedDesk === "THE_BEST";
   const scopedCashOperationsWhere = buildDeskScopedCashOperationWhere(selectedDesk, { strict: true });
   const range = dateRangeFromParams(

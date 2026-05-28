@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
+import { isDeskAllowedForUser } from "@/lib/payments-desk";
 import { prisma } from "@/lib/prisma";
 import { requireApiModuleAccess } from "@/lib/rbac";
+import { getUserModuleAccessMap } from "@/lib/user-module-access";
 import {
   canReviewCashOperationApprovals,
   cashOperationApprovalRequestClient,
@@ -76,6 +78,17 @@ export async function PATCH(request: NextRequest, { params }: Params) {
 
   if (!existingRequest) {
     return NextResponse.json({ error: "Demande introuvable." }, { status: 404 });
+  }
+
+  const moduleAccessMap = await getUserModuleAccessMap(access.session.user.id);
+  if (!isDeskAllowedForUser({
+    desk: existingRequest.cashDesk,
+    jobTitle: access.session.user.jobTitle,
+    role: access.role,
+    customModuleAccessLevel: access.customModuleAccess,
+    customModuleAccessMap: moduleAccessMap,
+  })) {
+    return NextResponse.json({ error: "Accès refusé pour cette caisse." }, { status: 403 });
   }
 
   if (existingRequest.status !== "PENDING") {

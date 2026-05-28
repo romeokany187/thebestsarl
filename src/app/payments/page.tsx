@@ -18,7 +18,7 @@ import { isCashierJobTitle } from "@/lib/assignment";
 import { requirePageModuleAccess } from "@/lib/rbac";
 import { prisma } from "@/lib/prisma";
 import { cashOperationApprovalRequestClient, canReviewCashOperationApprovals, ensureCashOperationApprovalRequestTable } from "@/lib/cash-operation-approvals";
-import { hasRequiredModuleAccessLevel } from "@/lib/user-module-access";
+import { getUserModuleAccessMap, hasRequiredModuleAccessLevel } from "@/lib/user-module-access";
 import { buildDeskScopedCashOperationWhere, isMainCashDesk, resolvePaymentsDeskState } from "@/lib/payments-desk";
 import { getTicketTotalAmount } from "@/lib/ticket-pricing";
 
@@ -460,6 +460,7 @@ export default async function PaymentsPage({
   searchParams?: Promise<SearchParams>;
 }) {
   const { role, session, customModuleAccess } = await requirePageModuleAccess("payments", ["ADMIN", "DIRECTEUR_GENERAL", "ACCOUNTANT", "EMPLOYEE", "MANAGER"]);
+  const moduleAccessMap = await getUserModuleAccessMap(session.user.id);
   const isCashier = isCashierJobTitle(session.user.jobTitle);
   const isComptable = role === "ACCOUNTANT" || session.user.jobTitle === "COMPTABLE";
   const isAdmin = role === "ADMIN";
@@ -472,6 +473,7 @@ export default async function PaymentsPage({
     jobTitle: session.user.jobTitle,
     role,
     customModuleAccessLevel: customModuleAccess,
+    customModuleAccessMap: moduleAccessMap,
     requestedDesk: typeof (resolvedSearchParams as { desk?: unknown }).desk === "string"
       ? (resolvedSearchParams as { desk?: string }).desk
       : null,

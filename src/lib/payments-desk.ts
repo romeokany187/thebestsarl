@@ -1,5 +1,7 @@
 export type AppRoleLike = "ADMIN" | "DIRECTEUR_GENERAL" | "MANAGER" | "EMPLOYEE" | "ACCOUNTANT";
 type ModuleAccessLevelLike = "READ" | "WRITE" | "FULL" | null | undefined;
+type CashAuthorizationModule = "payments" | "caisse_1_siege" | "caisse_2_siege" | "caisse_agence";
+type CashModuleAccessMap = Partial<Record<CashAuthorizationModule, ModuleAccessLevelLike>>;
 
 export type CashDeskValue = "PROXY_BANKING" | "THE_BEST" | "CAISSE_2_SIEGE" | "CAISSE_SAFETY" | "CAISSE_VISAS" | "CAISSE_TSL" | "CAISSE_AGENCE";
 export type CashDeskOption = { value: CashDeskValue; label: string; description: string };
@@ -71,7 +73,29 @@ export const ADMIN_CASH_ROLE_OPTIONS: Array<{ value: AdminCashRoleScope; label: 
   },
 ];
 
-function hasCustomPaymentsModuleAccess(level?: ModuleAccessLevelLike) {
+function hasModuleReadAccess(level?: ModuleAccessLevelLike) {
+  return level === "READ" || level === "WRITE" || level === "FULL";
+}
+
+function resolveCustomCashScopes(customModuleAccessMap?: CashModuleAccessMap) {
+  if (!customModuleAccessMap) return [] as AdminCashRoleScope[];
+
+  if (hasModuleReadAccess(customModuleAccessMap.payments)) {
+    return ["CAISSIER", "CAISSE_2_SIEGE", "CAISSE_AGENCE"];
+  }
+
+  const scopes: AdminCashRoleScope[] = [];
+  if (hasModuleReadAccess(customModuleAccessMap.caisse_1_siege)) scopes.push("CAISSIER");
+  if (hasModuleReadAccess(customModuleAccessMap.caisse_2_siege)) scopes.push("CAISSE_2_SIEGE");
+  if (hasModuleReadAccess(customModuleAccessMap.caisse_agence)) scopes.push("CAISSE_AGENCE");
+  return scopes;
+}
+
+function hasCustomPaymentsModuleAccess(level?: ModuleAccessLevelLike, customModuleAccessMap?: CashModuleAccessMap) {
+  if (resolveCustomCashScopes(customModuleAccessMap).length > 0) {
+    return true;
+  }
+
   return level === "FULL";
 }
 
@@ -103,9 +127,15 @@ export function getDefaultCashRoleScope(
   jobTitle?: string | null,
   role?: AppRoleLike | string | null,
   customModuleAccessLevel?: ModuleAccessLevelLike,
+  customModuleAccessMap?: CashModuleAccessMap,
 ): AdminCashRoleScope {
-  if (hasCustomPaymentsModuleAccess(customModuleAccessLevel)) {
-    return "CAISSE_2_SIEGE";
+  const customScopes = resolveCustomCashScopes(customModuleAccessMap);
+  if (customScopes.length > 0) {
+    return customScopes[0];
+  }
+
+  if (hasCustomPaymentsModuleAccess(customModuleAccessLevel, customModuleAccessMap)) {
+    return "CAISSIER";
   }
 
   const normalizedJobTitle = (jobTitle ?? "").trim().toUpperCase();
@@ -129,8 +159,14 @@ export function getVisibleCashRoleOptions(
   jobTitle?: string | null,
   role?: AppRoleLike | string | null,
   customModuleAccessLevel?: ModuleAccessLevelLike,
+  customModuleAccessMap?: CashModuleAccessMap,
 ) {
-  if (hasCustomPaymentsModuleAccess(customModuleAccessLevel)) {
+  const customScopes = resolveCustomCashScopes(customModuleAccessMap);
+  if (customScopes.length > 0) {
+    return ADMIN_CASH_ROLE_OPTIONS.filter((option) => customScopes.includes(option.value));
+  }
+
+  if (hasCustomPaymentsModuleAccess(customModuleAccessLevel, customModuleAccessMap)) {
     return ADMIN_CASH_ROLE_OPTIONS;
   }
 
@@ -166,9 +202,10 @@ export function getManagedCashDesks(
   role?: AppRoleLike | string | null,
   scope?: AdminCashRoleScope | null,
   customModuleAccessLevel?: ModuleAccessLevelLike,
+  customModuleAccessMap?: CashModuleAccessMap,
 ) {
   const normalizedJobTitle = (jobTitle ?? "").trim().toUpperCase();
-  const visibleScopeOptions = getVisibleCashRoleOptions(jobTitle, role, customModuleAccessLevel);
+  const visibleScopeOptions = getVisibleCashRoleOptions(jobTitle, role, customModuleAccessLevel, customModuleAccessMap);
 
   if (visibleScopeOptions.length > 0) {
     const fallbackScope = visibleScopeOptions[0]?.value ?? getDefaultCashRoleScope(jobTitle, role, customModuleAccessLevel);
@@ -286,15 +323,17 @@ export function resolvePaymentsDeskState({
   requestedDesk,
   requestedScope,
   customModuleAccessLevel,
+  customModuleAccessMap,
 }: {
   jobTitle?: string | null;
   role?: AppRoleLike | string | null;
   requestedDesk?: string | null;
   requestedScope?: string | null;
   customModuleAccessLevel?: ModuleAccessLevelLike;
+  customModuleAccessMap?: CashModuleAccessMap;
 }) {
-  const scopeOptions = getVisibleCashRoleOptions(jobTitle, role, customModuleAccessLevel);
-  const fallbackScope = getDefaultCashRoleScope(jobTitle, role, customModuleAccessLevel);
+  const scopeOptions = getVisibleCashRoleOptions(jobTitle, role, customModuleAccessLevel, customModuleAccessMap);
+  const fallbackScope = getDefaultCashRoleScope(jobTitle, role, customModuleAccessLevel, customModuleAccessMap);
   const inferredScope = inferScopeFromDesk(requestedDesk);
   const scope = scopeOptions.length > 0
     ? (scopeOptions.some((option) => option.value === requestedScope)
@@ -305,7 +344,7 @@ export function resolvePaymentsDeskState({
           ? fallbackScope
           : scopeOptions[0].value)
     : (requestedScope as AdminCashRoleScope | null) ?? inferredScope ?? fallbackScope;
-  const deskOptions = getManagedCashDesks(jobTitle, role, scope, customModuleAccessLevel);
+  const deskOptions = getManagedCashDesks(jobTitle, role, scope, customModuleAccessLevel, customModuleAccessMap);
   const normalizedRequestedDesk = (requestedDesk ?? "").trim().toUpperCase() as CashDeskValue;
   const desk = deskOptions.some((option) => option.value === normalizedRequestedDesk)
     ? normalizedRequestedDesk
@@ -324,17 +363,19 @@ export function resolveExecutionCashDesk({
   jobTitle,
   role,
   customModuleAccessLevel,
+  customModuleAccessMap,
 }: {
   requestedDesk?: string | null;
   jobTitle?: string | null;
   role?: AppRoleLike | string | null;
   customModuleAccessLevel?: ModuleAccessLevelLike;
+  customModuleAccessMap?: CashModuleAccessMap;
 }): CashDeskValue {
   const normalizedRequestedDesk = normalizeCashDeskValue(requestedDesk);
   if (normalizedRequestedDesk) {
     const inferredScope = inferScopeFromDesk(normalizedRequestedDesk);
-    const fallbackScope = getDefaultCashRoleScope(jobTitle, role, customModuleAccessLevel);
-    const visibleDesks = getManagedCashDesks(jobTitle, role, inferredScope ?? fallbackScope, customModuleAccessLevel);
+    const fallbackScope = getDefaultCashRoleScope(jobTitle, role, customModuleAccessLevel, customModuleAccessMap);
+    const visibleDesks = getManagedCashDesks(jobTitle, role, inferredScope ?? fallbackScope, customModuleAccessLevel, customModuleAccessMap);
     if (visibleDesks.some((desk) => desk.value === normalizedRequestedDesk)) {
       return normalizedRequestedDesk;
     }
@@ -344,4 +385,23 @@ export function resolveExecutionCashDesk({
   if (normalizedJobTitle === "CAISSIER") return "PROXY_BANKING";
   if (normalizedJobTitle === "CAISSE_AGENCE") return "CAISSE_AGENCE";
   return "THE_BEST";
+}
+
+export function isDeskAllowedForUser({
+  desk,
+  jobTitle,
+  role,
+  customModuleAccessLevel,
+  customModuleAccessMap,
+}: {
+  desk: CashDeskValue;
+  jobTitle?: string | null;
+  role?: AppRoleLike | string | null;
+  customModuleAccessLevel?: ModuleAccessLevelLike;
+  customModuleAccessMap?: CashModuleAccessMap;
+}) {
+  const inferredScope = inferScopeFromDesk(desk);
+  const fallbackScope = getDefaultCashRoleScope(jobTitle, role, customModuleAccessLevel, customModuleAccessMap);
+  const visibleDesks = getManagedCashDesks(jobTitle, role, inferredScope ?? fallbackScope, customModuleAccessLevel, customModuleAccessMap);
+  return visibleDesks.some((item) => item.value === desk);
 }

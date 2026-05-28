@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireApiModuleAccess } from "@/lib/rbac";
+import { getUserModuleAccessMap } from "@/lib/user-module-access";
+import { isDeskAllowedForUser, normalizeCashDeskValue } from "@/lib/payments-desk";
 
 export const dynamic = "force-dynamic";
 
@@ -11,10 +13,21 @@ export async function GET(request: NextRequest) {
 
   const { searchParams } = request.nextUrl;
   const date = searchParams.get("date");
-  const cashDesk = searchParams.get("cashDesk");
+  const cashDesk = normalizeCashDeskValue(searchParams.get("cashDesk"));
 
   if (!date || !cashDesk) {
     return NextResponse.json({ error: "date et cashDesk requis" }, { status: 400 });
+  }
+
+  const moduleAccessMap = await getUserModuleAccessMap(access.session.user.id);
+  if (!isDeskAllowedForUser({
+    desk: cashDesk,
+    jobTitle: access.session.user.jobTitle,
+    role: access.role,
+    customModuleAccessLevel: access.customModuleAccess,
+    customModuleAccessMap: moduleAccessMap,
+  })) {
+    return NextResponse.json({ error: "Accès refusé pour cette caisse." }, { status: 403 });
   }
 
   const snapshot = await prisma.cashBilletageSnapshot.findUnique({
@@ -51,8 +64,21 @@ export async function POST(request: NextRequest) {
 
   const { date, cashDesk, usdCounts, cdfCounts, expectedUsd, expectedCdf } = body;
 
-  if (!date || !cashDesk) {
+  const normalizedCashDesk = normalizeCashDeskValue(cashDesk);
+
+  if (!date || !normalizedCashDesk) {
     return NextResponse.json({ error: "date et cashDesk requis" }, { status: 400 });
+  }
+
+  const moduleAccessMap = await getUserModuleAccessMap(access.session.user.id);
+  if (!isDeskAllowedForUser({
+    desk: normalizedCashDesk,
+    jobTitle: access.session.user.jobTitle,
+    role: access.role,
+    customModuleAccessLevel: access.customModuleAccess,
+    customModuleAccessMap: moduleAccessMap,
+  })) {
+    return NextResponse.json({ error: "Accès refusé pour cette caisse." }, { status: 403 });
   }
 
   // Validate date format
@@ -61,10 +87,10 @@ export async function POST(request: NextRequest) {
   }
 
   const snapshot = await prisma.cashBilletageSnapshot.upsert({
-    where: { date_cashDesk: { date, cashDesk } },
+    where: { date_cashDesk: { date, cashDesk: normalizedCashDesk } },
     create: {
       date,
-      cashDesk,
+      cashDesk: normalizedCashDesk,
       usdCounts: usdCounts ?? {},
       cdfCounts: cdfCounts ?? {},
       expectedUsd: expectedUsd ?? 0,

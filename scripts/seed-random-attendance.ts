@@ -2,12 +2,14 @@ import { AttendanceStatus, PresenceLocationStatus, PrismaClient, SiteType } from
 
 const prisma = new PrismaClient();
 
-const targetUserId = "cmnnqfi9e000j56dpzhewyj0k";
+const targetUserId = process.env.ATTENDANCE_USER_ID?.trim() || "cmnnqfi9e000j56dpzhewyj0k";
 const defaultTimeZone = "Africa/Kinshasa";
 const kinshasaOfficeSiteName = "Agence de Kinshasa";
 const defaultOfficeAddress = "Agence de Kinshasa, Kinshasa";
 const defaultKinshasaLatitude = -4.325;
 const defaultKinshasaLongitude = 15.322;
+const defaultClockInStart = "08:00";
+const defaultClockInEnd = "08:30";
 
 function getMonthStart(date: Date) {
   return new Date(date.getFullYear(), date.getMonth(), 1);
@@ -43,6 +45,23 @@ function isSundayInTimeZone(date: Date, timeZone: string) {
 
 function randomInt(min: number, max: number) {
   return Math.floor(Math.random() * (max - min + 1)) + min;
+}
+
+function parseTimeToMinutes(value: string, fallback: number) {
+  const normalized = value.trim();
+  const match = normalized.match(/^(\d{1,2}):(\d{2})$/);
+  if (!match) return fallback;
+  const hour = Number.parseInt(match[1], 10);
+  const minute = Number.parseInt(match[2], 10);
+  if (!Number.isFinite(hour) || !Number.isFinite(minute)) return fallback;
+  if (hour < 0 || hour > 23 || minute < 0 || minute > 59) return fallback;
+  return (hour * 60) + minute;
+}
+
+function addDays(date: Date, days: number) {
+  const copy = new Date(date);
+  copy.setDate(copy.getDate() + days);
+  return copy;
 }
 
 function timeZoneOffsetMinutes(timeZone: string) {
@@ -119,8 +138,11 @@ async function resolveKinshasaOfficeSite() {
 async function main() {
   const today = new Date();
   const timeZone = await resolveAttendanceTimeZone(targetUserId);
-  const startDate = getMonthStart(today);
   const kinshasaOffice = await resolveKinshasaOfficeSite();
+  const clockInStartMinutes = parseTimeToMinutes(process.env.ATTENDANCE_CLOCKIN_START ?? defaultClockInStart, 8 * 60);
+  const clockInEndMinutes = parseTimeToMinutes(process.env.ATTENDANCE_CLOCKIN_END ?? defaultClockInEnd, (8 * 60) + 30);
+  const minClockInMinutes = Math.min(clockInStartMinutes, clockInEndMinutes);
+  const maxClockInMinutes = Math.max(clockInStartMinutes, clockInEndMinutes);
 
   const targetUser = await prisma.user.findUnique({
     where: { id: targetUserId },
@@ -131,31 +153,33 @@ async function main() {
     throw new Error(`User not found: ${targetUserId}`);
   }
 
+  const lastAttendance = await prisma.attendance.findFirst({
+    where: {
+      userId: targetUserId,
+      OR: [
+        { signedAt: { not: null } },
+        { clockIn: { not: null } },
+      ],
+    },
+    orderBy: [
+      { signedAt: "desc" },
+      { clockIn: "desc" },
+      { date: "desc" },
+    ],
+    select: {
+      signedAt: true,
+      clockIn: true,
+      date: true,
+    },
+  });
+
+  const referenceDate = lastAttendance?.signedAt ?? lastAttendance?.clockIn ?? lastAttendance?.date;
+  const startDate = referenceDate
+    ? addDays(buildAttendanceDay(referenceDate, timeZone), 1)
+    : getMonthStart(today);
+
   let createdCount = 0;
-  let deletedSundayCount = 0;
   const cursor = new Date(startDate);
-
-  const sundaysToDelete: Date[] = [];
-  while (cursor <= today) {
-    if (isSundayInTimeZone(cursor, timeZone)) {
-      sundaysToDelete.push(buildAttendanceDay(cursor, timeZone));
-    }
-    cursor.setDate(cursor.getDate() + 1);
-  }
-
-  if (sundaysToDelete.length > 0) {
-    const deleted = await prisma.attendance.deleteMany({
-      where: {
-        userId: targetUserId,
-        date: {
-          in: sundaysToDelete,
-        },
-      },
-    });
-    deletedSundayCount = deleted.count;
-  }
-
-  cursor.setTime(startDate.getTime());
 
   while (cursor <= today) {
     if (isSundayInTimeZone(cursor, timeZone)) {
@@ -164,8 +188,10 @@ async function main() {
     }
 
     const dayKey = buildAttendanceDay(cursor, timeZone);
-    const minute = randomInt(0, 30);
-    const clockIn = makeLocalTimeUtc(cursor, 8, minute, timeZone);
+    const randomMinuteOfDay = randomInt(minClockInMinutes, maxClockInMinutes);
+    const clockInHour = Math.floor(randomMinuteOfDay / 60);
+    const clockInMinute = randomMinuteOfDay % 60;
+    const clockIn = makeLocalTimeUtc(cursor, clockInHour, clockInMinute, timeZone);
 
     await prisma.attendance.upsert({
       where: {
@@ -213,7 +239,9 @@ async function main() {
   }
 
   console.log(`Created or updated ${createdCount} attendance records for ${targetUser.name} (${targetUser.email})`);
-  console.log(`Deleted ${deletedSundayCount} Sunday attendance records for ${targetUser.name} (${targetUser.email})`);
+  console.log(`Started from: ${startDate.toISOString().slice(0, 10)} (last signed date + 1 day when available)`);
+  console.log(`Clock-in interval: ${String(Math.floor(minClockInMinutes / 60)).padStart(2, "0")}:${String(minClockInMinutes % 60).padStart(2, "0")} -> ${String(Math.floor(maxClockInMinutes / 60)).padStart(2, "0")}:${String(maxClockInMinutes % 60).padStart(2, "0")}`);
+  console.log("Sundays excluded.");
   console.log(`Attendance linked to site: ${kinshasaOffice.name} (${kinshasaOffice.latitude}, ${kinshasaOffice.longitude})`);
   console.log(`Time zone: ${timeZone}`);
 }

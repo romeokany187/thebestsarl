@@ -2,9 +2,10 @@ import { NextRequest, NextResponse } from "next/server";
 import { isCashierJobTitle } from "@/lib/assignment";
 import { prisma } from "@/lib/prisma";
 import { requireApiModuleAccess } from "@/lib/rbac";
+import { getUserModuleAccessMap } from "@/lib/user-module-access";
 import { cashOperationCreateSchema } from "@/lib/validators";
 import { isMailConfigured, sendMailBatch } from "@/lib/mail";
-import { inferCashDeskFromDescription } from "@/lib/payments-desk";
+import { inferCashDeskFromDescription, isDeskAllowedForUser } from "@/lib/payments-desk";
 import { writeActivityLog } from "@/lib/activity-log";
 import { canReviewCashOperationApprovals, createBlockedCashOutflowApprovalRequest } from "@/lib/cash-operation-approvals";
 import { getCashDeskAvailableBalances } from "@/lib/cash-balance";
@@ -143,6 +144,16 @@ export async function POST(request: NextRequest) {
   const { start: dayStart, end: dayEnd } = utcDayBounds(occurredAt);
   const description = (data.description ?? "").trim();
   const cashDeskForOp = inferCashDeskFromDescription(description);
+  const moduleAccessMap = await getUserModuleAccessMap(access.session.user.id);
+  if (!isDeskAllowedForUser({
+    desk: cashDeskForOp,
+    jobTitle: access.session.user.jobTitle,
+    role: access.role,
+    customModuleAccessLevel: access.customModuleAccess,
+    customModuleAccessMap: moduleAccessMap,
+  })) {
+    return NextResponse.json({ error: "Accès refusé pour cette caisse." }, { status: 403 });
+  }
   let projectedDailyOutflowUsd = 0;
   let thresholdAlertMessage: string | null = null;
 
@@ -475,6 +486,18 @@ export async function PATCH(request: NextRequest) {
       return NextResponse.json({ error: "Écriture de caisse introuvable." }, { status: 404 });
     }
 
+    const existingDesk = inferCashDeskFromDescription(existing.description ?? "");
+    const moduleAccessMap = await getUserModuleAccessMap(access.session.user.id);
+    if (!isDeskAllowedForUser({
+      desk: existingDesk,
+      jobTitle: access.session.user.jobTitle,
+      role: access.role,
+      customModuleAccessLevel: access.customModuleAccess,
+      customModuleAccessMap: moduleAccessMap,
+    })) {
+      return NextResponse.json({ error: "Accès refusé pour cette caisse." }, { status: 403 });
+    }
+
     const nextAmount = body?.amount !== undefined ? Number(body.amount) : existing.amount;
     if (!Number.isFinite(nextAmount) || nextAmount <= 0) {
       return NextResponse.json({ error: "Montant invalide pour la modification de l'écriture." }, { status: 400 });
@@ -642,6 +665,18 @@ export async function DELETE(request: NextRequest) {
 
     if (!existing) {
       return NextResponse.json({ error: "Écriture de caisse introuvable." }, { status: 404 });
+    }
+
+    const existingDesk = inferCashDeskFromDescription(existing.description ?? "");
+    const moduleAccessMap = await getUserModuleAccessMap(access.session.user.id);
+    if (!isDeskAllowedForUser({
+      desk: existingDesk,
+      jobTitle: access.session.user.jobTitle,
+      role: access.role,
+      customModuleAccessLevel: access.customModuleAccess,
+      customModuleAccessMap: moduleAccessMap,
+    })) {
+      return NextResponse.json({ error: "Accès refusé pour cette caisse." }, { status: 403 });
     }
 
     await cashOperationClient.delete({ where: { id: cashOperationId } });

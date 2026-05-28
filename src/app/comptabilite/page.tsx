@@ -1,5 +1,4 @@
 import React from 'react'
-import { redirect } from 'next/navigation'
 import { AppShell } from '@/components/app-shell'
 import { AccountingPlanWorkspace } from '@/components/accounting-plan-workspace'
 import { AccountingReportsWorkspace } from '@/components/accounting-reports-workspace'
@@ -19,12 +18,7 @@ function formatClassLabel(cls: string) {
 }
 
 export default async function Page() {
-  const { role, session } = await requirePageModuleAccess('comptabilite', ['ADMIN', 'ACCOUNTANT', 'EMPLOYEE'])
-  const normalizedJobTitle = (session.user.jobTitle ?? '').trim().toUpperCase()
-
-  if (role !== 'ADMIN' && role !== 'ACCOUNTANT' && normalizedJobTitle !== 'COMPTABLE') {
-    redirect('/')
-  }
+  const { role } = await requirePageModuleAccess('comptabilite', ['ADMIN', 'ACCOUNTANT', 'EMPLOYEE'])
 
   const accounts = await prisma.account.findMany({
     select: {

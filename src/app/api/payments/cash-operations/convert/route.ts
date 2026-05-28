@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { isCashierJobTitle } from "@/lib/assignment";
 import { prisma } from "@/lib/prisma";
 import { requireApiModuleAccess } from "@/lib/rbac";
-import { inferCashDeskFromDescription } from "@/lib/payments-desk";
+import { getUserModuleAccessMap } from "@/lib/user-module-access";
+import { inferCashDeskFromDescription, isDeskAllowedForUser } from "@/lib/payments-desk";
 import { cashConversionSchema } from "@/lib/validators";
 import { writeActivityLog } from "@/lib/activity-log";
 import { getCashDeskAvailableBalances } from "@/lib/cash-balance";
@@ -69,6 +70,16 @@ export async function POST(request: NextRequest) {
 
   const desc = (data.description ?? "").trim();
   const cashDeskForOp = inferCashDeskFromDescription(desc);
+  const moduleAccessMap = await getUserModuleAccessMap(access.session.user.id);
+  if (!isDeskAllowedForUser({
+    desk: cashDeskForOp,
+    jobTitle: access.session.user.jobTitle,
+    role: access.role,
+    customModuleAccessLevel: access.customModuleAccess,
+    customModuleAccessMap: moduleAccessMap,
+  })) {
+    return NextResponse.json({ error: "Accès refusé pour cette caisse." }, { status: 403 });
+  }
 
   const deskBalances = await getCashDeskAvailableBalances({
     client: prisma,

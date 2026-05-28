@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { Prisma } from "@prisma/client";
 import { isCashierJobTitle } from "@/lib/assignment";
-import { resolveExecutionCashDesk } from "@/lib/payments-desk";
+import { isDeskAllowedForUser, resolveExecutionCashDesk } from "@/lib/payments-desk";
 import { prisma } from "@/lib/prisma";
 import { requireApiModuleAccess } from "@/lib/rbac";
+import { getUserModuleAccessMap } from "@/lib/user-module-access";
 import { needExecutionSchema } from "@/lib/validators";
 import { writeActivityLog } from "@/lib/activity-log";
 import { getCashDeskAvailableBalances } from "@/lib/cash-balance";
@@ -66,12 +67,24 @@ export async function POST(request: NextRequest) {
     );
   }
   const executionAmount = need.estimatedAmount;
+  const moduleAccessMap = await getUserModuleAccessMap(access.session.user.id);
   const executionCashDesk = resolveExecutionCashDesk({
     requestedDesk: parsed.data.cashDesk,
     jobTitle: me.jobTitle,
     role: access.role,
     customModuleAccessLevel: access.customModuleAccess,
+    customModuleAccessMap: moduleAccessMap,
   });
+
+  if (!isDeskAllowedForUser({
+    desk: executionCashDesk,
+    jobTitle: me.jobTitle,
+    role: access.role,
+    customModuleAccessLevel: access.customModuleAccess,
+    customModuleAccessMap: moduleAccessMap,
+  })) {
+    return NextResponse.json({ error: "Accès refusé pour cette caisse." }, { status: 403 });
+  }
 
   const now = new Date();
   const needCurrency = normalizeCashCurrency(need.currency);
