@@ -846,7 +846,7 @@ export function AccountingJournalWorkspace({
             </p>
           ) : (
             filteredRecentEntries.map((entry) => (
-              <article key={entry.id} className="rounded-xl border border-black/10 p-3 dark:border-white/10">
+              <article id={`entry-${entry.id}`} key={entry.id} className="rounded-xl border border-black/10 p-3 dark:border-white/10">
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div>
                     <p className="text-sm font-semibold">Écriture n° {entry.sequence}</p>
@@ -933,6 +933,27 @@ export function AccountingJournalWorkspace({
               ))
             )}
           </div>
+        
+          {/* Deep-link focus: scroll to entry when URL contains ?entryId=... */}
+          <script suppressHydrationWarning>
+            {`(function(){
+              try{
+                function focusEntry(){
+                  const url = new URL(window.location.href);
+                  const entryId = (url.searchParams.get('entryId') || '').trim();
+                  if(!entryId) return;
+                  const el = document.getElementById('entry-' + entryId);
+                  if(el){
+                    el.scrollIntoView({behavior:'smooth', block:'center'});
+                    try{ el.animate([{boxShadow:'0 0 0 8px rgba(59,130,246,0.25)'},{boxShadow:'none'}],{duration:1800}); }catch(e){}
+                  }
+                }
+                if(document.readyState === 'complete') focusEntry(); else window.addEventListener('load', focusEntry);
+                window.addEventListener('popstate', focusEntry);
+                window.addEventListener('hashchange', focusEntry);
+              }catch(e){}
+            })();`}
+          </script>
         </div>
       </section>
       ) : null}
