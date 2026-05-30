@@ -193,6 +193,8 @@ async function main() {
     const clockInMinute = randomMinuteOfDay % 60;
     const clockIn = makeLocalTimeUtc(cursor, clockInHour, clockInMinute, timeZone);
 
+    const observation = `Signature automatique: Entrée enregistrée. Heure locale (${timeZone}): ${new Intl.DateTimeFormat("fr-FR", { timeZone, hour: "2-digit", minute: "2-digit" }).format(clockIn)}.`;
+
     await prisma.attendance.upsert({
       where: {
         userId_date: {
@@ -213,7 +215,7 @@ async function main() {
         locationStatus: PresenceLocationStatus.OFFICE,
         matchedSiteId: kinshasaOffice.id,
         matchDistanceM: 0,
-        notes: null,
+        notes: observation,
       },
       create: {
         userId: targetUserId,
@@ -230,9 +232,11 @@ async function main() {
         locationStatus: PresenceLocationStatus.OFFICE,
         matchedSiteId: kinshasaOffice.id,
         matchDistanceM: 0,
-        notes: null,
+        notes: observation,
       },
     });
+
+    console.log(`Signed ${dayKey.toISOString().slice(0, 10)} for ${targetUser.name} at ${clockIn.toISOString()} - observation: ${observation}`);
 
     createdCount += 1;
     cursor.setDate(cursor.getDate() + 1);
