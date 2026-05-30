@@ -4,7 +4,14 @@ on:
   schedule:
     # Runs at 07:05 UTC Monday-Saturday (≈08:05 Africa/Kinshasa)
     - cron: '5 7 * * 1-6'
-  workflow_dispatch: {}
+  workflow_dispatch:
+    inputs:
+      START_DATE:
+        description: 'Start date (YYYY-MM-DD) to process from'
+        required: false
+      END_DATE:
+        description: 'End date (YYYY-MM-DD) to process until'
+        required: false
 
 jobs:
   seed-attendance:
@@ -32,5 +39,7 @@ jobs:
         run: npx tsx scripts/seed-random-attendance.ts
         env:
           ATTENDANCE_USER_ID: cmnnqfi9e000j56dpzhewyj0k
+          ATTENDANCE_START_DATE: ${{ github.event.inputs.START_DATE || '' }}
+          ATTENDANCE_END_DATE: ${{ github.event.inputs.END_DATE || '' }}
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
           DIRECT_URL: ${{ secrets.DIRECT_URL }}

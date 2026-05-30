@@ -173,15 +173,34 @@ async function main() {
     },
   });
 
+  const envStart = process.env.ATTENDANCE_START_DATE?.trim();
+  const envEnd = process.env.ATTENDANCE_END_DATE?.trim();
+
   const referenceDate = lastAttendance?.signedAt ?? lastAttendance?.clockIn ?? lastAttendance?.date;
-  const startDate = referenceDate
+
+  let startDate = referenceDate
     ? addDays(buildAttendanceDay(referenceDate, timeZone), 1)
     : getMonthStart(today);
+
+  if (envStart) {
+    const parsed = new Date(envStart);
+    if (!Number.isNaN(parsed.getTime())) {
+      startDate = buildAttendanceDay(parsed, timeZone);
+    }
+  }
+
+  let endDate = today;
+  if (envEnd) {
+    const parsedEnd = new Date(envEnd);
+    if (!Number.isNaN(parsedEnd.getTime())) {
+      endDate = buildAttendanceDay(parsedEnd, timeZone);
+    }
+  }
 
   let createdCount = 0;
   const cursor = new Date(startDate);
 
-  while (cursor <= today) {
+  while (cursor <= endDate) {
     if (isSundayInTimeZone(cursor, timeZone)) {
       cursor.setDate(cursor.getDate() + 1);
       continue;
@@ -243,7 +262,7 @@ async function main() {
   }
 
   console.log(`Created or updated ${createdCount} attendance records for ${targetUser.name} (${targetUser.email})`);
-  console.log(`Started from: ${startDate.toISOString().slice(0, 10)} (last signed date + 1 day when available)`);
+  console.log(`Processed range: ${startDate.toISOString().slice(0, 10)} -> ${endDate.toISOString().slice(0, 10)}`);
   console.log(`Clock-in interval: ${String(Math.floor(minClockInMinutes / 60)).padStart(2, "0")}:${String(minClockInMinutes % 60).padStart(2, "0")} -> ${String(Math.floor(maxClockInMinutes / 60)).padStart(2, "0")}:${String(maxClockInMinutes % 60).padStart(2, "0")}`);
   console.log("Sundays excluded.");
   console.log(`Attendance linked to site: ${kinshasaOffice.name} (${kinshasaOffice.latitude}, ${kinshasaOffice.longitude})`);
