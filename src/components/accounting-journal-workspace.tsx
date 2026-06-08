@@ -940,7 +940,16 @@ export function AccountingJournalWorkspace({
               try{
                 function focusEntry(){
                   const url = new URL(window.location.href);
-                  const entryId = (url.searchParams.get('entryId') || '').trim();
+                  let entryId = (url.searchParams.get('entryId') || '').trim();
+                  if(!entryId){
+                    const hash = (window.location.hash || '').trim();
+                    if(hash){
+                      const m = hash.match(/^#?entry-(.+)$/);
+                      if(m && m[1]){
+                        try{ entryId = decodeURIComponent(m[1]); }catch(e){ entryId = m[1]; }
+                      }
+                    }
+                  }
                   if(!entryId) return;
                   const el = document.getElementById('entry-' + entryId);
                   if(el){

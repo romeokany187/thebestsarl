@@ -968,7 +968,11 @@ async function loadPdfFonts(pdf: PDFDocument) {
 
 function buildAccountingEntryDeepLink(baseUrl: string | null, entryId: string) {
   if (!baseUrl || !entryId) return "";
-  return `${baseUrl.replace(/\/$/, "")}/comptabilite?view=journal&entryId=${encodeURIComponent(entryId)}`;
+  // Include both a query parameter and a hash anchor so various PDF viewers
+  // and browsers reliably open the app and allow the frontend to focus the entry.
+  const base = baseUrl.replace(/\/$/, "");
+  const encoded = encodeURIComponent(entryId);
+  return `${base}/comptabilite?view=journal&entryId=${encoded}#entry-${encoded}`;
 }
 
 async function buildPdf(report: ReportPayload, appBaseUrl: string | null) {
