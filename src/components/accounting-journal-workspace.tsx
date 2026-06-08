@@ -951,11 +951,29 @@ export function AccountingJournalWorkspace({
                     }
                   }
                   if(!entryId) return;
-                  const el = document.getElementById('entry-' + entryId);
-                  if(el){
-                    el.scrollIntoView({behavior:'smooth', block:'center'});
-                    try{ el.animate([{boxShadow:'0 0 0 8px rgba(59,130,246,0.25)'},{boxShadow:'none'}],{duration:1800}); }catch(e){}
+
+                  // Try to find the element immediately; if entries are loaded async,
+                  // poll for a short time until the element appears.
+                  function applyFocus(){
+                    const el = document.getElementById('entry-' + entryId);
+                    if(el){
+                      el.scrollIntoView({behavior:'smooth', block:'center'});
+                      try{ el.animate([{boxShadow:'0 0 0 8px rgba(59,130,246,0.25)'},{boxShadow:'none'}],{duration:1800}); }catch(e){}
+                      return true;
+                    }
+                    return false;
                   }
+
+                  if(applyFocus()) return;
+
+                  let attempts = 0;
+                  const maxAttempts = 30; // ~9 seconds at 300ms interval
+                  const interval = setInterval(() => {
+                    attempts += 1;
+                    if(applyFocus() || attempts >= maxAttempts){
+                      clearInterval(interval);
+                    }
+                  }, 300);
                 }
                 if(document.readyState === 'complete') focusEntry(); else window.addEventListener('load', focusEntry);
                 window.addEventListener('popstate', focusEntry);
