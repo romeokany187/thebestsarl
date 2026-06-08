@@ -959,6 +959,13 @@ export function AccountingJournalWorkspace({
                     if(el){
                       el.scrollIntoView({behavior:'smooth', block:'center'});
                       try{ el.animate([{boxShadow:'0 0 0 8px rgba(59,130,246,0.25)'},{boxShadow:'none'}],{duration:1800}); }catch(e){}
+                      try{
+                        el.setAttribute('tabindex', '-1');
+                        el.focus({preventScroll: true});
+                      }catch(e){}
+                      // Extra attempts to ensure scroll isn't overridden by other page behavior
+                      setTimeout(() => { try{ el.scrollIntoView({behavior:'smooth', block:'center'}); }catch(e){} }, 300);
+                      setTimeout(() => { try{ el.scrollIntoView({behavior:'smooth', block:'center'}); }catch(e){} }, 1000);
                       return true;
                     }
                     return false;
