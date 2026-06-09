@@ -53,7 +53,13 @@ export function AccountingWritingWorkspace({
   reportsWorkspace: React.ReactNode;
   planWorkspace: React.ReactNode;
 }) {
-  const [view, setView] = useState<AccountingView>("overview");
+  const [view, setView] = useState<AccountingView>(() => {
+    if (typeof window === "undefined") return "overview";
+    const url = new URL(window.location.href);
+    return resolveAccountingView(url.searchParams.get("view"))
+      ?? resolveAccountingView(window.location.hash)
+      ?? "overview";
+  });
 
   useEffect(() => {
     if (typeof window === "undefined") return;

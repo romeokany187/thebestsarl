@@ -966,8 +966,8 @@ async function loadPdfFonts(pdf: PDFDocument) {
   }
 }
 
-function buildAccountingEntryDeepLink(baseUrl: string | null, entryId: string) {
-  if (!baseUrl || !entryId) return "";
+function buildAccountingEntryDeepLink(_baseUrl: string | null, entryId: string) {
+  if (!entryId) return "";
   // Include both a query parameter and a hash anchor so various PDF viewers
   // and browsers reliably open the app and allow the frontend to focus the entry.
   const encoded = encodeURIComponent(entryId);
