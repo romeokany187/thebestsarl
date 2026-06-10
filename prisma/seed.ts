@@ -140,6 +140,24 @@ async function main() {
     },
   });
 
+  const southAfrica = await prisma.airline.upsert({
+    where: { code: "SA" },
+    update: {},
+    create: {
+      code: "SA",
+      name: "South African Airways",
+    },
+  });
+
+  const airlink = await prisma.airline.upsert({
+    where: { code: "4Z" },
+    update: {},
+    create: {
+      code: "4Z",
+      name: "Airlink",
+    },
+  });
+
   await Promise.all([
     prisma.airline.upsert({
       where: { code: "FST" },

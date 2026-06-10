@@ -33,6 +33,7 @@ export default async function Page() {
 
   const AccountsManager = (await import('@/components/accounts-manager')).default
   const AccountingJournalWorkspace = (await import('@/components/accounting-journal-workspace')).AccountingJournalWorkspace
+  const UnpaidAlertsButton = (await import('@/components/unpaid-alerts-button')).UnpaidAlertsButton
   const totalAccounts = accounts.length
   const rootAccounts = accounts.filter((account) => !account.parentCode).length
   const detailAccounts = accounts.filter((account) => !accounts.some((candidate) => candidate.parentCode === account.code)).length
@@ -115,6 +116,9 @@ export default async function Page() {
                     <p className="mt-1 text-xs text-black/55 dark:text-white/55">Les notifications caisse servent de rappel, pas de source automatique.</p>
                   </div>
                 </div>
+                  <div className="mt-4">
+                    <UnpaidAlertsButton />
+                  </div>
               </section>
 
               <section className="rounded-2xl border border-black/10 bg-white p-4 shadow-sm dark:border-white/10 dark:bg-zinc-900">
