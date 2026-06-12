@@ -116,6 +116,29 @@ export async function POST(request: NextRequest) {
             "",
             `Consulter: ${newsUrl}`,
           ].join("\n"),
+          html: `
+            <div style="font-family:Arial,sans-serif;max-width:680px;margin:0 auto;color:#1f2937">
+              <div style="background:#f3f4f6;padding:20px;border-radius:8px;margin-bottom:20px">
+                <h2 style="color:#111827;margin:0 0 12px 0;font-size:18px">THEBEST SARL - Nouveau Communiqué</h2>
+              </div>
+              
+              <div style="margin-bottom:20px">
+                <h3 style="color:#111827;margin:0 0 12px 0;font-size:16px;font-weight:600">${created.title}</h3>
+              </div>
+              
+              <div style="background:#ffffff;border:1px solid #e5e7eb;border-radius:6px;padding:16px;margin-bottom:20px;white-space:pre-wrap;word-wrap:break-word;line-height:1.6">
+                ${created.content.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/\n/g, "<br/>")}
+              </div>
+              
+              <div style="margin-top:20px;padding-top:20px;border-top:1px solid #e5e7eb">
+                <p style="margin:0;font-size:13px;color:#6b7280">
+                  <a href="${newsUrl}" style="color:#2563eb;text-decoration:none;font-weight:600">Consulter la nouvelle complète →</a>
+                </p>
+              </div>
+              
+              <p style="margin:16px 0 0;font-size:11px;color:#9ca3af;text-align:center">Message automatisé THEBEST SARL</p>
+            </div>
+          `,
           replyTo: created.author.email,
         });
 
