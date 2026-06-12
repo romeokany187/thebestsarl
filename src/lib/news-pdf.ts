@@ -190,6 +190,26 @@ function wrapText(text: string, font: PDFFont, size: number, maxWidth: number) {
   const lines: string[] = [];
   const paragraphs = text.split("\n");
 
+  // Helper function to break long words that exceed maxWidth
+  function breakLongWord(word: string): string[] {
+    const result: string[] = [];
+    let current = "";
+
+    for (const char of word) {
+      const candidate = current + char;
+      const width = font.widthOfTextAtSize(candidate, size);
+      if (width <= maxWidth) {
+        current = candidate;
+      } else {
+        if (current) result.push(current);
+        current = char;
+      }
+    }
+
+    if (current) result.push(current);
+    return result;
+  }
+
   for (const paragraph of paragraphs) {
     if (!paragraph.trim()) {
       lines.push("");
@@ -202,11 +222,26 @@ function wrapText(text: string, font: PDFFont, size: number, maxWidth: number) {
     for (const word of words) {
       const candidate = current ? `${current} ${word}` : word;
       const candidateWidth = font.widthOfTextAtSize(candidate, size);
+      
       if (candidateWidth <= maxWidth) {
         current = candidate;
       } else {
-        if (current) lines.push(current);
-        current = word;
+        // Word doesn't fit - either start new line or break the word if too long
+        const wordWidth = font.widthOfTextAtSize(word, size);
+        
+        if (wordWidth > maxWidth) {
+          // Word is too long to fit on any line - break it into pieces
+          if (current) lines.push(current);
+          const wordParts = breakLongWord(word);
+          for (let i = 0; i < wordParts.length - 1; i++) {
+            lines.push(wordParts[i]);
+          }
+          current = wordParts[wordParts.length - 1];
+        } else {
+          // Word fits on next line
+          if (current) lines.push(current);
+          current = word;
+        }
       }
     }
 
