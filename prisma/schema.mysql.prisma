@@ -220,6 +220,8 @@ model User {
   stockMovements          StockMovement[]         @relation("StockMovementActor")
   archiveUploads          ArchiveDocument[]       @relation("ArchiveUploader")
   accountingEntries       AccountingEntry[]       @relation("AccountingEntryCreator")
+  bidFolders              BidFolder[]             @relation("BidFolderCreator")
+  bidDocuments            BidDocument[]           @relation("BidDocumentUploader")
   passwordSetupCodes      PasswordSetupCode[]
   authSessionState        AuthSessionState?
   authDeviceChallenges    AuthDeviceChallenge[]
@@ -721,4 +723,62 @@ model AccountingEntryLine {
 
   @@index([entryId, side])
   @@index([accountCode])
+}
+
+model BidFolder {
+  id              String          @id @default(cuid())
+  reference       String          @unique
+  title           String
+  clientName      String          @default("")
+  deadline        DateTime?
+  estimatedAmount Float?
+  currency        String          @default("CDF")
+  status          String          @default("IN_PROGRESS")
+  notes           String?
+  createdById     String
+  createdBy       User            @relation("BidFolderCreator", fields: [createdById], references: [id])
+  requirements    BidRequirement[]
+  documents       BidDocument[]
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+
+  @@index([createdById])
+  @@index([status])
+}
+
+model BidRequirement {
+  id          String       @id @default(cuid())
+  bidFolderId String
+  bidFolder   BidFolder    @relation(fields: [bidFolderId], references: [id], onDelete: Cascade)
+  label       String
+  description String?
+  category    String       @default("AUTRE")
+  isRequired  Boolean      @default(true)
+  orderIndex  Int          @default(0)
+  documents   BidDocument[]
+  createdAt   DateTime     @default(now())
+
+  @@index([bidFolderId])
+}
+
+model BidDocument {
+  id               String         @id @default(cuid())
+  bidFolderId      String
+  bidFolder        BidFolder      @relation(fields: [bidFolderId], references: [id], onDelete: Cascade)
+  requirementId    String?
+  requirement      BidRequirement? @relation(fields: [requirementId], references: [id], onDelete: SetNull)
+  label            String
+  originalFileName String
+  mimeType         String
+  fileSize         Int            @default(0)
+  fileData         Bytes?
+  externalUrl      String?
+  uploadedById     String
+  uploadedBy       User           @relation("BidDocumentUploader", fields: [uploadedById], references: [id])
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+
+  @@index([bidFolderId])
+  @@index([requirementId])
+  @@index([uploadedById])
 }

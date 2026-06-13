@@ -26,7 +26,8 @@ export type AppModule =
   | "archives"
   | "news"
   | "settings"
-  | "audit";
+  | "audit"
+  | "dao";
 
 const ALL_ROLES: AppRole[] = ["ADMIN", "DIRECTEUR_GENERAL", "MANAGER", "EMPLOYEE", "ACCOUNTANT"];
 
@@ -139,6 +140,10 @@ export function hasModuleAccess(params: {
   if (module === "audit") {
     return jobTitle === "AUDITEUR"
       || teamIncludes(teamName, ["AUDIT"]);
+  }
+
+  if (module === "dao") {
+    return jobTitle === "RELATION_PUBLIQUE";
   }
 
   return false;

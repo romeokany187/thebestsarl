@@ -128,6 +128,12 @@ const links = [
     roles: ["ADMIN", "DIRECTEUR_GENERAL", "MANAGER", "EMPLOYEE", "ACCOUNTANT"] as AppRole[],
   },
   {
+    href: "/relation-publique",
+    label: "DAO - Appels d'offres",
+    module: "dao" as AppModule,
+    roles: ["ADMIN", "DIRECTEUR_GENERAL", "MANAGER", "EMPLOYEE", "ACCOUNTANT"] as AppRole[],
+  },
+  {
     href: "/admin/logs",
     label: "Logs activités",
     module: "admin" as AppModule,
