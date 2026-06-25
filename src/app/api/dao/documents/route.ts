@@ -81,8 +81,7 @@ export async function POST(request: NextRequest) {
       },
     });
 
-    const redirectUrl = new URL("/relation-publique", request.url);
-    return NextResponse.redirect(redirectUrl, { status: 303 });
+    return NextResponse.redirect(new URL("/relation-publique", request.url).pathname, { status: 303 });
   } catch (error) {
     console.error("POST /api/dao/documents", error);
     return NextResponse.json({ error: "Erreur serveur lors de l'upload." }, { status: 500 });
