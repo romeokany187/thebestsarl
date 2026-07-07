@@ -433,23 +433,64 @@ export async function DELETE(_request: NextRequest, context: RouteContext) {
 
   try {
     await prisma.$transaction(async (tx) => {
+      // Relations avec cascade dans le schéma (supprimées en premier pour éviter les conflits FK)
+      await tx.passwordSetupCode.deleteMany({ where: { userId: id } });
+      await tx.authDeviceChallenge.deleteMany({ where: { userId: id } });
+      await tx.authSessionState.deleteMany({ where: { userId: id } });
+      await tx.userModuleAccess.deleteMany({ where: { userId: id } });
+
+      // Notifications et logs
       await tx.userNotification.deleteMany({ where: { userId: id } });
       await tx.auditLog.deleteMany({ where: { actorId: id } });
+
+      // Présences et rapports
+      await tx.attendance.deleteMany({ where: { userId: id } });
       await tx.workerReport.updateMany({ where: { authorId: id }, data: { authorId: actor.id } });
       await tx.workerReport.updateMany({ where: { reviewerId: id }, data: { reviewerId: null } });
-      await tx.attendance.deleteMany({ where: { userId: id } });
+
+      // Actualités
       await tx.newsPost.updateMany({ where: { authorId: id }, data: { authorId: actor.id } });
+
+      // Demandes de besoin
       await tx.needRequest.updateMany({ where: { requesterId: id }, data: { requesterId: actor.id } });
       await tx.needRequest.updateMany({ where: { reviewedById: id }, data: { reviewedById: null } });
+
+      // Ordres de paiement
       await tx.paymentOrder.updateMany({ where: { issuedById: id }, data: { issuedById: actor.id } });
       await tx.paymentOrder.updateMany({ where: { approvedById: id }, data: { approvedById: null } });
       await tx.paymentOrder.updateMany({ where: { executedById: id }, data: { executedById: null } });
+
+      // Opérations de caisse
       await tx.cashOperation.updateMany({ where: { createdById: id }, data: { createdById: actor.id } });
+      await tx.cashBilletageSnapshot.deleteMany({ where: { savedById: id } });
+
+      // Demandes d'approbation caisse
+      await tx.cashOperationApprovalRequest.updateMany({ where: { requestedById: id }, data: { requestedById: actor.id } });
+      await tx.cashOperationApprovalRequest.updateMany({ where: { reviewedById: id }, data: { reviewedById: null } });
+
+      // Mouvements de stock
       await tx.stockMovement.updateMany({ where: { performedById: id }, data: { performedById: actor.id } });
+
+      // Archives
       await tx.archiveDocument.updateMany({ where: { createdById: id }, data: { createdById: null } });
+
+      // Mouvements de dépôt compagnies aériennes
       await tx.airlineDepositMovement.updateMany({ where: { createdById: id }, data: { createdById: null } });
+
+      // Ventes de billets
       await tx.ticketSale.updateMany({ where: { sellerId: id, sellerName: null }, data: { sellerName: existing.name } });
       await tx.ticketSale.updateMany({ where: { sellerId: id }, data: { sellerId: null } });
+
+      // Écritures comptables
+      await tx.accountingEntry.updateMany({ where: { createdById: id }, data: { createdById: actor.id } });
+
+      // Dossiers DAO - appels d'offres
+      await tx.bidDocument.updateMany({ where: { uploadedById: id }, data: { uploadedById: actor.id } });
+
+      // Pour BidFolder: on réaffecte les dossiers à l'admin qui supprime
+      await tx.bidFolder.updateMany({ where: { createdById: id }, data: { createdById: actor.id } });
+
+      // Suppression finale de l'utilisateur
       await tx.user.delete({ where: { id } });
     });
 
