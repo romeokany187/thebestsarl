@@ -146,13 +146,6 @@ export async function POST(request: NextRequest) {
     const isMontGabaon = airline.code === "MGB";
     const isAirFast = airline.code === "FST";
 
-    if ((isAirCongo || isMontGabaon) && !parsed.data.baseFareAmount) {
-      return NextResponse.json(
-        { error: "Pour Air Congo et Mont Gabaon, le BaseFare est obligatoire pour calculer la commission." },
-        { status: 400 },
-      );
-    }
-
     const isAfterDepositMode = rule?.commissionMode === CommissionMode.AFTER_DEPOSIT;
     const todayRaw = new Date().toISOString().slice(0, 10);
     const todayDate = new Date(`${todayRaw}T00:00:00.000Z`);
