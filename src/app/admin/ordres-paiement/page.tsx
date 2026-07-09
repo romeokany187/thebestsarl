@@ -215,7 +215,15 @@ export default async function AdminPaymentOrdersPage() {
 
       {/* ---------- OP STATUS DASHBOARD ---------- */}
       <section className="mb-8 rounded-2xl border border-black/10 bg-white p-4 shadow-sm dark:border-white/10 dark:bg-zinc-900">
-        <h2 className="mb-3 text-base font-semibold">Ordres de paiement — Synthèse</h2>
+        <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
+          <h2 className="text-base font-semibold">Ordres de paiement — Synthèse</h2>
+          <a
+            href="/admin/ordres-paiement/rapport-periodique"
+            className="rounded-md border border-black/20 px-3 py-1.5 text-xs font-semibold hover:bg-black/5 dark:border-white/20 dark:hover:bg-white/10"
+          >
+            Rapport périodique
+          </a>
+        </div>
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
           <DashboardCard href="/admin/ordres-paiement/op/total" count={opStats.total} label={OP_FILTER_LABELS.total} className="border-black/10 bg-black/3 dark:border-white/10 dark:bg-white/3" />
           <DashboardCard href="/admin/ordres-paiement/op/en-attente" count={opStats.enAttente} label={OP_FILTER_LABELS["en-attente"]} className="border-amber-200 bg-amber-50/50 text-amber-800 dark:border-amber-800/40 dark:bg-amber-950/20 dark:text-amber-300" />
