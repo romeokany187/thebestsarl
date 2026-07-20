@@ -1635,6 +1635,24 @@ export default async function PaymentsPage({
               >
                 Télécharger PDF paiements billets
               </a>
+                <a
+                  href={`/api/payments/report?${reportQuery}&ticketStatus=PAID&download=1`}
+                  className="rounded-lg border border-black/15 px-3 py-2 text-xs font-semibold hover:bg-black/5 dark:border-white/15 dark:hover:bg-white/10"
+                >
+                  Télécharger billets payés (PDF)
+                </a>
+                <a
+                  href={`/api/payments/report?${reportQuery}&ticketStatus=UNPAID&download=1`}
+                  className="rounded-lg border border-black/15 px-3 py-2 text-xs font-semibold hover:bg-black/5 dark:border-white/15 dark:hover:bg-white/10"
+                >
+                  Télécharger billets non payés (PDF)
+                </a>
+                <a
+                  href={`/api/payments/report?${reportQuery}&ticketStatus=PARTIAL&download=1`}
+                  className="rounded-lg border border-black/15 px-3 py-2 text-xs font-semibold hover:bg-black/5 dark:border-white/15 dark:hover:bg-white/10"
+                >
+                  Télécharger billets partiels (PDF)
+                </a>
               <a
                 href={`/api/payments/report?${cashJournalReportQuery}`}
                 target="_blank"
@@ -1709,6 +1727,24 @@ export default async function PaymentsPage({
                   className="inline-flex rounded-md border border-black/20 px-2.5 py-1 font-semibold hover:bg-black/5 dark:border-white/20 dark:hover:bg-white/10"
                 >
                   Télécharger PDF paiements
+                </a>
+                <a
+                  href={`/api/payments/report?${reportQuery}&ticketStatus=PAID&download=1`}
+                  className="inline-flex rounded-md border border-black/20 px-2.5 py-1 font-semibold hover:bg-black/5 dark:border-white/20 dark:hover:bg-white/10"
+                >
+                  Billets payés (PDF)
+                </a>
+                <a
+                  href={`/api/payments/report?${reportQuery}&ticketStatus=UNPAID&download=1`}
+                  className="inline-flex rounded-md border border-black/20 px-2.5 py-1 font-semibold hover:bg-black/5 dark:border-white/20 dark:hover:bg-white/10"
+                >
+                  Billets non payés (PDF)
+                </a>
+                <a
+                  href={`/api/payments/report?${reportQuery}&ticketStatus=PARTIAL&download=1`}
+                  className="inline-flex rounded-md border border-black/20 px-2.5 py-1 font-semibold hover:bg-black/5 dark:border-white/20 dark:hover:bg-white/10"
+                >
+                  Billets partiels (PDF)
                 </a>
               </div>
               <p className="mt-3 text-xs text-black/60 dark:text-white/60">

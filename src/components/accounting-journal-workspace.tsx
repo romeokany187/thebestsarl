@@ -140,27 +140,6 @@ function buildAccountingSigninUrl() {
   return `/auth/signin?callbackUrl=${encodeURIComponent(callbackUrl)}`;
 }
 
-function getFocusedEntryIdFromUrl() {
-  if (typeof window === "undefined") return "";
-
-  const url = new URL(window.location.href);
-  let entryId = url.searchParams.get("entryId")?.trim() ?? "";
-
-  if (!entryId) {
-    const hash = window.location.hash.trim();
-    const match = hash.match(/^#?entry-(.+)$/);
-    if (match?.[1]) {
-      try {
-        entryId = decodeURIComponent(match[1]);
-      } catch {
-        entryId = match[1];
-      }
-    }
-  }
-
-  return entryId;
-}
-
 export function AccountingJournalWorkspace({
   showComposer = true,
   showHistory = true,
@@ -188,8 +167,6 @@ export function AccountingJournalWorkspace({
   const [ticketInvoiceQuery, setTicketInvoiceQuery] = useState("");
   const [historySearchInput, setHistorySearchInput] = useState("");
   const [historySearch, setHistorySearch] = useState("");
-  const [pendingFocusEntryId, setPendingFocusEntryId] = useState(() => getFocusedEntryIdFromUrl());
-  const [highlightedEntryId, setHighlightedEntryId] = useState("");
   const [rateDate, setRateDate] = useState(toLocalDateValue(new Date()));
   const [dailyRateValue, setDailyRateValue] = useState("");
   const [lines, setLines] = useState<EntryLineForm[]>([lineFactory("DEBIT"), lineFactory("CREDIT")]);
@@ -211,17 +188,12 @@ export function AccountingJournalWorkspace({
     return response;
   }
 
-  async function loadData(options?: { entryId?: string }) {
+  async function loadData() {
     setLoading(true);
     setError("");
 
-    const focusedEntryId = (options?.entryId ?? getFocusedEntryIdFromUrl()).trim();
-    const journalUrl = focusedEntryId
-      ? `/api/comptabilite/journal?entryId=${encodeURIComponent(focusedEntryId)}`
-      : "/api/comptabilite/journal";
-
     try {
-      const response = await fetchAccounting(journalUrl, { cache: "no-store" });
+      const response = await fetchAccounting("/api/comptabilite/journal", { cache: "no-store" });
       const payload = await response.json().catch(() => null);
 
       if (!response.ok) {
@@ -230,25 +202,11 @@ export function AccountingJournalWorkspace({
         return;
       }
 
-      let nextRecentEntries = payload.recentEntries ?? [];
-      const focusedEntry = payload.focusedEntry as RecentEntry | null | undefined;
-      if (focusedEntry && !nextRecentEntries.some((entry: RecentEntry) => entry.id === focusedEntry.id)) {
-        nextRecentEntries = [focusedEntry, ...nextRecentEntries];
-      }
-
       setAccounts(payload.accounts ?? []);
-      setRecentEntries(nextRecentEntries);
+      setRecentEntries(payload.recentEntries ?? []);
       setDeletedEntries(payload.deletedEntries ?? []);
       setTicketInvoiceOptions(payload.ticketInvoiceOptions ?? []);
       setDailyRates(payload.dailyRates ?? []);
-
-      if (focusedEntryId) {
-        setPendingFocusEntryId(focusedEntryId);
-        if (!focusedEntry && !nextRecentEntries.some((entry: RecentEntry) => entry.id === focusedEntryId)) {
-          setError("Écriture introuvable ou supprimée.");
-          setPendingFocusEntryId("");
-        }
-      }
     } catch (error) {
       if (error instanceof Error && error.message === "SESSION_EXPIREE") {
         return;
@@ -262,55 +220,6 @@ export function AccountingJournalWorkspace({
   useEffect(() => {
     loadData();
   }, []);
-
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-
-    const syncFocusFromUrl = () => {
-      const entryId = getFocusedEntryIdFromUrl();
-      if (entryId) {
-        setPendingFocusEntryId(entryId);
-      }
-    };
-
-    window.addEventListener("popstate", syncFocusFromUrl);
-    window.addEventListener("hashchange", syncFocusFromUrl);
-    return () => {
-      window.removeEventListener("popstate", syncFocusFromUrl);
-      window.removeEventListener("hashchange", syncFocusFromUrl);
-    };
-  }, []);
-
-  useEffect(() => {
-    if (loading || !pendingFocusEntryId || historySearch) return;
-
-    const entryExists = recentEntries.some((entry) => entry.id === pendingFocusEntryId);
-    if (!entryExists) {
-      setPendingFocusEntryId("");
-      return;
-    }
-
-    let attempts = 0;
-    const interval = window.setInterval(() => {
-      attempts += 1;
-      const element = document.getElementById(`entry-${pendingFocusEntryId}`);
-      if (element) {
-        element.scrollIntoView({ behavior: "smooth", block: "center" });
-        setHighlightedEntryId(pendingFocusEntryId);
-        window.setTimeout(() => setHighlightedEntryId(""), 2200);
-        setPendingFocusEntryId("");
-        window.clearInterval(interval);
-        return;
-      }
-
-      if (attempts >= 30) {
-        window.clearInterval(interval);
-        setPendingFocusEntryId("");
-      }
-    }, 150);
-
-    return () => window.clearInterval(interval);
-  }, [loading, recentEntries, pendingFocusEntryId, historySearch]);
 
   const accountMap = useMemo(
     () => new Map(accounts.map((account) => [account.code, account])),
@@ -937,13 +846,7 @@ export function AccountingJournalWorkspace({
             </p>
           ) : (
             filteredRecentEntries.map((entry) => (
-              <article
-                id={`entry-${entry.id}`}
-                key={entry.id}
-                className={`rounded-xl border border-black/10 p-3 transition-shadow duration-500 dark:border-white/10 ${
-                  highlightedEntryId === entry.id ? "ring-2 ring-blue-500 ring-offset-2 dark:ring-offset-zinc-900" : ""
-                }`}
-              >
+              <article id={`entry-${entry.id}`} key={entry.id} className="rounded-xl border border-black/10 p-3 dark:border-white/10">
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div>
                     <p className="text-sm font-semibold">Écriture n° {entry.sequence}</p>
@@ -1030,6 +933,27 @@ export function AccountingJournalWorkspace({
               ))
             )}
           </div>
+        
+          {/* Deep-link focus: scroll to entry when URL contains ?entryId=... */}
+          <script suppressHydrationWarning>
+            {`(function(){
+              try{
+                function focusEntry(){
+                  const url = new URL(window.location.href);
+                  const entryId = (url.searchParams.get('entryId') || '').trim();
+                  if(!entryId) return;
+                  const el = document.getElementById('entry-' + entryId);
+                  if(el){
+                    el.scrollIntoView({behavior:'smooth', block:'center'});
+                    try{ el.animate([{boxShadow:'0 0 0 8px rgba(59,130,246,0.25)'},{boxShadow:'none'}],{duration:1800}); }catch(e){}
+                  }
+                }
+                if(document.readyState === 'complete') focusEntry(); else window.addEventListener('load', focusEntry);
+                window.addEventListener('popstate', focusEntry);
+                window.addEventListener('hashchange', focusEntry);
+              }catch(e){}
+            })();`}
+          </script>
         </div>
       </section>
       ) : null}
