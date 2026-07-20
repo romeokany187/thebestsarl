@@ -968,18 +968,15 @@ export async function GET(request: NextRequest) {
 
     const drawSummary = () => {
       page.drawText(detailLabel, { x: 24, y: 518, size: 8.8, font: fontBold, color: textBlack });
-      page.drawText(`Billets (${ticketStatusLabel}): ${ticketsForReport.length} • Transactions période: ${rows.length}`, { x: 180, y: 518, size: 8.4, font, color: textBlack });
+      page.drawText(`Billets (${ticketStatusLabel}): ${ticketsForReport.length}`, { x: 180, y: 518, size: 8.4, font, color: textBlack });
       page.drawText(`Facturé: ${totalBilled.toFixed(2)} USD eq`, { x: 24, y: 505, size: 8.4, font: fontBold, color: textBlack });
       page.drawText(`Encaissé: ${totalPaidOnTickets.toFixed(2)} USD eq`, { x: 190, y: 505, size: 8.4, font: fontBold, color: textBlack });
       page.drawText(`Créance: ${totalOutstanding.toFixed(2)} USD eq`, { x: 360, y: 505, size: 8.4, font: fontBold, color: textBlack });
-      page.drawText(`Payés: ${paidTickets.length} • Impayés: ${unpaidTickets.length} • Partiels: ${partialTickets.length}`, { x: 24, y: 492, size: 8.2, font, color: textBlack });
-      page.drawText(`Partiels encaissés: ${partialPaid.toFixed(2)} / ${partialBilled.toFixed(2)} USD eq (${partialCoverage.toFixed(1)}%)`, { x: 350, y: 492, size: 8.2, font, color: textBlack });
-      page.drawText(`Caisse USD: ouverture ${openingUsd.toFixed(2)} • entrées ${ticketPaymentInflowUsd.toFixed(2) + cashInflowUsd.toFixed(2)} • sorties ${cashOutflowUsd.toFixed(2)} • solde ${closingUsd.toFixed(2)}`, { x: 24, y: 480, size: 7.9, font, color: textBlack });
-      page.drawText(`Caisse CDF: ouverture ${openingCdf.toFixed(2)} • entrées ${ticketPaymentInflowCdf.toFixed(2) + cashInflowCdf.toFixed(2)} • sorties ${cashOutflowCdf.toFixed(2)} • solde ${closingCdf.toFixed(2)}`, { x: 24, y: 468, size: 7.9, font, color: textBlack });
-      const methodsLabel = topMethods.length > 0
-        ? `Méthodes: ${topMethods.map(([method, amount]) => `${method} ${amount.toFixed(2)} USD eq`).join(" | ")}`
-        : "Méthodes: -";
-      page.drawText(short(methodsLabel, 150), { x: 24, y: 456, size: 7.6, font, color: textBlack });
+      if (ticketStatusFilter === "PARTIAL") {
+        page.drawText(`Partiels: ${partialTickets.length} • Partiels encaissés: ${partialPaid.toFixed(2)} / ${partialBilled.toFixed(2)} USD eq (${partialCoverage.toFixed(1)}%)`, { x: 24, y: 492, size: 8.2, font, color: textBlack });
+      } else {
+        page.drawText(`Payés: ${paidTickets.length} • Impayés: ${unpaidTickets.length} • Partiels: ${partialTickets.length}`, { x: 24, y: 492, size: 8.2, font, color: textBlack });
+      }
       page.drawLine({ start: { x: 24, y: 451 }, end: { x: 818, y: 451 }, thickness: 0.7, color: lineGray });
     };
 
