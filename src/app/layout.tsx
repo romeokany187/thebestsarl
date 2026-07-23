@@ -38,11 +38,40 @@ export default function RootLayout({
           dangerouslySetInnerHTML={{
             __html: `(() => {
   try {
-    const saved = localStorage.getItem('thebest-theme');
-    const isDark = saved === 'dark' || (saved !== 'light' && window.matchMedia('(prefers-color-scheme: dark)').matches);
+    const saved = typeof localStorage !== 'undefined' ? localStorage.getItem('thebest-theme') : null;
+    const isDark = saved === 'dark' || (saved !== 'light' && typeof window !== 'undefined' && window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches);
     if (isDark) document.documentElement.classList.add('dark');
     else document.documentElement.classList.remove('dark');
-  } catch {}
+  } catch (e) {}
+
+  try {
+    function sendClientError(payload) {
+      try {
+        if (navigator && navigator.sendBeacon) {
+          navigator.sendBeacon('/api/client-errors', JSON.stringify(payload));
+          return;
+        }
+      } catch (_) {}
+
+      try {
+        fetch('/api/client-errors', { method: 'POST', keepalive: true, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+      } catch (_) {}
+    }
+
+    window.addEventListener('error', function (ev) {
+      try {
+        const err = ev.error || {};
+        sendClientError({ message: err.message || String(ev.message || 'unknown'), stack: err.stack || null, filename: ev.filename || null, lineno: ev.lineno || null, colno: ev.colno || null, userAgent: navigator.userAgent, href: location.href });
+      } catch (_) {}
+    });
+
+    window.addEventListener('unhandledrejection', function (ev) {
+      try {
+        const reason = ev.reason || {};
+        sendClientError({ message: reason.message || String(reason || 'unhandledrejection'), stack: reason.stack || null, type: 'unhandledrejection', userAgent: navigator.userAgent, href: location.href });
+      } catch (_) {}
+    });
+  } catch (e) {}
 })();`,
           }}
         />
