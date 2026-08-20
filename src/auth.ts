@@ -21,6 +21,29 @@ const SESSION_MAX_AGE_SECONDS = 8 * 60 * 60;
 const SESSION_UPDATE_AGE_SECONDS = 30 * 60;
 const authSessionStateClient = (prisma as unknown as { authSessionState: any }).authSessionState;
 
+export function normalizeAuthRedirectUrl(url: string | undefined, baseUrl: string): string {
+  const fallbackUrl = baseUrl.replace(/\/$/, "");
+
+  if (!url) {
+    return fallbackUrl;
+  }
+
+  if (url.startsWith("/")) {
+    return new URL(url, fallbackUrl).toString();
+  }
+
+  try {
+    const parsedUrl = new URL(url);
+    if (parsedUrl.origin === new URL(fallbackUrl).origin) {
+      return parsedUrl.toString();
+    }
+  } catch {
+    // Ignore invalid URLs and fall back to base URL.
+  }
+
+  return fallbackUrl;
+}
+
 const adminEmails = new Set(
   `${process.env.ADMIN_EMAILS ?? ""},${process.env.ADMIN_EMAIL ?? ""},${DEFAULT_ADMIN_EMAIL}`
     .split(",")
@@ -115,6 +138,9 @@ export const authOptions: NextAuthOptions = {
     error: "/auth/error",
   },
   callbacks: {
+    async redirect({ url, baseUrl }) {
+      return normalizeAuthRedirectUrl(url, baseUrl);
+    },
     async signIn({ user, account }) {
       if (account?.provider === "credentials") {
         return isPasswordAuthActive();
