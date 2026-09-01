@@ -149,18 +149,29 @@ export function hasModuleAccess(params: {
   return false;
 }
 
-function extractRole(role: unknown, jobTitle: string | null | undefined): AppRole | null {
+export function extractRole(role: unknown, jobTitle: string | null | undefined): AppRole | null {
   if (role === "ADMIN") {
     return "ADMIN";
   }
 
-  if (normalize(jobTitle) === "DIRECTION_GENERALE") {
+  const normalizedJobTitle = normalize(jobTitle);
+
+  if (normalizedJobTitle === "DIRECTION_GENERALE") {
     return "DIRECTEUR_GENERAL";
+  }
+
+  if (normalizedJobTitle === "COMPTABLE") {
+    return "ACCOUNTANT";
+  }
+
+  if (normalizedJobTitle === "CHEF_AGENCE") {
+    return "MANAGER";
   }
 
   if (role === "MANAGER" || role === "EMPLOYEE" || role === "ACCOUNTANT") {
     return role;
   }
+
   return null;
 }
 
