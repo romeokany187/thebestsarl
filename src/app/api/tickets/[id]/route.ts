@@ -74,16 +74,16 @@ export async function PATCH(request: NextRequest, { params }: Params) {
     return access.error;
   }
 
-  if (!canManageTicketRecord(access.role, access.session.user.jobTitle)) {
+  if (!canManageTicketRecord(access.role, access.session.user.jobTitle, access.customModuleAccess)) {
     return NextResponse.json(
-      { error: "Seul l'administrateur peut modifier un billet déjà enregistré." },
+      { error: "Seul l'administrateur ou un profil ventes avec accès complet peut modifier un billet déjà enregistré." },
       { status: 403 },
     );
   }
 
   let attemptedTicketNumber = "";
   let currentTicketId = "";
-  const hasSalesAdminAccess = canManageTicketRecord(access.role, access.session.user.jobTitle);
+  const hasSalesAdminAccess = canManageTicketRecord(access.role, access.session.user.jobTitle, access.customModuleAccess);
 
   try {
     const { id } = await params;
@@ -428,9 +428,9 @@ export async function DELETE(_request: NextRequest, { params }: Params) {
     return access.error;
   }
 
-  if (!canManageTicketRecord(access.role, access.session.user.jobTitle)) {
+  if (!canManageTicketRecord(access.role, access.session.user.jobTitle, access.customModuleAccess)) {
     return NextResponse.json(
-      { error: "Seul l'administrateur peut supprimer un billet déjà enregistré." },
+      { error: "Seul l'administrateur ou un profil ventes avec accès complet peut supprimer un billet déjà enregistré." },
       { status: 403 },
     );
   }

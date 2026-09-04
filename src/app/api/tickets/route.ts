@@ -90,11 +90,11 @@ export async function POST(request: NextRequest) {
     return access.error;
   }
 
-  const hasSalesAdminAccess = canManageTicketRecord(access.role, access.session.user.jobTitle);
+  const hasSalesAdminAccess = canManageTicketRecord(access.role, access.session.user.jobTitle, access.customModuleAccess);
 
-  if (!canSellTickets(access.session.user.jobTitle ?? "")) {
+  if (!canSellTickets(access.session.user.jobTitle ?? "", access.customModuleAccess)) {
     return NextResponse.json(
-      { error: "Le billetage est en lecture seule pour ce profil. Seul le caissier peut enregistrer un billet." },
+      { error: "Le billetage est en lecture seule pour ce profil. Demandez un niveau d'accès Écriture ou Complet sur le module Ventes." },
       { status: 403 },
     );
   }

@@ -1,3 +1,5 @@
+import { hasRequiredModuleAccessLevel, type ModuleAccessLevel } from "@/lib/user-module-access";
+
 export type JobTitleValue =
   | "COMMERCIAL"
   | "STAGIAIRE"
@@ -70,21 +72,35 @@ export function assignmentCapabilities(jobTitle: string) {
   return ["Opérations terrain", "Suivi activité", "Support équipe"];
 }
 
-export function canSellTickets(_jobTitle: string) {
-  return true;
+export function canSellTickets(jobTitle: string, customAccessLevel?: ModuleAccessLevel | null) {
+  if (customAccessLevel) {
+    return hasRequiredModuleAccessLevel(customAccessLevel, "WRITE");
+  }
+
+  const normalizedJobTitle = (jobTitle ?? "").trim().toUpperCase();
+  return normalizedJobTitle !== "AGENT_TERRAIN" && normalizedJobTitle !== "";
 }
 
-function hasSalesAdminPrivileges(role: string, jobTitle?: string | null) {
+function hasSalesAdminPrivileges(role: string, jobTitle?: string | null, customAccessLevel?: ModuleAccessLevel | null) {
+  if (customAccessLevel) {
+    return hasRequiredModuleAccessLevel(customAccessLevel, "FULL");
+  }
+
   const normalizedJobTitle = (jobTitle ?? "").trim().toUpperCase();
   return role === "ADMIN" || normalizedJobTitle === "STAGIAIRE";
 }
 
-export function canManageTicketRecord(role: string, jobTitle?: string | null) {
-  return hasSalesAdminPrivileges(role, jobTitle);
+export function canManageTicketRecord(role: string, jobTitle?: string | null, customAccessLevel?: ModuleAccessLevel | null) {
+  return hasSalesAdminPrivileges(role, jobTitle, customAccessLevel);
 }
 
-export function canImportTicketWorkbook(role: string, _explicitPermission?: boolean | null, jobTitle?: string | null) {
-  return hasSalesAdminPrivileges(role, jobTitle);
+export function canImportTicketWorkbook(
+  role: string,
+  _explicitPermission?: boolean | null,
+  jobTitle?: string | null,
+  customAccessLevel?: ModuleAccessLevel | null,
+) {
+  return hasSalesAdminPrivileges(role, jobTitle, customAccessLevel);
 }
 
 export function canProcessPayments(jobTitle: string) {

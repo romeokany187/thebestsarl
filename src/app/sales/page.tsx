@@ -103,14 +103,14 @@ export default async function SalesPage({
   const resolvedSearchParams = (await searchParams) ?? {};
   const dateRange = rangeFromSearch(resolvedSearchParams);
   const searchQuery = resolvedSearchParams.q?.trim() ?? "";
-  const { session, role } = await requirePageModuleAccess("sales", ["ADMIN", "DIRECTEUR_GENERAL", "MANAGER", "EMPLOYEE", "ACCOUNTANT"]);
+  const { session, role, customModuleAccess } = await requirePageModuleAccess("sales", ["ADMIN", "DIRECTEUR_GENERAL", "MANAGER", "EMPLOYEE", "ACCOUNTANT"]);
   const currentJobTitle = session.user.jobTitle ?? "AGENT_TERRAIN";
   const roleTicketFilter = {};
-  const canCreateTicket = canSellTickets(currentJobTitle);
-  const canManageTickets = canManageTicketRecord(role, currentJobTitle);
-  const canImportTickets = canImportTicketWorkbook(role, session.user.canImportTicketWorkbook, currentJobTitle);
-  const canReplaceImportedPeriod = canImportTicketWorkbook(role, session.user.canImportTicketWorkbook, currentJobTitle);
-  const canUseSalesAdminDateControls = canManageTicketRecord(role, currentJobTitle);
+  const canCreateTicket = canSellTickets(currentJobTitle, customModuleAccess);
+  const canManageTickets = canManageTicketRecord(role, currentJobTitle, customModuleAccess);
+  const canImportTickets = canImportTicketWorkbook(role, session.user.canImportTicketWorkbook, currentJobTitle, customModuleAccess);
+  const canReplaceImportedPeriod = canImportTicketWorkbook(role, session.user.canImportTicketWorkbook, currentJobTitle, customModuleAccess);
+  const canUseSalesAdminDateControls = canManageTicketRecord(role, currentJobTitle, customModuleAccess);
   const accessNote = canManageTickets
     ? "Vente: tous les profils autorisés peuvent encoder les billets; le profil admin ventes peut en plus importer Excel, modifier et supprimer les billets déjà enregistrés."
     : "Vente: vous pouvez encoder les billets normalement. L'import Excel, la modification et la suppression restent réservés au profil admin ventes.";

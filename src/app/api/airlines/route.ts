@@ -44,7 +44,7 @@ export async function POST(request: NextRequest) {
     return access.error;
   }
 
-  if (!canManageTicketRecord(access.role, access.session.user.jobTitle)) {
+  if (!canManageTicketRecord(access.role, access.session.user.jobTitle, access.customModuleAccess)) {
     return NextResponse.json({ error: "Accès réservé au profil admin ventes." }, { status: 403 });
   }
 

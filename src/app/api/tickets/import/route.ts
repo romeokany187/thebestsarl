@@ -38,7 +38,7 @@ export async function GET(request: NextRequest) {
     return access.error;
   }
 
-  if (!canImportTicketWorkbook(access.role, access.session.user.canImportTicketWorkbook, access.session.user.jobTitle)) {
+  if (!canImportTicketWorkbook(access.role, access.session.user.canImportTicketWorkbook, access.session.user.jobTitle, access.customModuleAccess)) {
     return NextResponse.json({ error: "Accès refusé." }, { status: 403 });
   }
 
@@ -70,8 +70,8 @@ export async function POST(request: NextRequest) {
     return access.error;
   }
 
-  if (!canImportTicketWorkbook(access.role, access.session.user.canImportTicketWorkbook, access.session.user.jobTitle)) {
-    return NextResponse.json({ error: "L'import Excel des billets est réservé à l'administrateur." }, { status: 403 });
+  if (!canImportTicketWorkbook(access.role, access.session.user.canImportTicketWorkbook, access.session.user.jobTitle, access.customModuleAccess)) {
+    return NextResponse.json({ error: "L'import Excel des billets est réservé à l'administrateur ou à un profil ventes avec accès complet." }, { status: 403 });
   }
 
   try {

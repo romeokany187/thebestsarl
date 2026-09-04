@@ -8,6 +8,12 @@ Application web professionnelle pour la gestion opérationnelle d'une agence de 
 - calcul de commissions brutes et nettes par compagnie,
 - visibilité direction en temps réel sur les rapports et indicateurs.
 
+## Documentation
+
+- Guide développeur : [docs/guide-developpeur.md](docs/guide-developpeur.md)
+- Manuel d’exploitation : [docs/manuel-exploitation.md](docs/manuel-exploitation.md)
+- Instructions Hostinger / phpMyAdmin : [docs/hostinger-phpmyadmin-instructions.md](docs/hostinger-phpmyadmin-instructions.md)
+
 ## Stack technique
 
 - Next.js 16 (App Router) + TypeScript
