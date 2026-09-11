@@ -72,7 +72,9 @@ export const AUTHORIZATION_MODULE_OPTIONS: Array<{ value: AuthorizationModule; l
   { value: "profile", label: "Profil" },
 ];
 
-const userModuleAccessClient = (prisma as unknown as { userModuleAccess: any }).userModuleAccess;
+const userModuleAccessClient = (prisma as unknown as Record<string, unknown>).userModuleAccess as {
+  findMany: (args: unknown) => Promise<unknown[]>;
+};
 
 const MODULE_ACCESS_ALIASES: Record<AuthorizationModule, AuthorizationModule[]> = {
   home: ["home"],
@@ -175,10 +177,10 @@ export async function getUserModuleAccessMap(userId?: string | null) {
 
     const map: Partial<Record<AuthorizationModule, ModuleAccessLevel>> = {};
     for (const row of rows as Array<{ module: string; accessLevel: string }>) {
-      const module = normalizeModule(row.module);
+      const authModule = normalizeModule(row.module);
       const level = normalizeLevel(row.accessLevel);
-      if (module && level) {
-        map[module] = level;
+      if (authModule && level) {
+        map[authModule] = level;
       }
     }
     return map;

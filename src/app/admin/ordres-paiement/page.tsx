@@ -150,14 +150,14 @@ export default async function AdminPaymentOrdersPage() {
                 const quote = parseNeedQuote(need.details ?? null);
                 const label = needStatusLabel(need.status, need.reviewComment);
                 return (
-                  <tr key={need.id} className="border-t border-black/5 dark:border-white/10 hover:bg-black/[0.02] dark:hover:bg-white/[0.02]">
+                  <tr key={need.id} className="border-t border-black/5 dark:border-white/10 hover:bg-black/2 dark:hover:bg-white/2">
                     <td className="px-3 py-2 whitespace-nowrap text-xs text-black/65 dark:text-white/65">
                       {formatDate(need.createdAt)}
                     </td>
                     <td className="px-3 py-2 font-mono text-xs font-semibold text-blue-700 dark:text-blue-400 whitespace-nowrap">
                       {need.code ?? need.id.slice(0, 8).toUpperCase()}
                     </td>
-                    <td className="px-3 py-2 font-medium max-w-[200px] truncate">{need.title}</td>
+                    <td className="px-3 py-2 font-medium max-w-50 truncate">{need.title}</td>
                     <td className="px-3 py-2 text-xs">{need.requester.name}</td>
                     <td className="px-3 py-2 text-xs">{workflowAssignmentLabel(quote?.assignment)}</td>
                     <td className="px-3 py-2 whitespace-nowrap">
