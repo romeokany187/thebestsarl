@@ -1,4 +1,5 @@
 const DEFAULT_FORCE_REAUTH_AFTER = "2026-04-20T21:20:00.000Z";
+export const AUTH_SESSION_MAX_AGE_SECONDS = 8 * 60 * 60;
 export const SESSION_INACTIVITY_TIMEOUT_MS = 20 * 60 * 1000;
 
 export function forceReauthAfter() {

@@ -8,16 +8,16 @@ import {
   findCredentialsUser,
   hashDeviceToken,
   normalizeDeviceToken,
+  requiresDeviceChallenge,
   validateApprovedDeviceChallenge,
 } from "@/lib/auth-device-session";
 import { prisma } from "@/lib/prisma";
 import { normalizeAuthEmail } from "@/lib/password-setup";
-import { shouldForceReauthenticateSession } from "@/lib/session-security";
+import { AUTH_SESSION_MAX_AGE_SECONDS, shouldForceReauthenticateSession } from "@/lib/session-security";
 
 process.env.AUTH_TRUST_HOST = process.env.AUTH_TRUST_HOST?.trim() || "true";
 
 const DEFAULT_ADMIN_EMAIL = "romeokany187@gmail.com";
-const SESSION_MAX_AGE_SECONDS = 8 * 60 * 60;
 const SESSION_UPDATE_AGE_SECONDS = 30 * 60;
 const authSessionStateClient = (prisma as unknown as { authSessionState: any }).authSessionState;
 
@@ -55,11 +55,11 @@ export const authOptions: NextAuthOptions = {
   secret: process.env.NEXTAUTH_SECRET?.trim() || process.env.AUTH_SECRET?.trim(),
   session: {
     strategy: "jwt",
-    maxAge: SESSION_MAX_AGE_SECONDS,
+    maxAge: AUTH_SESSION_MAX_AGE_SECONDS,
     updateAge: SESSION_UPDATE_AGE_SECONDS,
   },
   jwt: {
-    maxAge: SESSION_MAX_AGE_SECONDS,
+    maxAge: AUTH_SESSION_MAX_AGE_SECONDS,
   },
   providers: [
     CredentialsProvider({
@@ -93,10 +93,7 @@ export const authOptions: NextAuthOptions = {
 
         const currentSessionState = await authSessionStateClient.findUnique({ where: { userId: user.id } });
         const currentDeviceTokenHash = hashDeviceToken(deviceToken);
-        const requiresApprovedChallenge = Boolean(
-          currentSessionState?.activeSessionKey
-          && currentSessionState.activeDeviceTokenHash !== currentDeviceTokenHash,
-        );
+        const requiresApprovedChallenge = requiresDeviceChallenge(currentSessionState, currentDeviceTokenHash);
 
         if (requiresApprovedChallenge) {
           const approved = await validateApprovedDeviceChallenge({

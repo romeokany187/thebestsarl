@@ -2,6 +2,7 @@ import { createHash, randomInt, randomUUID } from "node:crypto";
 import { prisma } from "@/lib/prisma";
 import { sendMailBatch } from "@/lib/mail";
 import { normalizeAuthEmail, verifyUserPassword } from "@/lib/password-setup";
+import { AUTH_SESSION_MAX_AGE_SECONDS } from "@/lib/session-security";
 
 const DEVICE_CHALLENGE_TTL_MINUTES = 10;
 const DEVICE_CHALLENGE_REQUEST_COOLDOWN_SECONDS = 60;
@@ -52,6 +53,20 @@ function deviceChallengeExpiryDate() {
 
 function deviceChallengeWindowStart() {
   return new Date(Date.now() - DEVICE_CHALLENGE_REQUEST_WINDOW_MINUTES * 60 * 1000);
+}
+
+export function requiresDeviceChallenge(
+  sessionState: { activeSessionKey: string; activeDeviceTokenHash: string; lastAuthenticatedAt: Date } | null,
+  deviceTokenHash: string,
+) {
+  if (!sessionState?.activeSessionKey) {
+    return false;
+  }
+
+  const sessionExpired = Date.now() - sessionState.lastAuthenticatedAt.getTime()
+    >= AUTH_SESSION_MAX_AGE_SECONDS * 1000;
+
+  return sessionExpired || sessionState.activeDeviceTokenHash !== deviceTokenHash;
 }
 
 export async function ensureAuthSessionSecurityStorage() {
@@ -145,7 +160,7 @@ export async function requestDeviceSignInChallenge(params: {
   const deviceTokenHash = hashDeviceToken(normalizedDeviceToken);
   const sessionState = await prisma.authSessionState.findUnique({ where: { userId: user.id } });
 
-  if (!sessionState?.activeSessionKey || sessionState.activeDeviceTokenHash === deviceTokenHash) {
+  if (!requiresDeviceChallenge(sessionState, deviceTokenHash)) {
     return { ok: true as const, otpRequired: false as const, user };
   }
 
