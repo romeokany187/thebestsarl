@@ -464,6 +464,8 @@ export default async function PaymentsPage({
   const isCashier = isCashierJobTitle(session.user.jobTitle);
   const isComptable = role === "ACCOUNTANT" || session.user.jobTitle === "COMPTABLE";
   const isAdmin = role === "ADMIN";
+  const isDirecteurGeneral = role === "DIRECTEUR_GENERAL";
+  const canSendUnpaidAlerts = isAdmin || isDirecteurGeneral || isComptable;
   const hasPaymentsFullAccess = hasRequiredModuleAccessLevel(customModuleAccess, "FULL");
   const canWrite = isCashier || isAdmin || isComptable || hasPaymentsFullAccess;
   const canManageLedger = isAdmin || isComptable || hasPaymentsFullAccess;
@@ -514,6 +516,8 @@ export default async function PaymentsPage({
   const yearStart = new Date(Date.UTC(selectedYear, 0, 1, 0, 0, 0, 0));
   const yearEnd = new Date(Date.UTC(selectedYear + 1, 0, 1, 0, 0, 0, 0));
 
+
+  const UnpaidAlertsButton = (await import("@/components/unpaid-alerts-button")).UnpaidAlertsButton;
 
   const paymentsData = await Promise.all([
     prisma.airline.findMany({
@@ -1765,6 +1769,19 @@ export default async function PaymentsPage({
               <KpiCard label="Billets partiels" value={`${partialTickets.length}`} hint={`${partialCollected.toFixed(2)} / ${partialBilled.toFixed(2)} USD eq`} />
               <KpiCard label="Tickets totalement payés" value={`${collectedTotal.toFixed(2)} USD`} />
             </div>
+
+            <section className="rounded-2xl border border-red-200 bg-red-50/40 p-4 dark:border-red-900/50 dark:bg-red-950/20">
+              <div className="flex flex-wrap items-start justify-between gap-4">
+                <div>
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-red-700/80 dark:text-red-300/80">Recouvrement</p>
+                  <h2 className="mt-1 text-sm font-semibold">Relance billets non payés</h2>
+                  <p className="mt-2 max-w-2xl text-xs text-black/65 dark:text-white/65">
+                    Envoie une alerte urgente dans l&apos;application et par email aux personnes concernées (vendeur, payant interne, chef d&apos;équipe) pour chaque billet impayé ou partiel depuis avril.
+                  </p>
+                </div>
+                <UnpaidAlertsButton canSend={canSendUnpaidAlerts} />
+              </div>
+            </section>
 
             <section className="overflow-hidden rounded-2xl border border-black/10 bg-white shadow-sm dark:border-white/10 dark:bg-zinc-900">
               <div className="border-b border-black/10 px-4 py-3 dark:border-white/10">

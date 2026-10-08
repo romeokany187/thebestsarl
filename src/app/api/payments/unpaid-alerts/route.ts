@@ -356,7 +356,7 @@ async function dispatchUnpaidAlerts(senderName: string) {
 }
 
 export async function POST(_req: NextRequest) {
-  const access = await requireApiRoles(["ADMIN", "DIRECTEUR_GENERAL"]);
+  const access = await requireApiRoles(["ADMIN", "DIRECTEUR_GENERAL", "ACCOUNTANT"]);
   if (access.error) return access.error;
 
   const result = await dispatchUnpaidAlerts(access.session.user.name ?? "Admin");

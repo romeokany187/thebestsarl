@@ -2,16 +2,29 @@
 
 import { useState } from "react";
 
-export function UnpaidAlertsButton() {
+export function UnpaidAlertsButton({ canSend = true }: { canSend?: boolean }) {
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<{ message: string; ok: boolean } | null>(null);
 
+  if (!canSend) {
+    return null;
+  }
+
   async function handleSendAlerts() {
-    if (!confirm("Envoyer des alertes urgentes pour les billets non payés à tous les comptables et caissiers ?")) return;
+    if (
+      !confirm(
+        "Envoyer une alerte urgente (notification + email) aux vendeurs, payants internes et chefs d'équipe concernés par les billets non payés ou partiels depuis avril ?",
+      )
+    ) {
+      return;
+    }
     setLoading(true);
     setResult(null);
     try {
-      const res = await fetch("/api/payments/unpaid-alerts", { method: "POST" });
+      const res = await fetch("/api/payments/unpaid-alerts", {
+        method: "POST",
+        credentials: "include",
+      });
       const data = await res.json();
       if (res.ok) {
         setResult({ message: data.message ?? `Alertes envoyées.`, ok: true });
@@ -32,7 +45,7 @@ export function UnpaidAlertsButton() {
         disabled={loading}
         className="flex items-center gap-2 rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white shadow hover:bg-red-700 disabled:opacity-60 transition-colors"
       >
-        <span>{loading ? "Envoi…" : "🚨 Alerter comptables & caissiers"}</span>
+        <span>{loading ? "Envoi…" : "🚨 Alerter pour recouvrement billets"}</span>
       </button>
       {result && (
         <p className={`text-xs px-1 ${result.ok ? "text-green-700" : "text-red-600"}`}>
