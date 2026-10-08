@@ -198,11 +198,9 @@ function VerifiedBadge({ tone }: { tone: "gold" | "blue" }) {
 export async function AppShell({
   children,
   role,
-  accessNote,
 }: {
   children: React.ReactNode;
   role?: AppRole;
-  accessNote?: string;
 }) {
   const session = await getServerSession(authOptions);
   let unreadNotifications = 0;
@@ -339,11 +337,6 @@ export async function AppShell({
           </header>
 
           <main className="mobile-safe-area-bottom min-w-0 px-4 pt-32 pb-24 sm:px-6 md:pt-24 lg:px-8 lg:pb-8 2xl:px-10">
-            {accessNote ? (
-              <p className="mb-5 rounded-xl border border-black/10 bg-white px-4 py-3 text-xs text-black/70 shadow-sm dark:border-white/10 dark:bg-zinc-900 dark:text-white/70">
-                {accessNote}
-              </p>
-            ) : null}
             {children}
           </main>
 

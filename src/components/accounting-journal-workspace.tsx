@@ -545,11 +545,7 @@ export function AccountingJournalWorkspace({
       <div className="rounded-2xl border border-black/10 bg-white p-4 shadow-sm dark:border-white/10 dark:bg-zinc-900">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
-            <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-black/50 dark:text-white/50">Banque centrale</p>
-            <h2 className="mt-1 text-sm font-semibold">Taux du jour comptable</h2>
-            <p className="mt-2 text-sm text-black/60 dark:text-white/60">
-              Le comptable enregistre ici le taux officiel du jour. Toutes les écritures passées à cette date récupèrent automatiquement ce taux.
-            </p>
+            <h2 className="text-sm font-semibold">Taux du jour</h2>
           </div>
           <div className="rounded-xl border border-black/10 px-3 py-2 text-xs dark:border-white/10">
             {selectedManagedRate
@@ -597,11 +593,7 @@ export function AccountingJournalWorkspace({
       <div className="rounded-2xl border border-black/10 bg-white p-4 shadow-sm dark:border-white/10 dark:bg-zinc-900">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
-            <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-black/50 dark:text-white/50">Passation</p>
-            <h2 className="mt-1 text-sm font-semibold">{editingEntryId ? "Modifier une écriture de journal" : "Nouvelle écriture de journal"}</h2>
-            <p className="mt-2 text-sm text-black/60 dark:text-white/60">
-              Les opérations comptables restent saisies manuellement. Pour les billets vendus depuis le 1er avril, une aide rapide permet de choisir la facture et de proposer automatiquement la pièce justificative et le libellé, tout en laissant ces champs modifiables.
-            </p>
+            <h2 className="text-sm font-semibold">{editingEntryId ? "Modifier l'écriture" : "Nouvelle écriture"}</h2>
           </div>
           <div className="rounded-xl border border-black/10 px-3 py-2 text-xs dark:border-white/10">
             USD: débit {totalDebitUsd.toFixed(2)} / crédit {totalCreditUsd.toFixed(2)}<br />
@@ -640,9 +632,6 @@ export function AccountingJournalWorkspace({
                 );
               })}
             </div>
-            <p className="mt-1 text-[11px] text-black/50 dark:text-white/50">
-              Tu peux sélectionner un ou plusieurs pôles pour la même écriture. Laisse vide si l'écriture est sans pôle.
-            </p>
           </div>
           <div className="min-w-0">
             <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-black/60 dark:text-white/60">Facture billet depuis le 1er avril</label>
@@ -687,9 +676,6 @@ export function AccountingJournalWorkspace({
                 <p className="px-2 py-1 text-xs text-black/50 dark:text-white/50">Aucune facture trouvée pour cette recherche.</p>
               )}
             </div>
-            <p className="mt-1 text-[11px] text-black/50 dark:text-white/50">
-              Recherche directe par nom client, numéro de facture ou numéro de billet. Dès qu'une facture est trouvée, la pièce justificative se remplit avec sa référence.
-            </p>
           </div>
           <div className="min-w-0">
             <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-black/60 dark:text-white/60">Pièce justificative</label>
@@ -712,9 +698,6 @@ export function AccountingJournalWorkspace({
               placeholder="BEC, OP, reçu ou facture billet..."
               className="w-full rounded-md border border-black/15 bg-white px-3 py-2 text-sm dark:border-white/15 dark:bg-zinc-900"
             />
-            <p className="mt-1 text-[11px] text-black/50 dark:text-white/50">
-              Champ obligatoire: indique la référence de la pièce justificative liée à l'écriture.
-            </p>
           </div>
         </div>
 
@@ -883,11 +866,7 @@ export function AccountingJournalWorkspace({
         </div>
         <div className="mt-6 border-t border-black/10 pt-4 dark:border-white/10">
           <div className="mb-3">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-black/50 dark:text-white/50">Suppressions</p>
-            <h3 className="mt-1 text-sm font-semibold">Journal des écritures supprimées</h3>
-            <p className="mt-1 text-xs text-black/55 dark:text-white/55">
-              Les écritures actives sont renumérotées selon leur chronologie comptable. Les suppressions restent archivées ici avec leur numéro au moment de la suppression.
-            </p>
+            <h3 className="text-sm font-semibold">Écritures supprimées</h3>
           </div>
 
           <div className="space-y-3">

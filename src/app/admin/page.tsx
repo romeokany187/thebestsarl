@@ -28,14 +28,11 @@ export default async function AdminPage() {
   ]);
 
   return (
-    <AppShell role={role} accessNote="Accès administrateur: gestion des utilisateurs, équipes et paramétrage rapide des commissions.">
+    <AppShell role={role}>
       <section className="mb-6">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <h1 className="text-2xl font-semibold">Administration</h1>
-            <p className="text-sm text-black/60 dark:text-white/60">
-              Référentiel des utilisateurs, équipes et paramètres essentiels.
-            </p>
           </div>
           <div className="flex flex-wrap gap-2">
             <a

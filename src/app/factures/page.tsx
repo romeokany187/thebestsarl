@@ -145,13 +145,9 @@ export default async function FacturesPage({
   return (
     <AppShell
       role={role}
-      accessNote="Factures et itinérances: chaque billet encodé peut générer une facture et une fiche d’itinérance téléchargeables."
     >
       <section className="mb-6">
         <h1 className="text-2xl font-semibold tracking-tight">Factures</h1>
-        <p className="text-sm text-black/60 dark:text-white/60">
-          Factures générées automatiquement à partir des billets vendus.
-        </p>
       </section>
 
       <section className="mb-6 rounded-2xl border border-black/10 bg-white p-4 dark:border-white/10 dark:bg-zinc-900">

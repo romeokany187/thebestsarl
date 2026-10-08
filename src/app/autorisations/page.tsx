@@ -33,12 +33,9 @@ export default async function AuthorizationsPage() {
   ]);
 
   return (
-    <AppShell role={role} accessNote="Administration des droits par service et par niveau d'acces pour chaque employe affecte.">
+    <AppShell role={role}>
       <section className="mb-5">
         <h1 className="text-2xl font-semibold">Autorisations</h1>
-        <p className="text-sm text-black/60 dark:text-white/60">
-          Configure les acces par employe: service cible, lecture seulement, ecriture & lecture, ou acces complet.
-        </p>
       </section>
 
       <UserAuthorizationsAdmin

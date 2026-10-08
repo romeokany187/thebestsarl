@@ -14,10 +14,9 @@ export default async function SettingsPage() {
   });
 
   return (
-    <AppShell role={role} accessNote="Paramètres compte: profil personnel, sécurité Google et préférences d'interface/export.">
+    <AppShell role={role}>
       <section className="mb-6">
         <h1 className="text-2xl font-semibold tracking-tight">Paramètres</h1>
-        <p className="text-sm text-black/60 dark:text-white/60">Configuration fonctionnelle du compte et des préférences utilisateur.</p>
       </section>
 
       <SettingsWorkspace

@@ -1771,21 +1771,15 @@ export default async function PaymentsPage({
             </div>
 
             <section className="rounded-2xl border border-red-200 bg-red-50/40 p-4 dark:border-red-900/50 dark:bg-red-950/20">
-              <div className="flex flex-wrap items-start justify-between gap-4">
-                <div>
-                  <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-red-700/80 dark:text-red-300/80">Recouvrement</p>
-                  <h2 className="mt-1 text-sm font-semibold">Relance billets non payés</h2>
-                  <p className="mt-2 max-w-2xl text-xs text-black/65 dark:text-white/65">
-                    Envoie une alerte urgente dans l&apos;application et par email aux personnes concernées (vendeur, payant interne, chef d&apos;équipe) pour chaque billet impayé ou partiel depuis avril.
-                  </p>
-                </div>
+              <div className="flex flex-wrap items-center justify-between gap-4">
+                <h2 className="text-sm font-semibold">Relance billets non payés</h2>
                 <UnpaidAlertsButton canSend={canSendUnpaidAlerts} />
               </div>
             </section>
 
             <section className="overflow-hidden rounded-2xl border border-black/10 bg-white shadow-sm dark:border-white/10 dark:bg-zinc-900">
               <div className="border-b border-black/10 px-4 py-3 dark:border-white/10">
-                <h2 className="text-sm font-semibold">Billets trouvés sur la période (y compris imports Excel)</h2>
+                <h2 className="text-sm font-semibold">Billets sur la période</h2>
               </div>
               <div className="overflow-x-auto">
                 <table className="min-w-full text-sm">

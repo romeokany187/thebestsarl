@@ -65,11 +65,6 @@ export default async function RelationPubliquePage() {
   return (
     <AppShell
       role={role}
-      accessNote={
-        canManageAll
-          ? "Accès complet à tous les dossiers d'appels d'offres. Vous pouvez créer, modifier et suivre tous les dossiers."
-          : "Espace de travail dédié aux appels d'offres (DAO). Créez vos dossiers, définissez les exigences et suivez le taux de complétude."
-      }
     >
       <BidWorkspace
         initialFolders={serializedFolders}

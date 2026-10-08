@@ -18,14 +18,10 @@ export default async function AdminApprovalsPage() {
   return (
     <AppShell
       role={role}
-      accessNote="Route dédiée à l'admin / DG pour approuver les OP et EDB en attente."
     >
       <section className="mb-6">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Validation OP & EDB</h1>
-          <p className="text-sm text-black/60 dark:text-white/60">
-            Espace admin dédié aux dossiers à approuver. Les notifications vous amènent directement sur la bonne ligne.
-          </p>
         </div>
       </section>
 

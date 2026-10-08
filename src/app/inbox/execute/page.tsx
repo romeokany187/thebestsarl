@@ -20,7 +20,6 @@ export default async function InboxExecutePage() {
   return (
     <AppShell
       role={role}
-      accessNote="Route dédiée aux OP / EDB à exécuter pour l’admin, le comptable et les profils caisse autorisés."
     >
       <section className="mb-6 space-y-3">
         <div className="flex flex-wrap items-center gap-2 text-xs font-semibold">
@@ -32,9 +31,6 @@ export default async function InboxExecutePage() {
 
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">OP & EDB à exécuter</h1>
-          <p className="text-sm text-black/60 dark:text-white/60">
-            Espace réservé aux profils autorisés pour les exécutions. Un clic sur la notification ouvre directement le bon dossier dans cette section.
-          </p>
         </div>
       </section>
 

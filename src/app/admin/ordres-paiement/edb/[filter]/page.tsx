@@ -57,15 +57,11 @@ export default async function EdbListPage({
   return (
     <AppShell
       role={role}
-      accessNote={`Liste filtrée des EDB : ${label}`}
     >
       <section className="mb-6">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <h1 className="text-2xl font-semibold tracking-tight">États de besoin — {label}</h1>
-            <p className="text-sm text-black/60 dark:text-white/60">
-              {filteredNeeds.length} EDB trouvé{filteredNeeds.length > 1 ? "s" : ""}
-            </p>
           </div>
           <a
             href="/admin/ordres-paiement"

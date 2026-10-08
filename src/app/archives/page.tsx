@@ -87,15 +87,9 @@ export default async function ArchivesPage({
   return (
     <AppShell
       role={role}
-      accessNote={canArchiveWrite
-        ? "Archives: lecture et archivage autorisés selon les catégories accessibles à votre profil."
-        : "Mode lecture: consultation et export PDF limités aux catégories accessibles à votre profil."}
     >
       <section className="mb-6">
         <h1 className="text-2xl font-semibold tracking-tight">Archives</h1>
-        <p className="text-sm text-black/60 dark:text-white/60">
-          Gestion type explorateur de fichiers: choisissez un dossier, ajoutez des documents et consultez l&apos;historique référencé.
-        </p>
       </section>
 
       <section className="mb-5 grid gap-4 sm:grid-cols-3 lg:grid-cols-4">

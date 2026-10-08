@@ -55,12 +55,9 @@ export default async function ProfilePage() {
   });
 
   return (
-    <AppShell role={role} accessNote="Profil connecté et inbox: informations du compte, notifications et activité récente.">
+    <AppShell role={role}>
       <section className="mb-6">
         <h1 className="text-2xl font-semibold tracking-tight">Profil</h1>
-        <p className="text-sm text-black/60 dark:text-white/60">
-          Voici l&apos;identité connectée, ses permissions et l&apos;accès à votre centre de notifications.
-        </p>
       </section>
 
       <div className="grid gap-4 md:grid-cols-2">
@@ -98,9 +95,6 @@ export default async function ProfilePage() {
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <h2 className="text-lg font-semibold">Centre de notifications</h2>
-            <p className="text-sm text-black/60 dark:text-white/60">
-              Les alertes OP / EDB et les actions rapides sont maintenant centralisées dans une vue dédiée.
-            </p>
           </div>
           <a
             href="/inbox"

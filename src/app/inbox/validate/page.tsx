@@ -18,14 +18,10 @@ export default async function InboxValidatePage() {
   return (
     <AppShell
       role={role}
-      accessNote="Route dédiée aux OP / EDB à approuver pour l'admin et la DG."
     >
       <section className="mb-6">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">OP & EDB à approuver</h1>
-          <p className="text-sm text-black/60 dark:text-white/60">
-            Espace réservé aux validations admin / DG. Un clic depuis une notification vous amène directement sur le dossier concerné.
-          </p>
         </div>
       </section>
 

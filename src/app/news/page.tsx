@@ -24,9 +24,6 @@ export default async function NewsPage() {
   return (
     <AppShell
       role={role}
-      accessNote={role === "ADMIN" || role === "DIRECTEUR_GENERAL"
-        ? "Pilotage éditorial: vous pouvez publier les nouvelles officielles de la direction."
-        : "Mode lecture: consultation des nouvelles publiées par la direction."}
     >
       <section className="mb-6 rounded-3xl border border-black/10 bg-linear-to-br from-white via-slate-50 to-blue-50 p-5 shadow-sm dark:border-white/10 dark:from-zinc-900 dark:via-zinc-900 dark:to-zinc-800">
         <div className="flex flex-wrap items-center justify-between gap-3">

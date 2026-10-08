@@ -17,13 +17,9 @@ export default async function DepositPage() {
   return (
     <AppShell
       role={role}
-      accessNote="Espace admin / DG / comptable dédié aux opérations de dépôt compagnies: approvisionnements, suivi des soldes et historique des mouvements."
     >
       <section className="mb-6">
         <h1 className="text-2xl font-semibold">Dépôts compagnies</h1>
-        <p className="text-sm text-black/60 dark:text-white/60">
-          Centralisation des approvisionnements manuels et suivi des comptes de dépôt des compagnies aériennes. Les billets vendus à partir du {AIRLINE_TICKET_DEPOSIT_START_LABEL} impactent automatiquement ces comptes; les billets antérieurs restent exclus.
-        </p>
       </section>
 
       <AirlineDepositAccountManager

@@ -137,15 +137,11 @@ export default async function AdminLogsPage({
   return (
     <AppShell
       role={role}
-      accessNote="Journal compact des actions métiers des utilisateurs."
     >
       <section className="mb-4 space-y-2">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <h1 className="text-2xl font-semibold tracking-tight">Logs activités utilisateurs</h1>
-            <p className="text-sm text-black/60 dark:text-white/60">
-              Vue compacte, ligne par ligne, comme un terminal.
-            </p>
           </div>
           <Link
             href="/admin"

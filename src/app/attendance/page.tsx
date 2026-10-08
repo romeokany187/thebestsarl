@@ -46,11 +46,6 @@ export default async function AttendancePage({
       ? resolvedSearchParams.userId
       : undefined
     : session.user.id;
-  const accessNote = canViewGlobalAttendance
-    ? isComptable
-      ? "Accès comptable: consultation globale des présences et téléchargement des rapports PDF."
-      : "Accès direction: visualisation globale et gestion des présences de toute l'équipe."
-    : "Accès personnel: vous signez votre présence et consultez uniquement vos propres lignes.";
 
   const users = !canViewGlobalAttendance
     ? []
@@ -83,12 +78,9 @@ export default async function AttendancePage({
   });
 
   return (
-    <AppShell role={role} accessNote={accessNote}>
+    <AppShell role={role}>
       <section className="mb-6">
         <h1 className="text-2xl font-semibold">Gestion des présences</h1>
-        <p className="text-sm text-black/60 dark:text-white/60">
-          Pointage, retards, heures supplémentaires et suivi quotidien des équipes.
-        </p>
       </section>
 
       <section className="mb-6 rounded-xl border border-black/10 bg-white p-4 dark:border-white/10 dark:bg-zinc-900">

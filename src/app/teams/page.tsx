@@ -98,11 +98,9 @@ export default async function TeamsPage({
   return (
     <AppShell
       role={role}
-      accessNote="Vue organisation: structure des équipes, répartition des rôles et administration des agences et partenaires."
     >
       <section className="mb-6">
         <h1 className="text-2xl font-semibold tracking-tight">Équipes</h1>
-        <p className="text-sm text-black/60 dark:text-white/60">Gestion des équipes, collaborateurs et responsabilités.</p>
       </section>
 
       <section className="mb-6 rounded-2xl border border-black/10 bg-white p-5 shadow-sm dark:border-white/10 dark:bg-zinc-900">

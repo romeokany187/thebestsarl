@@ -27,7 +27,6 @@ export default async function InboxPage() {
     <AppShell role={role}>
       <section className="mb-6">
         <h1 className="text-2xl font-semibold tracking-tight">Centre des notifications</h1>
-        <p className="text-sm text-black/60 dark:text-white/60">Des lignes d'information qui vous amènent directement au bon écran.</p>
       </section>
 
       <NotificationCenter

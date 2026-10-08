@@ -89,13 +89,6 @@ export default async function ReportsPage() {
     : users;
   const canApproveReport = role === "ADMIN" || role === "DIRECTEUR_GENERAL" || role === "MANAGER";
   const canCreateReport = canApproveReport || role === "EMPLOYEE" || role === "ACCOUNTANT";
-  const accessNote = isExecutiveRole
-    ? "Accès direction: lecture, organisation par service et impression des rapports soumis."
-    : canApproveReport
-      ? "Accès validation: vous pouvez créer et approuver les rapports."
-    : canCreateReport
-      ? "Accès contribution: vous pouvez créer vos rapports et suivre leur statut."
-      : "Accès lecture seule: consultation des rapports uniquement.";
 
   const submittedReports = reports.filter((report) => report.status === "SUBMITTED");
   const adminSectionsData = adminReportSections.map((section) => ({
@@ -119,12 +112,9 @@ export default async function ReportsPage() {
   }));
 
   return (
-    <AppShell role={role} accessNote={accessNote}>
+    <AppShell role={role}>
       <section className="mb-6">
         <h1 className="text-2xl font-semibold">Rapports de travail</h1>
-        <p className="text-sm text-black/60 dark:text-white/60">
-          Journalier, hebdomadaire, mensuel et annuel avec workflow de validation.
-        </p>
       </section>
 
       {isExecutiveRole ? (

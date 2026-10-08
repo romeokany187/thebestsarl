@@ -77,7 +77,6 @@ export default async function BidDetailPage({
   return (
     <AppShell
       role={role}
-      accessNote={canManageAll ? "Accès complet à tous les dossiers." : "Espace de travail dédié aux appels d'offres."}
     >
       <ClientBidDetailPage
         folder={serializedFolder}

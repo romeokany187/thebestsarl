@@ -110,13 +110,9 @@ export default async function AdminPaymentOrdersPage() {
   return (
     <AppShell
       role={role}
-      accessNote="Espace admin: création des ordres de paiement et suivi de tous les OP et EDB."
     >
       <section className="mb-6">
         <h1 className="text-2xl font-semibold tracking-tight">Espace Admin — Ordres de paiement & États de besoin</h1>
-        <p className="text-sm text-black/60 dark:text-white/60">
-          Tableau de bord, création d'OP et suivi détaillé. Cliquez sur une carte pour voir la liste complète par catégorie.
-        </p>
       </section>
 
       {/* ---------- EDB STATUS DASHBOARD ---------- */}

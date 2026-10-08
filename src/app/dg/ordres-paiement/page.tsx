@@ -29,13 +29,9 @@ export default async function DgPaymentOrdersPage() {
   return (
     <AppShell
       role={role}
-      accessNote="Espace DG: création des ordres de paiement avec validation admin avant exécution caisse."
     >
       <section className="mb-6">
         <h1 className="text-2xl font-semibold tracking-tight">Espace DG - Ordres de paiement</h1>
-        <p className="text-sm text-black/60 dark:text-white/60">
-          Les OP émis par la DG passent d&apos;abord par l&apos;approbation admin, puis par l&apos;exécution caisse.
-        </p>
       </section>
 
       <PaymentOrderForm issuerRole="DIRECTEUR_GENERAL" />

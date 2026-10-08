@@ -16,15 +16,9 @@ export default async function Home() {
 
   if (canAccessExecutiveDashboard) {
     return (
-      <AppShell
-        role={userRole as AppRole}
-        accessNote="Tableau de pilotage interactif: utilisateurs, présences/absences, rapports par employé/fonction et ventes multi-fréquences."
-      >
+      <AppShell role={userRole as AppRole}>
         <section className="mb-6">
           <h1 className="text-2xl font-semibold">Dashboard direction</h1>
-          <p className="text-sm text-black/60 dark:text-white/60">
-            Vision complète et interactive de l&apos;activité agence selon la période, la fonction et l&apos;employé.
-          </p>
         </section>
         <DashboardOverview />
       </AppShell>

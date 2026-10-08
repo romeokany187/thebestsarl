@@ -53,17 +53,9 @@ export default async function ApprovisionnementPage() {
   return (
     <AppShell
       role={role}
-      accessNote={role === "ADMIN"
-        ? "Admin: accès complet à l’émission, la validation, l’exécution et la gestion de stock avec traçabilité."
-          : hasProcurementFullAccess
-            ? "Accès complet: émission, validation, exécution et gestion de stock avec traçabilité."
-        : "Approvisionnement: émission des états de besoin, validation via inbox, exécution financière et suivi stock avec traçabilité."}
     >
       <section className="mb-6">
         <h1 className="text-2xl font-semibold tracking-tight">Approvisionnement</h1>
-        <p className="text-sm text-black/60 dark:text-white/60">
-          État de besoin, validation, passage à l&apos;achat et gestion dynamique des biens matériels.
-        </p>
       </section>
 
       <ProcurementHub

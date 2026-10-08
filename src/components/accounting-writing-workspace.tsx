@@ -80,16 +80,11 @@ export function AccountingWritingWorkspace({
       window.removeEventListener("popstate", syncViewFromUrl);
     };
   }, []);
-  const activeView = VIEW_ITEMS.find((item) => item.key === view) ?? VIEW_ITEMS[0];
 
   return (
     <section className="mb-6 grid items-start gap-4 lg:grid-cols-[280px_minmax(0,1fr)] xl:grid-cols-[320px_minmax(0,1fr)]">
       <aside className="rounded-2xl border border-black/10 bg-white p-4 shadow-sm lg:sticky lg:top-28 dark:border-white/10 dark:bg-zinc-900">
-        <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-black/50 dark:text-white/50">Comptabilite</p>
-        <h2 className="mt-1 text-sm font-semibold">Sous-menu Comptabilite</h2>
-        <p className="mt-3 text-xs text-black/60 dark:text-white/60">
-          Choisis une zone de travail. L'espace principal n'affiche que le bloc comptable utile pour eviter l'effet de page trop chargee.
-        </p>
+        <h2 className="text-sm font-semibold">Comptabilité</h2>
 
         <div className="mt-4 space-y-2">
           {VIEW_ITEMS.map((item) => (
@@ -114,18 +109,6 @@ export function AccountingWritingWorkspace({
       </aside>
 
       <div className="min-w-0">
-        <section className="mb-4 rounded-2xl border border-black/10 bg-white p-4 shadow-sm dark:border-white/10 dark:bg-zinc-900">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div>
-              <p className="text-[11px] font-semibold uppercase tracking-wide text-black/55 dark:text-white/55">Zone active</p>
-              <h3 className="text-sm font-semibold">{activeView.label}</h3>
-            </div>
-            <span className="rounded-full border border-black/15 px-3 py-1 text-[11px] font-semibold dark:border-white/15">
-              Module comptabilite
-            </span>
-          </div>
-        </section>
-
         <div className="space-y-4">
           {view === "overview" ? overviewWorkspace : null}
           {view === "pilotage" ? pilotageWorkspace : null}

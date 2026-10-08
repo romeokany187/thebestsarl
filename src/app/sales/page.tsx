@@ -111,9 +111,6 @@ export default async function SalesPage({
   const canImportTickets = canImportTicketWorkbook(role, session.user.canImportTicketWorkbook, currentJobTitle, customModuleAccess);
   const canReplaceImportedPeriod = canImportTicketWorkbook(role, session.user.canImportTicketWorkbook, currentJobTitle, customModuleAccess);
   const canUseSalesAdminDateControls = canManageTicketRecord(role, currentJobTitle, customModuleAccess);
-  const accessNote = canManageTickets
-    ? "Vente: tous les profils autorisés peuvent encoder les billets; le profil admin ventes peut en plus importer Excel, modifier et supprimer les billets déjà enregistrés."
-    : "Vente: vous pouvez encoder les billets normalement. L'import Excel, la modification et la suppression restent réservés au profil admin ventes.";
 
   await ensureAirlineCatalog(prisma);
 
@@ -281,12 +278,9 @@ export default async function SalesPage({
     .sort((a, b) => a.name.localeCompare(b.name, "fr", { sensitivity: "base" }));
 
   return (
-    <AppShell role={role} accessNote={accessNote}>
+    <AppShell role={role}>
       <section className="mb-6">
         <h1 className="text-2xl font-semibold">Gestion des billets</h1>
-        <p className="text-sm text-black/60 dark:text-white/60">
-          Tout profil vente habilité peut encoder un billet. Seul le profil admin ventes peut importer un fichier Excel, modifier un billet déjà enregistré ou le supprimer.
-        </p>
       </section>
 
       <section className="mb-6 rounded-xl border border-black/10 bg-white p-4 dark:border-white/10 dark:bg-zinc-900">

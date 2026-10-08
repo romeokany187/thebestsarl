@@ -56,39 +56,24 @@ export function AccountingPlanWorkspace({
             <article className="rounded-2xl border border-black/10 bg-white p-4 shadow-sm dark:border-white/10 dark:bg-zinc-900">
               <p className="text-[11px] font-semibold uppercase tracking-wide text-black/50 dark:text-white/50">Total comptes</p>
               <p className="mt-2 text-3xl font-semibold">{totalAccounts}</p>
-              <p className="mt-2 text-xs text-black/55 dark:text-white/55">Tous niveaux confondus.</p>
             </article>
             <article className="rounded-2xl border border-black/10 bg-white p-4 shadow-sm dark:border-white/10 dark:bg-zinc-900">
               <p className="text-[11px] font-semibold uppercase tracking-wide text-black/50 dark:text-white/50">Classes actives</p>
               <p className="mt-2 text-3xl font-semibold">{activeClasses}</p>
-              <p className="mt-2 text-xs text-black/55 dark:text-white/55">Classes actuellement chargees dans le referentiel.</p>
             </article>
             <article className="rounded-2xl border border-black/10 bg-white p-4 shadow-sm dark:border-white/10 dark:bg-zinc-900">
               <p className="text-[11px] font-semibold uppercase tracking-wide text-black/50 dark:text-white/50">Comptes racines</p>
               <p className="mt-2 text-3xl font-semibold">{rootAccounts}</p>
-              <p className="mt-2 text-xs text-black/55 dark:text-white/55">Niveau superieur de l'arborescence.</p>
             </article>
             <article className="rounded-2xl border border-black/10 bg-white p-4 shadow-sm dark:border-white/10 dark:bg-zinc-900">
               <p className="text-[11px] font-semibold uppercase tracking-wide text-black/50 dark:text-white/50">Comptes de detail</p>
               <p className="mt-2 text-3xl font-semibold">{detailAccounts}</p>
-              <p className="mt-2 text-xs text-black/55 dark:text-white/55">Comptes sans sous-comptes enfants.</p>
             </article>
           </section>
 
-          <section className="grid gap-4 xl:grid-cols-[1.3fr_1fr]">
+          <section className="grid gap-4 xl:grid-cols-[1fr]">
             <article className="rounded-2xl border border-black/10 bg-white p-4 shadow-sm dark:border-white/10 dark:bg-zinc-900">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-black/50 dark:text-white/50">Lecture rapide</p>
-              <h3 className="mt-1 text-base font-semibold">Comment utiliser cet espace</h3>
-              <div className="mt-3 space-y-3 text-sm text-black/60 dark:text-white/60">
-                <p>Utilise la vue synthese pour verifier la structure globale avant de modifier le plan.</p>
-                <p>Passe ensuite sur l'arborescence pour importer, charger SYSCOHADA, ajouter ou corriger un compte precis.</p>
-                <p>Le journal comptable reste separe afin de ne pas melanger la maintenance du referentiel avec la passation des ecritures.</p>
-              </div>
-            </article>
-
-            <article className="rounded-2xl border border-black/10 bg-white p-4 shadow-sm dark:border-white/10 dark:bg-zinc-900">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-black/50 dark:text-white/50">Densite</p>
-              <p className="mt-2 text-sm font-semibold">Classe la plus dense</p>
+              <p className="text-sm font-semibold">Classe la plus dense</p>
               <p className="mt-1 text-base">{densestClassLabel}</p>
               <div className="mt-4 space-y-2">
                 {topClasses.map((entry) => (

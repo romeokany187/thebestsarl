@@ -10,7 +10,6 @@ export default async function RapportPeriodiquePage() {
   return (
     <AppShell
       role={role}
-      accessNote="Rapport périodique: tous les OP et EDB émis dans une plage de dates, tous statuts confondus."
     >
       <RapportPeriodiqueContent />
     </AppShell>
