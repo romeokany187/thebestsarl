@@ -2,17 +2,15 @@
 
 import { useEffect, useState } from "react";
 
-type AccountingView = "overview" | "pilotage" | "journal" | "reports" | "plan";
+type AccountingView = "journal" | "reports" | "plan";
 
 type AccountingViewItem = {
   key: AccountingView;
   label: string;
-  tone: "emerald" | "amber" | "blue" | "violet";
+  tone: "blue" | "violet";
 };
 
 const VIEW_ITEMS: AccountingViewItem[] = [
-  { key: "overview", label: "Vue d'ensemble", tone: "emerald" },
-  { key: "pilotage", label: "Pilotage", tone: "amber" },
   { key: "journal", label: "Livre journal", tone: "blue" },
   { key: "reports", label: "Rapports", tone: "blue" },
   { key: "plan", label: "Plan comptable", tone: "violet" },
@@ -21,12 +19,18 @@ const VIEW_ITEMS: AccountingViewItem[] = [
 function resolveAccountingView(value: string | null | undefined): AccountingView | null {
   if (!value) return null;
   const normalized = value.replace(/^#/, "").trim().toLowerCase();
-  if (normalized === "overview") return "overview";
-  if (normalized === "pilotage") return "pilotage";
-  if (normalized === "journal") return "journal";
+  if (normalized === "journal" || normalized === "overview" || normalized === "pilotage") return "journal";
   if (normalized === "reports") return "reports";
   if (normalized === "plan") return "plan";
   return null;
+}
+
+function defaultAccountingView(): AccountingView {
+  if (typeof window === "undefined") return "journal";
+  const url = new URL(window.location.href);
+  return resolveAccountingView(url.searchParams.get("view"))
+    ?? resolveAccountingView(window.location.hash)
+    ?? "journal";
 }
 
 function toneClass(tone: AccountingViewItem["tone"], active: boolean) {
@@ -34,42 +38,26 @@ function toneClass(tone: AccountingViewItem["tone"], active: boolean) {
     return "border border-black/15 text-black/75 hover:bg-black/5 dark:border-white/15 dark:text-white/75 dark:hover:bg-white/10";
   }
 
-  if (tone === "emerald") return "border border-emerald-500 bg-emerald-50 text-emerald-700 dark:border-emerald-600 dark:bg-emerald-950/40 dark:text-emerald-300";
-  if (tone === "amber") return "border border-amber-500 bg-amber-50 text-amber-700 dark:border-amber-600 dark:bg-amber-950/40 dark:text-amber-300";
   if (tone === "blue") return "border border-blue-500 bg-blue-50 text-blue-700 dark:border-blue-600 dark:bg-blue-950/40 dark:text-blue-300";
   return "border border-violet-500 bg-violet-50 text-violet-700 dark:border-violet-600 dark:bg-violet-950/40 dark:text-violet-300";
 }
 
 export function AccountingWritingWorkspace({
-  overviewWorkspace,
-  pilotageWorkspace,
   journalWorkspace,
   reportsWorkspace,
   planWorkspace,
 }: {
-  overviewWorkspace: React.ReactNode;
-  pilotageWorkspace: React.ReactNode;
   journalWorkspace: React.ReactNode;
   reportsWorkspace: React.ReactNode;
   planWorkspace: React.ReactNode;
 }) {
-  const [view, setView] = useState<AccountingView>(() => {
-    if (typeof window === "undefined") return "overview";
-    const url = new URL(window.location.href);
-    return resolveAccountingView(url.searchParams.get("view"))
-      ?? resolveAccountingView(window.location.hash)
-      ?? "overview";
-  });
+  const [view, setView] = useState<AccountingView>(defaultAccountingView);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
 
     const syncViewFromUrl = () => {
-      const url = new URL(window.location.href);
-      const nextView = resolveAccountingView(url.searchParams.get("view"))
-        ?? resolveAccountingView(window.location.hash)
-        ?? "overview";
-      setView(nextView);
+      setView(defaultAccountingView());
     };
 
     syncViewFromUrl();
@@ -81,24 +69,25 @@ export function AccountingWritingWorkspace({
     };
   }, []);
 
-  return (
-    <section className="mb-6 grid items-start gap-4 lg:grid-cols-[280px_minmax(0,1fr)] xl:grid-cols-[320px_minmax(0,1fr)]">
-      <aside className="rounded-2xl border border-black/10 bg-white p-4 shadow-sm lg:sticky lg:top-28 dark:border-white/10 dark:bg-zinc-900">
-        <h2 className="text-sm font-semibold">Comptabilité</h2>
+  function selectView(nextView: AccountingView) {
+    setView(nextView);
+    if (typeof window === "undefined") return;
 
-        <div className="mt-4 space-y-2">
+    const url = new URL(window.location.href);
+    url.searchParams.set("view", nextView);
+    url.hash = nextView;
+    window.history.replaceState(window.history.state, "", url.toString());
+  }
+
+  return (
+    <section className="mb-6 grid items-start gap-4 lg:grid-cols-[240px_minmax(0,1fr)] xl:grid-cols-[260px_minmax(0,1fr)]">
+      <aside className="rounded-2xl border border-black/10 bg-white p-4 shadow-sm lg:sticky lg:top-28 dark:border-white/10 dark:bg-zinc-900">
+        <div className="space-y-2">
           {VIEW_ITEMS.map((item) => (
             <button
               key={item.key}
               type="button"
-              onClick={() => {
-                setView(item.key);
-                if (typeof window !== "undefined") {
-                  const url = new URL(window.location.href);
-                  url.hash = item.key;
-                  window.history.replaceState(window.history.state, "", url.toString());
-                }
-              }}
+              onClick={() => selectView(item.key)}
               className={`flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-xs font-semibold transition ${toneClass(item.tone, view === item.key)}`}
             >
               <span>{item.label}</span>
@@ -108,14 +97,10 @@ export function AccountingWritingWorkspace({
         </div>
       </aside>
 
-      <div className="min-w-0">
-        <div className="space-y-4">
-          {view === "overview" ? overviewWorkspace : null}
-          {view === "pilotage" ? pilotageWorkspace : null}
-          {view === "journal" ? journalWorkspace : null}
-          {view === "reports" ? reportsWorkspace : null}
-          {view === "plan" ? planWorkspace : null}
-        </div>
+      <div className="min-w-0 space-y-4">
+        {view === "journal" ? journalWorkspace : null}
+        {view === "reports" ? reportsWorkspace : null}
+        {view === "plan" ? planWorkspace : null}
       </div>
     </section>
   );

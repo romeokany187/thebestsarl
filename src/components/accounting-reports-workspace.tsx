@@ -220,7 +220,7 @@ export function AccountingReportsWorkspace({ accounts }: { accounts: AccountOpti
       <section className="rounded-2xl border border-black/10 bg-white p-4 shadow-sm dark:border-white/10 dark:bg-zinc-900">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
-            <h2 className="text-lg font-semibold tracking-tight">Rapports comptables</h2>
+            <h2 className="text-sm font-semibold tracking-tight">Rapports</h2>
           </div>
           <div className="flex flex-wrap gap-2">
             <button type="button" onClick={loadPreview} disabled={loading} className="rounded-md bg-black px-4 py-2 text-sm font-semibold text-white disabled:opacity-60 dark:bg-white dark:text-black">
@@ -286,8 +286,7 @@ export function AccountingReportsWorkspace({ accounts }: { accounts: AccountOpti
       {preview ? (
         <section className="space-y-4 rounded-2xl border border-black/10 bg-white p-4 shadow-sm dark:border-white/10 dark:bg-zinc-900">
           <div>
-            <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-black/50 dark:text-white/50">Aperçu écran</p>
-            <h3 className="mt-1 text-base font-semibold">
+            <h3 className="text-base font-semibold">
               {preview.reportType === "journal"
                 ? "Livre journal"
                 : preview.reportType === "ledger"
@@ -295,8 +294,9 @@ export function AccountingReportsWorkspace({ accounts }: { accounts: AccountOpti
                   : preview.reportType === "trial-balance"
                     ? "Balance des comptes"
                     : "Balance générale"}
+              {" · "}
+              {preview.periodLabel}
             </h3>
-            <p className="mt-1 text-sm text-black/60 dark:text-white/60">{preview.periodLabel}</p>
           </div>
 
           <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">

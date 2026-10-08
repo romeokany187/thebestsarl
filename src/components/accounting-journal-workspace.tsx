@@ -775,11 +775,8 @@ export function AccountingJournalWorkspace({
       {showHistory ? (
       <section className="rounded-2xl border border-black/10 bg-white p-4 shadow-sm dark:border-white/10 dark:bg-zinc-900">
         <div className="mb-3 flex flex-wrap items-end justify-between gap-3">
-          <div>
-            <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-black/50 dark:text-white/50">Historique</p>
-            <h2 className="mt-1 text-sm font-semibold">Écritures récentes du livre journal</h2>
-          </div>
-          <div className="flex w-full flex-wrap items-center gap-2 md:w-auto">
+          <h2 className="text-sm font-semibold">Historique</h2>
+          <div className="flex w-full flex-wrap items-center gap-2 md:w-auto md:max-w-xl">
             <input
               type="search"
               value={historySearchInput}
@@ -813,12 +810,6 @@ export function AccountingJournalWorkspace({
         </div>
 
         {loading ? <p className="text-sm text-black/55 dark:text-white/55">Chargement…</p> : null}
-
-        {!loading && historySearch ? (
-          <p className="mb-3 text-xs text-black/55 dark:text-white/55">
-            Recherche active: "{historySearch}" ({filteredRecentEntries.length} résultat{filteredRecentEntries.length > 1 ? "s" : ""})
-          </p>
-        ) : null}
 
         <div className="space-y-3">
           {filteredRecentEntries.length === 0 ? (
