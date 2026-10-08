@@ -47,7 +47,6 @@ export default async function ApprovisionnementPage() {
 
   const hasProcurementFullAccess = hasRequiredModuleAccessLevel(customModuleAccess, "FULL");
   const canCreateNeed = role === "ADMIN" || role === "MANAGER" || me?.jobTitle === "APPROVISIONNEMENT" || hasProcurementFullAccess;
-  const canApproveNeed = role === "ADMIN" || role === "DIRECTEUR_GENERAL" || hasProcurementFullAccess;
   const canManageStock = role === "ADMIN" || role === "MANAGER" || me?.jobTitle === "APPROVISIONNEMENT" || hasProcurementFullAccess;
 
   return (
@@ -75,10 +74,7 @@ export default async function ApprovisionnementPage() {
           createdAt: movement.createdAt.toISOString(),
         }))}
         canCreateNeed={canCreateNeed}
-        canApproveNeed={canApproveNeed}
         canManageStock={canManageStock}
-        hideNeedWorkflow={false}
-        hideDynamicStock={false}
         allUsers={allUsers}
       />
     </AppShell>

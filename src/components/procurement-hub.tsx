@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useState } from "react";
 import { parseNeedQuote } from "@/lib/need-lines";
 import {
   WORKFLOW_ASSIGNMENT_OPTIONS,
@@ -10,6 +10,7 @@ import {
 
 type NeedStatus = "DRAFT" | "SUBMITTED" | "APPROVED" | "REJECTED";
 type MovementType = "IN" | "OUT";
+type ProcurementView = "needs" | "stock";
 
 type NeedItem = {
   id: string;
@@ -76,6 +77,34 @@ const BENEFICIARY_LABEL: Record<NeedBeneficiaryTeam, string> = {
   MBUJIMAYI: "Mbujimayi",
 };
 
+const VIEW_ITEMS: { key: ProcurementView; label: string }[] = [
+  { key: "needs", label: "États de besoin" },
+  { key: "stock", label: "Stock" },
+];
+
+function resolveProcurementView(value: string | null | undefined): ProcurementView | null {
+  if (!value) return null;
+  const normalized = value.replace(/^#/, "").trim().toLowerCase();
+  if (normalized === "needs" || normalized === "edb") return "needs";
+  if (normalized === "stock") return "stock";
+  return null;
+}
+
+function defaultProcurementView(): ProcurementView {
+  if (typeof window === "undefined") return "needs";
+  const url = new URL(window.location.href);
+  return resolveProcurementView(url.searchParams.get("view"))
+    ?? resolveProcurementView(window.location.hash)
+    ?? "needs";
+}
+
+function viewToneClass(active: boolean) {
+  if (!active) {
+    return "border border-black/15 text-black/75 hover:bg-black/5 dark:border-white/15 dark:text-white/75 dark:hover:bg-white/10";
+  }
+  return "border border-emerald-500 bg-emerald-50 text-emerald-800 dark:border-emerald-600 dark:bg-emerald-950/40 dark:text-emerald-300";
+}
+
 function parseNeedMeta(details: string) {
   type NeedMeta = {
     urgencyLevel: NeedUrgencyLevel | null;
@@ -140,36 +169,35 @@ export function ProcurementHub({
   initialStock,
   initialMovements,
   canCreateNeed,
-  canApproveNeed,
   canManageStock,
-  hideNeedWorkflow,
-  hideDynamicStock,
   allUsers = [],
 }: {
   initialNeeds: NeedItem[];
   initialStock: StockItem[];
   initialMovements: StockMovement[];
   canCreateNeed: boolean;
-  canApproveNeed: boolean;
   canManageStock: boolean;
+  allUsers?: UserOption[];
+  /** @deprecated validation DG via inbox uniquement */
+  canApproveNeed?: boolean;
   hideNeedWorkflow?: boolean;
   hideDynamicStock?: boolean;
-  allUsers?: UserOption[];
 }) {
   const defaultReportMonth = new Date().toISOString().slice(0, 7);
+  const [view, setView] = useState<ProcurementView>(defaultProcurementView);
   const [needs, setNeeds] = useState(initialNeeds);
   const [stockItems, setStockItems] = useState(initialStock);
   const [movements, setMovements] = useState(initialMovements);
   const [needStatus, setNeedStatus] = useState("");
   const [stockCatalogStatus, setStockCatalogStatus] = useState("");
   const [stockStatus, setStockStatus] = useState("");
-  const [approvalStatus, setApprovalStatus] = useState("");
   const [editingNeedId, setEditingNeedId] = useState<string | null>(null);
   const [needTitle, setNeedTitle] = useState("");
   const [selectedUrgencyLevel, setSelectedUrgencyLevel] = useState<NeedUrgencyLevel>("NORMALE");
   const [stockReportMonth, setStockReportMonth] = useState(defaultReportMonth);
   const [needStatusFilter, setNeedStatusFilter] = useState<"ALL" | NeedStatus>("ALL");
   const [needSearch, setNeedSearch] = useState("");
+  const [showNeedForm, setShowNeedForm] = useState(false);
   const [needLines, setNeedLines] = useState<NeedLineForm[]>([
     { designation: "", description: "", quantity: "1", unitPrice: "0" },
   ]);
@@ -177,6 +205,33 @@ export function ProcurementHub({
   const [selectedBeneficiaryTeam, setSelectedBeneficiaryTeam] = useState<NeedBeneficiaryTeam>("KINSHASA");
   const [selectedBeneficiaryPerson, setSelectedBeneficiaryPerson] = useState("");
   const [selectedAssignment, setSelectedAssignment] = useState<WorkflowAssignmentValue>("A_MON_COMPTE");
+  const [movementStockItemId, setMovementStockItemId] = useState("");
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    const syncViewFromUrl = () => {
+      setView(defaultProcurementView());
+    };
+
+    syncViewFromUrl();
+    window.addEventListener("hashchange", syncViewFromUrl);
+    window.addEventListener("popstate", syncViewFromUrl);
+    return () => {
+      window.removeEventListener("hashchange", syncViewFromUrl);
+      window.removeEventListener("popstate", syncViewFromUrl);
+    };
+  }, []);
+
+  function selectView(nextView: ProcurementView) {
+    setView(nextView);
+    if (typeof window === "undefined") return;
+
+    const url = new URL(window.location.href);
+    url.searchParams.set("view", nextView);
+    url.hash = nextView;
+    window.history.replaceState(window.history.state, "", url.toString());
+  }
 
   const filteredUsers = useMemo(() => {
     const keyword = selectedBeneficiaryTeam.toLowerCase();
@@ -188,8 +243,8 @@ export function ProcurementHub({
     [needs],
   );
 
-  const executedNeeds = useMemo(
-    () => needs.filter((need) => hasCashExecutionMarker(need.reviewComment)),
+  const submittedCount = useMemo(
+    () => needs.filter((need) => need.status === "SUBMITTED").length,
     [needs],
   );
 
@@ -198,19 +253,9 @@ export function ProcurementHub({
     [needLines],
   );
 
-  const submittedNeeds = useMemo(
-    () => needs.filter((need) => need.status === "SUBMITTED"),
-    [needs],
-  );
-
-  const rejectedNeeds = useMemo(
-    () => needs.filter((need) => need.status === "REJECTED"),
-    [needs],
-  );
-
-  const lowStockItems = useMemo(
-    () => stockItems.filter((item) => item.currentQuantity <= 5),
-    [stockItems],
+  const selectedMovementItem = useMemo(
+    () => stockItems.find((item) => item.id === movementStockItemId) ?? null,
+    [stockItems, movementStockItemId],
   );
 
   const visibleNeeds = useMemo(() => {
@@ -255,6 +300,7 @@ export function ProcurementHub({
     setSelectedAssignment("A_MON_COMPTE");
     setNeedCurrency("CDF");
     setNeedLines([{ designation: "", description: "", quantity: "1", unitPrice: "0" }]);
+    setNeedStatus("");
   }
 
   function startNeedEdit(need: NeedItem) {
@@ -276,7 +322,8 @@ export function ProcurementHub({
         }))
         : [{ designation: need.title, description: "", quantity: String(need.quantity || 1), unitPrice: String(need.estimatedAmount || 0) }],
     );
-    setNeedStatus(`État de besoin ${need.code ?? need.title} chargé pour modification.`);
+    setShowNeedForm(true);
+    selectView("needs");
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
@@ -325,11 +372,11 @@ export function ProcurementHub({
       .filter((line) => line.designation.length > 0 && line.quantity > 0 && line.unitPrice >= 0);
 
     if (items.length === 0) {
-      setNeedStatus("Ajoutez au moins une ligne avec désignation, quantité et prix unitaire.");
+      setNeedStatus("Ajoutez au moins une ligne valide.");
       return;
     }
 
-    setNeedStatus("Émission en cours...");
+    setNeedStatus("En cours…");
 
     const beneficiaryPersonId = selectedBeneficiaryPerson.trim() || undefined;
     const beneficiaryPersonName = beneficiaryPersonId
@@ -354,41 +401,13 @@ export function ProcurementHub({
 
     const payload = await response.json().catch(() => null);
     if (!response.ok) {
-      setNeedStatus(payload?.error?.formErrors?.[0] ?? payload?.error ?? "Erreur lors de l'émission.");
+      setNeedStatus(payload?.error?.formErrors?.[0] ?? payload?.error ?? "Erreur.");
       return;
     }
 
-    setNeedStatus(isEditingNeed ? "État de besoin modifié avec succès." : "État de besoin émis et transféré au Directeur Général.");
+    setNeedStatus(isEditingNeed ? "Modifications enregistrées." : "État de besoin émis.");
     resetNeedForm();
-    await refreshData();
-  }
-
-  async function submitApproval(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (!canApproveNeed) return;
-
-    const form = event.currentTarget;
-    const formData = new FormData(form);
-    setApprovalStatus("Validation en cours...");
-
-    const response = await fetch("/api/procurement/needs/approve", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        needRequestId: String(formData.get("needRequestId") ?? ""),
-        status: String(formData.get("status") ?? "APPROVED"),
-        reviewComment: String(formData.get("reviewComment") ?? "").trim() || undefined,
-      }),
-    });
-
-    const payload = await response.json().catch(() => null);
-    if (!response.ok) {
-      setApprovalStatus(payload?.error?.formErrors?.[0] ?? payload?.error ?? "Erreur de validation.");
-      return;
-    }
-
-    setApprovalStatus("Décision enregistrée.");
-    form.reset();
+    setShowNeedForm(false);
     await refreshData();
   }
 
@@ -399,7 +418,7 @@ export function ProcurementHub({
     const form = event.currentTarget;
     const formData = new FormData(form);
 
-    setStockCatalogStatus("Ajout de l'article à la fiche stock...");
+    setStockCatalogStatus("En cours…");
 
     const response = await fetch("/api/procurement/stock/items", {
       method: "POST",
@@ -413,11 +432,11 @@ export function ProcurementHub({
 
     const payload = await response.json().catch(() => null);
     if (!response.ok) {
-      setStockCatalogStatus(payload?.error?.formErrors?.[0] ?? payload?.error ?? "Erreur lors de l'ajout de l'article.");
+      setStockCatalogStatus(payload?.error?.formErrors?.[0] ?? payload?.error ?? "Erreur.");
       return;
     }
 
-    setStockCatalogStatus("Article ajouté à la fiche stock avec succès.");
+    setStockCatalogStatus("Article ajouté.");
     form.reset();
     await refreshData();
   }
@@ -428,15 +447,22 @@ export function ProcurementHub({
 
     const form = event.currentTarget;
     const formData = new FormData(form);
-    setStockStatus("Mise à jour de la fiche stock...");
+    const item = selectedMovementItem;
+
+    if (!item) {
+      setStockStatus("Choisissez un article du stock.");
+      return;
+    }
+
+    setStockStatus("En cours…");
 
     const response = await fetch("/api/procurement/stock/movements", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        itemName: String(formData.get("itemName") ?? ""),
-        category: String(formData.get("category") ?? ""),
-        unit: String(formData.get("unit") ?? ""),
+        itemName: item.name,
+        category: item.category,
+        unit: item.unit,
         movementType: String(formData.get("movementType") ?? "IN"),
         quantity: Number(formData.get("quantity") ?? 0),
         justification: String(formData.get("justification") ?? ""),
@@ -447,29 +473,25 @@ export function ProcurementHub({
 
     const payload = await response.json().catch(() => null);
     if (!response.ok) {
-      setStockStatus(payload?.error?.formErrors?.[0] ?? payload?.error ?? "Erreur sur la fiche stock.");
+      setStockStatus(payload?.error?.formErrors?.[0] ?? payload?.error ?? "Erreur.");
       return;
     }
 
-    setStockStatus("Fiche stock mise à jour avec traçabilité.");
+    setStockStatus("Mouvement enregistré.");
     form.reset();
+    setMovementStockItemId("");
     await refreshData();
   }
 
-  const stockGridColumns = hideDynamicStock ? "lg:grid-cols-1" : "lg:grid-cols-[380px,1fr]";
-
-  return (
-    <div className="space-y-6">
-      {hideNeedWorkflow ? null : (
-        <div className="grid gap-6 lg:grid-cols-[420px,1fr]">
-          <section className="rounded-xl border border-black/10 bg-white p-4 dark:border-white/10 dark:bg-zinc-900">
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <h2 className="text-base font-semibold">{isEditingNeed ? "Modifier un état de besoin" : "Émettre un état de besoin"}</h2>
-                <p className="mt-1 text-xs text-black/60 dark:text-white/60">
-                  Le document est transmis au Directeur Général (inbox) pour décision tant qu'aucune approbation ou aucun rejet n'a encore été enregistré.
-                </p>
-              </div>
+  const needsPanel = (
+    <div className="space-y-4">
+      {canCreateNeed ? (
+        <section className="rounded-xl border border-black/10 bg-white p-4 dark:border-white/10 dark:bg-zinc-900">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <h2 className="text-base font-semibold">
+              {isEditingNeed ? "Modifier l'état de besoin" : "État de besoin"}
+            </h2>
+            <div className="flex gap-2">
               {isEditingNeed ? (
                 <button
                   type="button"
@@ -479,213 +501,172 @@ export function ProcurementHub({
                   Annuler
                 </button>
               ) : null}
-            </div>
-
-            {canCreateNeed ? (
-              <form onSubmit={submitNeed} className="mt-3 grid gap-2">
-                <input
-                  name="title"
-                  required
-                  value={needTitle}
-                  onChange={(event) => setNeedTitle(event.target.value)}
-                  placeholder="Objet du besoin"
-                  className="rounded-md border px-3 py-2 text-sm"
-                />
-                <div className="grid gap-2 sm:grid-cols-2">
-                  <select name="urgencyLevel" value={selectedUrgencyLevel} onChange={(event) => setSelectedUrgencyLevel(event.target.value as NeedUrgencyLevel)} required className="rounded-md border px-3 py-2 text-sm">
-                    <option value="CRITIQUE">Urgence critique</option>
-                    <option value="ELEVEE">Urgence élevée</option>
-                    <option value="NORMALE">Urgence normale</option>
-                    <option value="FAIBLE">Urgence faible</option>
-                  </select>
-                  <select
-                    name="assignment"
-                    value={selectedAssignment}
-                    onChange={(event) => setSelectedAssignment(event.target.value as WorkflowAssignmentValue)}
-                    required
-                    className="rounded-md border px-3 py-2 text-sm"
-                  >
-                    {WORKFLOW_ASSIGNMENT_OPTIONS.map((option) => (
-                      <option key={option.value} value={option.value}>{option.label}</option>
-                    ))}
-                  </select>
-                  <select
-                    name="beneficiaryTeam"
-                    value={selectedBeneficiaryTeam}
-                    onChange={(e) => {
-                      setSelectedBeneficiaryTeam(e.target.value as NeedBeneficiaryTeam);
-                      setSelectedBeneficiaryPerson("");
-                    }}
-                    required
-                    className="rounded-md border px-3 py-2 text-sm"
-                  >
-                    <option value="KINSHASA">Équipe bénéficiaire: Kinshasa</option>
-                    <option value="LUBUMBASHI">Équipe bénéficiaire: Lubumbashi</option>
-                    <option value="MBUJIMAYI">Équipe bénéficiaire: Mbujimayi</option>
-                  </select>
-                  <select
-                    name="beneficiaryPersonId"
-                    value={selectedBeneficiaryPerson}
-                    onChange={(e) => setSelectedBeneficiaryPerson(e.target.value)}
-                    className="rounded-md border px-3 py-2 text-sm col-span-2"
-                  >
-                    <option value="">Personne bénéficiaire (optionnel)</option>
-                    {filteredUsers.length === 0 ? (
-                      <option disabled>Aucun employé lié à cette équipe</option>
-                    ) : (
-                      filteredUsers.map((u) => (
-                        <option key={u.id} value={u.id}>{u.name}</option>
-                      ))
-                    )}
-                  </select>
-                </div>
-                <div className="rounded-lg border border-black/10 p-3 dark:border-white/10">
-                  <div className="flex items-center justify-between gap-2">
-                    <p className="text-[11px] font-semibold uppercase tracking-wide text-black/60 dark:text-white/60">
-                      Lignes du devis ({needLines.length})
-                    </p>
-                    <button
-                      type="button"
-                      onClick={addNeedLine}
-                      className="rounded-md border border-black/20 px-2.5 py-1 text-xs font-semibold hover:bg-black/5 dark:border-white/20 dark:hover:bg-white/10"
-                    >
-                      + Ajouter ligne
-                    </button>
-                  </div>
-
-                  <div className="mt-2 max-h-64 space-y-2 overflow-y-auto pr-1">
-                    {needLines.map((line, index) => {
-                      const lineTotal = parseDecimal(line.quantity) * parseDecimal(line.unitPrice);
-
-                      return (
-                        <div key={`line-${index}`} className="rounded-md border border-black/10 p-2.5 dark:border-white/10">
-                          <div className="mb-2 flex items-center justify-between gap-2">
-                            <p className="text-xs font-semibold text-black/70 dark:text-white/70">Article {index + 1}</p>
-                            <button
-                              type="button"
-                              onClick={() => removeNeedLine(index)}
-                              className="rounded-md border border-red-300 px-2 py-1 text-[11px] font-semibold text-red-700 hover:bg-red-50 dark:border-red-700/60 dark:text-red-300 dark:hover:bg-red-950/40"
-                            >
-                              Retirer
-                            </button>
-                          </div>
-
-                          <div className="grid gap-2 sm:grid-cols-2">
-                            <input
-                              value={line.designation}
-                              onChange={(event) => updateNeedLine(index, "designation", event.target.value)}
-                              placeholder="Désignation"
-                              className="rounded-md border px-2 py-2 text-sm"
-                            />
-                            <input
-                              value={line.description}
-                              onChange={(event) => updateNeedLine(index, "description", event.target.value)}
-                              placeholder="Description"
-                              className="rounded-md border px-2 py-2 text-sm"
-                            />
-                          </div>
-
-                          <div className="mt-2 grid gap-2 sm:grid-cols-3">
-                            <input
-                              type="number"
-                              min="0.01"
-                              step="0.01"
-                              value={line.quantity}
-                              onChange={(event) => updateNeedLine(index, "quantity", event.target.value)}
-                              placeholder="Quantité"
-                              className="rounded-md border px-2 py-2 text-sm"
-                            />
-                            <input
-                              type="number"
-                              min="0"
-                              step="0.01"
-                              value={line.unitPrice}
-                              onChange={(event) => updateNeedLine(index, "unitPrice", event.target.value)}
-                              placeholder="Prix unitaire"
-                              className="rounded-md border px-2 py-2 text-sm"
-                            />
-                            <div className="flex items-center rounded-md border bg-black/5 px-3 py-2 text-sm font-semibold dark:bg-white/10">
-                              Total: {lineTotal.toFixed(2)} {needCurrency}
-                            </div>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                  <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
-                    <div className="text-sm font-semibold">
-                      Total général: {quoteTotal.toFixed(2)} {needCurrency}
-                    </div>
-                  </div>
-                </div>
-                <div className="grid grid-cols-[160px] gap-2">
-                  <select
-                    name="currency"
-                    value={needCurrency}
-                    onChange={(event) => setNeedCurrency(event.target.value as "CDF" | "USD")}
-                    className="rounded-md border px-3 py-2 text-sm"
-                  >
-                    <option value="CDF">CDF</option>
-                    <option value="USD">USD</option>
-                  </select>
-                </div>
-                <p className="text-[11px] text-black/55 dark:text-white/55">Format devis: chaque ligne = désignation + description + quantité + prix unitaire. Devise disponible: USD ou CDF.</p>
-                <button className="rounded-md bg-black px-3 py-2 text-sm font-semibold text-white dark:bg-white dark:text-black">
-                  {isEditingNeed ? "Enregistrer les modifications" : "Émettre"}
+              {!isEditingNeed ? (
+                <button
+                  type="button"
+                  onClick={() => setShowNeedForm((open) => !open)}
+                  className="rounded-md border border-black/20 px-2.5 py-1 text-xs font-semibold hover:bg-black/5 dark:border-white/20 dark:hover:bg-white/10"
+                >
+                  {showNeedForm ? "Masquer" : "Nouveau"}
                 </button>
-              </form>
-            ) : (
-              <p className="mt-3 rounded-md border border-dashed border-black/20 px-3 py-2 text-xs text-black/70 dark:border-white/20 dark:text-white/70">
-                Émission réservée au service Approvisionnement.
-              </p>
-            )}
+              ) : null}
+            </div>
+          </div>
 
-            {needStatus ? <p className="mt-2 text-xs text-black/60 dark:text-white/60">{needStatus}</p> : null}
-          </section>
-
-          <section className="rounded-xl border border-black/10 bg-white p-4 dark:border-white/10 dark:bg-zinc-900">
-            <h2 className="text-base font-semibold">Validation du Directeur Général</h2>
-            <p className="mt-1 text-xs text-black/60 dark:text-white/60">
-              Validation réalisée par le Directeur Général via inbox.
-            </p>
-
-            {canApproveNeed ? (
-              <form onSubmit={submitApproval} className="mt-3 grid gap-2 sm:grid-cols-2">
-                <select name="needRequestId" required className="rounded-md border px-3 py-2 text-sm sm:col-span-2">
-                  <option value="">Sélectionner un état de besoin</option>
-                  {needs
-                    .filter((need) => need.status === "SUBMITTED")
-                    .map((need) => (
-                      <option key={need.id} value={need.id}>{need.title} • {need.requester.name}</option>
-                    ))}
+          {showNeedForm || isEditingNeed ? (
+            <form onSubmit={submitNeed} className="mt-3 grid gap-2">
+              <input
+                name="title"
+                required
+                value={needTitle}
+                onChange={(event) => setNeedTitle(event.target.value)}
+                placeholder="Objet"
+                className="rounded-md border px-3 py-2 text-sm"
+              />
+              <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+                <select name="urgencyLevel" value={selectedUrgencyLevel} onChange={(event) => setSelectedUrgencyLevel(event.target.value as NeedUrgencyLevel)} required className="rounded-md border px-3 py-2 text-sm">
+                  <option value="CRITIQUE">Critique</option>
+                  <option value="ELEVEE">Élevée</option>
+                  <option value="NORMALE">Normale</option>
+                  <option value="FAIBLE">Faible</option>
                 </select>
-                <select name="status" defaultValue="APPROVED" className="rounded-md border px-3 py-2 text-sm">
-                  <option value="APPROVED">Approuver</option>
-                  <option value="REJECTED">Rejeter</option>
+                <select
+                  name="assignment"
+                  value={selectedAssignment}
+                  onChange={(event) => setSelectedAssignment(event.target.value as WorkflowAssignmentValue)}
+                  required
+                  className="rounded-md border px-3 py-2 text-sm"
+                >
+                  {WORKFLOW_ASSIGNMENT_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>{option.label}</option>
+                  ))}
                 </select>
-                <input name="reviewComment" placeholder="Commentaire" className="rounded-md border px-3 py-2 text-sm" />
-                <button className="rounded-md bg-black px-3 py-2 text-sm font-semibold text-white dark:bg-white dark:text-black sm:col-span-2">Valider</button>
-              </form>
-            ) : (
-              <p className="mt-3 rounded-md border border-dashed border-black/20 px-3 py-2 text-xs text-black/70 dark:border-white/20 dark:text-white/70">
-                Validation réservée au Directeur Général.
-              </p>
-            )}
+                <select
+                  name="beneficiaryTeam"
+                  value={selectedBeneficiaryTeam}
+                  onChange={(e) => {
+                    setSelectedBeneficiaryTeam(e.target.value as NeedBeneficiaryTeam);
+                    setSelectedBeneficiaryPerson("");
+                  }}
+                  required
+                  className="rounded-md border px-3 py-2 text-sm"
+                >
+                  <option value="KINSHASA">Kinshasa</option>
+                  <option value="LUBUMBASHI">Lubumbashi</option>
+                  <option value="MBUJIMAYI">Mbujimayi</option>
+                </select>
+                <select
+                  name="currency"
+                  value={needCurrency}
+                  onChange={(event) => setNeedCurrency(event.target.value as "CDF" | "USD")}
+                  className="rounded-md border px-3 py-2 text-sm"
+                >
+                  <option value="CDF">CDF</option>
+                  <option value="USD">USD</option>
+                </select>
+              </div>
+              <select
+                name="beneficiaryPersonId"
+                value={selectedBeneficiaryPerson}
+                onChange={(e) => setSelectedBeneficiaryPerson(e.target.value)}
+                className="rounded-md border px-3 py-2 text-sm"
+              >
+                <option value="">Bénéficiaire (optionnel)</option>
+                {filteredUsers.map((u) => (
+                  <option key={u.id} value={u.id}>{u.name}</option>
+                ))}
+              </select>
 
-            {approvalStatus ? <p className="mt-2 text-xs text-black/60 dark:text-white/60">{approvalStatus}</p> : null}
-          </section>
-        </div>
-      )}
+              <div className="rounded-lg border border-black/10 p-3 dark:border-white/10">
+                <div className="flex items-center justify-between gap-2">
+                  <p className="text-xs font-semibold text-black/70 dark:text-white/70">Lignes</p>
+                  <button
+                    type="button"
+                    onClick={addNeedLine}
+                    className="rounded-md border border-black/20 px-2 py-1 text-xs font-semibold hover:bg-black/5 dark:border-white/20 dark:hover:bg-white/10"
+                  >
+                    + Ligne
+                  </button>
+                </div>
+
+                <div className="mt-2 max-h-56 space-y-2 overflow-y-auto">
+                  {needLines.map((line, index) => {
+                    const lineTotal = parseDecimal(line.quantity) * parseDecimal(line.unitPrice);
+
+                    return (
+                      <div key={`line-${index}`} className="grid gap-2 rounded-md border border-black/10 p-2 dark:border-white/10 sm:grid-cols-[1fr,1fr,80px,100px,100px,auto] sm:items-center">
+                        <input
+                          value={line.designation}
+                          onChange={(event) => updateNeedLine(index, "designation", event.target.value)}
+                          placeholder="Désignation"
+                          className="rounded-md border px-2 py-1.5 text-sm sm:col-span-1"
+                        />
+                        <input
+                          value={line.description}
+                          onChange={(event) => updateNeedLine(index, "description", event.target.value)}
+                          placeholder="Description"
+                          className="rounded-md border px-2 py-1.5 text-sm"
+                        />
+                        <input
+                          type="number"
+                          min="0.01"
+                          step="0.01"
+                          value={line.quantity}
+                          onChange={(event) => updateNeedLine(index, "quantity", event.target.value)}
+                          placeholder="Qté"
+                          className="rounded-md border px-2 py-1.5 text-sm"
+                        />
+                        <input
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          value={line.unitPrice}
+                          onChange={(event) => updateNeedLine(index, "unitPrice", event.target.value)}
+                          placeholder="P.U."
+                          className="rounded-md border px-2 py-1.5 text-sm"
+                        />
+                        <span className="text-xs font-semibold tabular-nums">{lineTotal.toFixed(2)}</span>
+                        <button
+                          type="button"
+                          onClick={() => removeNeedLine(index)}
+                          disabled={needLines.length <= 1}
+                          className="rounded-md border border-red-200 px-2 py-1 text-[11px] font-semibold text-red-700 disabled:opacity-40 dark:border-red-800 dark:text-red-300"
+                        >
+                          ×
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+                <p className="mt-2 text-sm font-semibold tabular-nums">
+                  Total : {quoteTotal.toFixed(2)} {needCurrency}
+                </p>
+              </div>
+
+              <button className="w-fit rounded-md bg-black px-4 py-2 text-sm font-semibold text-white dark:bg-white dark:text-black">
+                {isEditingNeed ? "Enregistrer" : "Émettre"}
+              </button>
+            </form>
+          ) : null}
+
+          {needStatus ? <p className="mt-2 text-xs text-black/60 dark:text-white/60">{needStatus}</p> : null}
+        </section>
+      ) : null}
 
       <section className="rounded-xl border border-black/10 bg-white p-4 dark:border-white/10 dark:bg-zinc-900">
-        <h2 className="text-base font-semibold">Suivi des états de besoin</h2>
-        <div className="mt-3 grid gap-2 sm:grid-cols-[220px,1fr]">
+        <div className="flex flex-wrap items-end justify-between gap-3">
+          <h2 className="text-base font-semibold">Liste</h2>
+          <p className="text-xs text-black/55 dark:text-white/55">
+            {needs.length} EDB · {submittedCount} en attente
+          </p>
+        </div>
+        <div className="mt-3 grid gap-2 sm:grid-cols-[180px,1fr]">
           <select
             value={needStatusFilter}
             onChange={(event) => setNeedStatusFilter(event.target.value as "ALL" | NeedStatus)}
             className="rounded-md border px-3 py-2 text-sm"
           >
-            <option value="ALL">Tous les statuts</option>
+            <option value="ALL">Tous</option>
             <option value="SUBMITTED">Soumis</option>
             <option value="APPROVED">Approuvés</option>
             <option value="REJECTED">Rejetés</option>
@@ -694,112 +675,79 @@ export function ProcurementHub({
           <input
             value={needSearch}
             onChange={(event) => setNeedSearch(event.target.value)}
-            placeholder="Rechercher: référence, objet, demandeur, bénéficiaire..."
+            placeholder="Rechercher…"
             className="rounded-md border px-3 py-2 text-sm"
           />
-        </div>
-
-        <div className="mt-3 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-          <article className="rounded-lg border border-black/10 bg-black/3 p-3 dark:border-white/10 dark:bg-white/3">
-            <p className="text-[11px] uppercase tracking-wide text-black/60 dark:text-white/60">Total EDB</p>
-            <p className="mt-1 text-2xl font-semibold">{needs.length}</p>
-          </article>
-          <article className="rounded-lg border border-black/10 bg-black/3 p-3 dark:border-white/10 dark:bg-white/3">
-            <p className="text-[11px] uppercase tracking-wide text-black/60 dark:text-white/60">En attente</p>
-            <p className="mt-1 text-2xl font-semibold">{submittedNeeds.length}</p>
-          </article>
-          <article className="rounded-lg border border-black/10 bg-black/3 p-3 dark:border-white/10 dark:bg-white/3">
-            <p className="text-[11px] uppercase tracking-wide text-black/60 dark:text-white/60">Approuvés</p>
-            <p className="mt-1 text-2xl font-semibold">{approvedNeeds.length}</p>
-          </article>
-          <article className="rounded-lg border border-black/10 bg-black/3 p-3 dark:border-white/10 dark:bg-white/3">
-            <p className="text-[11px] uppercase tracking-wide text-black/60 dark:text-white/60">Exécutés caisse</p>
-            <p className="mt-1 text-2xl font-semibold">{executedNeeds.length}</p>
-          </article>
-          <article className="rounded-lg border border-black/10 bg-black/3 p-3 dark:border-white/10 dark:bg-white/3">
-            <p className="text-[11px] uppercase tracking-wide text-black/60 dark:text-white/60">Rejetés</p>
-            <p className="mt-1 text-2xl font-semibold">{rejectedNeeds.length}</p>
-          </article>
         </div>
 
         <div className="mt-4 overflow-x-auto">
           <table className="min-w-full text-sm">
             <thead className="bg-black/5 dark:bg-white/10">
               <tr>
-                <th className="px-3 py-2 text-left font-semibold">Référence</th>
+                <th className="px-3 py-2 text-left font-semibold">Réf.</th>
                 <th className="px-3 py-2 text-left font-semibold">Objet</th>
                 <th className="px-3 py-2 text-left font-semibold">Demandeur</th>
                 <th className="px-3 py-2 text-left font-semibold">Urgence</th>
-                <th className="px-3 py-2 text-left font-semibold">Affectation</th>
-                <th className="px-3 py-2 text-left font-semibold">Équipe cible</th>
-                <th className="px-3 py-2 text-left font-semibold">Bénéficiaire</th>
                 <th className="px-3 py-2 text-left font-semibold">Montant</th>
                 <th className="px-3 py-2 text-left font-semibold">Statut</th>
                 <th className="px-3 py-2 text-left font-semibold">Date</th>
-                <th className="px-3 py-2 text-left font-semibold">Actions</th>
+                <th className="px-3 py-2 text-left font-semibold" />
               </tr>
             </thead>
             <tbody>
-              {visibleNeeds.slice(0, 30).map((need) => (
-                (() => {
-                  const meta = parseNeedMeta(need.details);
-                  return (
-                <tr key={need.id} className="border-t border-black/10 dark:border-white/10">
-                  <td className="px-3 py-2 font-mono text-xs font-semibold text-blue-700 dark:text-blue-400 whitespace-nowrap">{need.code ?? "-"}</td>
-                  <td className="px-3 py-2 font-medium">{need.title}</td>
-                  <td className="px-3 py-2">{need.requester.name}</td>
-                  <td className="px-3 py-2 text-xs font-semibold">{meta.urgencyLevel ? URGENCY_LABEL[meta.urgencyLevel] : "-"}</td>
-                  <td className="px-3 py-2 text-xs">{workflowAssignmentLabel(meta.assignment)}</td>
-                  <td className="px-3 py-2 text-xs">{meta.beneficiaryTeam ? BENEFICIARY_LABEL[meta.beneficiaryTeam] : "-"}</td>
-                  <td className="px-3 py-2 text-xs">{meta.beneficiaryPersonName ?? "-"}</td>
-                  <td className="px-3 py-2">
-                    {typeof need.estimatedAmount === "number"
-                      ? `${new Intl.NumberFormat("fr-FR").format(need.estimatedAmount)} ${normalizeMoneyCurrency(need.currency)}`
-                      : "-"}
-                  </td>
-                  <td className="px-3 py-2">
-                    <span className="rounded-full border border-black/15 px-2 py-0.5 text-[11px] font-semibold dark:border-white/20">
-                      {hasCashExecutionMarker(need.reviewComment)
-                        ? "Exécuté"
-                        : statusLabel(need.status)}
-                    </span>
-                  </td>
-                  <td className="px-3 py-2 text-xs text-black/65 dark:text-white/65">{new Date(need.createdAt).toLocaleDateString()}</td>
-                  <td className="px-3 py-2">
-                    <div className="flex flex-wrap gap-2">
-                      <a
-                        href={`/approvisionnement/${need.id}`}
-                        className="inline-flex rounded-md border border-black/20 px-2.5 py-1 text-[11px] font-semibold hover:bg-black/5 dark:border-white/20 dark:hover:bg-white/10"
-                      >
-                        Ouvrir
-                      </a>
-                      <a
-                        href={`/api/procurement/needs/${need.id}/pdf`}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="inline-flex rounded-md border border-black/20 px-2.5 py-1 text-[11px] font-semibold hover:bg-black/5 dark:border-white/20 dark:hover:bg-white/10"
-                      >
-                        PDF
-                      </a>
-                      {canCreateNeed && isNeedEditable(need) ? (
-                        <button
-                          type="button"
-                          onClick={() => startNeedEdit(need)}
-                          className="inline-flex rounded-md border border-emerald-300 px-2.5 py-1 text-[11px] font-semibold text-emerald-700 hover:bg-emerald-50 dark:border-emerald-700/60 dark:text-emerald-300 dark:hover:bg-emerald-950/40"
+              {visibleNeeds.slice(0, 40).map((need) => {
+                const meta = parseNeedMeta(need.details);
+                return (
+                  <tr key={need.id} className="border-t border-black/10 dark:border-white/10">
+                    <td className="px-3 py-2 font-mono text-xs text-blue-700 dark:text-blue-400 whitespace-nowrap">{need.code ?? "-"}</td>
+                    <td className="px-3 py-2 font-medium">{need.title}</td>
+                    <td className="px-3 py-2">{need.requester.name}</td>
+                    <td className="px-3 py-2 text-xs">{meta.urgencyLevel ? URGENCY_LABEL[meta.urgencyLevel] : "-"}</td>
+                    <td className="px-3 py-2 whitespace-nowrap">
+                      {typeof need.estimatedAmount === "number"
+                        ? `${new Intl.NumberFormat("fr-FR").format(need.estimatedAmount)} ${normalizeMoneyCurrency(need.currency)}`
+                        : "-"}
+                    </td>
+                    <td className="px-3 py-2">
+                      <span className="rounded-full border border-black/15 px-2 py-0.5 text-[11px] font-semibold dark:border-white/20">
+                        {hasCashExecutionMarker(need.reviewComment) ? "Exécuté" : statusLabel(need.status)}
+                      </span>
+                    </td>
+                    <td className="px-3 py-2 text-xs text-black/65 dark:text-white/65">{new Date(need.createdAt).toLocaleDateString()}</td>
+                    <td className="px-3 py-2">
+                      <div className="flex flex-wrap gap-1">
+                        <a
+                          href={`/approvisionnement/${need.id}`}
+                          className="rounded-md border border-black/20 px-2 py-1 text-[11px] font-semibold hover:bg-black/5 dark:border-white/20 dark:hover:bg-white/10"
                         >
-                          Modifier
-                        </button>
-                      ) : null}
-                    </div>
-                  </td>
-                </tr>
-                  );
-                })()
-              ))}
+                          Voir
+                        </a>
+                        <a
+                          href={`/api/procurement/needs/${need.id}/pdf`}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="rounded-md border border-black/20 px-2 py-1 text-[11px] font-semibold hover:bg-black/5 dark:border-white/20 dark:hover:bg-white/10"
+                        >
+                          PDF
+                        </a>
+                        {canCreateNeed && isNeedEditable(need) ? (
+                          <button
+                            type="button"
+                            onClick={() => startNeedEdit(need)}
+                            className="rounded-md border border-emerald-300 px-2 py-1 text-[11px] font-semibold text-emerald-700 dark:border-emerald-700/60 dark:text-emerald-300"
+                          >
+                            Modifier
+                          </button>
+                        ) : null}
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
               {visibleNeeds.length === 0 ? (
                 <tr>
-                  <td colSpan={10} className="px-3 py-8 text-center text-sm text-black/60 dark:text-white/60">
-                    Aucun état de besoin sur ce filtre.
+                  <td colSpan={8} className="px-3 py-8 text-center text-sm text-black/60 dark:text-white/60">
+                    Aucun résultat.
                   </td>
                 </tr>
               ) : null}
@@ -807,160 +755,159 @@ export function ProcurementHub({
           </table>
         </div>
       </section>
+    </div>
+  );
 
-      <div className={`grid gap-5 ${stockGridColumns}`}>
-        {hideDynamicStock ? null : (
-          <section className="rounded-xl border border-black/10 bg-white p-3.5 dark:border-white/10 dark:bg-zinc-900">
-            <h2 className="text-base font-semibold">Fiche stock dynamique</h2>
-            <p className="mt-1 text-[11px] text-black/60 dark:text-white/60">
-              Chaque entrée/sortie exige un justificatif pour garder la traçabilité complète.
-            </p>
-
-            {canManageStock ? (
-              <div className="mt-3 space-y-3">
-                <div className="rounded-lg border border-black/10 p-3 dark:border-white/10">
-                  <h3 className="text-sm font-semibold">Ajouter un article à la fiche</h3>
-                  <p className="mt-1 text-[11px] text-black/60 dark:text-white/60">
-                    Ajoutez d&apos;abord l&apos;article ici, puis utilisez ensuite la fiche stock dynamique pour les ajouts et retraits de quantité.
-                  </p>
-                  <form onSubmit={submitStockItem} className="mt-3 grid gap-2">
-                    <div className="grid gap-2 sm:grid-cols-3">
-                      <input name="itemName" required placeholder="Produit / Article" className="rounded-md border px-2.5 py-2 text-sm" />
-                      <input name="category" required placeholder="Catégorie" className="rounded-md border px-2.5 py-2 text-sm" />
-                      <input name="unit" required placeholder="Unité" className="rounded-md border px-2.5 py-2 text-sm" />
-                    </div>
-                    <button className="rounded-md bg-black px-3 py-2 text-sm font-semibold text-white dark:bg-white dark:text-black">
-                      Ajouter l'article
-                    </button>
-                  </form>
-                  {stockCatalogStatus ? <p className="mt-2 text-xs text-black/60 dark:text-white/60">{stockCatalogStatus}</p> : null}
-                </div>
-
-                <div className="rounded-lg border border-black/10 p-3 dark:border-white/10">
-                  <h3 className="text-sm font-semibold">Enregistrer un mouvement</h3>
-                  <form onSubmit={submitStockMovement} className="mt-3 grid gap-2">
-                    <div className="grid gap-2 sm:grid-cols-2">
-                      <input name="itemName" required placeholder="Produit / Matériel" className="rounded-md border px-2.5 py-2 text-sm" />
-                      <input name="category" required placeholder="Catégorie" className="rounded-md border px-2.5 py-2 text-sm" />
-                    </div>
-                    <div className="grid gap-2 sm:grid-cols-3">
-                      <input name="quantity" type="number" min="0.01" step="0.01" required placeholder="Quantité" className="rounded-md border px-2.5 py-2 text-sm" />
-                      <input name="unit" required placeholder="Unité" className="rounded-md border px-2.5 py-2 text-sm" />
-                      <select name="movementType" defaultValue="IN" className="rounded-md border px-2.5 py-2 text-sm">
-                        <option value="IN">Entrée</option>
-                        <option value="OUT">Sortie</option>
-                      </select>
-                    </div>
-                    <div className="grid gap-2 sm:grid-cols-2">
-                      <input name="referenceDoc" required placeholder="Référence justificatif" className="rounded-md border px-2.5 py-2 text-sm" />
-                      <select name="needRequestId" className="rounded-md border px-2.5 py-2 text-sm">
-                        <option value="">Sans EDB liée</option>
-                        {approvedNeeds.map((need) => (
-                          <option key={need.id} value={need.id}>{need.title}</option>
-                        ))}
-                      </select>
-                    </div>
-                    <textarea name="justification" required rows={2} placeholder="Motif / justification" className="rounded-md border px-2.5 py-2 text-sm" />
-                    <button className="rounded-md bg-black px-3 py-2 text-sm font-semibold text-white dark:bg-white dark:text-black">Enregistrer mouvement</button>
-                  </form>
-                  {stockStatus ? <p className="mt-2 text-xs text-black/60 dark:text-white/60">{stockStatus}</p> : null}
-                </div>
+  const stockPanel = (
+    <div className="space-y-4">
+      {canManageStock ? (
+        <div className="grid gap-4 lg:grid-cols-2">
+          <section className="rounded-xl border border-black/10 bg-white p-4 dark:border-white/10 dark:bg-zinc-900">
+            <h2 className="text-base font-semibold">Nouvel article</h2>
+            <form onSubmit={submitStockItem} className="mt-3 grid gap-2">
+              <input name="itemName" required placeholder="Nom" className="rounded-md border px-3 py-2 text-sm" />
+              <div className="grid gap-2 sm:grid-cols-2">
+                <input name="category" required placeholder="Catégorie" className="rounded-md border px-3 py-2 text-sm" />
+                <input name="unit" required placeholder="Unité" className="rounded-md border px-3 py-2 text-sm" />
               </div>
-            ) : (
-              <p className="mt-3 rounded-md border border-dashed border-black/20 px-3 py-2 text-xs text-black/70 dark:border-white/20 dark:text-white/70">
-                Gestion de stock réservée à l&apos;Approvisionnement.
-              </p>
-            )}
+              <button className="w-fit rounded-md bg-black px-4 py-2 text-sm font-semibold text-white dark:bg-white dark:text-black">
+                Ajouter
+              </button>
+            </form>
+            {stockCatalogStatus ? <p className="mt-2 text-xs text-black/60 dark:text-white/60">{stockCatalogStatus}</p> : null}
           </section>
-        )}
 
-        <section className="rounded-xl border border-black/10 bg-white p-3.5 dark:border-white/10 dark:bg-zinc-900">
-          <h2 className="text-base font-semibold">Stock et rapports</h2>
-          <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
-            <label className="flex items-center gap-2 text-black/70 dark:text-white/70">
-              Période
-              <input
-                type="month"
-                value={stockReportMonth}
-                onChange={(event) => setStockReportMonth(event.target.value || defaultReportMonth)}
-                className="rounded-md border border-black/15 bg-transparent px-2 py-1 text-xs dark:border-white/20"
-              />
-            </label>
+          <section className="rounded-xl border border-black/10 bg-white p-4 dark:border-white/10 dark:bg-zinc-900">
+            <h2 className="text-base font-semibold">Mouvement</h2>
+            <form onSubmit={submitStockMovement} className="mt-3 grid gap-2">
+              <select
+                required
+                value={movementStockItemId}
+                onChange={(e) => setMovementStockItemId(e.target.value)}
+                className="rounded-md border px-3 py-2 text-sm"
+              >
+                <option value="">Article</option>
+                {stockItems.map((item) => (
+                  <option key={item.id} value={item.id}>
+                    {item.name} ({item.currentQuantity} {item.unit})
+                  </option>
+                ))}
+              </select>
+              <div className="grid gap-2 sm:grid-cols-3">
+                <input name="quantity" type="number" min="0.01" step="0.01" required placeholder="Quantité" className="rounded-md border px-3 py-2 text-sm" />
+                <select name="movementType" defaultValue="IN" className="rounded-md border px-3 py-2 text-sm">
+                  <option value="IN">Entrée</option>
+                  <option value="OUT">Sortie</option>
+                </select>
+                <select name="needRequestId" className="rounded-md border px-3 py-2 text-sm">
+                  <option value="">Sans EDB</option>
+                  {approvedNeeds.map((need) => (
+                    <option key={need.id} value={need.id}>{need.code ?? need.title}</option>
+                  ))}
+                </select>
+              </div>
+              <input name="referenceDoc" required placeholder="Réf. justificatif" className="rounded-md border px-3 py-2 text-sm" />
+              <textarea name="justification" required rows={2} placeholder="Motif" className="rounded-md border px-3 py-2 text-sm" />
+              <button className="w-fit rounded-md bg-black px-4 py-2 text-sm font-semibold text-white dark:bg-white dark:text-black">
+                Enregistrer
+              </button>
+            </form>
+            {stockStatus ? <p className="mt-2 text-xs text-black/60 dark:text-white/60">{stockStatus}</p> : null}
+          </section>
+        </div>
+      ) : (
+        <p className="rounded-xl border border-dashed border-black/20 px-4 py-3 text-sm text-black/70 dark:border-white/20 dark:text-white/70">
+          Gestion du stock réservée au service approvisionnement.
+        </p>
+      )}
+
+      <section className="rounded-xl border border-black/10 bg-white p-4 dark:border-white/10 dark:bg-zinc-900">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <h2 className="text-base font-semibold">
+            Inventaire · {stockItems.length} articles
+          </h2>
+          <div className="flex flex-wrap items-center gap-2 text-xs">
+            <input
+              type="month"
+              value={stockReportMonth}
+              onChange={(event) => setStockReportMonth(event.target.value || defaultReportMonth)}
+              className="rounded-md border border-black/15 bg-transparent px-2 py-1 dark:border-white/20"
+            />
             <a
               href={`/api/procurement/stock/report?mode=month&month=${encodeURIComponent(stockReportMonth)}`}
               target="_blank"
               rel="noreferrer"
-              className="inline-flex rounded-md border border-black/20 px-2.5 py-1 font-semibold hover:bg-black/5 dark:border-white/20 dark:hover:bg-white/10"
+              className="rounded-md border border-black/20 px-2.5 py-1 font-semibold hover:bg-black/5 dark:border-white/20 dark:hover:bg-white/10"
             >
-              Lire PDF stock
-            </a>
-            <a
-              href={`/api/procurement/stock/report?mode=month&month=${encodeURIComponent(stockReportMonth)}&download=1`}
-              className="inline-flex rounded-md border border-black/20 px-2.5 py-1 font-semibold hover:bg-black/5 dark:border-white/20 dark:hover:bg-white/10"
-            >
-              Télécharger PDF stock
+              PDF
             </a>
           </div>
+        </div>
 
-          <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-            <article className="rounded-lg border border-black/10 bg-black/3 p-3 dark:border-white/10 dark:bg-white/3">
-              <p className="text-[11px] uppercase tracking-wide text-black/60 dark:text-white/60">Articles suivis</p>
-              <p className="mt-1 text-2xl font-semibold">{stockItems.length}</p>
-            </article>
-            <article className="rounded-lg border border-black/10 bg-black/3 p-3 dark:border-white/10 dark:bg-white/3">
-              <p className="text-[11px] uppercase tracking-wide text-black/60 dark:text-white/60">Stock faible</p>
-              <p className="mt-1 text-2xl font-semibold">{lowStockItems.length}</p>
-            </article>
-            <article className="rounded-lg border border-black/10 bg-black/3 p-3 dark:border-white/10 dark:bg-white/3">
-              <p className="text-[11px] uppercase tracking-wide text-black/60 dark:text-white/60">Mouvements</p>
-              <p className="mt-1 text-2xl font-semibold">{movements.length}</p>
-            </article>
-          </div>
-
-          <h3 className="mt-4 text-sm font-semibold">Aperçu stock (20 lignes)</h3>
-          <div className="mt-2 max-h-56 overflow-auto rounded-md border border-black/10 dark:border-white/10">
-            <table className="min-w-full text-sm">
-              <thead>
-                <tr className="border-b border-black/10 text-left dark:border-white/10">
-                  <th className="px-2 py-2">Produit</th>
-                  <th className="px-2 py-2">Catégorie</th>
-                  <th className="px-2 py-2">Stock</th>
-                  <th className="px-2 py-2">Maj</th>
+        <div className="mt-3 max-h-72 overflow-auto rounded-md border border-black/10 dark:border-white/10">
+          <table className="min-w-full text-sm">
+            <thead className="sticky top-0 bg-black/5 dark:bg-zinc-800">
+              <tr className="text-left">
+                <th className="px-2 py-2">Produit</th>
+                <th className="px-2 py-2">Catégorie</th>
+                <th className="px-2 py-2">Stock</th>
+              </tr>
+            </thead>
+            <tbody>
+              {stockItems.map((item) => (
+                <tr key={item.id} className="border-t border-black/5 dark:border-white/10">
+                  <td className="px-2 py-2">{item.name}</td>
+                  <td className="px-2 py-2">{item.category}</td>
+                  <td className="px-2 py-2 font-semibold tabular-nums">
+                    {item.currentQuantity} {item.unit}
+                    {item.currentQuantity <= 5 ? (
+                      <span className="ml-1 text-[10px] font-semibold text-amber-700 dark:text-amber-400">bas</span>
+                    ) : null}
+                  </td>
                 </tr>
-              </thead>
-              <tbody>
-                {stockItems.slice(0, 20).map((item) => (
-                  <tr key={item.id} className="border-b border-black/5 dark:border-white/10">
-                    <td className="px-2 py-2">{item.name}</td>
-                    <td className="px-2 py-2">{item.category}</td>
-                    <td className="px-2 py-2 font-semibold">{item.currentQuantity} {item.unit}</td>
-                    <td className="px-2 py-2 text-xs text-black/60 dark:text-white/60">{new Date(item.updatedAt).toLocaleString()}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+              ))}
+            </tbody>
+          </table>
+        </div>
 
-          <h3 className="mt-4 text-sm font-semibold">Derniers mouvements (8)</h3>
-          <div className="mt-2 max-h-60 space-y-2 overflow-y-auto pr-1">
-            {movements.length > 0 ? movements.slice(0, 8).map((movement) => (
-              <article key={movement.id} className="rounded-lg border border-black/10 p-2 text-xs dark:border-white/10">
-                <p className="font-semibold">
-                  {movement.movementType === "IN" ? "Entrée" : "Sortie"} • {movement.stockItem.name} • {movement.quantity} {movement.stockItem.unit}
-                </p>
-                <p className="text-black/70 dark:text-white/70">Justificatif: {movement.referenceDoc}</p>
-                <p className="line-clamp-2 text-black/65 dark:text-white/65">{movement.justification}</p>
-                <p className="text-black/55 dark:text-white/55">
-                  {new Date(movement.createdAt).toLocaleString()} • Par {movement.performedBy.name}
-                  {movement.needRequest ? ` • EDB: ${movement.needRequest.title}` : ""}
-                </p>
-              </article>
-            )) : (
-              <p className="text-xs text-black/60 dark:text-white/60">Aucun mouvement enregistré.</p>
-            )}
-          </div>
-        </section>
-      </div>
+        <h3 className="mt-4 text-sm font-semibold">Derniers mouvements</h3>
+        <div className="mt-2 max-h-48 space-y-1.5 overflow-y-auto">
+          {movements.length > 0 ? movements.slice(0, 12).map((movement) => (
+            <p key={movement.id} className="text-xs text-black/75 dark:text-white/75">
+              <span className="font-semibold">{movement.movementType === "IN" ? "+" : "−"}</span>
+              {" "}{movement.quantity} {movement.stockItem.unit} {movement.stockItem.name}
+              {" · "}{movement.referenceDoc}
+              {" · "}{new Date(movement.createdAt).toLocaleDateString()}
+            </p>
+          )) : (
+            <p className="text-xs text-black/60 dark:text-white/60">Aucun mouvement.</p>
+          )}
+        </div>
+      </section>
     </div>
+  );
+
+  return (
+    <section className="grid items-start gap-4 lg:grid-cols-[220px_minmax(0,1fr)]">
+      <aside className="rounded-2xl border border-black/10 bg-white p-4 shadow-sm lg:sticky lg:top-28 dark:border-white/10 dark:bg-zinc-900">
+        <div className="space-y-2">
+          {VIEW_ITEMS.map((item) => (
+            <button
+              key={item.key}
+              type="button"
+              onClick={() => selectView(item.key)}
+              className={`flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-xs font-semibold transition ${viewToneClass(view === item.key)}`}
+            >
+              <span>{item.label}</span>
+              <span>›</span>
+            </button>
+          ))}
+        </div>
+      </aside>
+
+      <div className="min-w-0">
+        {view === "needs" ? needsPanel : stockPanel}
+      </div>
+    </section>
   );
 }
