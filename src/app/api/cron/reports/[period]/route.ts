@@ -561,20 +561,7 @@ export async function GET(request: NextRequest, { params }: Params) {
 
   const dailyAttachments = frequency === "daily"
     ? await (async () => {
-      const [cashPayments, cashOperations, ticketPaymentsBeforeStart, cashOperationsBeforeStart] = await Promise.all([
-        prisma.payment.findMany({
-          where: { paidAt: { gte: range.start, lt: range.end } },
-          select: {
-            paidAt: true,
-            amount: true,
-            currency: true,
-            method: true,
-            reference: true,
-            ticket: { select: { ticketNumber: true, customerName: true, currency: true } },
-          },
-          orderBy: { paidAt: "asc" },
-          take: 2000,
-        }),
+      const [cashOperations, cashOperationsBeforeStart] = await Promise.all([
         prisma.cashOperation.findMany({
           where: { occurredAt: { gte: range.start, lt: range.end } },
           select: {
@@ -590,11 +577,6 @@ export async function GET(request: NextRequest, { params }: Params) {
           orderBy: { occurredAt: "asc" },
           take: 2000,
         }),
-        prisma.payment.findMany({
-          where: { paidAt: { lt: range.start } },
-          select: { paidAt: true, amount: true, currency: true, method: true },
-          take: 5000,
-        }),
         prisma.cashOperation.findMany({
           where: { occurredAt: { lt: range.start } },
           select: { occurredAt: true, amount: true, currency: true, method: true, direction: true, category: true },
@@ -602,16 +584,9 @@ export async function GET(request: NextRequest, { params }: Params) {
         }),
       ]);
 
-      const opening = computeCashOpeningBalance(ticketPaymentsBeforeStart, cashOperationsBeforeStart);
-      const cashTicketEntries = cashPayments.filter((payment) => !isVirtualMethod(payment.method));
+      const opening = computeCashOpeningBalance([], cashOperationsBeforeStart);
       const cashOpsEntries = cashOperations.filter((operation) => !isVirtualMethod(operation.method));
 
-      const ticketUsd = cashTicketEntries
-        .filter((payment) => normalizeMoneyCurrency(payment.currency ?? payment.ticket.currency) === "USD")
-        .reduce((sum, payment) => sum + payment.amount, 0);
-      const ticketCdf = cashTicketEntries
-        .filter((payment) => normalizeMoneyCurrency(payment.currency ?? payment.ticket.currency) === "CDF")
-        .reduce((sum, payment) => sum + payment.amount, 0);
       const cashInflowUsd = cashOpsEntries
         .filter((operation) => operation.direction === "INFLOW" && normalizeMoneyCurrency(operation.currency) === "USD")
         .reduce((sum, operation) => sum + operation.amount, 0);
@@ -625,19 +600,10 @@ export async function GET(request: NextRequest, { params }: Params) {
         .filter((operation) => operation.direction === "OUTFLOW" && normalizeMoneyCurrency(operation.currency) === "CDF")
         .reduce((sum, operation) => sum + operation.amount, 0);
 
-      const closingUsd = opening.usd + ticketUsd + cashInflowUsd - cashOutflowUsd;
-      const closingCdf = opening.cdf + ticketCdf + cashInflowCdf - cashOutflowCdf;
+      const closingUsd = opening.usd + cashInflowUsd - cashOutflowUsd;
+      const closingCdf = opening.cdf + cashInflowCdf - cashOutflowCdf;
 
       const journalRows = [
-        ...cashTicketEntries.map((payment) => ({
-          at: new Date(payment.paidAt),
-          label: `Paiement billet ${payment.ticket.ticketNumber} - ${payment.ticket.customerName}`,
-          reference: payment.reference ?? "-",
-          usdIn: normalizeMoneyCurrency(payment.currency ?? payment.ticket.currency) === "USD" ? payment.amount : 0,
-          usdOut: 0,
-          cdfIn: normalizeMoneyCurrency(payment.currency ?? payment.ticket.currency) === "CDF" ? payment.amount : 0,
-          cdfOut: 0,
-        })),
         ...cashOpsEntries.map((operation) => ({
           at: new Date(operation.occurredAt),
           label: operation.description,
@@ -676,14 +642,12 @@ export async function GET(request: NextRequest, { params }: Params) {
             ],
           },
           {
-            heading: "Mouvements du jour",
+            heading: "Mouvements du jour (journal caisse, hors billets)",
             lines: [
-              `Billets encaissés USD: ${formatMoney(ticketUsd)}`,
-              `Billets encaissés CDF: ${formatMoneyCdf(ticketCdf)}`,
-              `Autres entrées USD: ${formatMoney(cashInflowUsd)}`,
-              `Autres sorties USD: ${formatMoney(cashOutflowUsd)}`,
-              `Autres entrées CDF: ${formatMoneyCdf(cashInflowCdf)}`,
-              `Autres sorties CDF: ${formatMoneyCdf(cashOutflowCdf)}`,
+              `Entrées USD: ${formatMoney(cashInflowUsd)}`,
+              `Sorties USD: ${formatMoney(cashOutflowUsd)}`,
+              `Entrées CDF: ${formatMoneyCdf(cashInflowCdf)}`,
+              `Sorties CDF: ${formatMoneyCdf(cashOutflowCdf)}`,
             ],
           },
         ],

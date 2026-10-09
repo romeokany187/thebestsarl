@@ -575,34 +575,73 @@ export async function GET(request: NextRequest) {
   const closingCdf = openingCdf + ticketPaymentInflowCdf + cashInflowCdf - cashOutflowCdf;
   const accountingConsistency = Math.abs((openingBalance + grossInflows - cashOutflowsUsdEq) - closingBalance) <= 0.0001;
 
+  type CashJournalRow = {
+    occurredAt: Date;
+    typeOperation: string;
+    libelle: string;
+    reference: string;
+    usdIn: number;
+    usdOut: number;
+    cdfIn: number;
+    cdfOut: number;
+  };
+
+  const mapCashOperationToJournalRow = (operation: any): CashJournalRow => {
+    const currency = normalizeMoneyCurrency(operation.currency);
+    const isInflow = operation.direction === "INFLOW";
+    return {
+      occurredAt: new Date(operation.occurredAt),
+      typeOperation: isInflow ? "Entrée en caisse" : "Sortie en caisse",
+      libelle: operation.description,
+      reference: operation.reference ?? "-",
+      usdIn: isInflow && currency === "USD" ? operation.amount : 0,
+      usdOut: !isInflow && currency === "USD" ? operation.amount : 0,
+      cdfIn: isInflow && currency === "CDF" ? operation.amount : 0,
+      cdfOut: !isInflow && currency === "CDF" ? operation.amount : 0,
+    };
+  };
+
+  const operationalCaisseRows: CashJournalRow[] = [...cashOperationsWithoutOpeningBalance].map(mapCashOperationToJournalRow);
+  operationalCaisseRows.sort((a, b) => a.occurredAt.getTime() - b.occurredAt.getTime());
+
+  const journalOpeningBuckets = mainDesk
+    ? computeOpeningBuckets([], cashOperationsBeforeRange)
+    : computeOpeningBuckets(ticketPaymentsBeforeRange, cashOperationsBeforeRange);
+  const journalDisplayOpeningBuckets = applyOpeningFallbackFromCurrentPeriod(journalOpeningBuckets, cashOperationsInRange);
+  const journalOpeningUsd = journalDisplayOpeningBuckets.CASH.usd;
+  const journalOpeningCdf = journalDisplayOpeningBuckets.CASH.cdf;
+  const journalClosingUsd = journalOpeningUsd + cashInflowUsd - cashOutflowUsd;
+  const journalClosingCdf = journalOpeningCdf + cashInflowCdf - cashOutflowCdf;
+
+  let journalRunningUsd = journalOpeningUsd;
+  let journalRunningCdf = journalOpeningCdf;
+  const journalCaisseLedger = operationalCaisseRows.map((row) => {
+    journalRunningUsd += row.usdIn - row.usdOut;
+    journalRunningCdf += row.cdfIn - row.cdfOut;
+    return {
+      ...row,
+      usdBalance: journalRunningUsd,
+      cdfBalance: journalRunningCdf,
+    };
+  });
+
   const caisseRows = [
-    ...rows.map((payment: any) => {
-      const currency = normalizeMoneyCurrency(payment.currency ?? payment.ticket.currency);
-      return {
-        occurredAt: new Date(payment.paidAt),
-        typeOperation: "Entrée en caisse",
-        libelle: `Paiement billet ${payment.ticket.ticketNumber} - ${payment.ticket.customerName}`,
-        reference: payment.reference ?? "-",
-        usdIn: currency === "USD" ? payment.amount : 0,
-        usdOut: 0,
-        cdfIn: currency === "CDF" ? payment.amount : 0,
-        cdfOut: 0,
-      };
-    }),
-    ...cashOperationsWithoutOpeningBalance.map((operation: any) => {
-      const currency = normalizeMoneyCurrency(operation.currency);
-      const isInflow = operation.direction === "INFLOW";
-      return {
-        occurredAt: new Date(operation.occurredAt),
-        typeOperation: isInflow ? "Entrée en caisse" : "Sortie en caisse",
-        libelle: operation.description,
-        reference: operation.reference ?? "-",
-        usdIn: isInflow && currency === "USD" ? operation.amount : 0,
-        usdOut: !isInflow && currency === "USD" ? operation.amount : 0,
-        cdfIn: isInflow && currency === "CDF" ? operation.amount : 0,
-        cdfOut: !isInflow && currency === "CDF" ? operation.amount : 0,
-      };
-    }),
+    ...(mainDesk
+      ? []
+      : rows.map((payment: any) => {
+        const currency = normalizeMoneyCurrency(payment.currency ?? payment.ticket.currency);
+        return {
+          occurredAt: new Date(payment.paidAt),
+          typeOperation: "Entrée en caisse",
+          libelle: `Paiement billet ${payment.ticket.ticketNumber} - ${payment.ticket.customerName}`,
+          reference: payment.reference ?? "-",
+          usdIn: currency === "USD" ? payment.amount : 0,
+          usdOut: 0,
+          cdfIn: currency === "CDF" ? payment.amount : 0,
+          cdfOut: 0,
+        };
+      })),
+    ...operationalCaisseRows,
   ].sort((a, b) => a.occurredAt.getTime() - b.occurredAt.getTime());
 
   let runningUsd = openingUsd;
@@ -730,6 +769,11 @@ export async function GET(request: NextRequest) {
 
   if (reportType === "cash-journal") {
     filenameBase = "journal-caisse";
+    const ledgerForJournalPdf = mainDesk ? journalCaisseLedger : caisseLedger;
+    const ledgerOpeningUsd = mainDesk ? journalOpeningUsd : openingUsd;
+    const ledgerClosingUsd = mainDesk ? journalClosingUsd : closingUsd;
+    const ledgerOpeningCdf = mainDesk ? journalOpeningCdf : openingCdf;
+    const ledgerClosingCdf = mainDesk ? journalClosingCdf : closingCdf;
     const pageWidth = 1191;
     const pageHeight = 842;
     const margin = 28;
@@ -763,12 +807,21 @@ export async function GET(request: NextRequest) {
       });
       page.drawText(subtitle, { x: margin, y: pageHeight - 58, size: 11, font, color: rgb(0.87, 0.89, 0.93) });
       page.drawText(`Période du ${periodStart} au ${periodEnd}`, { x: margin, y: pageHeight - 76, size: 10, font, color: rgb(0.76, 0.8, 0.87) });
+      if (mainDesk) {
+        page.drawText("Opérations de caisse uniquement (saisie + import Excel) — paiements billets exclus", {
+          x: margin,
+          y: pageHeight - 92,
+          size: 9,
+          font,
+          color: rgb(0.76, 0.8, 0.87),
+        });
+      }
 
       const cards = [
-        `Ouverture USD\n${openingUsd.toFixed(2)} USD`,
-        `Clôture USD\n${closingUsd.toFixed(2)} USD`,
-        `Ouverture CDF\n${openingCdf.toFixed(2)} CDF`,
-        `Clôture CDF\n${closingCdf.toFixed(2)} CDF`,
+        `Ouverture USD\n${ledgerOpeningUsd.toFixed(2)} USD`,
+        `Clôture USD\n${ledgerClosingUsd.toFixed(2)} USD`,
+        `Ouverture CDF\n${ledgerOpeningCdf.toFixed(2)} CDF`,
+        `Clôture CDF\n${ledgerClosingCdf.toFixed(2)} CDF`,
       ];
       const cardWidth = 172;
       const cardY = pageHeight - 146;
@@ -803,10 +856,10 @@ export async function GET(request: NextRequest) {
       "Report à nouveau automatique de la caisse active",
       "-",
       "-",
-      openingUsd.toFixed(2),
+      ledgerOpeningUsd.toFixed(2),
       "-",
       "-",
-      openingCdf.toFixed(2),
+      ledgerOpeningCdf.toFixed(2),
       "-",
     ];
     openingValues.forEach((value, index) => {
@@ -815,7 +868,7 @@ export async function GET(request: NextRequest) {
     });
     y -= 36;
 
-    for (const [rowIndex, row] of caisseLedger.entries()) {
+    for (const [rowIndex, row] of ledgerForJournalPdf.entries()) {
       const cellMap = {
         date: [row.occurredAt.toISOString().slice(0, 10)],
         type: wrapTextToWidth(row.typeOperation, font, bodySize, columns[1].width - 10),

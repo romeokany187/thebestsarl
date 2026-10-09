@@ -136,39 +136,6 @@ function resolveDatesToImport(allDates: string[], lastDate: string | null, recon
   return { toImport, skipped };
 }
 
-async function ensurePlaceholderTicket() {
-  const existing = await prisma.ticketSale.findFirst({
-    where: { ticketNumber: PLACEHOLDER_TICKET_NUMBER },
-    select: { id: true },
-  });
-  if (existing) return existing.id;
-
-  const airline = await prisma.airline.findFirst({ orderBy: { code: "asc" }, select: { id: true } });
-  if (!airline) {
-    throw new Error("Aucune compagnie aérienne en base pour créer le ticket placeholder import Excel.");
-  }
-
-  const created = await prisma.ticketSale.create({
-    data: {
-      ticketNumber: PLACEHOLDER_TICKET_NUMBER,
-      customerName: "À rattacher (import Excel)",
-      route: "N/A",
-      travelDate: new Date(),
-      soldAt: new Date(),
-      amount: 0,
-      currency: "USD",
-      airlineId: airline.id,
-      commissionRateUsed: 0,
-      commissionAmount: 0,
-      paymentStatus: "UNPAID",
-      notes: "Ticket technique pour encaissements Excel en attente de rattachement.",
-    },
-    select: { id: true },
-  });
-
-  return created.id;
-}
-
 type TicketMatchCandidate = {
   id: string;
   customerName: string;
@@ -489,8 +456,6 @@ export async function runCashReportExcelImport(options: ImportOptions): Promise<
     throw new Error("Rien à importer : le journal est déjà à jour pour ce mois.");
   }
 
-  const placeholderTicketId = await ensurePlaceholderTicket();
-  let ticketSyncCount = 0;
   let cashOpSyncCount = 0;
 
   const importRecord = await prisma.$transaction(async (tx) => {
@@ -515,39 +480,11 @@ export async function runCashReportExcelImport(options: ImportOptions): Promise<
       let ticketMatchStatus: string | null = null;
 
       if (line.lineCategory === "TICKET_INFLOW") {
-        const primary = linePrimaryAmount(line);
         const matchedTicketId = matchTicketFromLibelleWithCandidates(line.libelle, ticketCandidates);
         ticketMatchStatus = matchedTicketId ? "MATCHED" : "UNMATCHED";
+      }
 
-        const payment = await tx.payment.upsert({
-          where: { importExternalKey: line.externalKey },
-          create: {
-            ticketId: matchedTicketId ?? placeholderTicketId,
-            amount: primary.amount,
-            currency: primary.currency,
-            amountUsd: primary.currency === "USD" ? primary.amount : null,
-            amountCdf: primary.currency === "CDF" ? primary.amount : null,
-            paidAt: new Date(`${line.businessDate}T12:00:00.000Z`),
-            method: "CASH",
-            reference: line.referenceDoc,
-            importSource: IMPORT_SOURCE,
-            importExternalKey: line.externalKey,
-            excelLibelle: line.libelle,
-          },
-          update: {
-            ticketId: matchedTicketId ?? placeholderTicketId,
-            amount: primary.amount,
-            currency: primary.currency,
-            amountUsd: primary.currency === "USD" ? primary.amount : null,
-            amountCdf: primary.currency === "CDF" ? primary.amount : null,
-            paidAt: new Date(`${line.businessDate}T12:00:00.000Z`),
-            reference: line.referenceDoc,
-            excelLibelle: line.libelle,
-          },
-        });
-        paymentId = payment.id;
-        ticketSyncCount += 1;
-      } else if (line.lineCategory === "OTHER_INFLOW" || line.lineCategory === "OUTFLOW") {
+      if (line.lineCategory === "TICKET_INFLOW" || line.lineCategory === "OTHER_INFLOW" || line.lineCategory === "OUTFLOW") {
         const primary = linePrimaryAmount(line);
         if (primary.amount <= 0) continue;
 
@@ -687,7 +624,7 @@ export async function runCashReportExcelImport(options: ImportOptions): Promise<
       data: {
         journalNewCount: linesToImport.length,
         journalSkipCount: skippedDates.length,
-        ticketSyncCount,
+        ticketSyncCount: linesToImport.filter((line) => line.lineCategory === "TICKET_INFLOW").length,
         cashOpSyncCount,
       },
     });

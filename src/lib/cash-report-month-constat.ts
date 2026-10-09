@@ -32,7 +32,7 @@ export type GrossDayTotals = {
 export type MonthlyConstat = {
   reportMonth: string;
   closedMonth: boolean;
-  /** Même périmètre que le PDF « Journal de caisse » (paiements + opérations THE BEST). */
+  /** Même périmètre que le PDF « Journal de caisse » (opérations caisse THE BEST, hors paiements billets). */
   systemSourceLabel: string;
   excelSideLabel: string;
   excelJournalMeta: {
@@ -145,54 +145,27 @@ function addToDay(map: Map<string, DayJournalTotals>, businessDate: string, part
   map.set(businessDate, bucket);
 }
 
-/** Journal opérationnel (PDF Paiements → journal de caisse), pas l’archive des imports Excel. */
+/** Journal opérationnel (PDF) = opérations caisse manuelles + import Excel, sans paiements billets. */
 export async function loadLiveCashJournalByDay(reportMonth: string): Promise<Map<string, DayJournalTotals>> {
   const { start, end } = monthUtcRange(reportMonth);
   const deskScope = buildDeskScopedCashOperationWhere("THE_BEST", { strict: true });
 
-  const [payments, cashOperations] = await Promise.all([
-    prisma.payment.findMany({
-      where: {
-        paidAt: { gte: start, lt: end },
-        ...whereNotExcelCaisse2Import(),
-      },
-      select: {
-        paidAt: true,
-        amount: true,
-        currency: true,
-      },
-    }),
-    prisma.cashOperation.findMany({
-      where: {
-        occurredAt: { gte: start, lt: end },
-        category: { not: "OPENING_BALANCE" },
-        ...whereNotExcelCaisse2Import(),
-        ...deskScope,
-      },
-      select: {
-        occurredAt: true,
-        direction: true,
-        amount: true,
-        currency: true,
-      },
-    }),
-  ]);
+  const cashOperations = await prisma.cashOperation.findMany({
+    where: {
+      occurredAt: { gte: start, lt: end },
+      category: { not: "OPENING_BALANCE" },
+      ...whereNotExcelCaisse2Import(),
+      ...deskScope,
+    },
+    select: {
+      occurredAt: true,
+      direction: true,
+      amount: true,
+      currency: true,
+    },
+  });
 
   const map = new Map<string, DayJournalTotals>();
-
-  for (const payment of payments) {
-    const businessDate = kinshasaDateKey(payment.paidAt);
-    if (!businessDate.startsWith(`${reportMonth}-`)) continue;
-    const currency = normalizeMoneyCurrency(payment.currency);
-    addToDay(map, businessDate, {
-      ticketInUsd: currency === "USD" ? payment.amount : 0,
-      ticketInCdf: currency === "CDF" ? payment.amount : 0,
-      otherInUsd: 0,
-      otherInCdf: 0,
-      outUsd: 0,
-      outCdf: 0,
-    });
-  }
 
   for (const operation of cashOperations) {
     const businessDate = kinshasaDateKey(operation.occurredAt);
@@ -382,7 +355,7 @@ export function buildMonthlyConstat(options: {
     reportMonth: options.reportMonth,
     closedMonth,
     excelSideLabel: "Rapport Excel caissière (feuille journal de caisse)",
-    systemSourceLabel: "Journal application = PDF Paiements → « Journal de caisse » (THE BEST)",
+    systemSourceLabel: "Journal application = opérations caisse THE BEST (saisie + Excel), hors paiements billets",
     excelJournalMeta,
     verdict,
     aligned,

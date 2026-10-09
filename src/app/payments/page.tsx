@@ -577,23 +577,7 @@ export default async function PaymentsPage({
         take: 5000,
       })
       : Promise.resolve([]),
-    // cashPayments: ticket payments for cash journal (THE_BEST only)
-    isMainDesk
-      ? paymentClient.findMany({
-        where: { paidAt: { gte: cashRange.start, lt: cashRange.end } },
-        include: {
-          ticket: {
-            select: {
-              ticketNumber: true,
-              customerName: true,
-              currency: true,
-            },
-          },
-        },
-        orderBy: { paidAt: "desc" },
-        take: 5000,
-      })
-      : Promise.resolve([]),
+    Promise.resolve([] as TicketPaymentRow[]),
     // cash operations: return desk-scoped operations
     cashOperationClient.findMany({
       where: {
@@ -606,21 +590,7 @@ export default async function PaymentsPage({
       orderBy: { occurredAt: "desc" },
       take: 5000,
     }),
-    isMainDesk
-      ? paymentClient.findMany({
-        where: { paidAt: { lt: cashRange.start } },
-        select: {
-          paidAt: true,
-          amount: true,
-          currency: true,
-          amountUsd: true,
-          amountCdf: true,
-          fxRateUsdToCdf: true,
-          method: true,
-        },
-        take: 5000,
-      })
-      : Promise.resolve([]),
+    Promise.resolve([] as Array<{ paidAt?: Date | string | null; amount: number; currency?: string | null; amountUsd?: number | null; amountCdf?: number | null; fxRateUsdToCdf?: number | null; method?: string | null }>),
     cashOperationClient.findMany({
       where: {
         occurredAt: { lt: cashRange.start },
@@ -797,7 +767,7 @@ export default async function PaymentsPage({
   const generalCashOperationsAllHistory = cashOperationsAllHistory.filter((operation) => !isProxyBankingOperation(operation));
   const proxyCashOperationsAllHistory = cashOperationsAllHistory.filter((operation) => isProxyBankingOperation(operation));
 
-  const openingBuckets = computeOpeningBuckets(ticketPaymentsBeforeStart, generalCashOperationsBeforeStart);
+  const openingBuckets = computeOpeningBuckets([], generalCashOperationsBeforeStart);
   const displayOpeningBuckets = applyOpeningFallbackFromCurrentPeriod(openingBuckets, generalCashOperations);
   const cashOperationsWithoutOpeningBalance = generalCashOperations.filter((operation) => operation.category !== "OPENING_BALANCE");
   const hasInitialOpeningRecorded = [...generalCashOperationsBeforeStart, ...generalCashOperations].some((operation) => operation.category === "OPENING_BALANCE");
@@ -809,20 +779,6 @@ export default async function PaymentsPage({
   );
   const openingUsd = displayOpeningBuckets.CASH.usd;
   const openingCdf = displayOpeningBuckets.CASH.cdf;
-
-  const ticketPaymentInflowsUsd = cashPayments.reduce(
-    (
-      sum: number,
-      payment: { amount: number; currency?: string | null; amountUsd?: number | null; amountCdf?: number | null; fxRateToUsd?: number | null; fxRateUsdToCdf?: number | null },
-    ) => sum + normalizeCashAmountUsd(payment),
-    0,
-  );
-  const ticketPaymentInflowUsd = cashPayments
-    .filter((payment: { currency?: string | null; ticket?: { currency?: string | null } }) => normalizeMoneyCurrency(payment.currency ?? payment.ticket?.currency) === "USD")
-    .reduce((sum: number, payment: { amount: number }) => sum + payment.amount, 0);
-  const ticketPaymentInflowCdf = cashPayments
-    .filter((payment: { currency?: string | null; ticket?: { currency?: string | null } }) => normalizeMoneyCurrency(payment.currency ?? payment.ticket?.currency) === "CDF")
-    .reduce((sum: number, payment: { amount: number }) => sum + payment.amount, 0);
 
   const otherInflows = cashOperationsWithoutOpeningBalance
     .filter((operation: { direction: string }) => operation.direction === "INFLOW")
@@ -837,7 +793,7 @@ export default async function PaymentsPage({
       0,
     );
 
-  const grossInflows = ticketPaymentInflowsUsd + otherInflows;
+  const grossInflows = otherInflows;
   const netCashVariation = grossInflows - cashOutflows;
   const closingBalance = openingBalance + netCashVariation;
   const expensePressure = grossInflows > 0 ? (cashOutflows / grossInflows) * 100 : cashOutflows > 0 ? 100 : 0;
@@ -865,30 +821,10 @@ export default async function PaymentsPage({
     .filter((operation: { direction: string; currency?: string | null }) => operation.direction === "OUTFLOW" && normalizeMoneyCurrency(operation.currency) === "CDF")
     .reduce((sum: number, operation: { amount: number }) => sum + operation.amount, 0);
 
-  const closingUsd = openingUsd + ticketPaymentInflowUsd + cashInflowUsd - cashOutflowUsd;
-  const closingCdf = openingCdf + ticketPaymentInflowCdf + cashInflowCdf - cashOutflowCdf;
+  const closingUsd = openingUsd + cashInflowUsd - cashOutflowUsd;
+  const closingCdf = openingCdf + cashInflowCdf - cashOutflowCdf;
 
   const caisseRows = [
-    ...cashPayments.map((payment) => {
-      const currency = normalizeMoneyCurrency(payment.currency ?? payment.ticket?.currency);
-      return {
-        occurredAt: new Date(payment.paidAt),
-        typeOperation: "Entrée en caisse",
-        libelle: `Paiement billet ${payment.ticket?.ticketNumber ?? "N/A"} - ${payment.ticket?.customerName ?? "Client"}`,
-        reference: payment.reference ?? "-",
-        usdIn: currency === "USD" ? payment.amount : 0,
-        usdOut: 0,
-        cdfIn: currency === "CDF" ? payment.amount : 0,
-        cdfOut: 0,
-        actionType: "payment" as const,
-        paymentId: payment.id,
-        paymentAmount: payment.amount,
-        paymentCurrency: currency,
-        paymentMethod: payment.method ?? "CASH",
-        paymentPaidAt: new Date(payment.paidAt).toISOString(),
-        paymentTicketId: (payment as any).ticketId ?? "",
-      };
-    }),
     ...cashOperationsWithoutOpeningBalance.map((operation) => {
       const currency = (operation.currency ?? "USD").toUpperCase();
       const isInflow = operation.direction === "INFLOW";
@@ -946,17 +882,6 @@ export default async function PaymentsPage({
     inCdf: number;
     outCdf: number;
   }>;
-
-  for (const payment of cashPayments as Array<{ amount: number; method?: string | null; currency?: string | null }>) {
-    const channel = detectVirtualChannel(payment.method);
-    if (!channel) continue;
-    const currency = normalizeMoneyCurrency(payment.currency);
-    if (currency === "USD") {
-      initialVirtualStats[channel].inUsd += payment.amount;
-    } else {
-      initialVirtualStats[channel].inCdf += payment.amount;
-    }
-  }
 
   for (const operation of cashOperationsWithoutOpeningBalance as Array<{ direction: string; amount: number; method?: string | null; currency?: string | null }>) {
     const channel = detectVirtualChannel(operation.method);
@@ -1615,7 +1540,7 @@ export default async function PaymentsPage({
         needsLabel={`EDB à exécuter (${needsExecutionCount})`}
         closedSummary={(
           <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-2 2xl:grid-cols-5">
-            <KpiCard label="Total encaissé" value={`${grossInflows.toFixed(2)} USD`} hint={`Billets ${ticketPaymentInflowsUsd.toFixed(2)} + autres ${otherInflows.toFixed(2)}`} />
+            <KpiCard label="Total encaissé (journal)" value={`${grossInflows.toFixed(2)} USD`} hint="Opérations caisse uniquement — paiements billets exclus" />
             <KpiCard label="Total dépensé" value={`${cashOutflows.toFixed(2)} USD`} />
             <KpiCard label="Solde caisse USD" value={`${closingUsd.toFixed(2)} USD`} />
             <KpiCard label="Total caisse CDF" value={`${closingCdf.toFixed(2)} CDF`} />
@@ -1892,9 +1817,9 @@ export default async function PaymentsPage({
             {approvalQueueSection}
             <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
               <KpiCard label="Solde ouverture USD" value={`${openingUsd.toFixed(2)} USD`} />
-              <KpiCard label="Solde clôture USD" value={`${closingUsd.toFixed(2)} USD`} hint={`Billets USD ${ticketPaymentInflowUsd.toFixed(2)} + autres USD ${cashInflowUsd.toFixed(2)} - sorties USD ${cashOutflowUsd.toFixed(2)}`} />
+              <KpiCard label="Solde clôture USD" value={`${closingUsd.toFixed(2)} USD`} hint={`Entrées USD ${cashInflowUsd.toFixed(2)} - sorties USD ${cashOutflowUsd.toFixed(2)} (hors billets)`} />
               <KpiCard label="Solde ouverture CDF" value={`${openingCdf.toFixed(2)} CDF`} />
-              <KpiCard label="Solde clôture CDF" value={`${closingCdf.toFixed(2)} CDF`} hint={`Billets CDF ${ticketPaymentInflowCdf.toFixed(2)} + autres CDF ${cashInflowCdf.toFixed(2)} - sorties CDF ${cashOutflowCdf.toFixed(2)}`} />
+              <KpiCard label="Solde clôture CDF" value={`${closingCdf.toFixed(2)} CDF`} hint={`Entrées CDF ${cashInflowCdf.toFixed(2)} - sorties CDF ${cashOutflowCdf.toFixed(2)} (hors billets)`} />
             </div>
 
             <section className="rounded-2xl border border-black/10 bg-white p-4 dark:border-white/10 dark:bg-zinc-900">
@@ -1951,7 +1876,7 @@ export default async function PaymentsPage({
 
             <section className="overflow-hidden rounded-2xl border border-black/10 bg-white shadow-sm dark:border-white/10 dark:bg-zinc-900">
               <div className="border-b border-black/10 px-4 py-3 dark:border-white/10">
-                <h2 className="text-sm font-semibold">Journal caisse (mois sélectionné - logique feuille CAISSE)</h2>
+                <h2 className="text-sm font-semibold">Journal caisse (opérations saisies + import Excel — sans paiements billets)</h2>
               </div>
               <div className="overflow-x-auto">
                 <table className="min-w-full text-sm">
@@ -2003,29 +1928,17 @@ export default async function PaymentsPage({
                         <td className="px-4 py-3">{row.reference}</td>
                         {canManageLedger ? (
                           <td className="px-4 py-3">
-                            {row.actionType === "payment" ? (
-                              <PaymentRowAdminActions
-                                paymentId={row.paymentId}
-                                ticketId={row.paymentTicketId}
-                                amount={row.paymentAmount}
-                                currency={row.paymentCurrency}
-                                method={row.paymentMethod}
-                                reference={row.reference === "-" ? null : row.reference}
-                                paidAt={row.paymentPaidAt}
-                              />
-                            ) : (
-                              <CashOperationRowActions
-                                cashOperationId={row.cashOperationId}
-                                amount={row.cashAmount}
-                                currency={row.cashCurrency}
-                                method={row.cashMethod}
-                                reference={row.reference === "-" ? null : row.reference}
-                                description={row.cashDescription}
-                                occurredAt={row.cashOccurredAt}
-                                direction={row.cashDirection}
-                                category={row.cashCategory}
-                              />
-                            )}
+                            <CashOperationRowActions
+                              cashOperationId={row.cashOperationId}
+                              amount={row.cashAmount}
+                              currency={row.cashCurrency}
+                              method={row.cashMethod}
+                              reference={row.reference === "-" ? null : row.reference}
+                              description={row.cashDescription}
+                              occurredAt={row.cashOccurredAt}
+                              direction={row.cashDirection}
+                              category={row.cashCategory}
+                            />
                           </td>
                         ) : null}
                       </tr>
