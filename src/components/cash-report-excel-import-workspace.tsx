@@ -43,8 +43,8 @@ type ImportPreview = {
       outCdf: number;
     };
     samples: {
-      tickets: Array<{ date: string; libelle: string; amount: number; currency: string; ticketMatched: boolean }>;
-      movements: Array<{ date: string; libelle: string; amount: number; currency: string }>;
+      tickets: Array<{ date: string; libelle: string; amount: number; currency: string; amountSummary?: string; ticketMatched: boolean }>;
+      movements: Array<{ date: string; libelle: string; amount: number; currency: string; amountSummary?: string }>;
     };
     virtual: {
       totalUsd: number;
@@ -430,7 +430,8 @@ function CashReportImportAnalysisPanel({ preview }: { preview: ImportPreview }) 
             <ul className="space-y-1">
               {analysis.samples.tickets.map((line) => (
                 <li key={`${line.date}-${line.libelle}`} className="rounded-md border border-black/10 px-2 py-1 dark:border-white/10">
-                  <span className="font-mono text-[10px]">{line.date}</span> · {formatAmount(line.amount, line.currency)}
+                  <span className="font-mono text-[10px]">{line.date}</span> ·{" "}
+                  {line.amountSummary && line.amountSummary !== "—" ? line.amountSummary : formatAmount(line.amount, line.currency)}
                   <span className={line.ticketMatched ? " text-emerald-700 dark:text-emerald-300" : " text-amber-700 dark:text-amber-300"}>
                     {line.ticketMatched ? " · ticket trouvé" : " · à rattacher"}
                   </span>
@@ -448,7 +449,8 @@ function CashReportImportAnalysisPanel({ preview }: { preview: ImportPreview }) 
             <ul className="space-y-1">
               {analysis.samples.movements.map((line) => (
                 <li key={`${line.date}-${line.libelle}`} className="rounded-md border border-black/10 px-2 py-1 dark:border-white/10">
-                  <span className="font-mono text-[10px]">{line.date}</span> · {formatAmount(line.amount, line.currency)}
+                  <span className="font-mono text-[10px]">{line.date}</span> ·{" "}
+                  {line.amountSummary && line.amountSummary !== "—" ? line.amountSummary : formatAmount(line.amount, line.currency)}
                   <p className="text-black/70 dark:text-white/70">{line.libelle}</p>
                 </li>
               ))}

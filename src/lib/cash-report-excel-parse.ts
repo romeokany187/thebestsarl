@@ -66,6 +66,33 @@ export function parseMoneyCell(value: unknown): number {
   return Number.isFinite(parsed) ? parsed : 0;
 }
 
+/** Entrées / sorties négatives dans Excel → colonne opposée (USD et CDF séparés). */
+export function normalizeJournalMovementColumns(raw: {
+  usdIn: number;
+  usdOut: number;
+  cdfIn: number;
+  cdfOut: number;
+}) {
+  let { usdIn, usdOut, cdfIn, cdfOut } = raw;
+  if (usdIn < 0) {
+    usdOut += Math.abs(usdIn);
+    usdIn = 0;
+  }
+  if (usdOut < 0) {
+    usdIn += Math.abs(usdOut);
+    usdOut = 0;
+  }
+  if (cdfIn < 0) {
+    cdfOut += Math.abs(cdfIn);
+    cdfIn = 0;
+  }
+  if (cdfOut < 0) {
+    cdfIn += Math.abs(cdfOut);
+    cdfOut = 0;
+  }
+  return { usdIn, usdOut, cdfIn, cdfOut };
+}
+
 function formatDateKey(date: Date) {
   const y = date.getFullYear();
   const m = String(date.getMonth() + 1).padStart(2, "0");
@@ -250,10 +277,12 @@ function parseJournalSheet(rows: unknown[][], fallbackYear: number, reportMonthH
       continue;
     }
 
-    const usdIn = parseMoneyCell(row[3]);
-    const usdOut = parseMoneyCell(row[4]);
-    const cdfIn = parseMoneyCell(row[6]);
-    const cdfOut = parseMoneyCell(row[7]);
+    const { usdIn, usdOut, cdfIn, cdfOut } = normalizeJournalMovementColumns({
+      usdIn: parseMoneyCell(row[3]),
+      usdOut: parseMoneyCell(row[4]),
+      cdfIn: parseMoneyCell(row[6]),
+      cdfOut: parseMoneyCell(row[7]),
+    });
     const usdBalanceRaw = row[5];
     const cdfBalanceRaw = row[8];
     const usdBalance = usdBalanceRaw === "" || usdBalanceRaw == null ? null : parseMoneyCell(usdBalanceRaw);

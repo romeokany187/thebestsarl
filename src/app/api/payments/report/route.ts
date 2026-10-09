@@ -7,7 +7,7 @@ import { prisma } from "@/lib/prisma";
 import { requireApiModuleAccess } from "@/lib/rbac";
 import { getUserModuleAccessMap } from "@/lib/user-module-access";
 import { getTicketTotalAmount } from "@/lib/ticket-pricing";
-import { buildCashJournalLedger, loadExcelDailyOpeningsForDateRange } from "@/lib/cash-journal-ledger";
+import { resolveMainCashJournalLedger } from "@/lib/cash-journal-ledger";
 import {
   ALL_CASH_DESKS,
   isDeskAllowedForUser,
@@ -627,10 +627,13 @@ export async function GET(request: NextRequest) {
 
   let journalCaisseLedger: Array<CashJournalRow & { usdBalance: number; cdfBalance: number; isOpeningRow?: boolean }>;
   let usesExcelDailyJournalOpenings = false;
+  let journalFromExcelImport = false;
 
   if (isMainCashJournalDesk) {
-    const excelDailyOpenings = await loadExcelDailyOpeningsForDateRange(periodStart, periodEnd);
-    const built = buildCashJournalLedger({
+    const built = await resolveMainCashJournalLedger({
+      periodStart,
+      periodEnd,
+      periodStartDate: periodStart,
       operations: (cashOperationsWithoutOpeningBalance as Array<any>).map((operation) => ({
         id: operation.id ?? String(operation.occurredAt),
         occurredAt: new Date(operation.occurredAt),
@@ -642,11 +645,10 @@ export async function GET(request: NextRequest) {
         method: operation.method,
         category: operation.category ?? null,
       })),
-      excelOpeningsByDate: excelDailyOpenings,
-      periodStartDate: periodStart,
       periodFallbackOpening: { usd: journalOpeningUsd, cdf: journalOpeningCdf },
     });
     usesExcelDailyJournalOpenings = built.usesExcelDailyOpenings;
+    journalFromExcelImport = built.source === "excel-import";
     journalCaisseLedger = built.rows.map((row) => ({
       occurredAt: row.occurredAt,
       typeOperation: row.typeOperation,
@@ -660,12 +662,10 @@ export async function GET(request: NextRequest) {
       cdfBalance: row.cdfBalance,
       isOpeningRow: row.isOpeningRow,
     }));
-    if (built.usesExcelDailyOpenings) {
-      journalOpeningUsd = built.periodOpeningUsd;
-      journalOpeningCdf = built.periodOpeningCdf;
-      journalClosingUsd = built.periodClosingUsd;
-      journalClosingCdf = built.periodClosingCdf;
-    }
+    journalOpeningUsd = built.periodOpeningUsd;
+    journalOpeningCdf = built.periodOpeningCdf;
+    journalClosingUsd = built.periodClosingUsd;
+    journalClosingCdf = built.periodClosingCdf;
   } else {
     let journalRunningUsd = journalOpeningUsd;
     let journalRunningCdf = journalOpeningCdf;
@@ -862,9 +862,11 @@ export async function GET(request: NextRequest) {
       page.drawText(`Période du ${periodStart} au ${periodEnd}`, { x: margin, y: pageHeight - 76, size: 10, font, color: rgb(0.76, 0.8, 0.87) });
       if (isMainCashJournalDesk) {
         page.drawText(
-          usesExcelDailyJournalOpenings
-            ? "Report à nouveau par jour = Excel importé • opérations caisse (saisie + import) — billets exclus"
-            : "Opérations de caisse uniquement (saisie + import Excel) — paiements billets exclus",
+          journalFromExcelImport
+            ? "Journal = feuille Excel importée (colonnes USD et CDF distinctes) — paiements billets exclus"
+            : usesExcelDailyJournalOpenings
+              ? "Report à nouveau par jour = Excel importé • opérations caisse (saisie + import) — billets exclus"
+              : "Opérations de caisse uniquement (saisie + import Excel) — paiements billets exclus",
           {
             x: margin,
             y: pageHeight - 92,
@@ -905,7 +907,7 @@ export async function GET(request: NextRequest) {
     drawTableHeader(pageHeight - 184);
     let y = pageHeight - 224;
 
-    if (!(isMainCashJournalDesk && usesExcelDailyJournalOpenings)) {
+    if (!(isMainCashJournalDesk && (usesExcelDailyJournalOpenings || journalFromExcelImport))) {
       const openingRowHeight = 28;
       page.drawRectangle({ x: tableX, y: y - openingRowHeight + 6, width: tableWidth, height: openingRowHeight, color: rgb(0.97, 0.97, 0.98), borderWidth: 0.5, borderColor: rgb(0.88, 0.89, 0.92) });
       let openingX = tableX;

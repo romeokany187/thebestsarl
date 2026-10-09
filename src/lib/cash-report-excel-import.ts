@@ -35,8 +35,10 @@ export type CashReportImportAnalysisLine = {
   date: string;
   typeOperation: string;
   libelle: string;
+  /** Montant principal (compatibilité) — préférer amountSummary pour l’affichage. */
   amount: number;
   currency: "USD" | "CDF";
+  amountSummary: string;
   ticketMatched: boolean;
 };
 
@@ -109,6 +111,15 @@ function normalizeMoneyCurrency(value: string): "USD" | "CDF" {
   return value === "CDF" ? "CDF" : "USD";
 }
 
+function formatLineAmountSummary(line: ParsedJournalLine) {
+  const parts: string[] = [];
+  if (line.usdIn > 0) parts.push(`+${line.usdIn} USD`);
+  if (line.usdOut > 0) parts.push(`-${line.usdOut} USD`);
+  if (line.cdfIn > 0) parts.push(`+${line.cdfIn} CDF`);
+  if (line.cdfOut > 0) parts.push(`-${line.cdfOut} CDF`);
+  return parts.join(" · ") || "—";
+}
+
 function linePrimaryAmount(line: ParsedJournalLine) {
   if (line.usdIn > 0 || line.usdOut > 0) {
     return {
@@ -122,6 +133,37 @@ function linePrimaryAmount(line: ParsedJournalLine) {
     currency: "CDF" as const,
     direction: line.cdfIn > 0 ? CashDirection.INFLOW : CashDirection.OUTFLOW,
   };
+}
+
+type ImportedCashLeg = {
+  amount: number;
+  currency: "USD" | "CDF";
+  direction: CashDirection;
+  externalKey: string;
+};
+
+function listLineCashLegs(line: ParsedJournalLine): ImportedCashLeg[] {
+  const legs: ImportedCashLeg[] = [];
+  const add = (amount: number, currency: "USD" | "CDF", direction: CashDirection, suffix: string) => {
+    if (amount <= 0) return;
+    legs.push({
+      amount,
+      currency,
+      direction,
+      externalKey: `${line.externalKey}:${suffix}`,
+    });
+  };
+  add(line.usdIn, "USD", CashDirection.INFLOW, "USD:IN");
+  add(line.usdOut, "USD", CashDirection.OUTFLOW, "USD:OUT");
+  add(line.cdfIn, "CDF", CashDirection.INFLOW, "CDF:IN");
+  add(line.cdfOut, "CDF", CashDirection.OUTFLOW, "CDF:OUT");
+  return legs;
+}
+
+function categoryForImportedLeg(lineCategory: ParsedJournalLine["lineCategory"], direction: CashDirection) {
+  if (direction === CashDirection.OUTFLOW) return CashOperationCategory.OTHER_EXPENSE;
+  if (lineCategory === "TICKET_INFLOW") return CashOperationCategory.SERVICE_INCOME;
+  return CashOperationCategory.SERVICE_INCOME;
 }
 
 async function getLastImportedJournalDate(reportMonth: string) {
@@ -221,6 +263,7 @@ function toAnalysisLine(line: ParsedJournalLine, ticketMatched: boolean): CashRe
     libelle: line.libelle.length > 72 ? `${line.libelle.slice(0, 72)}…` : line.libelle,
     amount: primary.amount,
     currency: primary.currency,
+    amountSummary: formatLineAmountSummary(line),
     ticketMatched,
   };
 }
@@ -477,40 +520,40 @@ export async function runCashReportExcelImport(options: ImportOptions): Promise<
       }
 
       if (line.lineCategory === "TICKET_INFLOW" || line.lineCategory === "OTHER_INFLOW" || line.lineCategory === "OUTFLOW") {
-        const primary = linePrimaryAmount(line);
-        if (primary.amount <= 0) continue;
-
-        const cashOperation = await tx.cashOperation.upsert({
-          where: { importExternalKey: line.externalKey },
-          create: {
-            occurredAt: new Date(`${line.businessDate}T12:00:00.000Z`),
-            direction: primary.direction,
-            category: primary.direction === CashDirection.INFLOW ? CashOperationCategory.SERVICE_INCOME : CashOperationCategory.OTHER_EXPENSE,
-            amount: primary.amount,
-            currency: normalizeMoneyCurrency(primary.currency),
-            amountUsd: primary.currency === "USD" ? primary.amount : null,
-            amountCdf: primary.currency === "CDF" ? primary.amount : null,
-            method: "CASH",
-            reference: line.referenceDoc,
-            description: line.libelle,
-            cashDesk: PRIMARY_CASH_DESK,
-            importSource: IMPORT_SOURCE,
-            importExternalKey: line.externalKey,
-            createdById: options.importedById,
-          },
-          update: {
-            occurredAt: new Date(`${line.businessDate}T12:00:00.000Z`),
-            direction: primary.direction,
-            amount: primary.amount,
-            currency: normalizeMoneyCurrency(primary.currency),
-            amountUsd: primary.currency === "USD" ? primary.amount : null,
-            amountCdf: primary.currency === "CDF" ? primary.amount : null,
-            reference: line.referenceDoc,
-            description: line.libelle,
-          },
-        });
-        cashOperationId = cashOperation.id;
-        cashOpSyncCount += 1;
+        const legs = listLineCashLegs(line);
+        for (const [index, leg] of legs.entries()) {
+          const cashOperation = await tx.cashOperation.upsert({
+            where: { importExternalKey: leg.externalKey },
+            create: {
+              occurredAt: new Date(`${line.businessDate}T12:00:00.000Z`),
+              direction: leg.direction,
+              category: categoryForImportedLeg(line.lineCategory, leg.direction),
+              amount: leg.amount,
+              currency: normalizeMoneyCurrency(leg.currency),
+              amountUsd: leg.currency === "USD" ? leg.amount : null,
+              amountCdf: leg.currency === "CDF" ? leg.amount : null,
+              method: "CASH",
+              reference: line.referenceDoc,
+              description: line.libelle,
+              cashDesk: PRIMARY_CASH_DESK,
+              importSource: IMPORT_SOURCE,
+              importExternalKey: leg.externalKey,
+              createdById: options.importedById,
+            },
+            update: {
+              occurredAt: new Date(`${line.businessDate}T12:00:00.000Z`),
+              direction: leg.direction,
+              amount: leg.amount,
+              currency: normalizeMoneyCurrency(leg.currency),
+              amountUsd: leg.currency === "USD" ? leg.amount : null,
+              amountCdf: leg.currency === "CDF" ? leg.amount : null,
+              reference: line.referenceDoc,
+              description: line.libelle,
+            },
+          });
+          if (index === 0) cashOperationId = cashOperation.id;
+          cashOpSyncCount += 1;
+        }
       }
 
       await tx.cashReportJournalLine.create({

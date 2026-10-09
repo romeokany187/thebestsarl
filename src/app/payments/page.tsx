@@ -22,8 +22,7 @@ import { prisma } from "@/lib/prisma";
 import { cashOperationApprovalRequestClient, canReviewCashOperationApprovals, ensureCashOperationApprovalRequestTable } from "@/lib/cash-operation-approvals";
 import { getUserModuleAccessMap, hasRequiredModuleAccessLevel } from "@/lib/user-module-access";
 import {
-  buildCashJournalLedger,
-  loadExcelDailyOpeningsForDateRange,
+  resolveMainCashJournalLedger,
   type CashJournalLedgerRow,
 } from "@/lib/cash-journal-ledger";
 import {
@@ -835,12 +834,11 @@ export default async function PaymentsPage({
   const closingUsd = openingUsd + cashInflowUsd - cashOutflowUsd;
   const closingCdf = openingCdf + cashInflowCdf - cashOutflowCdf;
 
-  const excelDailyOpenings = isMainDesk
-    ? await loadExcelDailyOpeningsForDateRange(cashRange.startRaw, cashRange.endRaw)
-    : new Map<string, { usd: number; cdf: number; libelle: string; typeOperation: string }>();
-
   const journalLedgerBuilt = isMainDesk
-    ? buildCashJournalLedger({
+    ? await resolveMainCashJournalLedger({
+        periodStart: cashRange.startRaw,
+        periodEnd: cashRange.endRaw,
+        periodStartDate: cashRange.startRaw,
         operations: cashOperationsWithoutOpeningBalance.map((operation) => ({
           id: operation.id,
           occurredAt: new Date(operation.occurredAt),
@@ -852,25 +850,16 @@ export default async function PaymentsPage({
           method: operation.method,
           category: operation.category ?? null,
         })),
-        excelOpeningsByDate: excelDailyOpenings,
-        periodStartDate: cashRange.startRaw,
         periodFallbackOpening: { usd: openingUsd, cdf: openingCdf },
       })
     : null;
 
   const usesExcelDailyJournalOpenings = journalLedgerBuilt?.usesExcelDailyOpenings ?? false;
-  const journalOpeningUsd = usesExcelDailyJournalOpenings
-    ? (journalLedgerBuilt?.periodOpeningUsd ?? openingUsd)
-    : openingUsd;
-  const journalOpeningCdf = usesExcelDailyJournalOpenings
-    ? (journalLedgerBuilt?.periodOpeningCdf ?? openingCdf)
-    : openingCdf;
-  const journalClosingUsd = usesExcelDailyJournalOpenings
-    ? (journalLedgerBuilt?.periodClosingUsd ?? closingUsd)
-    : closingUsd;
-  const journalClosingCdf = usesExcelDailyJournalOpenings
-    ? (journalLedgerBuilt?.periodClosingCdf ?? closingCdf)
-    : closingCdf;
+  const journalFromExcelImport = journalLedgerBuilt?.source === "excel-import";
+  const journalOpeningUsd = journalLedgerBuilt?.periodOpeningUsd ?? openingUsd;
+  const journalOpeningCdf = journalLedgerBuilt?.periodOpeningCdf ?? openingCdf;
+  const journalClosingUsd = journalLedgerBuilt?.periodClosingUsd ?? closingUsd;
+  const journalClosingCdf = journalLedgerBuilt?.periodClosingCdf ?? closingCdf;
 
   const caisseLedger: CashJournalLedgerRow[] = isMainDesk && journalLedgerBuilt
     ? journalLedgerBuilt.rows
@@ -1886,7 +1875,11 @@ export default async function PaymentsPage({
                   <h2 className="text-sm font-semibold">Synthèse caisse</h2>
                   <p className="mt-2 text-xs text-black/60 dark:text-white/60">
                     {cashRange.label}. Solde USD: ouverture {journalOpeningUsd.toFixed(2)} USD, clôture {journalClosingUsd.toFixed(2)} USD. Solde CDF: ouverture {journalOpeningCdf.toFixed(2)} CDF, clôture {journalClosingCdf.toFixed(2)} CDF.
-                    {usesExcelDailyJournalOpenings ? " Report à nouveau par jour = fichier Excel importé." : ""}
+                    {journalFromExcelImport
+                      ? " Journal affiché ligne à ligne depuis l’import Excel (USD et CDF séparés)."
+                      : usesExcelDailyJournalOpenings
+                        ? " Report à nouveau par jour = fichier Excel importé."
+                        : ""}
                     Contrôle global (équivalent USD): ouverture {openingBalance.toFixed(2)} USD, entrées {grossInflows.toFixed(2)} USD, sorties {cashOutflows.toFixed(2)} USD, variation nette {netCashVariation.toFixed(2)} USD, clôture {closingBalance.toFixed(2)} USD ({accountingConsistency ? "OK" : "écart"}).
                   </p>
                 </div>
@@ -1955,7 +1948,7 @@ export default async function PaymentsPage({
                     </tr>
                   </thead>
                   <tbody>
-                    {!usesExcelDailyJournalOpenings ? (
+                    {!usesExcelDailyJournalOpenings && !journalFromExcelImport ? (
                       <tr className="border-t border-black/5 bg-black/2 dark:border-white/10 dark:bg-white/3">
                         <td className="px-4 py-3 font-semibold">{cashRange.startRaw}</td>
                         <td className="px-4 py-3 font-semibold">Report à nouveau / solde d&apos;ouverture</td>

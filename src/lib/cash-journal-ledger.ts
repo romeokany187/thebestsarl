@@ -93,6 +93,117 @@ export async function loadExcelDailyOpeningsForDateRange(
   return map;
 }
 
+export type ImportedJournalLineRecord = {
+  businessDate: string;
+  lineCategory: string;
+  typeOperation: string;
+  libelle: string;
+  referenceDoc: string | null;
+  usdIn: number;
+  usdOut: number;
+  cdfIn: number;
+  cdfOut: number;
+  usdBalance: number | null;
+  cdfBalance: number | null;
+  createdAt: Date;
+};
+
+/** Lignes journal importées (colonnes USD + CDF comme dans Excel). */
+export async function loadImportedJournalLinesForDateRange(
+  startDate: string,
+  endDate: string,
+): Promise<ImportedJournalLineRecord[]> {
+  return prisma.cashReportJournalLine.findMany({
+    where: {
+      businessDate: { gte: startDate, lte: endDate },
+      lineCategory: { not: "SKIP" },
+    },
+    select: {
+      businessDate: true,
+      lineCategory: true,
+      typeOperation: true,
+      libelle: true,
+      referenceDoc: true,
+      usdIn: true,
+      usdOut: true,
+      cdfIn: true,
+      cdfOut: true,
+      usdBalance: true,
+      cdfBalance: true,
+      createdAt: true,
+    },
+    orderBy: [{ businessDate: "asc" }, { createdAt: "asc" }],
+  });
+}
+
+/** Journal PDF / écran : une ligne = une ligne Excel (6 colonnes montants + soldes). */
+export function buildCashJournalLedgerFromImportedLines(lines: ImportedJournalLineRecord[]): {
+  rows: CashJournalLedgerRow[];
+  usesExcelDailyOpenings: boolean;
+  periodOpeningUsd: number;
+  periodOpeningCdf: number;
+  periodClosingUsd: number;
+  periodClosingCdf: number;
+} {
+  const rows: CashJournalLedgerRow[] = lines.map((line) => ({
+    occurredAt: new Date(`${line.businessDate}T12:00:00.000Z`),
+    typeOperation: line.typeOperation,
+    libelle: line.libelle,
+    reference: line.referenceDoc ?? "-",
+    usdIn: line.usdIn,
+    usdOut: line.usdOut,
+    cdfIn: line.cdfIn,
+    cdfOut: line.cdfOut,
+    usdBalance: line.usdBalance ?? 0,
+    cdfBalance: line.cdfBalance ?? 0,
+    isOpeningRow: line.lineCategory === "OPENING",
+  }));
+
+  const firstOpening = rows.find((row) => row.isOpeningRow) ?? rows[0];
+  const last = rows[rows.length - 1];
+  const usesExcelDailyOpenings = lines.some((line) => line.lineCategory === "OPENING");
+
+  return {
+    rows,
+    usesExcelDailyOpenings,
+    periodOpeningUsd: firstOpening?.usdBalance ?? 0,
+    periodOpeningCdf: firstOpening?.cdfBalance ?? 0,
+    periodClosingUsd: last?.usdBalance ?? firstOpening?.usdBalance ?? 0,
+    periodClosingCdf: last?.cdfBalance ?? firstOpening?.cdfBalance ?? 0,
+  };
+}
+
+export async function resolveMainCashJournalLedger(options: {
+  periodStart: string;
+  periodEnd: string;
+  periodStartDate: string;
+  operations: CashJournalLedgerOperation[];
+  periodFallbackOpening: { usd: number; cdf: number };
+}) {
+  const importedLines = await loadImportedJournalLinesForDateRange(options.periodStart, options.periodEnd);
+  const hasImportedMovements = importedLines.some(
+    (line) => line.lineCategory !== "OPENING" && (line.usdIn > 0 || line.usdOut > 0 || line.cdfIn > 0 || line.cdfOut > 0),
+  );
+
+  if (hasImportedMovements) {
+    return {
+      ...buildCashJournalLedgerFromImportedLines(importedLines),
+      source: "excel-import" as const,
+    };
+  }
+
+  const excelDailyOpenings = await loadExcelDailyOpeningsForDateRange(options.periodStart, options.periodEnd);
+  return {
+    ...buildCashJournalLedger({
+      operations: options.operations,
+      excelOpeningsByDate: excelDailyOpenings,
+      periodStartDate: options.periodStartDate,
+      periodFallbackOpening: options.periodFallbackOpening,
+    }),
+    source: "cash-operations" as const,
+  };
+}
+
 function mapOperationToMovementRow(operation: CashJournalLedgerOperation): Omit<CashJournalLedgerRow, "usdBalance" | "cdfBalance"> {
   const currency = normalizeMoneyCurrency(operation.currency);
   const isInflow = operation.direction === "INFLOW";
