@@ -9,6 +9,8 @@ type ImportPreview = {
   fileName: string;
   reportMonth: string;
   closingDate: string;
+  suggestedClosingDate: string;
+  closingDateAdjusted: boolean;
   datesToImport: string[];
   skippedDates: string[];
   stats: {
@@ -202,8 +204,17 @@ function CashReportImportAnalysisPanel({ preview }: { preview: ImportPreview }) 
 
       <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
         <p><span className="text-black/55 dark:text-white/55">Fichier</span><br />{preview.fileName}</p>
-        <p><span className="text-black/55 dark:text-white/55">Mois rapport</span><br />{preview.reportMonth}</p>
-        <p><span className="text-black/55 dark:text-white/55">Clôture billetage</span><br />{preview.closingDate}</p>
+        <p>
+          <span className="text-black/55 dark:text-white/55">Mois détecté (fichier)</span><br />
+          <span className="font-semibold">{preview.reportMonth}</span>
+        </p>
+        <p>
+          <span className="text-black/55 dark:text-white/55">Clôture billetage / virtuel</span><br />
+          {preview.closingDate}
+          {preview.closingDateAdjusted ? (
+            <span className="text-amber-700 dark:text-amber-300"> · ajustée au journal</span>
+          ) : null}
+        </p>
         <p>
           <span className="text-black/55 dark:text-white/55">Période journal (fichier)</span><br />
           {analysis.journalRange.from && analysis.journalRange.to
@@ -317,6 +328,7 @@ export function CashReportExcelImportWorkspace() {
   const analyzeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const analyzeAbortRef = useRef<AbortController | null>(null);
   const analyzeSeqRef = useRef(0);
+  const closingDateManualRef = useRef(false);
 
   const canCommit = useMemo(
     () => Boolean(file && preview?.dryRun && preview.analysis.readyToCommit),
@@ -356,6 +368,9 @@ export function CashReportExcelImportWorkspace() {
 
       const data = payload?.data as ImportPreview;
       setPreview(data);
+      if (!closingDateManualRef.current && data.suggestedClosingDate) {
+        setClosingDate(data.suggestedClosingDate);
+      }
       setMessage(
         dryRun
           ? data.monthlyConstat?.closedMonth
@@ -405,8 +420,8 @@ export function CashReportExcelImportWorkspace() {
       <div>
         <h2 className="text-sm font-semibold">Import rapport Excel (Caisse 2 / THE BEST)</h2>
         <p className="mt-1 text-xs text-black/60 dark:text-white/60">
-          Dès la sélection du fichier, un constat compare le journal Excel au système (mois complet si le mois est déjà
-          passé, ex. septembre). Validez l&apos;import seulement après lecture de ce constat.
+          Le mois est lu dans le fichier Excel (journal de caisse), pas la date du jour. Le constat compare ce mois-là au
+          système. La date de clôture sert au billetage / virtuel et est proposée automatiquement (dernier jour du journal).
         </p>
       </div>
 
@@ -418,6 +433,7 @@ export function CashReportExcelImportWorkspace() {
             setFile(event.target.files?.[0] ?? null);
             setPreview(null);
             setMessage("");
+            closingDateManualRef.current = false;
           }}
           className="text-sm"
         />
@@ -426,7 +442,10 @@ export function CashReportExcelImportWorkspace() {
           <input
             type="date"
             value={closingDate}
-            onChange={(event) => setClosingDate(event.target.value)}
+            onChange={(event) => {
+              closingDateManualRef.current = true;
+              setClosingDate(event.target.value);
+            }}
             className="rounded-md border border-black/15 px-3 py-2 text-sm dark:border-white/15 dark:bg-zinc-900"
           />
         </label>

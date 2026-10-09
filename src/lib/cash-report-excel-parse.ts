@@ -171,13 +171,49 @@ function sheetRows(workbook: XLSX.WorkBook, sheetName: string) {
   return XLSX.utils.sheet_to_json(sheet, { header: 1, defval: "", raw: true }) as unknown[][];
 }
 
-function inferReportMonthFromJournal(lines: ParsedJournalLine[], fallbackYear: number) {
-  const dates = lines.map((line) => line.businessDate).filter(Boolean).sort();
-  if (dates.length === 0) {
+export function inferReportMonthFromJournal(lines: ParsedJournalLine[], fallbackYear: number) {
+  if (lines.length === 0) {
     const now = new Date();
     return `${fallbackYear}-${String(now.getMonth() + 1).padStart(2, "0")}`;
   }
-  return dates[0].slice(0, 7);
+
+  const counts = new Map<string, number>();
+  for (const line of lines) {
+    const month = line.businessDate.slice(0, 7);
+    counts.set(month, (counts.get(month) ?? 0) + 1);
+  }
+
+  let bestMonth = "";
+  let bestCount = 0;
+  for (const [month, count] of counts) {
+    if (count > bestCount) {
+      bestMonth = month;
+      bestCount = count;
+    }
+  }
+
+  return bestMonth || lines[0].businessDate.slice(0, 7);
+}
+
+/** Dernier jour du journal pour le mois détecté (billetage / virtuel). */
+export function suggestClosingDateForReport(journalLines: ParsedJournalLine[], reportMonth: string) {
+  const prefix = `${reportMonth}-`;
+  const datesInMonth = journalLines
+    .map((line) => line.businessDate)
+    .filter((date) => date.startsWith(prefix))
+    .sort();
+
+  if (datesInMonth.length > 0) return datesInMonth[datesInMonth.length - 1];
+
+  const [yearText, monthText] = reportMonth.split("-");
+  const year = Number(yearText);
+  const month = Number(monthText);
+  if (!Number.isFinite(year) || !Number.isFinite(month) || month < 1 || month > 12) {
+    return `${reportMonth}-28`;
+  }
+
+  const lastDay = new Date(year, month, 0).getDate();
+  return `${reportMonth}-${String(lastDay).padStart(2, "0")}`;
 }
 
 function parseJournalSheet(rows: unknown[][], fallbackYear: number, reportMonthHint?: string): { lines: ParsedJournalLine[]; warnings: string[] } {

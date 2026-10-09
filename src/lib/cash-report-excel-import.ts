@@ -3,6 +3,7 @@ import { CashDirection, CashOperationCategory, type Prisma } from "@prisma/clien
 import { prisma } from "@/lib/prisma";
 import {
   parseCashReportWorkbook,
+  suggestClosingDateForReport,
   type ParsedJournalLine,
   uniqueSortedDates,
 } from "@/lib/cash-report-excel-parse";
@@ -67,6 +68,8 @@ type ImportPreview = {
   fileName: string;
   reportMonth: string;
   closingDate: string;
+  suggestedClosingDate: string;
+  closingDateAdjusted: boolean;
   journalDates: string[];
   datesToImport: string[];
   skippedDates: string[];
@@ -367,9 +370,12 @@ async function buildImportAnalysis(options: {
 export async function runCashReportExcelImport(options: ImportOptions): Promise<ImportPreview | ImportResult> {
   const fileHash = hashBuffer(options.buffer);
   const parsed = parseCashReportWorkbook(options.buffer, {
-    reportMonthHint: options.closingDate.slice(0, 7),
-    fallbackYear: Number(options.closingDate.slice(0, 4)),
+    fallbackYear: Number(options.closingDate.slice(0, 4)) || new Date().getFullYear(),
   });
+
+  const suggestedClosingDate = suggestClosingDateForReport(parsed.journalLines, parsed.reportMonth);
+  const closingDateAdjusted = options.closingDate.slice(0, 7) !== parsed.reportMonth;
+  const effectiveClosingDate = closingDateAdjusted ? suggestedClosingDate : options.closingDate;
 
   const journalDates = uniqueSortedDates(parsed.journalLines);
   const lastDate = await getLastImportedJournalDate(parsed.reportMonth);
@@ -425,7 +431,9 @@ export async function runCashReportExcelImport(options: ImportOptions): Promise<
     fileHash,
     fileName: options.fileName,
     reportMonth: parsed.reportMonth,
-    closingDate: options.closingDate,
+    closingDate: effectiveClosingDate,
+    suggestedClosingDate,
+    closingDateAdjusted,
     journalDates,
     datesToImport,
     skippedDates,
@@ -438,6 +446,14 @@ export async function runCashReportExcelImport(options: ImportOptions): Promise<
     virtualChannelCount: parsed.virtualChannels.length,
     warnings: [
       ...parsed.warnings,
+      ...(parsed.journalLines.length > 0
+        ? [`Mois détecté dans le fichier : ${parsed.reportMonth} — comparaison avec le système sur ce mois.`]
+        : []),
+      ...(closingDateAdjusted
+        ? [
+            `La date saisie (${options.closingDate}) ne correspond pas au mois du fichier ; clôture billetage / virtuel : ${effectiveClosingDate}.`,
+          ]
+        : []),
       ...(duplicateFile ? ["Ce fichier a déjà été importé tel quel. Indiquez des dates à réconcilier pour réimporter."] : []),
       ...(monthlyConstat?.closedMonth && monthlyConstat.summary.missingInFileDays > 0
         ? [
@@ -482,7 +498,7 @@ export async function runCashReportExcelImport(options: ImportOptions): Promise<
         reportMonth: parsed.reportMonth,
         fileName: options.fileName,
         fileHash,
-        closingDate: options.closingDate,
+        closingDate: effectiveClosingDate,
         status: "COMPLETED",
         importedById: options.importedById,
       },
@@ -590,10 +606,10 @@ export async function runCashReportExcelImport(options: ImportOptions): Promise<
       if (billetage.variant !== "THE_BEST") {
         await tx.cashBilletageSnapshot.upsert({
           where: {
-            date_cashDesk: { date: options.closingDate, cashDesk: billetage.variant },
+            date_cashDesk: { date: effectiveClosingDate, cashDesk: billetage.variant },
           },
           create: {
-            date: options.closingDate,
+            date: effectiveClosingDate,
             cashDesk: billetage.variant,
             usdCounts: billetage.usdCounts,
             cdfCounts: billetage.cdfCounts,
@@ -615,10 +631,10 @@ export async function runCashReportExcelImport(options: ImportOptions): Promise<
 
       await tx.cashBilletageSnapshot.upsert({
         where: {
-          date_cashDesk: { date: options.closingDate, cashDesk: "THE_BEST" },
+          date_cashDesk: { date: effectiveClosingDate, cashDesk: "THE_BEST" },
         },
         create: {
-          date: options.closingDate,
+          date: effectiveClosingDate,
           cashDesk: "THE_BEST",
           usdCounts: billetage.usdCounts,
           cdfCounts: billetage.cdfCounts,
@@ -642,10 +658,10 @@ export async function runCashReportExcelImport(options: ImportOptions): Promise<
       const totalCdf = parsed.virtualChannels.reduce((sum, channel) => sum + channel.cdf, 0);
       await tx.cashReportVirtualSnapshot.upsert({
         where: {
-          closingDate_cashDesk: { closingDate: options.closingDate, cashDesk: "THE_BEST" },
+          closingDate_cashDesk: { closingDate: effectiveClosingDate, cashDesk: "THE_BEST" },
         },
         create: {
-          closingDate: options.closingDate,
+          closingDate: effectiveClosingDate,
           cashDesk: "THE_BEST",
           channels: parsed.virtualChannels,
           totalUsd,
