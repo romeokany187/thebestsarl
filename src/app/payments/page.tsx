@@ -11,7 +11,7 @@ import { PaymentRowAdminActions } from "@/components/payment-row-admin-actions";
 import { ProxyBankingForm } from "@/components/proxy-banking-form";
 import { ProxyBankingDeleteButton } from "@/components/proxy-banking-delete-button";
 import { ProxyBankingEditButton } from "@/components/proxy-banking-edit-button";
-import { CashReportExcelImportWorkspace } from "@/components/cash-report-excel-import-workspace";
+import { CashReportExcelImportWorkspace } from "@/components/cash-report-excel-import-lazy";
 import { PaymentsWritingWorkspace } from "@/components/payments-writing-workspace";
 import { canImportCashReportExcel } from "@/lib/cash-report-access";
 import { ProcurementCashExecutionActions } from "@/components/procurement-cash-execution-actions";

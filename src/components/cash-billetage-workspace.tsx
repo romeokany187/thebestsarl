@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { formatFrDecimal, kinshasaDateKey } from "@/lib/kinshasa-time";
 
 const usdDenominations = [100, 50, 20, 10, 5, 1] as const;
 const cdfDenominations = [20000, 10000, 5000, 1000, 500, 200, 100, 50] as const;
@@ -104,12 +105,12 @@ function CountTable({
                     placeholder="0"
                   />
                 </td>
-                <td className="px-3 py-2">{line.amount.toLocaleString("fr-FR", { minimumFractionDigits: currency === "USD" ? 2 : 0, maximumFractionDigits: currency === "USD" ? 2 : 0 })} {currency}</td>
+                <td className="px-3 py-2">{formatFrDecimal(line.amount, currency === "USD" ? 2 : 0)} {currency}</td>
               </tr>
             ))}
             <tr className="border-t border-black/10 bg-black/5 font-semibold dark:border-white/10 dark:bg-white/10">
               <td className="px-3 py-2" colSpan={3}>TOTAL</td>
-              <td className="px-3 py-2">{countedTotal.toLocaleString("fr-FR", { minimumFractionDigits: currency === "USD" ? 2 : 0, maximumFractionDigits: currency === "USD" ? 2 : 0 })} {currency}</td>
+              <td className="px-3 py-2">{formatFrDecimal(countedTotal, currency === "USD" ? 2 : 0)} {currency}</td>
             </tr>
           </tbody>
         </table>
@@ -118,15 +119,14 @@ function CountTable({
       <p className="mt-3 text-xs text-black/60 dark:text-white/60">
         {disabled
           ? "Billetage verrouillé. Cliquez sur Ouvrir ou Modifier pour saisir les coupures de cette date."
-          : `Saisie active • Attendu ${expected.toLocaleString("fr-FR", { minimumFractionDigits: currency === "USD" ? 2 : 0, maximumFractionDigits: currency === "USD" ? 2 : 0 })} ${currency}`}
+          : `Saisie active • Attendu ${formatFrDecimal(expected, currency === "USD" ? 2 : 0)} ${currency}`}
       </p>
     </section>
   );
 }
 
 export function CashBilletageWorkspace({ expectedUsd, expectedCdf, cashDesk }: { expectedUsd: number; expectedCdf: number; cashDesk: string }) {
-  const today = new Date().toISOString().slice(0, 10);
-  const [selectedDate, setSelectedDate] = useState(today);
+  const [selectedDate, setSelectedDate] = useState(() => kinshasaDateKey());
   const [usdCounts, setUsdCounts] = useState<CountsMap>({});
   const [cdfCounts, setCdfCounts] = useState<CountsMap>({});
   const [isOpen, setIsOpen] = useState(false);

@@ -81,9 +81,15 @@ export function PaymentsWritingWorkspace({
   const router = useRouter();
 
   useEffect(() => {
-    // reflect selected desk and workspace in URL so GET filters can preserve context
     try {
       const url = new URL(window.location.href);
+      const currentDesk = url.searchParams.get("desk") ?? "";
+      const currentMode = url.searchParams.get("mode") ?? "";
+      const targetMode = mode === "none" ? "" : mode;
+      if (currentDesk === (selectedDesk ?? "") && currentMode === targetMode) {
+        return;
+      }
+
       if (selectedDesk) {
         url.searchParams.set("desk", selectedDesk);
       } else {
@@ -95,7 +101,7 @@ export function PaymentsWritingWorkspace({
         url.searchParams.delete("mode");
       }
       router.replace(url.pathname + url.search, { scroll: false });
-    } catch (e) {
+    } catch {
       // ignore
     }
   }, [mode, selectedDesk, router]);

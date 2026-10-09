@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { FormEvent, useEffect, useMemo, useState } from "react";
+import { kinshasaDateTimeInputValue } from "@/lib/kinshasa-time";
 
 // Listen for external payment edit requests
 
@@ -38,15 +39,6 @@ function getApiErrorMessage(payload: unknown, fallback: string) {
   return fallback;
 }
 
-function toLocalDateTimeInputValue(date: Date): string {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  const day = String(date.getDate()).padStart(2, "0");
-  const hours = String(date.getHours()).padStart(2, "0");
-  const minutes = String(date.getMinutes()).padStart(2, "0");
-  return `${year}-${month}-${day}T${hours}:${minutes}`;
-}
-
 function normalizeCurrency(value: string | null | undefined): "USD" | "CDF" {
   const normalized = (value ?? "USD").trim().toUpperCase();
   return normalized === "CDF" || normalized === "XAF" || normalized === "FC" ? "CDF" : "USD";
@@ -70,7 +62,7 @@ export function PaymentEntryForm({ tickets }: { tickets: TicketOption[] }) {
   const [currency, setCurrency] = useState<string>(normalizeCurrency(tickets[0]?.currency));
   const [method, setMethod] = useState<string>("CASH");
   const [supportingReference, setSupportingReference] = useState<string>("");
-  const [paidAt, setPaidAt] = useState<string>(toLocalDateTimeInputValue(new Date()));
+  const [paidAt, setPaidAt] = useState<string>(() => kinshasaDateTimeInputValue());
   const [loading, setLoading] = useState<boolean>(false);
   const [message, setMessage] = useState<string>("");
   const [error, setError] = useState<string>("");

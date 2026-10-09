@@ -182,6 +182,10 @@ jobs:
               exit 1
             fi
 
+            echo "[deploy] Mise a jour schema import caisse (non destructif)..."
+            PRISMA_SCHEMA_FILE=prisma/schema.mysql.prisma npm run db:ensure:cash-report-import-schema \
+              || echo "[deploy] WARNING: echec ensure cash report import schema"
+
             rm -rf "$PREV_APP_DIR"
             if [ -d "$APP_DIR" ]; then
               mv "$APP_DIR" "$PREV_APP_DIR"

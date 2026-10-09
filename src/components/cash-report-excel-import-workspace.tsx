@@ -1,6 +1,7 @@
 "use client";
 
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { kinshasaDateKey } from "@/lib/kinshasa-time";
 
 type ImportPreview = {
   dryRun: boolean;
@@ -47,14 +48,6 @@ type ImportPreview = {
     };
   };
 };
-
-function todayKey() {
-  const now = new Date();
-  const y = now.getFullYear();
-  const m = String(now.getMonth() + 1).padStart(2, "0");
-  const d = String(now.getDate()).padStart(2, "0");
-  return `${y}-${m}-${d}`;
-}
 
 function formatAmount(value: number, currency: string) {
   return `${new Intl.NumberFormat("fr-FR", { maximumFractionDigits: 2 }).format(value)} ${currency}`;
@@ -188,7 +181,7 @@ function CashReportImportAnalysisPanel({ preview }: { preview: ImportPreview }) 
 
 export function CashReportExcelImportWorkspace() {
   const [file, setFile] = useState<File | null>(null);
-  const [closingDate, setClosingDate] = useState(todayKey());
+  const [closingDate, setClosingDate] = useState(() => kinshasaDateKey());
   const [reconcileDates, setReconcileDates] = useState("");
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("");

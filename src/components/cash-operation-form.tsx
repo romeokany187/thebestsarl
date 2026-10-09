@@ -2,15 +2,7 @@
 
 import { FormEvent, useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-
-function toLocalDateTimeInputValue(date: Date): string {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  const day = String(date.getDate()).padStart(2, "0");
-  const hours = String(date.getHours()).padStart(2, "0");
-  const minutes = String(date.getMinutes()).padStart(2, "0");
-  return `${year}-${month}-${day}T${hours}:${minutes}`;
-}
+import { kinshasaDateTimeInputValue } from "@/lib/kinshasa-time";
 
 const categories: Array<{ value: string; label: string }> = [
   { value: "OPENING_BALANCE", label: "Report à nouveau initial (solde d'ouverture)" },
@@ -66,13 +58,13 @@ export function CashOperationForm({
   const [categoryLabel, setCategoryLabel] = useState<string>("");
   const [reference, setReference] = useState<string>("");
   const [description, setDescription] = useState<string>("");
-  const [occurredAt, setOccurredAt] = useState<string>(toLocalDateTimeInputValue(new Date()));
+  const [occurredAt, setOccurredAt] = useState<string>(kinshasaDateTimeInputValue(new Date()));
   const [fxRateUsdToCdf, setFxRateUsdToCdf] = useState<string>("");
   const [conversionSourceCurrency, setConversionSourceCurrency] = useState<"USD" | "CDF">("USD");
   const [conversionSourceAmount, setConversionSourceAmount] = useState<string>("");
   const [conversionReference, setConversionReference] = useState<string>("");
   const [conversionDescription, setConversionDescription] = useState<string>("Conversion interne de caisse");
-  const [conversionOccurredAt, setConversionOccurredAt] = useState<string>(toLocalDateTimeInputValue(new Date()));
+  const [conversionOccurredAt, setConversionOccurredAt] = useState<string>(kinshasaDateTimeInputValue(new Date()));
   const [loading, setLoading] = useState<boolean>(false);
   const [conversionLoading, setConversionLoading] = useState<boolean>(false);
   const [message, setMessage] = useState<string>("");
@@ -123,7 +115,7 @@ export function CashOperationForm({
       setMethod(payload.method ?? methodOptions[0]?.value ?? "CASH");
       setReference(payload.reference ?? "");
       setDescription(parsedDescription.descriptionValue);
-      setOccurredAt(payload.occurredAt ? toLocalDateTimeInputValue(new Date(payload.occurredAt)) : toLocalDateTimeInputValue(new Date()));
+      setOccurredAt(payload.occurredAt ? kinshasaDateTimeInputValue(new Date(payload.occurredAt)) : kinshasaDateTimeInputValue(new Date()));
       if (usesFreeTextCategory) {
         setCategoryLabel(payload.categoryLabel ?? parsedDescription.categoryLabelValue);
       }
@@ -141,7 +133,7 @@ export function CashOperationForm({
     setAmount("");
     setReference("");
     setDescription("");
-    setOccurredAt(toLocalDateTimeInputValue(new Date()));
+    setOccurredAt(kinshasaDateTimeInputValue(new Date()));
     setCategoryLabel("");
     setCategory("OTHER_SALE");
     setDirection("INFLOW");

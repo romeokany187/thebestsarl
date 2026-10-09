@@ -2,15 +2,7 @@
 
 import { FormEvent, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-
-function toLocalDateTimeInputValue(date: Date): string {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  const day = String(date.getDate()).padStart(2, "0");
-  const hours = String(date.getHours()).padStart(2, "0");
-  const minutes = String(date.getMinutes()).padStart(2, "0");
-  return `${year}-${month}-${day}T${hours}:${minutes}`;
-}
+import { kinshasaDateTimeInputValue } from "@/lib/kinshasa-time";
 
 type ProxyOperationType = "OPENING_BALANCE" | "DEPOSIT" | "WITHDRAWAL";
 type FloatDirection = "FLOAT_TO_VIRTUAL" | "FLOAT_TO_CASH";
@@ -101,12 +93,12 @@ export function ProxyBankingForm() {
   const [currency, setCurrency] = useState<"USD" | "CDF">("USD");
   const [reference, setReference] = useState("");
   const [description, setDescription] = useState("");
-  const [occurredAt, setOccurredAt] = useState(toLocalDateTimeInputValue(new Date()));
+  const [occurredAt, setOccurredAt] = useState(kinshasaDateTimeInputValue(new Date()));
   const [changeReceivedCurrency, setChangeReceivedCurrency] = useState<"USD" | "CDF">("CDF");
   const [changeReceivedAmount, setChangeReceivedAmount] = useState("");
   const [changeReference, setChangeReference] = useState("");
   const [changeDescription, setChangeDescription] = useState("");
-  const [changeOccurredAt, setChangeOccurredAt] = useState(toLocalDateTimeInputValue(new Date()));
+  const [changeOccurredAt, setChangeOccurredAt] = useState(kinshasaDateTimeInputValue(new Date()));
   const [changeRateUsdToCdf, setChangeRateUsdToCdf] = useState("");
   const [loading, setLoading] = useState(false);
   const [changeLoading, setChangeLoading] = useState(false);
@@ -121,7 +113,7 @@ export function ProxyBankingForm() {
   const [floatCurrency, setFloatCurrency] = useState<"USD" | "CDF">("USD");
   const [floatReference, setFloatReference] = useState("");
   const [floatDescription, setFloatDescription] = useState("");
-  const [floatOccurredAt, setFloatOccurredAt] = useState(toLocalDateTimeInputValue(new Date()));
+  const [floatOccurredAt, setFloatOccurredAt] = useState(kinshasaDateTimeInputValue(new Date()));
   const [floatLoading, setFloatLoading] = useState(false);
   const [floatEditingOperationId, setFloatEditingOperationId] = useState<string | null>(null);
 
@@ -131,7 +123,7 @@ export function ProxyBankingForm() {
     setChangeReceivedAmount("");
     setChangeReference("");
     setChangeDescription("");
-    setChangeOccurredAt(toLocalDateTimeInputValue(new Date()));
+    setChangeOccurredAt(kinshasaDateTimeInputValue(new Date()));
     setChangeRateUsdToCdf("");
   }
 
@@ -143,7 +135,7 @@ export function ProxyBankingForm() {
     setFloatCurrency("USD");
     setFloatReference("");
     setFloatDescription("");
-    setFloatOccurredAt(toLocalDateTimeInputValue(new Date()));
+    setFloatOccurredAt(kinshasaDateTimeInputValue(new Date()));
   }
 
   useEffect(() => {
@@ -165,7 +157,7 @@ export function ProxyBankingForm() {
         setCurrency((payload.currency?.toUpperCase() === "CDF" ? "CDF" : "USD") as "USD" | "CDF");
         setReference(payload.reference ?? "");
         setDescription(payload.description ?? "");
-        setOccurredAt(toLocalDateTimeInputValue(payload.occurredAt ? new Date(payload.occurredAt) : new Date()));
+        setOccurredAt(kinshasaDateTimeInputValue(payload.occurredAt ? new Date(payload.occurredAt) : new Date()));
         setMessage("Modification de l'opération proxy banking en cours.");
         return;
       }
@@ -179,7 +171,7 @@ export function ProxyBankingForm() {
         setChangeRateUsdToCdf(payload.fxRateUsdToCdf != null ? String(payload.fxRateUsdToCdf) : "");
         setChangeReference(payload.reference ?? "");
         setChangeDescription(payload.description ?? "");
-        setChangeOccurredAt(toLocalDateTimeInputValue(payload.occurredAt ? new Date(payload.occurredAt) : new Date()));
+        setChangeOccurredAt(kinshasaDateTimeInputValue(payload.occurredAt ? new Date(payload.occurredAt) : new Date()));
         setMessage("Modification du change proxy banking en cours.");
         return;
       }
@@ -193,7 +185,7 @@ export function ProxyBankingForm() {
       setFloatCurrency((payload.currency?.toUpperCase() === "CDF" ? "CDF" : "USD") as "USD" | "CDF");
       setFloatReference(payload.reference ?? "");
       setFloatDescription(payload.description ?? "");
-      setFloatOccurredAt(toLocalDateTimeInputValue(payload.occurredAt ? new Date(payload.occurredAt) : new Date()));
+      setFloatOccurredAt(kinshasaDateTimeInputValue(payload.occurredAt ? new Date(payload.occurredAt) : new Date()));
       setError("");
       setMessage("Modification du transfert float en cours.");
     }
@@ -210,7 +202,7 @@ export function ProxyBankingForm() {
     setCurrency("USD");
     setReference("");
     setDescription("");
-    setOccurredAt(toLocalDateTimeInputValue(new Date()));
+    setOccurredAt(kinshasaDateTimeInputValue(new Date()));
   }
 
   const isOpening = operationType === "OPENING_BALANCE";
