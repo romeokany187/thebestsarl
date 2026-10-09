@@ -11,7 +11,9 @@ import { PaymentRowAdminActions } from "@/components/payment-row-admin-actions";
 import { ProxyBankingForm } from "@/components/proxy-banking-form";
 import { ProxyBankingDeleteButton } from "@/components/proxy-banking-delete-button";
 import { ProxyBankingEditButton } from "@/components/proxy-banking-edit-button";
+import { CashReportExcelImportWorkspace } from "@/components/cash-report-excel-import-workspace";
 import { PaymentsWritingWorkspace } from "@/components/payments-writing-workspace";
+import { canImportCashReportExcel } from "@/lib/cash-report-access";
 import { ProcurementCashExecutionActions } from "@/components/procurement-cash-execution-actions";
 import { invoiceNumberFromChronology } from "@/lib/invoice";
 import { isCashierJobTitle } from "@/lib/assignment";
@@ -155,7 +157,7 @@ function monthRangeFromValue(rawMonth?: string) {
 }
 
 function resolveInitialWorkspaceMode(value?: string) {
-  if (value === "tickets" || value === "cash" || value === "virtual" || value === "billetage" || value === "payment-orders" || value === "needs" || value === "float" || value === "reports") {
+  if (value === "tickets" || value === "cash" || value === "virtual" || value === "billetage" || value === "payment-orders" || value === "needs" || value === "float" || value === "reports" || value === "cash-report-import") {
     return value;
   }
 
@@ -469,6 +471,11 @@ export default async function PaymentsPage({
   const hasPaymentsFullAccess = hasRequiredModuleAccessLevel(customModuleAccess, "FULL");
   const canWrite = isCashier || isAdmin || isComptable || hasPaymentsFullAccess;
   const canManageLedger = isAdmin || isComptable || hasPaymentsFullAccess;
+  const canImportCashReport = canImportCashReportExcel({
+    role,
+    jobTitle: session.user.jobTitle,
+    customModuleAccessLevel: customModuleAccess,
+  });
   const canReviewApprovals = canReviewCashOperationApprovals(role, session.user.jobTitle) || hasPaymentsFullAccess;
   const resolvedSearchParams = (await searchParams) ?? {};
   const deskState = resolvePaymentsDeskState({
@@ -2099,6 +2106,7 @@ export default async function PaymentsPage({
         billetageWorkspace={canWrite ? (
           <CashBilletageWorkspace expectedUsd={closingUsd} expectedCdf={closingCdf} cashDesk={selectedDeskKey} />
         ) : null}
+        cashReportImportWorkspace={canImportCashReport && isMainDesk ? <CashReportExcelImportWorkspace /> : undefined}
       />
     </AppShell>
   );

@@ -214,6 +214,7 @@ model User {
   cashOperationApprovalRequests CashOperationApprovalRequest[] @relation("CashOperationApprovalRequester")
   cashOperationApprovalReviews  CashOperationApprovalRequest[] @relation("CashOperationApprovalReviewer")
   cashBilletageSnapshots  CashBilletageSnapshot[]
+  cashReportImports       CashReportImport[]
   userModuleAccesses      UserModuleAccess[]
   userModuleAccessesGranted UserModuleAccess[]    @relation("UserModuleAccessGrantor")
   airlineDepositMovements AirlineDepositMovement[] @relation("AirlineDepositMovementCreator")
@@ -455,21 +456,26 @@ model TicketSale {
 }
 
 model Payment {
-  id             String     @id @default(cuid())
-  ticketId       String
-  ticket         TicketSale @relation(fields: [ticketId], references: [id])
-  amount         Float
-  currency       String     @default("USD")
-  fxRateUsdToCdf Float?
-  amountUsd      Float?
-  amountCdf      Float?
-  paidAt         DateTime   @default(now())
-  method         String
-  reference      String?
-  createdAt      DateTime   @default(now())
+  id                String     @id @default(cuid())
+  ticketId          String
+  ticket            TicketSale @relation(fields: [ticketId], references: [id])
+  amount            Float
+  currency          String     @default("USD")
+  fxRateUsdToCdf    Float?
+  amountUsd         Float?
+  amountCdf         Float?
+  paidAt            DateTime   @default(now())
+  method            String
+  reference         String?
+  importSource      String?
+  importExternalKey String?    @unique
+  excelLibelle      String?    @db.Text
+  createdAt         DateTime   @default(now())
+  cashReportJournalLine CashReportJournalLine?
 
   @@index([paidAt])
   @@index([currency])
+  @@index([importSource])
 }
 
 model CashBilletageSnapshot {
@@ -491,30 +497,97 @@ model CashBilletageSnapshot {
 }
 
 model CashOperation {
-  id               String                @id @default(cuid())
-  occurredAt       DateTime              @default(now())
-  direction        CashDirection
-  category         CashOperationCategory
-  amount           Float
-  currency         String                @default("USD")
-  fxRateToUsd      Float?
-  fxRateUsdToCdf   Float?
-  amountUsd        Float?
-  amountCdf        Float?
-  method           String
-  reference        String?
-  description      String
-  cashDesk         String                // Identifiant de la caisse (THE_BEST, CAISSE_SAFETY, etc.)
-  createdById      String
-  createdBy        User                  @relation("CashOperationCreator", fields: [createdById], references: [id])
-  createdAt        DateTime              @default(now())
-  updatedAt        DateTime              @updatedAt
+  id                String                @id @default(cuid())
+  occurredAt        DateTime              @default(now())
+  direction         CashDirection
+  category          CashOperationCategory
+  amount            Float
+  currency          String                @default("USD")
+  fxRateToUsd       Float?
+  fxRateUsdToCdf    Float?
+  amountUsd         Float?
+  amountCdf         Float?
+  method            String
+  reference         String?
+  description       String
+  cashDesk          String                // Identifiant de la caisse (THE_BEST, CAISSE_SAFETY, etc.)
+  importSource      String?
+  importExternalKey String?               @unique
+  createdById       String
+  createdBy         User                  @relation("CashOperationCreator", fields: [createdById], references: [id])
+  createdAt         DateTime              @default(now())
+  updatedAt         DateTime              @updatedAt
+  cashReportJournalLine CashReportJournalLine?
 
   @@index([occurredAt])
   @@index([direction])
   @@index([category])
   @@index([createdById])
   @@index([cashDesk])
+  @@index([importSource])
+}
+
+model CashReportImport {
+  id              String   @id @default(cuid())
+  reportMonth     String
+  fileName        String
+  fileHash        String
+  closingDate     String
+  status          String   @default("COMPLETED")
+  journalNewCount Int      @default(0)
+  journalSkipCount Int     @default(0)
+  ticketSyncCount Int      @default(0)
+  cashOpSyncCount Int      @default(0)
+  importedById    String
+  importedBy      User     @relation(fields: [importedById], references: [id])
+  createdAt       DateTime @default(now())
+  journalLines    CashReportJournalLine[]
+
+  @@index([reportMonth, createdAt])
+  @@index([fileHash])
+}
+
+model CashReportJournalLine {
+  id                String   @id @default(cuid())
+  importId          String
+  import            CashReportImport @relation(fields: [importId], references: [id], onDelete: Cascade)
+  reportMonth       String
+  businessDate      String
+  lineCategory      String
+  typeOperation     String
+  libelle           String   @db.Text
+  referenceDoc      String?
+  usdIn             Float    @default(0)
+  usdOut            Float    @default(0)
+  cdfIn             Float    @default(0)
+  cdfOut            Float    @default(0)
+  usdBalance        Float?
+  cdfBalance        Float?
+  externalKey       String   @unique
+  ticketMatchStatus String?
+  paymentId         String?  @unique
+  payment           Payment? @relation(fields: [paymentId], references: [id], onDelete: SetNull)
+  cashOperationId   String?  @unique
+  cashOperation     CashOperation? @relation(fields: [cashOperationId], references: [id], onDelete: SetNull)
+  createdAt         DateTime @default(now())
+
+  @@index([reportMonth, businessDate])
+  @@index([lineCategory])
+}
+
+model CashReportVirtualSnapshot {
+  id          String   @id @default(cuid())
+  closingDate String
+  cashDesk    String   @default("THE_BEST")
+  channels    Json
+  totalUsd    Float    @default(0)
+  totalCdf    Float    @default(0)
+  importId    String?
+  updatedAt   DateTime @updatedAt
+  createdAt   DateTime @default(now())
+
+  @@unique([closingDate, cashDesk])
+  @@index([cashDesk, closingDate])
 }
 
 model CashOperationApprovalRequest {

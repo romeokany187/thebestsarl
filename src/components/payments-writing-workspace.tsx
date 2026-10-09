@@ -12,16 +12,16 @@ import {
 } from "@/lib/payments-desk";
 import type { ModuleAccessLevel } from "@/lib/user-module-access";
 
-type WritingMode = "none" | "tickets" | "cash" | "virtual" | "billetage" | "payment-orders" | "needs" | "float" | "reports";
+type WritingMode = "none" | "tickets" | "cash" | "virtual" | "billetage" | "payment-orders" | "needs" | "float" | "reports" | "cash-report-import";
 type DeskWorkspaceOverride = Partial<Record<Exclude<WritingMode, "none"> | "summary", React.ReactNode>>;
 
 function getAllowedActionsForDesk(deskValue: CashDeskValue | string): Array<Exclude<WritingMode, "none">> {
   if (deskValue === "THE_BEST") {
-    return ["tickets", "cash", "payment-orders", "billetage", "virtual", "needs", "reports"];
+    return ["cash-report-import", "tickets", "cash", "payment-orders", "billetage", "virtual", "needs", "reports"];
   }
 
   if (deskValue === "CAISSE_2_SIEGE") {
-    return ["tickets", "cash", "payment-orders", "billetage", "virtual", "needs", "reports"];
+    return ["cash-report-import", "tickets", "cash", "payment-orders", "billetage", "virtual", "needs", "reports"];
   }
 
   if (deskValue === "PROXY_BANKING") {
@@ -42,6 +42,7 @@ export function PaymentsWritingWorkspace({
   paymentOrdersLabel,
   needsWorkspace,
   needsLabel,
+  cashReportImportWorkspace,
   closedSummary,
   workspaceOverrides,
   jobTitle,
@@ -61,6 +62,7 @@ export function PaymentsWritingWorkspace({
   paymentOrdersLabel?: string;
   needsWorkspace?: React.ReactNode;
   needsLabel?: string;
+  cashReportImportWorkspace?: React.ReactNode;
   closedSummary?: React.ReactNode;
   workspaceOverrides?: Partial<Record<CashDeskValue, DeskWorkspaceOverride>>;
   jobTitle?: string | null;
@@ -142,6 +144,7 @@ export function PaymentsWritingWorkspace({
       : null,
     resolvedFloatWorkspace ? { key: "float" as const, label: "Gestion du float", tone: "cyan" } : null,
     resolvedNeedsWorkspace ? { key: "needs" as const, label: needsLabel ?? "EDB à exécuter", tone: "violet" } : null,
+    cashReportImportWorkspace ? { key: "cash-report-import" as const, label: "Import Excel caisse", tone: "emerald" } : null,
     resolvedReportsWorkspace ? { key: "reports" as const, label: "Rapports caisse", tone: "amber" } : null,
   ].filter(Boolean) as Array<{ key: Exclude<WritingMode, "none">; label: string; tone: string }>;
   const allowedActionKeys = getAllowedActionsForDesk(selectedDesk);
@@ -253,6 +256,7 @@ export function PaymentsWritingWorkspace({
             {mode === "needs" ? resolvedNeedsWorkspace : null}
             {mode === "float" ? resolvedFloatWorkspace : null}
             {mode === "reports" ? resolvedReportsWorkspace : null}
+            {mode === "cash-report-import" ? cashReportImportWorkspace : null}
           </div>
         </div>
       </section>
