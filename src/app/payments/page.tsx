@@ -1520,6 +1520,9 @@ export default async function PaymentsPage({
           <section className="space-y-4 rounded-2xl border border-black/10 bg-white p-4 dark:border-white/10 dark:bg-zinc-900">
             <div>
               <h2 className="text-sm font-semibold">OP à exécuter</h2>
+              <p className="mt-1 text-xs text-black/55 dark:text-white/55">
+                Marquer exécuté est indicatif : aucune sortie caisse ni ligne au journal (suivi et notification comptable uniquement).
+              </p>
             </div>
 
             {paymentOrdersReadyForExecution.length === 0 ? (
@@ -1554,6 +1557,9 @@ export default async function PaymentsPage({
           <section className="space-y-4 rounded-2xl border border-black/10 bg-white p-4 dark:border-white/10 dark:bg-zinc-900">
             <div>
               <h2 className="text-sm font-semibold">EDB à exécuter</h2>
+              <p className="mt-1 text-xs text-black/55 dark:text-white/55">
+                Marquer exécuté est indicatif : aucune sortie caisse ni ligne au journal (suivi et notification comptable uniquement).
+              </p>
             </div>
 
             {needsReadyForExecution.length === 0 ? (

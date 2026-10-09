@@ -4,18 +4,9 @@ import { isCashierJobTitle } from "@/lib/assignment";
 import { isDeskAllowedForUser, resolveExecutionCashDesk } from "@/lib/payments-desk";
 import { prisma } from "@/lib/prisma";
 import { requireApiModuleAccess } from "@/lib/rbac";
-import { getUserModuleAccessMap } from "@/lib/user-module-access";
+import { getUserModuleAccessMap, hasRequiredModuleAccessLevel } from "@/lib/user-module-access";
 import { needExecutionSchema } from "@/lib/validators";
 import { writeActivityLog } from "@/lib/activity-log";
-import { getCashDeskAvailableBalances } from "@/lib/cash-balance";
-import { hasRequiredModuleAccessLevel } from "@/lib/user-module-access";
-
-function normalizeCashCurrency(value: string | null | undefined): "USD" | "CDF" {
-  const normalized = (value ?? "USD").trim().toUpperCase();
-  if (normalized === "USD") return "USD";
-  if (normalized === "CDF" || normalized === "XAF" || normalized === "FC") return "CDF";
-  return "USD";
-}
 
 export async function POST(request: NextRequest) {
   const access = await requireApiModuleAccess("payments", ["ADMIN", "MANAGER", "EMPLOYEE", "ACCOUNTANT"], "WRITE");
@@ -57,16 +48,9 @@ export async function POST(request: NextRequest) {
   }
 
   if ((need.reviewComment ?? "").includes("EXECUTION_CAISSE:")) {
-    return NextResponse.json({ error: "Cet état de besoin est déjà exécuté en caisse." }, { status: 400 });
+    return NextResponse.json({ error: "Cet état de besoin est déjà marqué exécuté en caisse." }, { status: 400 });
   }
 
-  if (!need.estimatedAmount || need.estimatedAmount <= 0) {
-    return NextResponse.json(
-      { error: "Montant estimé invalide. Impossible d'exécuter automatiquement la sortie caisse." },
-      { status: 400 },
-    );
-  }
-  const executionAmount = need.estimatedAmount;
   const moduleAccessMap = await getUserModuleAccessMap(access.session.user.id);
   const executionCashDesk = resolveExecutionCashDesk({
     requestedDesk: parsed.data.cashDesk,
@@ -87,59 +71,12 @@ export async function POST(request: NextRequest) {
   }
 
   const now = new Date();
-  const needCurrency = normalizeCashCurrency(need.currency);
-  const latestRateOperation = await (prisma as unknown as { cashOperation: any }).cashOperation.findFirst({
-    where: {
-      occurredAt: { lte: now },
-      fxRateUsdToCdf: { not: null },
-    },
-    select: {
-      fxRateUsdToCdf: true,
-      fxRateToUsd: true,
-    },
-    orderBy: { occurredAt: "desc" },
-  });
-
-  const fxRateUsdToCdf = latestRateOperation?.fxRateUsdToCdf
-    ?? (latestRateOperation?.fxRateToUsd && latestRateOperation.fxRateToUsd > 0 ? 1 / latestRateOperation.fxRateToUsd : undefined);
-
-  if (!fxRateUsdToCdf || fxRateUsdToCdf <= 0) {
-    return NextResponse.json(
-      { error: "Le taux du jour (1 USD = X CDF) est obligatoire. Le comptable doit d'abord enregistrer le taux du jour en caisse." },
-      { status: 400 },
-    );
-  }
-
-  const deskBalances = await getCashDeskAvailableBalances({
-    client: prisma,
-    occurredAt: now,
-    cashDesk: executionCashDesk,
-    fxRateUsdToCdf,
-  });
-
-  const availableUsd = deskBalances.availableUsd;
-  const availableCdf = deskBalances.availableCdf;
-
-  if (needCurrency === "USD" && executionAmount > availableUsd + 0.0001) {
-    return NextResponse.json(
-      {
-        error: `Solde USD insuffisant pour exécuter l'EDB: disponible ${availableUsd.toFixed(2)} USD, requis ${executionAmount.toFixed(2)} USD.`,
-      },
-      { status: 400 },
-    );
-  }
-
-  if (needCurrency === "CDF" && executionAmount > availableCdf + 0.0001) {
-    return NextResponse.json(
-      {
-        error: `Solde CDF insuffisant pour exécuter l'EDB: disponible ${availableCdf.toFixed(2)} CDF, requis ${executionAmount.toFixed(2)} CDF.`,
-      },
-      { status: 400 },
-    );
-  }
+  const executionAmount = need.estimatedAmount ?? 0;
 
   const executionMemoParts = [
     `EXECUTION_CAISSE: ${now.toISOString()}`,
+    "Exécution indicative — aucune écriture caisse ni impact sur le journal.",
+    `Caisse (suivi): ${executionCashDesk}`,
     `Référence caisse: ${parsed.data.referenceDoc}`,
     `Exécuté par: ${me.name}`,
     parsed.data.executionComment?.trim() ? `Commentaire caisse: ${parsed.data.executionComment.trim()}` : null,
@@ -150,37 +87,13 @@ export async function POST(request: NextRequest) {
     .filter((part): part is string => Boolean(part && part.length > 0))
     .join("\n\n");
 
-  const updated = await prisma.$transaction(async (tx) => {
-    const operation = await (tx as unknown as { cashOperation: any }).cashOperation.create({
-      data: {
-        occurredAt: now,
-        direction: "OUTFLOW",
-        category: "SUPPLIER_PAYMENT",
-        amount: executionAmount,
-        currency: needCurrency,
-        fxRateToUsd: 1 / fxRateUsdToCdf,
-        fxRateUsdToCdf,
-        amountUsd: needCurrency === "USD" ? executionAmount : executionAmount / fxRateUsdToCdf,
-        amountCdf: needCurrency === "CDF" ? executionAmount : executionAmount * fxRateUsdToCdf,
-        method: "CASH",
-        reference: parsed.data.referenceDoc,
-        description: `Exécution EDB ${need.code ?? need.id} - ${need.title}`,
-        createdById: me.id,
-        cashDesk: executionCashDesk,
-      },
-      select: { id: true },
-    });
-
-    const updatedNeed = await (tx as unknown as { needRequest: any }).needRequest.update({
-      where: { id: need.id },
-      data: {
-        status: "APPROVED",
-        reviewComment,
-        sealedAt: now,
-      },
-    });
-
-    return { ...updatedNeed, cashOperationId: operation.id };
+  const updated = await prisma.needRequest.update({
+    where: { id: need.id },
+    data: {
+      status: "APPROVED",
+      reviewComment,
+      sealedAt: now,
+    },
   });
 
   const accountants = await prisma.user.findMany({
@@ -200,18 +113,16 @@ export async function POST(request: NextRequest) {
       `Demandeur: ${need.requester.name} (${need.requester.jobTitle})`,
       `Soumis: ${need.submittedAt ? new Date(need.submittedAt).toLocaleString("fr-FR") : "-"}`,
       `Validation DG: ${need.reviewedBy?.name ?? "-"} (${need.approvedAt ? new Date(need.approvedAt).toLocaleString("fr-FR") : "-"})`,
-      `Commentaire DG: ${need.reviewComment?.trim() || "-"}`,
-      `Exécution caisse: ${now.toLocaleString("fr-FR")}`,
+      `Marqué exécuté en caisse (indicatif, sans écriture caisse): ${now.toLocaleString("fr-FR")}`,
       `Agent finance: ${me.name}`,
       `Référence caisse: ${parsed.data.referenceDoc}`,
-      `Écriture sortie caisse: ${updated.cashOperationId}`,
       parsed.data.executionComment?.trim() ? `Commentaire caisse: ${parsed.data.executionComment.trim()}` : null,
     ].filter(Boolean).join(" | ");
 
     await prisma.userNotification.createMany({
       data: accountants.map((accountant) => ({
         userId: accountant.id,
-        title: "EDB exécuté - validation comptable requise",
+        title: "EDB — exécution caisse (indicatif)",
         message,
         type: "PROCUREMENT_ACCOUNTING_APPROVAL",
         metadata: {
@@ -221,9 +132,9 @@ export async function POST(request: NextRequest) {
           source: "INBOX_ACCOUNTING_APPROVAL",
           executedAt: now.toISOString(),
           executedByUserId: me.id,
-          cashOperationId: updated.cashOperationId,
           referenceDoc: parsed.data.referenceDoc,
           cashDesk: executionCashDesk,
+          informationalExecution: true,
         } as Prisma.InputJsonValue,
       })),
     });
@@ -234,14 +145,14 @@ export async function POST(request: NextRequest) {
     action: "NEED_REQUEST_EXECUTED",
     entityType: "NEED_REQUEST",
     entityId: updated.id,
-    summary: `EDB ${need.code ?? updated.id} exécuté en caisse: ${need.title} (${executionAmount.toFixed(2)} ${need.currency}).`,
+    summary: `EDB ${need.code ?? updated.id} marqué exécuté en caisse (indicatif): ${need.title}.`,
     payload: {
       code: need.code,
       title: need.title,
       amount: executionAmount,
       currency: need.currency,
       referenceDoc: parsed.data.referenceDoc,
-      cashOperationId: updated.cashOperationId,
+      informationalExecution: true,
       executionComment: parsed.data.executionComment ?? null,
       cashDesk: executionCashDesk,
     } as Prisma.InputJsonValue,

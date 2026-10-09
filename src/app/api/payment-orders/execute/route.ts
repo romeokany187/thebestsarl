@@ -5,17 +5,8 @@ import { prisma } from "@/lib/prisma";
 import { requireApiRoles } from "@/lib/rbac";
 import { getUserModuleAccessMap } from "@/lib/user-module-access";
 import { paymentOrderExecutionSchema } from "@/lib/validators";
-import { writeActivityLog } from "@/lib/activity-log";
-import { getCashDeskAvailableBalances } from "@/lib/cash-balance";
 
-const paymentOrderClient = (prisma as unknown as { paymentOrder: any }).paymentOrder;
-
-function normalizeCashCurrency(value: string | null | undefined): "USD" | "CDF" {
-  const normalized = (value ?? "USD").trim().toUpperCase();
-  if (normalized === "USD") return "USD";
-  if (normalized === "CDF" || normalized === "XAF" || normalized === "FC") return "CDF";
-  return "USD";
-}
+const paymentOrderClient = (prisma as unknown as { paymentOrder: typeof prisma.paymentOrder }).paymentOrder;
 
 export async function PATCH(request: NextRequest) {
   const access = await requireApiRoles(["ADMIN", "MANAGER", "EMPLOYEE", "ACCOUNTANT"]);
@@ -64,35 +55,12 @@ export async function PATCH(request: NextRequest) {
 
   if ((paymentOrder.reviewComment ?? "").includes("EXECUTION_CAISSE:")) {
     return NextResponse.json(
-      { error: "Cet ordre de paiement est déjà exécuté en caisse." },
+      { error: "Cet ordre de paiement est déjà marqué exécuté en caisse." },
       { status: 400 },
     );
   }
 
   const now = new Date();
-  const paymentCurrency = normalizeCashCurrency(paymentOrder.currency);
-  const latestRateOperation = await (prisma as unknown as { cashOperation: any }).cashOperation.findFirst({
-    where: {
-      occurredAt: { lte: now },
-      fxRateUsdToCdf: { not: null },
-    },
-    select: {
-      fxRateUsdToCdf: true,
-      fxRateToUsd: true,
-    },
-    orderBy: { occurredAt: "desc" },
-  });
-
-  const fxRateUsdToCdf = latestRateOperation?.fxRateUsdToCdf
-    ?? (latestRateOperation?.fxRateToUsd && latestRateOperation.fxRateToUsd > 0 ? 1 / latestRateOperation.fxRateToUsd : undefined);
-
-  if (!fxRateUsdToCdf || fxRateUsdToCdf <= 0) {
-    return NextResponse.json(
-      { error: "Le taux du jour (1 USD = X CDF) est obligatoire. Le comptable doit d'abord enregistrer le taux du jour en caisse." },
-      { status: 400 },
-    );
-  }
-
   const moduleAccessMap = await getUserModuleAccessMap(access.session.user.id);
   const executionCashDesk = resolveExecutionCashDesk({
     requestedDesk: parsed.data.cashDesk,
@@ -110,36 +78,10 @@ export async function PATCH(request: NextRequest) {
     return NextResponse.json({ error: "Accès refusé pour cette caisse." }, { status: 403 });
   }
 
-  const deskBalances = await getCashDeskAvailableBalances({
-    client: prisma,
-    occurredAt: now,
-    cashDesk: executionCashDesk,
-    fxRateUsdToCdf,
-  });
-
-  const availableUsd = deskBalances.availableUsd;
-  const availableCdf = deskBalances.availableCdf;
-
-  if (paymentCurrency === "USD" && paymentOrder.amount > availableUsd + 0.0001) {
-    return NextResponse.json(
-      {
-        error: `Solde USD insuffisant pour exécuter l'ordre: disponible ${availableUsd.toFixed(2)} USD, requis ${paymentOrder.amount.toFixed(2)} USD.`,
-      },
-      { status: 400 },
-    );
-  }
-
-  if (paymentCurrency === "CDF" && paymentOrder.amount > availableCdf + 0.0001) {
-    return NextResponse.json(
-      {
-        error: `Solde CDF insuffisant pour exécuter l'ordre: disponible ${availableCdf.toFixed(2)} CDF, requis ${paymentOrder.amount.toFixed(2)} CDF.`,
-      },
-      { status: 400 },
-    );
-  }
-
   const executionMemoParts = [
     `EXECUTION_CAISSE: ${now.toISOString()}`,
+    "Exécution indicative — aucune écriture caisse ni impact sur le journal.",
+    `Caisse (suivi): ${executionCashDesk}`,
     `Référence caisse: ${parsed.data.referenceDoc}`,
     `Exécuté par: ${me.name}`,
     parsed.data.executionComment?.trim() ? `Commentaire caisse: ${parsed.data.executionComment.trim()}` : null,
@@ -149,41 +91,17 @@ export async function PATCH(request: NextRequest) {
   const reviewComment = [previousComment, ...executionMemoParts]
     .filter((part): part is string => Boolean(part && part.length > 0))
     .join("\n\n");
-  const updated = await prisma.$transaction(async (tx) => {
-    const operation = await (tx as unknown as { cashOperation: any }).cashOperation.create({
-      data: {
-        occurredAt: now,
-        direction: "OUTFLOW",
-        category: "OTHER_EXPENSE",
-        amount: paymentOrder.amount,
-        currency: paymentCurrency,
-        fxRateToUsd: 1 / fxRateUsdToCdf,
-        fxRateUsdToCdf,
-        amountUsd: paymentCurrency === "USD" ? paymentOrder.amount : paymentOrder.amount / fxRateUsdToCdf,
-        amountCdf: paymentCurrency === "CDF" ? paymentOrder.amount : paymentOrder.amount * fxRateUsdToCdf,
-        method: "CASH",
-        reference: parsed.data.referenceDoc,
-        description: `Exécution OP ${paymentOrder.code ?? paymentOrder.id} - ${paymentOrder.beneficiary} - ${paymentOrder.description}`,
-        createdById: me.id,
-        cashDesk: executionCashDesk,
-      },
-      select: { id: true },
-    });
 
-    const order = await (tx as unknown as { paymentOrder: any }).paymentOrder.update({
-      where: { id: parsed.data.paymentOrderId },
-      data: {
-        status: "EXECUTED",
-        executedById: me.id,
-        reviewComment,
-        executedAt: now,
-      },
-    });
-
-    return { ...order, cashOperationId: operation.id };
+  const updated = await paymentOrderClient.update({
+    where: { id: parsed.data.paymentOrderId },
+    data: {
+      status: "EXECUTED",
+      executedById: me.id,
+      reviewComment,
+      executedAt: now,
+    },
   });
 
-  // Notify accountants about the execution
   const accountants = await prisma.user.findMany({
     where: {
       OR: [{ role: "ACCOUNTANT" }, { jobTitle: "COMPTABLE" }],
@@ -202,11 +120,9 @@ export async function PATCH(request: NextRequest) {
       `Demandeur: ${paymentOrder.issuedBy.name} (${paymentOrder.issuedBy.jobTitle})`,
       `Soumis: ${paymentOrder.submittedAt ? new Date(paymentOrder.submittedAt).toLocaleString("fr-FR") : "-"}`,
       `Validation Admin: ${paymentOrder.approvedBy?.name ?? "-"} (${paymentOrder.approvedAt ? new Date(paymentOrder.approvedAt).toLocaleString("fr-FR") : "-"})`,
-      `Commentaire Admin: ${paymentOrder.reviewComment?.trim() || "-"}`,
-      `Exécution caisse: ${now.toLocaleString("fr-FR")}`,
+      `Marqué exécuté en caisse (indicatif, sans écriture caisse): ${now.toLocaleString("fr-FR")}`,
       `Agent finance: ${me.name}`,
       `Référence caisse: ${parsed.data.referenceDoc}`,
-      `Écriture sortie caisse: ${updated.cashOperationId}`,
       parsed.data.executionComment?.trim() ? `Commentaire caisse: ${parsed.data.executionComment.trim()}` : null,
     ]
       .filter(Boolean)
@@ -215,7 +131,7 @@ export async function PATCH(request: NextRequest) {
     await prisma.userNotification.createMany({
       data: accountants.map((accountant) => ({
         userId: accountant.id,
-        title: "Ordre de paiement exécuté - notification comptable",
+        title: "Ordre de paiement — exécution caisse (indicatif)",
         message: `${message} | Consultez le PDF final de l'OP pour la traçabilité complète.`,
         type: "PAYMENT_ORDER_EXECUTED_NOTIFICATION",
         metadata: {
@@ -225,6 +141,7 @@ export async function PATCH(request: NextRequest) {
           currency: paymentOrder.currency,
           source: "INBOX_NOTIFICATION",
           cashDesk: executionCashDesk,
+          informationalExecution: true,
         },
       })),
     });

@@ -41,7 +41,7 @@ export function ProcurementCashExecutionActions({ needRequestId, cashDesk }: { n
       }
 
       setState("success");
-      setMessage("EDB exécuté. Le comptable a été notifié pour validation finale.");
+      setMessage("EDB marqué exécuté (indicatif). Aucune écriture caisse — le comptable est notifié.");
       setReferenceDoc("");
       setExecutionComment("");
       router.refresh();
@@ -85,7 +85,7 @@ export function ProcurementCashExecutionActions({ needRequestId, cashDesk }: { n
           disabled={state === "loading"}
           className="rounded-md border border-blue-300 px-2.5 py-1 text-[11px] font-semibold text-blue-700 hover:bg-blue-50 disabled:opacity-60 dark:border-blue-700/60 dark:text-blue-300 dark:hover:bg-blue-950/30"
         >
-          Exécuter (Caisse)
+          Marquer exécuté (indicatif)
         </button>
       </div>
       {message ? <span className="text-[11px] text-black/60 dark:text-white/60">{message}</span> : null}
