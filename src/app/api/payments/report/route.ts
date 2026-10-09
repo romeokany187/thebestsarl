@@ -7,6 +7,7 @@ import { prisma } from "@/lib/prisma";
 import { requireApiModuleAccess } from "@/lib/rbac";
 import { getUserModuleAccessMap } from "@/lib/user-module-access";
 import { getTicketTotalAmount } from "@/lib/ticket-pricing";
+import { buildCashJournalLedger, loadExcelDailyOpeningsForDateRange } from "@/lib/cash-journal-ledger";
 import { ALL_CASH_DESKS, buildDeskScopedCashOperationWhere, isDeskAllowedForUser, normalizeCashDeskValue } from "@/lib/payments-desk";
 
 type ReportMode = "date" | "month" | "year";
@@ -436,6 +437,7 @@ export async function GET(request: NextRequest) {
     cashOperationClient.findMany({
       where: { occurredAt: { gte: range.start, lt: range.end }, ...scopedCashOperationsWhere },
       select: {
+        id: true,
         occurredAt: true,
         direction: true,
         category: true,
@@ -601,6 +603,9 @@ export async function GET(request: NextRequest) {
     };
   };
 
+  const periodStart = range.start.toISOString().slice(0, 10);
+  const periodEnd = new Date(range.end.getTime() - 1).toISOString().slice(0, 10);
+
   const operationalCaisseRows: CashJournalRow[] = [...cashOperationsWithoutOpeningBalance].map(mapCashOperationToJournalRow);
   operationalCaisseRows.sort((a, b) => a.occurredAt.getTime() - b.occurredAt.getTime());
 
@@ -608,22 +613,65 @@ export async function GET(request: NextRequest) {
     ? computeOpeningBuckets([], cashOperationsBeforeRange)
     : computeOpeningBuckets(ticketPaymentsBeforeRange, cashOperationsBeforeRange);
   const journalDisplayOpeningBuckets = applyOpeningFallbackFromCurrentPeriod(journalOpeningBuckets, cashOperationsInRange);
-  const journalOpeningUsd = journalDisplayOpeningBuckets.CASH.usd;
-  const journalOpeningCdf = journalDisplayOpeningBuckets.CASH.cdf;
-  const journalClosingUsd = journalOpeningUsd + cashInflowUsd - cashOutflowUsd;
-  const journalClosingCdf = journalOpeningCdf + cashInflowCdf - cashOutflowCdf;
+  let journalOpeningUsd = journalDisplayOpeningBuckets.CASH.usd;
+  let journalOpeningCdf = journalDisplayOpeningBuckets.CASH.cdf;
+  let journalClosingUsd = journalOpeningUsd + cashInflowUsd - cashOutflowUsd;
+  let journalClosingCdf = journalOpeningCdf + cashInflowCdf - cashOutflowCdf;
 
-  let journalRunningUsd = journalOpeningUsd;
-  let journalRunningCdf = journalOpeningCdf;
-  const journalCaisseLedger = operationalCaisseRows.map((row) => {
-    journalRunningUsd += row.usdIn - row.usdOut;
-    journalRunningCdf += row.cdfIn - row.cdfOut;
-    return {
-      ...row,
-      usdBalance: journalRunningUsd,
-      cdfBalance: journalRunningCdf,
-    };
-  });
+  let journalCaisseLedger: Array<CashJournalRow & { usdBalance: number; cdfBalance: number; isOpeningRow?: boolean }>;
+  let usesExcelDailyJournalOpenings = false;
+
+  if (mainDesk) {
+    const excelDailyOpenings = await loadExcelDailyOpeningsForDateRange(periodStart, periodEnd);
+    const built = buildCashJournalLedger({
+      operations: (cashOperationsWithoutOpeningBalance as Array<any>).map((operation) => ({
+        id: operation.id ?? String(operation.occurredAt),
+        occurredAt: new Date(operation.occurredAt),
+        direction: operation.direction,
+        currency: operation.currency ?? "USD",
+        amount: operation.amount,
+        description: operation.description,
+        reference: operation.reference ?? null,
+        method: operation.method,
+        category: operation.category ?? null,
+      })),
+      excelOpeningsByDate: excelDailyOpenings,
+      periodStartDate: periodStart,
+      periodFallbackOpening: { usd: journalOpeningUsd, cdf: journalOpeningCdf },
+    });
+    usesExcelDailyJournalOpenings = built.usesExcelDailyOpenings;
+    journalCaisseLedger = built.rows.map((row) => ({
+      occurredAt: row.occurredAt,
+      typeOperation: row.typeOperation,
+      libelle: row.libelle,
+      reference: row.reference,
+      usdIn: row.usdIn,
+      usdOut: row.usdOut,
+      cdfIn: row.cdfIn,
+      cdfOut: row.cdfOut,
+      usdBalance: row.usdBalance,
+      cdfBalance: row.cdfBalance,
+      isOpeningRow: row.isOpeningRow,
+    }));
+    if (built.usesExcelDailyOpenings) {
+      journalOpeningUsd = built.periodOpeningUsd;
+      journalOpeningCdf = built.periodOpeningCdf;
+      journalClosingUsd = built.periodClosingUsd;
+      journalClosingCdf = built.periodClosingCdf;
+    }
+  } else {
+    let journalRunningUsd = journalOpeningUsd;
+    let journalRunningCdf = journalOpeningCdf;
+    journalCaisseLedger = operationalCaisseRows.map((row) => {
+      journalRunningUsd += row.usdIn - row.usdOut;
+      journalRunningCdf += row.cdfIn - row.cdfOut;
+      return {
+        ...row,
+        usdBalance: journalRunningUsd,
+        cdfBalance: journalRunningCdf,
+      };
+    });
+  }
 
   const caisseRows = [
     ...(mainDesk
@@ -752,8 +800,6 @@ export async function GET(request: NextRequest) {
   const textBlack = rgb(0, 0, 0);
   const lineGray = rgb(0.84, 0.84, 0.84);
   const generatedBy = access.session.user.name ?? access.session.user.email ?? "Utilisateur";
-  const periodStart = range.start.toISOString().slice(0, 10);
-  const periodEnd = new Date(range.end.getTime() - 1).toISOString().slice(0, 10);
   const selectedDeskLabel = ALL_CASH_DESKS.find((desk) => desk.value === selectedDesk)?.label ?? selectedDesk;
   const subtitle = airline
     ? `${range.label} • ${airline.code} - ${airline.name} • ${selectedDeskLabel}`
@@ -808,13 +854,18 @@ export async function GET(request: NextRequest) {
       page.drawText(subtitle, { x: margin, y: pageHeight - 58, size: 11, font, color: rgb(0.87, 0.89, 0.93) });
       page.drawText(`Période du ${periodStart} au ${periodEnd}`, { x: margin, y: pageHeight - 76, size: 10, font, color: rgb(0.76, 0.8, 0.87) });
       if (mainDesk) {
-        page.drawText("Opérations de caisse uniquement (saisie + import Excel) — paiements billets exclus", {
-          x: margin,
-          y: pageHeight - 92,
-          size: 9,
-          font,
-          color: rgb(0.76, 0.8, 0.87),
-        });
+        page.drawText(
+          usesExcelDailyJournalOpenings
+            ? "Report à nouveau par jour = Excel importé • opérations caisse (saisie + import) — billets exclus"
+            : "Opérations de caisse uniquement (saisie + import Excel) — paiements billets exclus",
+          {
+            x: margin,
+            y: pageHeight - 92,
+            size: 9,
+            font,
+            color: rgb(0.76, 0.8, 0.87),
+          },
+        );
       }
 
       const cards = [
@@ -847,26 +898,28 @@ export async function GET(request: NextRequest) {
     drawTableHeader(pageHeight - 184);
     let y = pageHeight - 224;
 
-    const openingRowHeight = 28;
-    page.drawRectangle({ x: tableX, y: y - openingRowHeight + 6, width: tableWidth, height: openingRowHeight, color: rgb(0.97, 0.97, 0.98), borderWidth: 0.5, borderColor: rgb(0.88, 0.89, 0.92) });
-    let openingX = tableX;
-    const openingValues = [
-      periodStart,
-      "Solde d'ouverture",
-      "Report à nouveau automatique de la caisse active",
-      "-",
-      "-",
-      ledgerOpeningUsd.toFixed(2),
-      "-",
-      "-",
-      ledgerOpeningCdf.toFixed(2),
-      "-",
-    ];
-    openingValues.forEach((value, index) => {
-      page.drawText(value, { x: openingX + 6, y: y - 10, size: 9.1, font: index === 1 ? fontBold : font, color: textBlack });
-      openingX += columns[index].width;
-    });
-    y -= 36;
+    if (!(mainDesk && usesExcelDailyJournalOpenings)) {
+      const openingRowHeight = 28;
+      page.drawRectangle({ x: tableX, y: y - openingRowHeight + 6, width: tableWidth, height: openingRowHeight, color: rgb(0.97, 0.97, 0.98), borderWidth: 0.5, borderColor: rgb(0.88, 0.89, 0.92) });
+      let openingX = tableX;
+      const openingValues = [
+        periodStart,
+        "Solde d'ouverture",
+        "Report à nouveau calculé depuis l’historique caisse",
+        "-",
+        "-",
+        ledgerOpeningUsd.toFixed(2),
+        "-",
+        "-",
+        ledgerOpeningCdf.toFixed(2),
+        "-",
+      ];
+      openingValues.forEach((value, index) => {
+        page.drawText(value, { x: openingX + 6, y: y - 10, size: 9.1, font: index === 1 ? fontBold : font, color: textBlack });
+        openingX += columns[index].width;
+      });
+      y -= 36;
+    }
 
     for (const [rowIndex, row] of ledgerForJournalPdf.entries()) {
       const cellMap = {

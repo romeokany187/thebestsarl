@@ -525,7 +525,13 @@ export function CashReportExcelImportWorkspace() {
       const payload = await response.json().catch(() => null);
       if (requestSeq !== analyzeSeqRef.current) return false;
       if (!response.ok) {
-        setMessage(payload?.error ?? "Analyse impossible.");
+        const fallback =
+          response.status === 401
+            ? "Session expirée — reconnectez-vous."
+            : response.status === 403
+              ? "Accès refusé (403) : droits insuffisants pour l’import Excel caisse."
+              : "Analyse impossible.";
+        setMessage(typeof payload?.error === "string" && payload.error.trim() ? payload.error : fallback);
         if (dryRun) setPreview(null);
         return false;
       }

@@ -7,7 +7,13 @@ export function canImportCashReportExcel(options: {
   customModuleAccessLevel?: ModuleAccessLevel | null;
 }) {
   if (hasRequiredModuleAccessLevel(options.customModuleAccessLevel, "FULL")) return true;
-  if (options.role === "ADMIN" || options.role === "ACCOUNTANT") return true;
+  if (
+    options.role === "ADMIN"
+    || options.role === "ACCOUNTANT"
+    || options.role === "DIRECTEUR_GENERAL"
+  ) {
+    return true;
+  }
   const jobTitle = (options.jobTitle ?? "").trim().toUpperCase();
   return jobTitle === "CAISSE_2_SIEGE" || jobTitle === "COMPTABLE";
 }

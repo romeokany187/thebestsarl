@@ -15,15 +15,44 @@ function kinshasaTodayKey() {
 }
 
 export async function POST(request: NextRequest) {
-  const access = await requireApiModuleAccess("payments", ["ADMIN", "ACCOUNTANT", "EMPLOYEE"]);
-  if (access.error) return access.error;
+  const access = await requireApiModuleAccess("payments", [
+    "ADMIN",
+    "ACCOUNTANT",
+    "EMPLOYEE",
+    "DIRECTEUR_GENERAL",
+    "MANAGER",
+  ]);
+  if (access.error) {
+    if (!access.session) {
+      return NextResponse.json({ error: "Session expirée — reconnectez-vous puis réessayez l’import." }, { status: 401 });
+    }
+    if (!access.role) {
+      return NextResponse.json(
+        { error: "Profil utilisateur non reconnu pour l’import caisse (poste ou rôle manquant)." },
+        { status: 403 },
+      );
+    }
+    return NextResponse.json(
+      {
+        error:
+          "Accès au module Paiements insuffisant pour l’import Excel. Comptes autorisés : admin, direction générale, comptable, caisse 2 siège (THE BEST).",
+      },
+      { status: 403 },
+    );
+  }
 
   if (!canImportCashReportExcel({
     role: access.role,
-    jobTitle: access.session.user.jobTitle,
+    jobTitle: access.session!.user.jobTitle,
     customModuleAccessLevel: access.customModuleAccess,
   })) {
-    return NextResponse.json({ error: "Import réservé à la caissière Caisse 2, au comptable ou à l'administrateur." }, { status: 403 });
+    return NextResponse.json(
+      {
+        error:
+          "Import réservé à la caissière Caisse 2 (THE BEST), au comptable, à la direction générale ou à l’administrateur (accès Paiements complet).",
+      },
+      { status: 403 },
+    );
   }
 
   const formData = await request.formData();
@@ -58,7 +87,11 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ data: result });
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Import impossible.";
+    let message = error instanceof Error ? error.message : "Import impossible.";
+    if (/preImportSnapshot|restoredAt|does not exist in the current database/i.test(message)) {
+      message =
+        "La base de données n’est pas à jour pour l’import caisse (colonnes manquantes). Sur le serveur, exécutez : npm run db:ensure:cash-report-import-schema — ou relancez un déploiement Hostinger récent.";
+    }
     return NextResponse.json({ error: message }, { status: 400 });
   }
 }

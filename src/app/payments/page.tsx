@@ -21,6 +21,11 @@ import { requirePageModuleAccess } from "@/lib/rbac";
 import { prisma } from "@/lib/prisma";
 import { cashOperationApprovalRequestClient, canReviewCashOperationApprovals, ensureCashOperationApprovalRequestTable } from "@/lib/cash-operation-approvals";
 import { getUserModuleAccessMap, hasRequiredModuleAccessLevel } from "@/lib/user-module-access";
+import {
+  buildCashJournalLedger,
+  loadExcelDailyOpeningsForDateRange,
+  type CashJournalLedgerRow,
+} from "@/lib/cash-journal-ledger";
 import { buildDeskScopedCashOperationWhere, isMainCashDesk, resolvePaymentsDeskState } from "@/lib/payments-desk";
 import { getTicketTotalAmount } from "@/lib/ticket-pricing";
 
@@ -824,43 +829,84 @@ export default async function PaymentsPage({
   const closingUsd = openingUsd + cashInflowUsd - cashOutflowUsd;
   const closingCdf = openingCdf + cashInflowCdf - cashOutflowCdf;
 
-  const caisseRows = [
-    ...cashOperationsWithoutOpeningBalance.map((operation) => {
-      const currency = (operation.currency ?? "USD").toUpperCase();
-      const isInflow = operation.direction === "INFLOW";
-      return {
-        occurredAt: new Date(operation.occurredAt),
-        typeOperation: isInflow ? "Entrée en caisse" : "Sortie en caisse",
-        libelle: operation.description,
-        reference: operation.reference ?? "-",
-        usdIn: isInflow && currency === "USD" ? operation.amount : 0,
-        usdOut: !isInflow && currency === "USD" ? operation.amount : 0,
-        cdfIn: isInflow && currency === "CDF" ? operation.amount : 0,
-        cdfOut: !isInflow && currency === "CDF" ? operation.amount : 0,
-        actionType: "cash-operation" as const,
-        cashOperationId: operation.id,
-        cashAmount: operation.amount,
-        cashCurrency: normalizeMoneyCurrency(operation.currency),
-        cashMethod: operation.method ?? "CASH",
-        cashDescription: operation.description,
-        cashOccurredAt: new Date(operation.occurredAt).toISOString(),
-        cashDirection: operation.direction,
-        cashCategory: operation.category ?? null,
-      };
-    }),
-  ].sort((a, b) => a.occurredAt.getTime() - b.occurredAt.getTime());
+  const excelDailyOpenings = isMainDesk
+    ? await loadExcelDailyOpeningsForDateRange(cashRange.startRaw, cashRange.endRaw)
+    : new Map<string, { usd: number; cdf: number; libelle: string; typeOperation: string }>();
 
-  const caisseLedger = caisseRows.reduce<Array<(typeof caisseRows)[number] & { usdBalance: number; cdfBalance: number }>>((rows, row) => {
-    const previous = rows[rows.length - 1];
-    const usdBalance = (previous?.usdBalance ?? openingUsd) + row.usdIn - row.usdOut;
-    const cdfBalance = (previous?.cdfBalance ?? openingCdf) + row.cdfIn - row.cdfOut;
-    rows.push({
-      ...row,
-      usdBalance,
-      cdfBalance,
-    });
-    return rows;
-  }, []);
+  const journalLedgerBuilt = isMainDesk
+    ? buildCashJournalLedger({
+        operations: cashOperationsWithoutOpeningBalance.map((operation) => ({
+          id: operation.id,
+          occurredAt: new Date(operation.occurredAt),
+          direction: operation.direction,
+          currency: operation.currency ?? "USD",
+          amount: operation.amount,
+          description: operation.description,
+          reference: operation.reference ?? null,
+          method: operation.method,
+          category: operation.category ?? null,
+        })),
+        excelOpeningsByDate: excelDailyOpenings,
+        periodStartDate: cashRange.startRaw,
+        periodFallbackOpening: { usd: openingUsd, cdf: openingCdf },
+      })
+    : null;
+
+  const usesExcelDailyJournalOpenings = journalLedgerBuilt?.usesExcelDailyOpenings ?? false;
+  const journalOpeningUsd = usesExcelDailyJournalOpenings
+    ? (journalLedgerBuilt?.periodOpeningUsd ?? openingUsd)
+    : openingUsd;
+  const journalOpeningCdf = usesExcelDailyJournalOpenings
+    ? (journalLedgerBuilt?.periodOpeningCdf ?? openingCdf)
+    : openingCdf;
+  const journalClosingUsd = usesExcelDailyJournalOpenings
+    ? (journalLedgerBuilt?.periodClosingUsd ?? closingUsd)
+    : closingUsd;
+  const journalClosingCdf = usesExcelDailyJournalOpenings
+    ? (journalLedgerBuilt?.periodClosingCdf ?? closingCdf)
+    : closingCdf;
+
+  const caisseLedger: CashJournalLedgerRow[] = isMainDesk && journalLedgerBuilt
+    ? journalLedgerBuilt.rows
+    : (() => {
+        const caisseRows = cashOperationsWithoutOpeningBalance
+          .map((operation) => {
+            const currency = (operation.currency ?? "USD").toUpperCase();
+            const isInflow = operation.direction === "INFLOW";
+            return {
+              occurredAt: new Date(operation.occurredAt),
+              typeOperation: isInflow ? "Entrée en caisse" : "Sortie en caisse",
+              libelle: operation.description,
+              reference: operation.reference ?? "-",
+              usdIn: isInflow && currency === "USD" ? operation.amount : 0,
+              usdOut: !isInflow && currency === "USD" ? operation.amount : 0,
+              cdfIn: isInflow && currency === "CDF" ? operation.amount : 0,
+              cdfOut: !isInflow && currency === "CDF" ? operation.amount : 0,
+              actionType: "cash-operation" as const,
+              cashOperationId: operation.id,
+              cashAmount: operation.amount,
+              cashCurrency: normalizeMoneyCurrency(operation.currency),
+              cashMethod: operation.method ?? "CASH",
+              cashDescription: operation.description,
+              cashOccurredAt: new Date(operation.occurredAt).toISOString(),
+              cashDirection: operation.direction,
+              cashCategory: operation.category ?? null,
+            };
+          })
+          .sort((a, b) => a.occurredAt.getTime() - b.occurredAt.getTime());
+
+        return caisseRows.reduce<CashJournalLedgerRow[]>((rows, row) => {
+          const previous = rows[rows.length - 1];
+          const usdBalance = (previous?.usdBalance ?? openingUsd) + row.usdIn - row.usdOut;
+          const cdfBalance = (previous?.cdfBalance ?? openingCdf) + row.cdfIn - row.cdfOut;
+          rows.push({
+            ...row,
+            usdBalance,
+            cdfBalance,
+          });
+          return rows;
+        }, []);
+      })();
 
   const initialVirtualStats = Object.fromEntries(
     virtualChannels.map(({ key }) => [
@@ -1827,7 +1873,8 @@ export default async function PaymentsPage({
                 <div className="max-w-3xl">
                   <h2 className="text-sm font-semibold">Synthèse caisse</h2>
                   <p className="mt-2 text-xs text-black/60 dark:text-white/60">
-                    {cashRange.label}. Solde USD: ouverture {openingUsd.toFixed(2)} USD, clôture {closingUsd.toFixed(2)} USD. Solde CDF: ouverture {openingCdf.toFixed(2)} CDF, clôture {closingCdf.toFixed(2)} CDF.
+                    {cashRange.label}. Solde USD: ouverture {journalOpeningUsd.toFixed(2)} USD, clôture {journalClosingUsd.toFixed(2)} USD. Solde CDF: ouverture {journalOpeningCdf.toFixed(2)} CDF, clôture {journalClosingCdf.toFixed(2)} CDF.
+                    {usesExcelDailyJournalOpenings ? " Report à nouveau par jour = fichier Excel importé." : ""}
                     Contrôle global (équivalent USD): ouverture {openingBalance.toFixed(2)} USD, entrées {grossInflows.toFixed(2)} USD, sorties {cashOutflows.toFixed(2)} USD, variation nette {netCashVariation.toFixed(2)} USD, clôture {closingBalance.toFixed(2)} USD ({accountingConsistency ? "OK" : "écart"}).
                   </p>
                 </div>
@@ -1896,26 +1943,31 @@ export default async function PaymentsPage({
                     </tr>
                   </thead>
                   <tbody>
-                    <tr className="border-t border-black/5 bg-black/2 dark:border-white/10 dark:bg-white/3">
-                      <td className="px-4 py-3 font-semibold">{cashRange.startRaw}</td>
-                      <td className="px-4 py-3 font-semibold">Report à nouveau / solde d&apos;ouverture</td>
-                      <td className="px-4 py-3 text-black/60 dark:text-white/60">
-                        {hasOpeningInsideSelectedRange
-                          ? "Ouverture de caisse utilisée comme report à nouveau initial"
-                          : "Solde reporté automatiquement depuis la veille / période précédente"}
-                      </td>
-                      <td className="px-4 py-3">-</td>
-                      <td className="px-4 py-3">-</td>
-                      <td className="px-4 py-3 font-semibold">{openingUsd.toFixed(2)} USD</td>
-                      <td className="px-4 py-3">-</td>
-                      <td className="px-4 py-3">-</td>
-                      <td className="px-4 py-3 font-semibold">{openingCdf.toFixed(2)} CDF</td>
-                      <td className="px-4 py-3">-</td>
-                      {canManageLedger ? <td className="px-4 py-3">-</td> : null}
-                    </tr>
+                    {!usesExcelDailyJournalOpenings ? (
+                      <tr className="border-t border-black/5 bg-black/2 dark:border-white/10 dark:bg-white/3">
+                        <td className="px-4 py-3 font-semibold">{cashRange.startRaw}</td>
+                        <td className="px-4 py-3 font-semibold">Report à nouveau / solde d&apos;ouverture</td>
+                        <td className="px-4 py-3 text-black/60 dark:text-white/60">
+                          {hasOpeningInsideSelectedRange
+                            ? "Ouverture de caisse saisie manuellement"
+                            : "Solde calculé depuis l’historique (importez l’Excel pour figer le report à nouveau par jour)"}
+                        </td>
+                        <td className="px-4 py-3">-</td>
+                        <td className="px-4 py-3">-</td>
+                        <td className="px-4 py-3 font-semibold">{journalOpeningUsd.toFixed(2)} USD</td>
+                        <td className="px-4 py-3">-</td>
+                        <td className="px-4 py-3">-</td>
+                        <td className="px-4 py-3 font-semibold">{journalOpeningCdf.toFixed(2)} CDF</td>
+                        <td className="px-4 py-3">-</td>
+                        {canManageLedger ? <td className="px-4 py-3">-</td> : null}
+                      </tr>
+                    ) : null}
 
                     {caisseLedger.map((row, index) => (
-                      <tr key={`${row.occurredAt.toISOString()}-${index}`} className="border-t border-black/5 dark:border-white/10">
+                      <tr
+                        key={`${row.occurredAt.toISOString()}-${index}`}
+                        className={`border-t border-black/5 dark:border-white/10${row.isOpeningRow ? " bg-black/2 dark:bg-white/3" : ""}`}
+                      >
                         <td className="px-4 py-3">{row.occurredAt.toLocaleDateString("fr-FR")}</td>
                         <td className="px-4 py-3">{row.typeOperation}</td>
                         <td className="px-4 py-3">{row.libelle}</td>
@@ -1928,17 +1980,21 @@ export default async function PaymentsPage({
                         <td className="px-4 py-3">{row.reference}</td>
                         {canManageLedger ? (
                           <td className="px-4 py-3">
-                            <CashOperationRowActions
-                              cashOperationId={row.cashOperationId}
-                              amount={row.cashAmount}
-                              currency={row.cashCurrency}
-                              method={row.cashMethod}
-                              reference={row.reference === "-" ? null : row.reference}
-                              description={row.cashDescription}
-                              occurredAt={row.cashOccurredAt}
-                              direction={row.cashDirection}
-                              category={row.cashCategory}
-                            />
+                            {row.isOpeningRow || !row.cashOperationId ? (
+                              "-"
+                            ) : (
+                              <CashOperationRowActions
+                                cashOperationId={row.cashOperationId}
+                                amount={row.cashAmount ?? 0}
+                                currency={row.cashCurrency ?? "USD"}
+                                method={row.cashMethod ?? "CASH"}
+                                reference={row.reference === "-" ? null : row.reference}
+                                description={row.cashDescription ?? ""}
+                                occurredAt={row.cashOccurredAt ?? row.occurredAt.toISOString()}
+                                direction={row.cashDirection ?? "INFLOW"}
+                                category={row.cashCategory}
+                              />
+                            )}
                           </td>
                         ) : null}
                       </tr>

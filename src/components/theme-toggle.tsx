@@ -11,17 +11,28 @@ function applyTheme(theme: Theme) {
   root.classList.toggle("dark", theme === "dark");
 }
 
+function readStoredTheme(): Theme {
+  const saved = localStorage.getItem(STORAGE_KEY);
+  if (saved === "dark" || saved === "light") return saved;
+  const preferredDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+  return preferredDark ? "dark" : "light";
+}
+
 export function ThemeToggle() {
-  const [theme, setTheme] = useState<Theme>(() => {
-    if (typeof window === "undefined") return "light";
-    const saved = localStorage.getItem(STORAGE_KEY);
-    const preferredDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
-    return (saved === "dark" || saved === "light") ? (saved as Theme) : (preferredDark ? "dark" : "light");
-  });
+  const [theme, setTheme] = useState<Theme>("light");
+  const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
+    setMounted(true);
+    const stored = readStoredTheme();
+    setTheme(stored);
+    applyTheme(stored);
+  }, []);
+
+  useEffect(() => {
+    if (!mounted) return;
     applyTheme(theme);
-  }, [theme]);
+  }, [theme, mounted]);
 
   function toggleTheme() {
     const next: Theme = theme === "dark" ? "light" : "dark";
@@ -38,7 +49,7 @@ export function ThemeToggle() {
       aria-label="Basculer thème clair/sombre"
       title="Basculer thème clair/sombre"
     >
-      {theme === "dark" ? "Mode clair" : "Mode sombre"}
+      <span suppressHydrationWarning>{!mounted ? "Thème" : theme === "dark" ? "Mode clair" : "Mode sombre"}</span>
     </button>
   );
 }
