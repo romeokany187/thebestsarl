@@ -8,7 +8,13 @@ import { requireApiModuleAccess } from "@/lib/rbac";
 import { getUserModuleAccessMap } from "@/lib/user-module-access";
 import { getTicketTotalAmount } from "@/lib/ticket-pricing";
 import { buildCashJournalLedger, loadExcelDailyOpeningsForDateRange } from "@/lib/cash-journal-ledger";
-import { ALL_CASH_DESKS, buildDeskScopedCashOperationWhere, isDeskAllowedForUser, normalizeCashDeskValue } from "@/lib/payments-desk";
+import {
+  ALL_CASH_DESKS,
+  isDeskAllowedForUser,
+  isMainCashDesk,
+  normalizeCashDeskValue,
+  resolveCashOperationWhereForReport,
+} from "@/lib/payments-desk";
 
 type ReportMode = "date" | "month" | "year";
 type ReportType = "payments" | "cash-journal" | "cash-summary";
@@ -393,8 +399,9 @@ export async function GET(request: NextRequest) {
   })) {
     return NextResponse.json({ error: "Accès refusé pour cette caisse." }, { status: 403 });
   }
-  const mainDesk = selectedDesk === "THE_BEST";
-  const scopedCashOperationsWhere = buildDeskScopedCashOperationWhere(selectedDesk, { strict: true });
+  const includeTicketPayments = selectedDesk === "THE_BEST";
+  const isMainCashJournalDesk = isMainCashDesk(selectedDesk);
+  const scopedCashOperationsWhere = resolveCashOperationWhereForReport(selectedDesk, reportType, { strict: true });
   const range = dateRangeFromParams(
     request.nextUrl.searchParams,
     reportType === "cash-journal" || reportType === "cash-summary" ? "month" : "date",
@@ -404,7 +411,7 @@ export async function GET(request: NextRequest) {
   const [rows, tickets, airline, cashOperationsInRange, cashOperationsBeforeRange, ticketPaymentsBeforeRange] = await Promise.all([
     paymentClient.findMany({
       where: {
-        ...(mainDesk ? { paidAt: { gte: range.start, lt: range.end } } : { id: "__NO_TICKET_PAYMENTS_FOR_DESK__" }),
+        ...(includeTicketPayments ? { paidAt: { gte: range.start, lt: range.end } } : { id: "__NO_TICKET_PAYMENTS_FOR_DESK__" }),
         ...(airlineId ? { ticket: { airlineId } } : {}),
       },
       include: {
@@ -474,7 +481,7 @@ export async function GET(request: NextRequest) {
       take: 5000,
     }),
     paymentClient.findMany({
-      where: mainDesk ? { paidAt: { lt: range.start } } : { id: "__NO_TICKET_PAYMENTS_FOR_DESK__" },
+      where: includeTicketPayments ? { paidAt: { lt: range.start } } : { id: "__NO_TICKET_PAYMENTS_FOR_DESK__" },
       select: {
         paidAt: true,
         amount: true,
@@ -609,7 +616,7 @@ export async function GET(request: NextRequest) {
   const operationalCaisseRows: CashJournalRow[] = [...cashOperationsWithoutOpeningBalance].map(mapCashOperationToJournalRow);
   operationalCaisseRows.sort((a, b) => a.occurredAt.getTime() - b.occurredAt.getTime());
 
-  const journalOpeningBuckets = mainDesk
+  const journalOpeningBuckets = isMainCashJournalDesk
     ? computeOpeningBuckets([], cashOperationsBeforeRange)
     : computeOpeningBuckets(ticketPaymentsBeforeRange, cashOperationsBeforeRange);
   const journalDisplayOpeningBuckets = applyOpeningFallbackFromCurrentPeriod(journalOpeningBuckets, cashOperationsInRange);
@@ -621,7 +628,7 @@ export async function GET(request: NextRequest) {
   let journalCaisseLedger: Array<CashJournalRow & { usdBalance: number; cdfBalance: number; isOpeningRow?: boolean }>;
   let usesExcelDailyJournalOpenings = false;
 
-  if (mainDesk) {
+  if (isMainCashJournalDesk) {
     const excelDailyOpenings = await loadExcelDailyOpeningsForDateRange(periodStart, periodEnd);
     const built = buildCashJournalLedger({
       operations: (cashOperationsWithoutOpeningBalance as Array<any>).map((operation) => ({
@@ -674,7 +681,7 @@ export async function GET(request: NextRequest) {
   }
 
   const caisseRows = [
-    ...(mainDesk
+    ...(includeTicketPayments
       ? []
       : rows.map((payment: any) => {
         const currency = normalizeMoneyCurrency(payment.currency ?? payment.ticket.currency);
@@ -815,11 +822,11 @@ export async function GET(request: NextRequest) {
 
   if (reportType === "cash-journal") {
     filenameBase = "journal-caisse";
-    const ledgerForJournalPdf = mainDesk ? journalCaisseLedger : caisseLedger;
-    const ledgerOpeningUsd = mainDesk ? journalOpeningUsd : openingUsd;
-    const ledgerClosingUsd = mainDesk ? journalClosingUsd : closingUsd;
-    const ledgerOpeningCdf = mainDesk ? journalOpeningCdf : openingCdf;
-    const ledgerClosingCdf = mainDesk ? journalClosingCdf : closingCdf;
+    const ledgerForJournalPdf = isMainCashJournalDesk ? journalCaisseLedger : caisseLedger;
+    const ledgerOpeningUsd = isMainCashJournalDesk ? journalOpeningUsd : openingUsd;
+    const ledgerClosingUsd = isMainCashJournalDesk ? journalClosingUsd : closingUsd;
+    const ledgerOpeningCdf = isMainCashJournalDesk ? journalOpeningCdf : openingCdf;
+    const ledgerClosingCdf = isMainCashJournalDesk ? journalClosingCdf : closingCdf;
     const pageWidth = 1191;
     const pageHeight = 842;
     const margin = 28;
@@ -853,7 +860,7 @@ export async function GET(request: NextRequest) {
       });
       page.drawText(subtitle, { x: margin, y: pageHeight - 58, size: 11, font, color: rgb(0.87, 0.89, 0.93) });
       page.drawText(`Période du ${periodStart} au ${periodEnd}`, { x: margin, y: pageHeight - 76, size: 10, font, color: rgb(0.76, 0.8, 0.87) });
-      if (mainDesk) {
+      if (isMainCashJournalDesk) {
         page.drawText(
           usesExcelDailyJournalOpenings
             ? "Report à nouveau par jour = Excel importé • opérations caisse (saisie + import) — billets exclus"
@@ -898,7 +905,7 @@ export async function GET(request: NextRequest) {
     drawTableHeader(pageHeight - 184);
     let y = pageHeight - 224;
 
-    if (!(mainDesk && usesExcelDailyJournalOpenings)) {
+    if (!(isMainCashJournalDesk && usesExcelDailyJournalOpenings)) {
       const openingRowHeight = 28;
       page.drawRectangle({ x: tableX, y: y - openingRowHeight + 6, width: tableWidth, height: openingRowHeight, color: rgb(0.97, 0.97, 0.98), borderWidth: 0.5, borderColor: rgb(0.88, 0.89, 0.92) });
       let openingX = tableX;
@@ -1044,7 +1051,7 @@ export async function GET(request: NextRequest) {
     });
 
     page.drawText("Situation billets de cette caisse", { x: margin, y: 118, size: 13.5, font: fontBold, color: textBlack });
-    if (mainDesk) {
+    if (includeTicketPayments) {
       page.drawText(`Billets facturés: ${totalBilled.toFixed(2)} USD eq • encaissés: ${totalPaidOnTickets.toFixed(2)} USD eq • reste: ${totalOutstanding.toFixed(2)} USD eq.`, { x: margin, y: 96, size: 10.5, font, color: textBlack });
       page.drawText(`Billets payés: ${paidTickets.length} • impayés: ${unpaidTickets.length} • partiels: ${partialTickets.length} • couverture des partiels: ${partialCoverage.toFixed(1)}%.`, { x: margin, y: 78, size: 10.5, font, color: textBlack });
     } else {

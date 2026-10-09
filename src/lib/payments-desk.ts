@@ -231,6 +231,23 @@ export function isMainCashDesk(value?: string | null) {
   return normalized === "THE_BEST" || normalized === "CAISSE_2_SIEGE";
 }
 
+/** Écritures du journal caisse (imports Excel + saisie) — toujours sur la caisse THE BEST. */
+export function buildMainCashJournalOperationWhere() {
+  return buildDeskScopedCashOperationWhere("THE_BEST", { strict: true });
+}
+
+export function resolveCashOperationWhereForReport(
+  selectedDesk: CashDeskValue,
+  reportType: "payments" | "cash-journal" | "cash-summary",
+  options?: { strict?: boolean },
+) {
+  const deskScope = buildDeskScopedCashOperationWhere(selectedDesk, options);
+  if ((reportType === "cash-journal" || reportType === "cash-summary") && isMainCashDesk(selectedDesk)) {
+    return buildMainCashJournalOperationWhere();
+  }
+  return deskScope;
+}
+
 export function inferCashDeskFromDescription(value?: string | null): CashDeskValue {
   const normalized = (value ?? "").trim().toUpperCase();
   if (normalized.startsWith("PROXY_BANKING:")) return "PROXY_BANKING";

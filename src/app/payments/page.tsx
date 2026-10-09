@@ -26,7 +26,12 @@ import {
   loadExcelDailyOpeningsForDateRange,
   type CashJournalLedgerRow,
 } from "@/lib/cash-journal-ledger";
-import { buildDeskScopedCashOperationWhere, isMainCashDesk, resolvePaymentsDeskState } from "@/lib/payments-desk";
+import {
+  buildDeskScopedCashOperationWhere,
+  buildMainCashJournalOperationWhere,
+  isMainCashDesk,
+  resolvePaymentsDeskState,
+} from "@/lib/payments-desk";
 import { getTicketTotalAmount } from "@/lib/ticket-pricing";
 
 type AirlineRow = { id: string; code: string; name: string };
@@ -496,6 +501,7 @@ export default async function PaymentsPage({
   const isMainDesk = isMainCashDesk(selectedDeskKey);
   const initialWorkspaceMode = resolveInitialWorkspaceMode(resolvedSearchParams.mode);
   const scopedCashOperationsWhere = buildDeskScopedCashOperationWhere(selectedDeskKey);
+  const journalCashOperationsWhere = isMainDesk ? buildMainCashJournalOperationWhere() : scopedCashOperationsWhere;
   const range = dateRangeFromParams(resolvedSearchParams);
   const cashRange = monthRangeFromValue(resolvedSearchParams.cashMonth);
 
@@ -587,7 +593,7 @@ export default async function PaymentsPage({
     cashOperationClient.findMany({
       where: {
         occurredAt: { gte: cashRange.start, lt: cashRange.end },
-        ...scopedCashOperationsWhere,
+        ...journalCashOperationsWhere,
       },
       include: {
         createdBy: { select: { name: true, jobTitle: true } },
@@ -599,7 +605,7 @@ export default async function PaymentsPage({
     cashOperationClient.findMany({
       where: {
         occurredAt: { lt: cashRange.start },
-        ...scopedCashOperationsWhere,
+        ...journalCashOperationsWhere,
       },
       select: {
         occurredAt: true,
