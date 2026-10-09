@@ -9,7 +9,7 @@ import {
 } from "@/lib/cash-report-excel-parse";
 import {
   buildMonthlyConstat,
-  loadSystemJournalByDay,
+  loadLiveCashJournalByDay,
   type MonthlyConstat,
 } from "@/lib/cash-report-month-constat";
 
@@ -381,7 +381,7 @@ export async function runCashReportExcelImport(options: ImportOptions): Promise<
   const lastDate = await getLastImportedJournalDate(parsed.reportMonth);
   const reconcileDates = options.reconcileDates ?? [];
 
-  const systemByDay = await loadSystemJournalByDay(parsed.reportMonth);
+  const systemByDay = await loadLiveCashJournalByDay(parsed.reportMonth);
   const monthlyConstat =
     parsed.journalLines.length > 0
       ? buildMonthlyConstat({

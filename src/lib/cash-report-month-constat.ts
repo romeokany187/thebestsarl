@@ -1,6 +1,7 @@
 import type { ParsedJournalLine } from "@/lib/cash-report-excel-parse";
 import { kinshasaDateKey } from "@/lib/kinshasa-time";
 import { prisma } from "@/lib/prisma";
+import { buildDeskScopedCashOperationWhere } from "@/lib/payments-desk";
 
 export type DayJournalTotals = {
   lineCount: number;
@@ -24,6 +25,8 @@ export type MonthDayConstat = {
 export type MonthlyConstat = {
   reportMonth: string;
   closedMonth: boolean;
+  /** Même périmètre que le PDF « Journal de caisse » (paiements + opérations THE BEST). */
+  systemSourceLabel: string;
   verdict: string;
   aligned: boolean;
   summary: {
@@ -86,54 +89,110 @@ export function aggregateJournalDayTotals(lines: ParsedJournalLine[]): Map<strin
   return map;
 }
 
-function aggregateDbRow(row: {
-  lineCategory: string;
-  usdIn: number;
-  usdOut: number;
-  cdfIn: number;
-  cdfOut: number;
-}): Omit<DayJournalTotals, "lineCount"> {
-  const delta = { ...EMPTY_TOTALS };
-  if (row.lineCategory === "TICKET_INFLOW") {
-    delta.ticketInUsd = row.usdIn;
-    delta.ticketInCdf = row.cdfIn;
-  } else if (row.lineCategory === "OTHER_INFLOW") {
-    delta.otherInUsd = row.usdIn;
-    delta.otherInCdf = row.cdfIn;
-  } else if (row.lineCategory === "OUTFLOW") {
-    delta.outUsd = row.usdOut;
-    delta.outCdf = row.cdfOut;
-  }
-  return delta;
+function normalizeMoneyCurrency(value: string | null | undefined): "USD" | "CDF" {
+  const normalized = (value ?? "USD").trim().toUpperCase();
+  return normalized === "CDF" || normalized === "XAF" || normalized === "FC" ? "CDF" : "USD";
 }
 
-export async function loadSystemJournalByDay(reportMonth: string): Promise<Map<string, DayJournalTotals>> {
-  const rows = await prisma.cashReportJournalLine.findMany({
-    where: { reportMonth },
-    select: {
-      businessDate: true,
-      lineCategory: true,
-      usdIn: true,
-      usdOut: true,
-      cdfIn: true,
-      cdfOut: true,
-    },
-  });
+function monthUtcRange(reportMonth: string) {
+  const match = reportMonth.match(/^(\d{4})-(\d{2})$/);
+  if (!match) {
+    throw new Error(`Mois invalide: ${reportMonth}`);
+  }
+  const year = Number.parseInt(match[1], 10);
+  const monthIndex = Number.parseInt(match[2], 10) - 1;
+  const start = new Date(Date.UTC(year, monthIndex, 1, 0, 0, 0, 0));
+  const end = new Date(Date.UTC(year, monthIndex + 1, 1, 0, 0, 0, 0));
+  return { start, end };
+}
+
+function addToDay(map: Map<string, DayJournalTotals>, businessDate: string, part: Omit<DayJournalTotals, "lineCount">) {
+  const bucket = map.get(businessDate) ?? { ...EMPTY_TOTALS };
+  bucket.lineCount += 1;
+  bucket.ticketInUsd += part.ticketInUsd;
+  bucket.ticketInCdf += part.ticketInCdf;
+  bucket.otherInUsd += part.otherInUsd;
+  bucket.otherInCdf += part.otherInCdf;
+  bucket.outUsd += part.outUsd;
+  bucket.outCdf += part.outCdf;
+  map.set(businessDate, bucket);
+}
+
+/** Journal opérationnel (PDF Paiements → journal de caisse), pas l’archive des imports Excel. */
+export async function loadLiveCashJournalByDay(reportMonth: string): Promise<Map<string, DayJournalTotals>> {
+  const { start, end } = monthUtcRange(reportMonth);
+  const deskScope = buildDeskScopedCashOperationWhere("THE_BEST", { strict: true });
+
+  const [payments, cashOperations] = await Promise.all([
+    prisma.payment.findMany({
+      where: {
+        paidAt: { gte: start, lt: end },
+        NOT: { importSource: "EXCEL_CAISSE2" },
+      },
+      select: {
+        paidAt: true,
+        amount: true,
+        currency: true,
+      },
+    }),
+    prisma.cashOperation.findMany({
+      where: {
+        occurredAt: { gte: start, lt: end },
+        category: { not: "OPENING_BALANCE" },
+        NOT: { importSource: "EXCEL_CAISSE2" },
+        ...deskScope,
+      },
+      select: {
+        occurredAt: true,
+        direction: true,
+        amount: true,
+        currency: true,
+      },
+    }),
+  ]);
 
   const map = new Map<string, DayJournalTotals>();
-  for (const row of rows) {
-    if (row.lineCategory === "OPENING" || row.lineCategory === "SKIP") continue;
 
-    const bucket = map.get(row.businessDate) ?? { ...EMPTY_TOTALS };
-    bucket.lineCount += 1;
-    const part = aggregateDbRow(row);
-    bucket.ticketInUsd += part.ticketInUsd;
-    bucket.ticketInCdf += part.ticketInCdf;
-    bucket.otherInUsd += part.otherInUsd;
-    bucket.otherInCdf += part.otherInCdf;
-    bucket.outUsd += part.outUsd;
-    bucket.outCdf += part.outCdf;
-    map.set(row.businessDate, bucket);
+  for (const payment of payments) {
+    const businessDate = kinshasaDateKey(payment.paidAt);
+    if (!businessDate.startsWith(`${reportMonth}-`)) continue;
+    const currency = normalizeMoneyCurrency(payment.currency);
+    addToDay(map, businessDate, {
+      ticketInUsd: currency === "USD" ? payment.amount : 0,
+      ticketInCdf: currency === "CDF" ? payment.amount : 0,
+      otherInUsd: 0,
+      otherInCdf: 0,
+      outUsd: 0,
+      outCdf: 0,
+    });
+  }
+
+  for (const operation of cashOperations) {
+    const businessDate = kinshasaDateKey(operation.occurredAt);
+    if (!businessDate.startsWith(`${reportMonth}-`)) continue;
+    const currency = normalizeMoneyCurrency(operation.currency);
+    const isInflow = operation.direction === "INFLOW";
+    addToDay(
+      map,
+      businessDate,
+      isInflow
+        ? {
+            ticketInUsd: 0,
+            ticketInCdf: 0,
+            otherInUsd: currency === "USD" ? operation.amount : 0,
+            otherInCdf: currency === "CDF" ? operation.amount : 0,
+            outUsd: 0,
+            outCdf: 0,
+          }
+        : {
+            ticketInUsd: 0,
+            ticketInCdf: 0,
+            otherInUsd: 0,
+            otherInCdf: 0,
+            outUsd: currency === "USD" ? operation.amount : 0,
+            outCdf: currency === "CDF" ? operation.amount : 0,
+          },
+    );
   }
 
   return map;
@@ -144,7 +203,6 @@ function nearlyEqual(a: number, b: number) {
 }
 
 function totalsAligned(excel: DayJournalTotals, system: DayJournalTotals) {
-  if (excel.lineCount !== system.lineCount) return false;
   return (
     nearlyEqual(excel.ticketInUsd, system.ticketInUsd)
     && nearlyEqual(excel.ticketInCdf, system.ticketInCdf)
@@ -252,6 +310,7 @@ export function buildMonthlyConstat(options: {
   return {
     reportMonth: options.reportMonth,
     closedMonth,
+    systemSourceLabel: "Journal caisse application (paiements + opérations THE BEST)",
     verdict,
     aligned,
     summary: {

@@ -52,6 +52,7 @@ type ImportPreview = {
   monthlyConstat: {
     reportMonth: string;
     closedMonth: boolean;
+    systemSourceLabel: string;
     verdict: string;
     aligned: boolean;
     summary: {
@@ -123,11 +124,12 @@ function MonthlyConstatPanel({ constat }: { constat: NonNullable<ImportPreview["
           {constat.closedMonth ? " (mois clôturé)" : " (mois en cours)"}
         </p>
         <p className="mt-1 text-xs text-violet-900/90 dark:text-violet-200/90">{constat.verdict}</p>
+        <p className="mt-1 text-[11px] text-violet-800/80 dark:text-violet-200/75">{constat.systemSourceLabel}</p>
       </div>
 
       <ul className="grid gap-1 text-xs sm:grid-cols-2 lg:grid-cols-3">
         <li>Jours dans le fichier : {constat.summary.excelDays}</li>
-        <li>Jours en système : {constat.summary.systemDays}</li>
+        <li>Jours avec écritures (journal app) : {constat.summary.systemDays}</li>
         <li>Jours alignés : {constat.summary.alignedDays}</li>
         <li>Absents du système : {constat.summary.missingInSystemDays}</li>
         <li>Écarts de totaux : {constat.summary.mismatchDays}</li>
