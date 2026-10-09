@@ -20,9 +20,46 @@ type ImportOptions = {
   reconcileDates?: string[];
 };
 
+export type CashReportImportAnalysisLine = {
+  date: string;
+  typeOperation: string;
+  libelle: string;
+  amount: number;
+  currency: "USD" | "CDF";
+  ticketMatched: boolean;
+};
+
+export type CashReportImportAnalysis = {
+  fileName: string;
+  lastImportedDate: string | null;
+  journalRange: { from: string | null; to: string | null };
+  status: "NEW_DAYS" | "UP_TO_DATE" | "RECONCILE_ONLY" | "NO_JOURNAL";
+  statusLabel: string;
+  readyToCommit: boolean;
+  duplicateFile: boolean;
+  totals: {
+    ticketInUsd: number;
+    ticketInCdf: number;
+    otherInUsd: number;
+    otherInCdf: number;
+    outUsd: number;
+    outCdf: number;
+  };
+  samples: {
+    tickets: CashReportImportAnalysisLine[];
+    movements: CashReportImportAnalysisLine[];
+  };
+  virtual: {
+    totalUsd: number;
+    totalCdf: number;
+    channels: Array<{ label: string; usd: number; cdf: number }>;
+  };
+};
+
 type ImportPreview = {
   dryRun: boolean;
   fileHash: string;
+  fileName: string;
   reportMonth: string;
   closingDate: string;
   journalDates: string[];
@@ -40,6 +77,7 @@ type ImportPreview = {
   billetages: Array<{ variant: string; totalUsd: number; totalCdf: number }>;
   virtualChannelCount: number;
   warnings: string[];
+  analysis: CashReportImportAnalysis;
 };
 
 type ImportResult = ImportPreview & {
@@ -191,6 +229,109 @@ function buildStats(lines: ParsedJournalLine[]) {
   };
 }
 
+function sumJournalTotals(lines: ParsedJournalLine[]) {
+  return lines.reduce(
+    (acc, line) => {
+      if (line.lineCategory === "TICKET_INFLOW") {
+        acc.ticketInUsd += line.usdIn;
+        acc.ticketInCdf += line.cdfIn;
+      } else if (line.lineCategory === "OTHER_INFLOW") {
+        acc.otherInUsd += line.usdIn;
+        acc.otherInCdf += line.cdfIn;
+      } else if (line.lineCategory === "OUTFLOW") {
+        acc.outUsd += line.usdOut;
+        acc.outCdf += line.cdfOut;
+      }
+      return acc;
+    },
+    {
+      ticketInUsd: 0,
+      ticketInCdf: 0,
+      otherInUsd: 0,
+      otherInCdf: 0,
+      outUsd: 0,
+      outCdf: 0,
+    },
+  );
+}
+
+function toAnalysisLine(line: ParsedJournalLine, ticketMatched: boolean): CashReportImportAnalysisLine {
+  const primary = linePrimaryAmount(line);
+  return {
+    date: line.businessDate,
+    typeOperation: line.typeOperation,
+    libelle: line.libelle.length > 72 ? `${line.libelle.slice(0, 72)}…` : line.libelle,
+    amount: primary.amount,
+    currency: primary.currency,
+    ticketMatched,
+  };
+}
+
+async function buildImportAnalysis(options: {
+  fileName: string;
+  parsed: ReturnType<typeof parseCashReportWorkbook>;
+  linesToImport: ParsedJournalLine[];
+  journalDates: string[];
+  datesToImport: string[];
+  skippedDates: string[];
+  lastImportedDate: string | null;
+  duplicateFile: boolean;
+  reconcileDates: string[];
+}): Promise<CashReportImportAnalysis> {
+  const { from, to } = options.journalDates.length
+    ? { from: options.journalDates[0], to: options.journalDates[options.journalDates.length - 1] }
+    : { from: null, to: null };
+
+  let status: CashReportImportAnalysis["status"] = "NEW_DAYS";
+  let statusLabel = "Nouveaux jours détectés dans le journal.";
+  if (options.parsed.journalLines.length === 0) {
+    status = "NO_JOURNAL";
+    statusLabel = "Aucune ligne de journal reconnue dans le fichier.";
+  } else if (options.datesToImport.length === 0) {
+    status = "UP_TO_DATE";
+    statusLabel = "Journal déjà à jour pour ce mois (aucun jour nouveau).";
+  } else if (options.reconcileDates.length > 0 && options.skippedDates.length > 0) {
+    status = "RECONCILE_ONLY";
+    statusLabel = "Réconciliation de dates sélectionnées.";
+  }
+
+  const ticketLines = options.linesToImport.filter((line) => line.lineCategory === "TICKET_INFLOW");
+  const movementLines = options.linesToImport.filter(
+    (line) => line.lineCategory === "OTHER_INFLOW" || line.lineCategory === "OUTFLOW",
+  );
+
+  const ticketMatches = await Promise.all(ticketLines.map((line) => matchTicketFromLibelle(line.libelle)));
+
+  const virtualTotalUsd = options.parsed.virtualChannels.reduce((sum, channel) => sum + channel.usd, 0);
+  const virtualTotalCdf = options.parsed.virtualChannels.reduce((sum, channel) => sum + channel.cdf, 0);
+
+  const readyToCommit = options.datesToImport.length > 0 && !options.duplicateFile;
+
+  return {
+    fileName: options.fileName,
+    lastImportedDate: options.lastImportedDate,
+    journalRange: { from, to },
+    status,
+    statusLabel,
+    readyToCommit,
+    duplicateFile: options.duplicateFile,
+    totals: sumJournalTotals(options.linesToImport),
+    samples: {
+      tickets: ticketLines.slice(0, 4).map((line, index) => toAnalysisLine(line, Boolean(ticketMatches[index]))),
+      movements: movementLines.slice(0, 4).map((line) => toAnalysisLine(line, false)),
+    },
+    virtual: {
+      totalUsd: virtualTotalUsd,
+      totalCdf: virtualTotalCdf,
+      channels: options.parsed.virtualChannels.map((channel) => ({
+        label: channel.label,
+        usd: channel.usd,
+        cdf: channel.cdf,
+      })),
+    },
+  };
+}
+
 export async function runCashReportExcelImport(options: ImportOptions): Promise<ImportPreview | ImportResult> {
   const fileHash = hashBuffer(options.buffer);
   const parsed = parseCashReportWorkbook(options.buffer, {
@@ -206,8 +347,27 @@ export async function runCashReportExcelImport(options: ImportOptions): Promise<
   const linesToImport = parsed.journalLines.filter((line) => datesToImport.includes(line.businessDate));
   const stats = buildStats(linesToImport);
 
+  const duplicate = await prisma.cashReportImport.findFirst({
+    where: { fileHash, status: "COMPLETED" },
+    orderBy: { createdAt: "desc" },
+  });
+  const duplicateFile = Boolean(duplicate && reconcileDates.length === 0);
+
+  const analysis = await buildImportAnalysis({
+    fileName: options.fileName,
+    parsed,
+    linesToImport,
+    journalDates,
+    datesToImport,
+    skippedDates,
+    lastImportedDate: lastDate,
+    duplicateFile,
+    reconcileDates,
+  });
+
   const previewBase = {
     fileHash,
+    fileName: options.fileName,
     reportMonth: parsed.reportMonth,
     closingDate: options.closingDate,
     journalDates,
@@ -220,7 +380,11 @@ export async function runCashReportExcelImport(options: ImportOptions): Promise<
       totalCdf: item.totalCdf,
     })),
     virtualChannelCount: parsed.virtualChannels.length,
-    warnings: parsed.warnings,
+    warnings: [
+      ...parsed.warnings,
+      ...(duplicateFile ? ["Ce fichier a déjà été importé tel quel. Indiquez des dates à réconcilier pour réimporter."] : []),
+    ],
+    analysis,
   };
 
   if (options.dryRun) {
@@ -239,14 +403,12 @@ export async function runCashReportExcelImport(options: ImportOptions): Promise<
     };
   }
 
-  if (reconcileDates.length === 0) {
-    const duplicate = await prisma.cashReportImport.findFirst({
-      where: { fileHash, status: "COMPLETED" },
-      orderBy: { createdAt: "desc" },
-    });
-    if (duplicate) {
-      throw new Error("Ce fichier a déjà été importé (contenu identique). Utilisez « dates à réconcilier » pour forcer une mise à jour.");
-    }
+  if (duplicateFile) {
+    throw new Error("Ce fichier a déjà été importé (contenu identique). Utilisez « dates à réconcilier » pour forcer une mise à jour.");
+  }
+
+  if (!analysis.readyToCommit) {
+    throw new Error("Rien à importer : le journal est déjà à jour pour ce mois.");
   }
 
   const placeholderTicketId = await ensurePlaceholderTicket();
