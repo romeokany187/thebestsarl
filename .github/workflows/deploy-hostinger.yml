@@ -71,6 +71,10 @@ jobs:
           sshpass -p "$HOSTINGER_PASSWORD" scp -P "$HOSTINGER_PORT" -o StrictHostKeyChecking=no .deploy/thebestsarl-hostinger.tar.gz "$HOSTINGER_USER@$HOSTINGER_HOST:$HOSTINGER_BUNDLE_DIR/"
           # Toujours synchroniser le .env depuis HOSTINGER_ENV si defini
           if [ -n "$HOSTINGER_ENV" ]; then
+            if printf '%s' "$HOSTINGER_ENV" | grep -qE 'DATABASE_URL=.*127\.0\.0\.1:3306'; then
+              echo "[deploy] WARNING: HOSTINGER_ENV pointe DATABASE_URL vers 127.0.0.1:3306."
+              echo "[deploy] Sur Hostinger Node.js, preferer l'hote MySQL indique dans hPanel."
+            fi
             printf '%s' "$HOSTINGER_ENV" | sshpass -p "$HOSTINGER_PASSWORD" ssh -o StrictHostKeyChecking=no -p "$HOSTINGER_PORT" "$HOSTINGER_USER@$HOSTINGER_HOST" "cat > '$HOSTINGER_APP_DIR/.env'"
             printf '%s' "$HOSTINGER_ENV" | sshpass -p "$HOSTINGER_PASSWORD" ssh -o StrictHostKeyChecking=no -p "$HOSTINGER_PORT" "$HOSTINGER_USER@$HOSTINGER_HOST" "cat > '$HOSTINGER_BUNDLE_DIR/.env'"
             echo "[deploy] .env synchronise depuis HOSTINGER_ENV."

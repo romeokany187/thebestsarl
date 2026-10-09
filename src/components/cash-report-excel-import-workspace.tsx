@@ -315,6 +315,8 @@ export function CashReportExcelImportWorkspace() {
   const [message, setMessage] = useState("");
   const [preview, setPreview] = useState<ImportPreview | null>(null);
   const analyzeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const analyzeAbortRef = useRef<AbortController | null>(null);
+  const analyzeSeqRef = useRef(0);
 
   const canCommit = useMemo(
     () => Boolean(file && preview?.dryRun && preview.analysis.readyToCommit),
@@ -322,6 +324,12 @@ export function CashReportExcelImportWorkspace() {
   );
 
   const runAnalysis = useCallback(async (targetFile: File, dryRun: boolean) => {
+    analyzeAbortRef.current?.abort();
+    const abortController = new AbortController();
+    analyzeAbortRef.current = abortController;
+    const requestSeq = analyzeSeqRef.current + 1;
+    analyzeSeqRef.current = requestSeq;
+
     setLoading(true);
     setMessage(dryRun ? "Analyse du fichier…" : "");
 
@@ -336,8 +344,10 @@ export function CashReportExcelImportWorkspace() {
         method: "POST",
         body: formData,
         credentials: "include",
+        signal: abortController.signal,
       });
       const payload = await response.json().catch(() => null);
+      if (requestSeq !== analyzeSeqRef.current) return false;
       if (!response.ok) {
         setMessage(payload?.error ?? "Analyse impossible.");
         if (dryRun) setPreview(null);
@@ -357,11 +367,14 @@ export function CashReportExcelImportWorkspace() {
         window.location.reload();
       }
       return true;
-    } catch {
+    } catch (error) {
+      if (error instanceof DOMException && error.name === "AbortError") return false;
       setMessage("Erreur réseau.");
       return false;
     } finally {
-      setLoading(false);
+      if (requestSeq === analyzeSeqRef.current) {
+        setLoading(false);
+      }
     }
   }, [closingDate, reconcileDates]);
 
@@ -371,7 +384,7 @@ export function CashReportExcelImportWorkspace() {
     if (analyzeTimerRef.current) clearTimeout(analyzeTimerRef.current);
     analyzeTimerRef.current = setTimeout(() => {
       void runAnalysis(file, true);
-    }, 450);
+    }, 900);
 
     return () => {
       if (analyzeTimerRef.current) clearTimeout(analyzeTimerRef.current);

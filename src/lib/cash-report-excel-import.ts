@@ -166,18 +166,15 @@ async function ensurePlaceholderTicket() {
   return created.id;
 }
 
-async function matchTicketFromLibelle(libelle: string) {
+type TicketMatchCandidate = {
+  id: string;
+  customerName: string;
+  ticketNumber: string;
+};
+
+function matchTicketFromLibelleWithCandidates(libelle: string, tickets: TicketMatchCandidate[]) {
   const normalizedLibelle = libelle.trim().toLowerCase();
   if (!normalizedLibelle) return null;
-
-  const tickets = await prisma.ticketSale.findMany({
-    where: {
-      ticketNumber: { not: PLACEHOLDER_TICKET_NUMBER },
-    },
-    select: { id: true, customerName: true, ticketNumber: true },
-    orderBy: { soldAt: "desc" },
-    take: 500,
-  });
 
   let best: { id: string; score: number } | null = null;
   for (const ticket of tickets) {
@@ -189,6 +186,26 @@ async function matchTicketFromLibelle(libelle: string) {
   }
 
   return best?.id ?? null;
+}
+
+async function loadTicketMatchCandidates() {
+  return prisma.ticketSale.findMany({
+    where: {
+      ticketNumber: { not: PLACEHOLDER_TICKET_NUMBER },
+    },
+    select: { id: true, customerName: true, ticketNumber: true },
+    orderBy: { soldAt: "desc" },
+    take: 500,
+  });
+}
+
+function countUnmatchedTicketLines(lines: ParsedJournalLine[], tickets: TicketMatchCandidate[]) {
+  let unmatched = 0;
+  for (const line of lines) {
+    if (line.lineCategory !== "TICKET_INFLOW") continue;
+    if (!matchTicketFromLibelleWithCandidates(line.libelle, tickets)) unmatched += 1;
+  }
+  return unmatched;
 }
 
 async function purgeImportedDay(
@@ -284,6 +301,7 @@ async function buildImportAnalysis(options: {
   duplicateFile: boolean;
   reconcileDates: string[];
   monthlyConstat: MonthlyConstat | null;
+  ticketCandidates: TicketMatchCandidate[];
 }): Promise<CashReportImportAnalysis> {
   const { from, to } = options.journalDates.length
     ? { from: options.journalDates[0], to: options.journalDates[options.journalDates.length - 1] }
@@ -312,7 +330,9 @@ async function buildImportAnalysis(options: {
     (line) => line.lineCategory === "OTHER_INFLOW" || line.lineCategory === "OUTFLOW",
   );
 
-  const ticketMatches = await Promise.all(ticketLines.map((line) => matchTicketFromLibelle(line.libelle)));
+  const ticketMatches = ticketLines.map((line) =>
+    matchTicketFromLibelleWithCandidates(line.libelle, options.ticketCandidates),
+  );
 
   const virtualTotalUsd = options.parsed.virtualChannels.reduce((sum, channel) => sum + channel.usd, 0);
   const virtualTotalCdf = options.parsed.virtualChannels.reduce((sum, channel) => sum + channel.cdf, 0);
@@ -385,6 +405,8 @@ export async function runCashReportExcelImport(options: ImportOptions): Promise<
   });
   const duplicateFile = Boolean(duplicate && reconcileDates.length === 0 && datesToImport.length === 0);
 
+  const ticketCandidates = await loadTicketMatchCandidates();
+
   const analysis = await buildImportAnalysis({
     fileName: options.fileName,
     parsed,
@@ -396,6 +418,7 @@ export async function runCashReportExcelImport(options: ImportOptions): Promise<
     duplicateFile,
     reconcileDates,
     monthlyConstat,
+    ticketCandidates,
   });
 
   const previewBase = {
@@ -427,17 +450,12 @@ export async function runCashReportExcelImport(options: ImportOptions): Promise<
   };
 
   if (options.dryRun) {
-    const unmatchedPreview = await Promise.all(
-      linesToImport
-        .filter((line) => line.lineCategory === "TICKET_INFLOW")
-        .map(async (line) => matchTicketFromLibelle(line.libelle)),
-    );
     return {
       dryRun: true,
       ...previewBase,
       stats: {
         ...stats,
-        unmatchedTicketLines: unmatchedPreview.filter((id) => !id).length,
+        unmatchedTicketLines: countUnmatchedTicketLines(linesToImport, ticketCandidates),
       },
     };
   }
@@ -477,7 +495,7 @@ export async function runCashReportExcelImport(options: ImportOptions): Promise<
 
       if (line.lineCategory === "TICKET_INFLOW") {
         const primary = linePrimaryAmount(line);
-        const matchedTicketId = await matchTicketFromLibelle(line.libelle);
+        const matchedTicketId = matchTicketFromLibelleWithCandidates(line.libelle, ticketCandidates);
         ticketMatchStatus = matchedTicketId ? "MATCHED" : "UNMATCHED";
 
         const payment = await tx.payment.upsert({
