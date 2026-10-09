@@ -216,6 +216,129 @@ function statusTone(status: ImportPreview["analysis"]["status"]) {
   return "border-amber-300 bg-amber-50 text-amber-900 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-200";
 }
 
+type ImportHistoryRow = {
+  id: string;
+  reportMonth: string;
+  fileName: string;
+  closingDate: string;
+  status: string;
+  createdAt: string;
+  restoredAt: string | null;
+  journalLineCount: number;
+  cashOpSyncCount: number;
+  importedByLabel: string;
+  canRestore: boolean;
+};
+
+function ImportRestoreHistoryPanel({ reportMonth }: { reportMonth?: string }) {
+  const [rows, setRows] = useState<ImportHistoryRow[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [restoringId, setRestoringId] = useState<string | null>(null);
+  const [feedback, setFeedback] = useState("");
+
+  const loadHistory = useCallback(async () => {
+    setLoading(true);
+    try {
+      const query = reportMonth ? `?reportMonth=${encodeURIComponent(reportMonth)}` : "";
+      const response = await fetch(`/api/payments/cash-report/import/history${query}`, { credentials: "include" });
+      const payload = await response.json().catch(() => null);
+      if (!response.ok) {
+        setFeedback(payload?.error ?? "Impossible de charger l'historique.");
+        setRows([]);
+        return;
+      }
+      setRows((payload?.data as ImportHistoryRow[]) ?? []);
+      setFeedback("");
+    } catch {
+      setFeedback("Erreur réseau lors du chargement de l'historique.");
+    } finally {
+      setLoading(false);
+    }
+  }, [reportMonth]);
+
+  useEffect(() => {
+    void loadHistory();
+  }, [loadHistory]);
+
+  async function restoreImport(importId: string, fileName: string) {
+    const confirmed = window.confirm(
+      `Restaurer l'état d'avant l'import « ${fileName} » ?\n\nLes écritures créées par cet import seront supprimées et les opérations caisse sauvegardées avant l'import seront rétablies sur les jours concernés.`,
+    );
+    if (!confirmed) return;
+
+    setRestoringId(importId);
+    setFeedback("");
+    try {
+      const response = await fetch(`/api/payments/cash-report/import/${importId}/restore`, {
+        method: "POST",
+        credentials: "include",
+      });
+      const payload = await response.json().catch(() => null);
+      if (!response.ok) {
+        setFeedback(payload?.error ?? "Restauration impossible.");
+        return;
+      }
+      setFeedback("Restauration terminée. Le journal caisse a été remis comme avant cet import.");
+      await loadHistory();
+    } catch {
+      setFeedback("Erreur réseau lors de la restauration.");
+    } finally {
+      setRestoringId(null);
+    }
+  }
+
+  return (
+    <div className="space-y-3 rounded-xl border border-amber-300/70 bg-amber-50/60 p-4 dark:border-amber-800 dark:bg-amber-950/20">
+      <div>
+        <p className="text-sm font-semibold text-amber-950 dark:text-amber-100">Restaurer après import Excel</p>
+        <p className="mt-1 text-xs text-amber-900/85 dark:text-amber-200/85">
+          Chaque import confirmé enregistre une sauvegarde des opérations caisse THE BEST sur les jours remplacés. Utilisez
+          « Restaurer » pour annuler un import et revenir à l&apos;état précédent (paiements billets non concernés).
+        </p>
+      </div>
+
+      {loading ? <p className="text-xs text-amber-900/70 dark:text-amber-200/70">Chargement…</p> : null}
+      {feedback ? <p className="text-xs font-medium text-amber-950 dark:text-amber-100">{feedback}</p> : null}
+
+      {!loading && rows.length === 0 ? (
+        <p className="text-xs text-amber-900/70 dark:text-amber-200/70">Aucun import enregistré pour le moment.</p>
+      ) : null}
+
+      {rows.length > 0 ? (
+        <ul className="divide-y divide-amber-200/80 rounded-lg border border-amber-200/80 dark:divide-amber-900 dark:border-amber-900">
+          {rows.map((row) => (
+            <li key={row.id} className="flex flex-wrap items-center justify-between gap-2 px-3 py-2 text-xs">
+              <div>
+                <p className="font-semibold text-amber-950 dark:text-amber-100">
+                  {row.reportMonth} · {row.fileName}
+                </p>
+                <p className="text-amber-900/80 dark:text-amber-200/80">
+                  {new Date(row.createdAt).toLocaleString("fr-FR")} · {row.journalLineCount} lignes · {row.importedByLabel}
+                  {row.restoredAt ? ` · restauré le ${new Date(row.restoredAt).toLocaleString("fr-FR")}` : ""}
+                </p>
+              </div>
+              {row.canRestore ? (
+                <button
+                  type="button"
+                  disabled={restoringId === row.id}
+                  onClick={() => void restoreImport(row.id, row.fileName)}
+                  className="rounded-md border border-amber-700/40 bg-white px-3 py-1.5 font-semibold text-amber-950 hover:bg-amber-100 disabled:opacity-50 dark:border-amber-600 dark:bg-amber-950/40 dark:text-amber-100 dark:hover:bg-amber-900/50"
+                >
+                  {restoringId === row.id ? "Restauration…" : "Restaurer"}
+                </button>
+              ) : (
+                <span className="text-[11px] text-amber-900/65 dark:text-amber-200/65">
+                  {row.status === "RESTORED" || row.restoredAt ? "Déjà restauré" : "Sans sauvegarde"}
+                </span>
+              )}
+            </li>
+          ))}
+        </ul>
+      ) : null}
+    </div>
+  );
+}
+
 function CashReportImportAnalysisPanel({ preview }: { preview: ImportPreview }) {
   const { analysis } = preview;
 
@@ -354,6 +477,7 @@ export function CashReportExcelImportWorkspace() {
   const analyzeAbortRef = useRef<AbortController | null>(null);
   const analyzeSeqRef = useRef(0);
   const closingDateManualRef = useRef(false);
+  const [historyRefreshKey, setHistoryRefreshKey] = useState(0);
 
   const canCommit = useMemo(
     () => Boolean(file && preview?.dryRun && preview.analysis.readyToCommit),
@@ -404,7 +528,8 @@ export function CashReportExcelImportWorkspace() {
           : "Import enregistré.",
       );
       if (!dryRun) {
-        window.location.reload();
+        setHistoryRefreshKey((value) => value + 1);
+        setMessage("Import enregistré. Un point de restauration a été créé — voir la section « Restaurer » ci-dessous.");
       }
       return true;
     } catch (error) {
@@ -510,6 +635,8 @@ export function CashReportExcelImportWorkspace() {
       ) : null}
 
       {preview ? <CashReportImportAnalysisPanel preview={preview} /> : null}
+
+      <ImportRestoreHistoryPanel key={historyRefreshKey} reportMonth={preview?.reportMonth} />
     </section>
   );
 }

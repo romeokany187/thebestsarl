@@ -528,20 +528,22 @@ model CashOperation {
 }
 
 model CashReportImport {
-  id              String   @id @default(cuid())
-  reportMonth     String
-  fileName        String
-  fileHash        String
-  closingDate     String
-  status          String   @default("COMPLETED")
-  journalNewCount Int      @default(0)
-  journalSkipCount Int     @default(0)
-  ticketSyncCount Int      @default(0)
-  cashOpSyncCount Int      @default(0)
-  importedById    String
-  importedBy      User     @relation(fields: [importedById], references: [id])
-  createdAt       DateTime @default(now())
-  journalLines    CashReportJournalLine[]
+  id                 String    @id @default(cuid())
+  reportMonth        String
+  fileName           String
+  fileHash           String
+  closingDate        String
+  status             String    @default("COMPLETED")
+  journalNewCount    Int       @default(0)
+  journalSkipCount   Int       @default(0)
+  ticketSyncCount    Int       @default(0)
+  cashOpSyncCount    Int       @default(0)
+  preImportSnapshot  Json?
+  restoredAt         DateTime?
+  importedById       String
+  importedBy         User      @relation(fields: [importedById], references: [id])
+  createdAt          DateTime  @default(now())
+  journalLines       CashReportJournalLine[]
 
   @@index([reportMonth, createdAt])
   @@index([fileHash])

@@ -12,6 +12,10 @@ import {
   loadLiveCashJournalByDay,
   type MonthlyConstat,
 } from "@/lib/cash-report-month-constat";
+import {
+  capturePreImportSnapshot,
+  purgeBusinessDatesForExcelImport,
+} from "@/lib/cash-report-import-restore";
 
 const IMPORT_SOURCE = "EXCEL_CAISSE2";
 const PRIMARY_CASH_DESK = "THE_BEST";
@@ -176,38 +180,6 @@ function countUnmatchedTicketLines(lines: ParsedJournalLine[], tickets: TicketMa
     if (!matchTicketFromLibelleWithCandidates(line.libelle, tickets)) unmatched += 1;
   }
   return unmatched;
-}
-
-async function purgeImportedDay(
-  tx: Prisma.TransactionClient,
-  reportMonth: string,
-  businessDate: string,
-) {
-  const existingLines = await tx.cashReportJournalLine.findMany({
-    where: { reportMonth, businessDate },
-    select: { id: true, paymentId: true, cashOperationId: true },
-  });
-
-  const paymentIds = existingLines.map((line) => line.paymentId).filter(Boolean) as string[];
-  const cashOperationIds = existingLines.map((line) => line.cashOperationId).filter(Boolean) as string[];
-
-  if (paymentIds.length > 0) {
-    await tx.payment.deleteMany({
-      where: { id: { in: paymentIds }, importSource: IMPORT_SOURCE },
-    });
-  }
-
-  if (cashOperationIds.length > 0) {
-    await tx.cashOperation.deleteMany({
-      where: { id: { in: cashOperationIds }, importSource: IMPORT_SOURCE },
-    });
-  }
-
-  if (existingLines.length > 0) {
-    await tx.cashReportJournalLine.deleteMany({
-      where: { id: { in: existingLines.map((line) => line.id) } },
-    });
-  }
 }
 
 function buildStats(lines: ParsedJournalLine[]) {
@@ -432,6 +404,11 @@ export async function runCashReportExcelImport(options: ImportOptions): Promise<
             `${monthlyConstat.summary.missingInFileDays} jour(s) présent(s) en système mais absent(s) du fichier Excel — vérifiez le rapport.`,
           ]
         : []),
+      ...(datesToImport.length > 0
+        ? [
+            `${datesToImport.length} jour(s) seront remplacés : une sauvegarde automatique permettra la restauration via « Restaurer » après import.`,
+          ]
+        : []),
     ],
     analysis,
     monthlyConstat,
@@ -458,11 +435,13 @@ export async function runCashReportExcelImport(options: ImportOptions): Promise<
 
   let cashOpSyncCount = 0;
 
-  const importRecord = await prisma.$transaction(async (tx) => {
-    for (const businessDate of datesToImport) {
-      await purgeImportedDay(tx, parsed.reportMonth, businessDate);
-    }
+  const preImportSnapshot = await capturePreImportSnapshot({
+    reportMonth: parsed.reportMonth,
+    businessDates: datesToImport,
+    closingDate: effectiveClosingDate,
+  });
 
+  const importRecord = await prisma.$transaction(async (tx) => {
     const createdImport = await tx.cashReportImport.create({
       data: {
         reportMonth: parsed.reportMonth,
@@ -471,8 +450,11 @@ export async function runCashReportExcelImport(options: ImportOptions): Promise<
         closingDate: effectiveClosingDate,
         status: "COMPLETED",
         importedById: options.importedById,
+        preImportSnapshot: preImportSnapshot as unknown as Prisma.InputJsonValue,
       },
     });
+
+    await purgeBusinessDatesForExcelImport(tx, parsed.reportMonth, datesToImport);
 
     for (const line of linesToImport) {
       let paymentId: string | null = null;

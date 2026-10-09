@@ -62,6 +62,9 @@ async function ensureCashReportImportSchema() {
   await addIndexIfMissing("CashOperation", "CashOperation_importSource_idx", "INDEX `CashOperation_importSource_idx` (`importSource`)");
   await addIndexIfMissing("CashOperation", "CashOperation_importExternalKey_key", "UNIQUE INDEX `CashOperation_importExternalKey_key` (`importExternalKey`)");
 
+  await addColumnIfMissing("CashReportImport", "preImportSnapshot", "JSON NULL");
+  await addColumnIfMissing("CashReportImport", "restoredAt", "DATETIME(3) NULL");
+
   if (!(await tableExists("CashReportImport"))) {
     await prisma.$executeRawUnsafe(`
       CREATE TABLE \`CashReportImport\` (

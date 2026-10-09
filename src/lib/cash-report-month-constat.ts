@@ -121,7 +121,7 @@ function normalizeMoneyCurrency(value: string | null | undefined): "USD" | "CDF"
   return normalized === "CDF" || normalized === "XAF" || normalized === "FC" ? "CDF" : "USD";
 }
 
-function monthUtcRange(reportMonth: string) {
+export function monthUtcRange(reportMonth: string) {
   const match = reportMonth.match(/^(\d{4})-(\d{2})$/);
   if (!match) {
     throw new Error(`Mois invalide: ${reportMonth}`);
