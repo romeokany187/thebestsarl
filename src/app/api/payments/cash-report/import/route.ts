@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { requireApiModuleAccess } from "@/lib/rbac";
-import { canImportCashReportExcel } from "@/lib/cash-report-access";
+import { requireCashReportImportApiAccess } from "@/lib/cash-report-import-api-auth";
 import { runCashReportExcelImport } from "@/lib/cash-report-excel-import";
 
 export const dynamic = "force-dynamic";
@@ -15,45 +14,8 @@ function kinshasaTodayKey() {
 }
 
 export async function POST(request: NextRequest) {
-  const access = await requireApiModuleAccess("payments", [
-    "ADMIN",
-    "ACCOUNTANT",
-    "EMPLOYEE",
-    "DIRECTEUR_GENERAL",
-    "MANAGER",
-  ]);
-  if (access.error) {
-    if (!access.session) {
-      return NextResponse.json({ error: "Session expirée — reconnectez-vous puis réessayez l’import." }, { status: 401 });
-    }
-    if (!access.role) {
-      return NextResponse.json(
-        { error: "Profil utilisateur non reconnu pour l’import caisse (poste ou rôle manquant)." },
-        { status: 403 },
-      );
-    }
-    return NextResponse.json(
-      {
-        error:
-          "Accès au module Paiements insuffisant pour l’import Excel. Comptes autorisés : admin, direction générale, comptable, caisse 2 siège (THE BEST).",
-      },
-      { status: 403 },
-    );
-  }
-
-  if (!canImportCashReportExcel({
-    role: access.role,
-    jobTitle: access.session!.user.jobTitle,
-    customModuleAccessLevel: access.customModuleAccess,
-  })) {
-    return NextResponse.json(
-      {
-        error:
-          "Import réservé à la caissière Caisse 2 (THE BEST), au comptable, à la direction générale ou à l’administrateur (accès Paiements complet).",
-      },
-      { status: 403 },
-    );
-  }
+  const access = await requireCashReportImportApiAccess();
+  if (access.error) return access.error;
 
   const formData = await request.formData();
   const file = formData.get("file");

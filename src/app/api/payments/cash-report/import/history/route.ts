@@ -1,21 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
-import { requireApiModuleAccess } from "@/lib/rbac";
-import { canImportCashReportExcel } from "@/lib/cash-report-access";
+import { requireCashReportImportApiAccess } from "@/lib/cash-report-import-api-auth";
 import { listCashReportImportsForRestore } from "@/lib/cash-report-import-restore";
 
 export const dynamic = "force-dynamic";
 
 export async function GET(request: NextRequest) {
-  const access = await requireApiModuleAccess("payments", ["ADMIN", "ACCOUNTANT", "EMPLOYEE"]);
+  const access = await requireCashReportImportApiAccess();
   if (access.error) return access.error;
-
-  if (!canImportCashReportExcel({
-    role: access.role,
-    jobTitle: access.session.user.jobTitle,
-    customModuleAccessLevel: access.customModuleAccess,
-  })) {
-    return NextResponse.json({ error: "Accès refusé." }, { status: 403 });
-  }
 
   const reportMonth = request.nextUrl.searchParams.get("reportMonth")?.trim() || undefined;
   const rows = await listCashReportImportsForRestore({ reportMonth, limit: 20 });

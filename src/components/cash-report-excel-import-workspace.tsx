@@ -98,6 +98,21 @@ function formatAmount(value: number, currency: string) {
   return `${new Intl.NumberFormat("fr-FR", { maximumFractionDigits: 2 }).format(value)} ${currency}`;
 }
 
+/** Évite les 403 WAF Hostinger sur les noms avec apostrophe (ex. « D'OCTOBRE »). */
+function sanitizeCashReportUploadFile(file: File): File {
+  const safeName = file.name
+    .replace(/[\u0000-\u001f\u007f]/g, "")
+    .replace(/[''`’]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  const finalName =
+    safeName.length > 0 && /\.xlsx?$/i.test(safeName) ? safeName : `${safeName || "journal-caisse"}.xlsx`;
+  if (finalName === file.name) return file;
+  return new File([file], finalName, {
+    type: file.type || "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  });
+}
+
 function dayStatusLabel(status: NonNullable<ImportPreview["monthlyConstat"]>["days"][number]["status"]) {
   if (status === "ALIGNED") return "Aligné";
   if (status === "MISSING_IN_SYSTEM") return "Absent du système";
@@ -510,7 +525,7 @@ export function CashReportExcelImportWorkspace() {
     setMessage(dryRun ? "Analyse du fichier…" : "");
 
     const formData = new FormData();
-    formData.set("file", targetFile);
+    formData.set("file", sanitizeCashReportUploadFile(targetFile));
     formData.set("dryRun", dryRun ? "true" : "false");
     formData.set("closingDate", closingDate);
     if (reconcileDates.trim()) formData.set("reconcileDates", reconcileDates.trim());
@@ -522,15 +537,20 @@ export function CashReportExcelImportWorkspace() {
         credentials: "include",
         signal: abortController.signal,
       });
-      const payload = await response.json().catch(() => null);
+      const contentType = response.headers.get("content-type") ?? "";
+      const payload = contentType.includes("application/json") ? await response.json().catch(() => null) : null;
       if (requestSeq !== analyzeSeqRef.current) return false;
       if (!response.ok) {
         const fallback =
           response.status === 401
             ? "Session expirée — reconnectez-vous."
             : response.status === 403
-              ? "Accès refusé (403) : droits insuffisants pour l’import Excel caisse."
-              : "Analyse impossible.";
+              ? payload
+                ? "Accès refusé (403) : droits insuffisants pour l’import Excel caisse."
+                : "Accès refusé (403) sans message serveur — souvent le pare-feu Hostinger (nom de fichier avec apostrophe, etc.). Renommez le fichier (ex. Journal-OCTOBRE-2026.xlsx) et réessayez."
+              : payload
+                ? "Analyse impossible."
+                : `Analyse impossible (HTTP ${response.status}). Réponse non JSON — vérifiez les logs serveur ou renommez le fichier Excel.`;
         setMessage(typeof payload?.error === "string" && payload.error.trim() ? payload.error : fallback);
         if (dryRun) setPreview(null);
         return false;
@@ -569,11 +589,14 @@ export function CashReportExcelImportWorkspace() {
 
     if (analyzeTimerRef.current) clearTimeout(analyzeTimerRef.current);
     analyzeTimerRef.current = setTimeout(() => {
-      void runAnalysis(file, true);
+      void runAnalysis(file, true).catch(() => {
+        /* évite unhandledrejection si la requête est interrompue */
+      });
     }, 900);
 
     return () => {
       if (analyzeTimerRef.current) clearTimeout(analyzeTimerRef.current);
+      analyzeAbortRef.current?.abort();
     };
   }, [file, closingDate, reconcileDates, runAnalysis]);
 

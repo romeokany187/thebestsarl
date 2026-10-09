@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { Suspense, startTransition, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   getDefaultCashRoleScope,
@@ -153,7 +153,9 @@ export function PaymentsWritingWorkspace({
     cashReportImportWorkspace ? { key: "cash-report-import" as const, label: "Import Excel caisse", tone: "emerald" } : null,
     resolvedReportsWorkspace ? { key: "reports" as const, label: "Rapports caisse", tone: "amber" } : null,
   ].filter(Boolean) as Array<{ key: Exclude<WritingMode, "none">; label: string; tone: string }>;
-  const allowedActionKeys = getAllowedActionsForDesk(selectedDesk);
+  const allowedActionKeys = getAllowedActionsForDesk(selectedDesk).filter(
+    (key) => key !== "cash-report-import" || Boolean(cashReportImportWorkspace),
+  );
   const visibleActionItems = actionItems.filter((item) => allowedActionKeys.includes(item.key));
 
   useEffect(() => {
@@ -221,7 +223,7 @@ export function PaymentsWritingWorkspace({
               <button
                 key={item.key}
                 type="button"
-                onClick={() => setMode(item.key)}
+                onClick={() => startTransition(() => setMode(item.key))}
                 className={`flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-xs font-semibold transition ${actionToneClass(item.tone, mode === item.key)}`}
               >
                 <span>{item.label}</span>
@@ -262,7 +264,17 @@ export function PaymentsWritingWorkspace({
             {mode === "needs" ? resolvedNeedsWorkspace : null}
             {mode === "float" ? resolvedFloatWorkspace : null}
             {mode === "reports" ? resolvedReportsWorkspace : null}
-            {mode === "cash-report-import" ? cashReportImportWorkspace : null}
+            {mode === "cash-report-import" ? (
+              <Suspense
+                fallback={
+                  <section className="rounded-2xl border border-black/10 bg-white p-4 text-xs text-black/60 dark:border-white/10 dark:bg-zinc-900 dark:text-white/60">
+                    Chargement de l&apos;import Excel…
+                  </section>
+                }
+              >
+                {cashReportImportWorkspace}
+              </Suspense>
+            ) : null}
           </div>
         </div>
       </section>
