@@ -22,11 +22,26 @@ export type MonthDayConstat = {
   system: DayJournalTotals;
 };
 
+export type GrossDayTotals = {
+  inUsd: number;
+  inCdf: number;
+  outUsd: number;
+  outCdf: number;
+};
+
 export type MonthlyConstat = {
   reportMonth: string;
   closedMonth: boolean;
   /** Même périmètre que le PDF « Journal de caisse » (paiements + opérations THE BEST). */
   systemSourceLabel: string;
+  excelSideLabel: string;
+  excelJournalMeta: {
+    linesInMonth: number;
+    linesOutsideMonth: number;
+    daysInMonth: number;
+    dateFrom: string | null;
+    dateTo: string | null;
+  };
   verdict: string;
   aligned: boolean;
   summary: {
@@ -41,6 +56,11 @@ export type MonthlyConstat = {
     excel: DayJournalTotals;
     system: DayJournalTotals;
     delta: DayJournalTotals;
+  };
+  monthGross: {
+    excel: GrossDayTotals;
+    system: GrossDayTotals;
+    delta: GrossDayTotals;
   };
   days: MonthDayConstat[];
   datesToSync: string[];
@@ -57,6 +77,13 @@ const EMPTY_TOTALS: DayJournalTotals = {
 };
 
 const MONEY_EPS = 1;
+
+/** Exclut les écritures créées par un import Excel, sans exclure importSource NULL (MySQL + Prisma NOT). */
+export function whereNotExcelCaisse2Import() {
+  return {
+    OR: [{ importSource: null }, { importSource: { not: "EXCEL_CAISSE2" } }],
+  };
+}
 
 export function isReportMonthClosed(reportMonth: string, todayKey = kinshasaDateKey()) {
   const currentMonth = todayKey.slice(0, 7);
@@ -127,7 +154,7 @@ export async function loadLiveCashJournalByDay(reportMonth: string): Promise<Map
     prisma.payment.findMany({
       where: {
         paidAt: { gte: start, lt: end },
-        NOT: { importSource: "EXCEL_CAISSE2" },
+        ...whereNotExcelCaisse2Import(),
       },
       select: {
         paidAt: true,
@@ -139,7 +166,7 @@ export async function loadLiveCashJournalByDay(reportMonth: string): Promise<Map
       where: {
         occurredAt: { gte: start, lt: end },
         category: { not: "OPENING_BALANCE" },
-        NOT: { importSource: "EXCEL_CAISSE2" },
+        ...whereNotExcelCaisse2Import(),
         ...deskScope,
       },
       select: {
@@ -202,15 +229,34 @@ function nearlyEqual(a: number, b: number) {
   return Math.abs(a - b) <= MONEY_EPS;
 }
 
+function toGrossTotals(totals: DayJournalTotals): GrossDayTotals {
+  return {
+    inUsd: totals.ticketInUsd + totals.otherInUsd,
+    inCdf: totals.ticketInCdf + totals.otherInCdf,
+    outUsd: totals.outUsd,
+    outCdf: totals.outCdf,
+  };
+}
+
+/** Compare entrées/sorties globales (billets + autres), comme deux journaux du même mois. */
 function totalsAligned(excel: DayJournalTotals, system: DayJournalTotals) {
+  const e = toGrossTotals(excel);
+  const s = toGrossTotals(system);
   return (
-    nearlyEqual(excel.ticketInUsd, system.ticketInUsd)
-    && nearlyEqual(excel.ticketInCdf, system.ticketInCdf)
-    && nearlyEqual(excel.otherInUsd, system.otherInUsd)
-    && nearlyEqual(excel.otherInCdf, system.otherInCdf)
-    && nearlyEqual(excel.outUsd, system.outUsd)
-    && nearlyEqual(excel.outCdf, system.outCdf)
+    nearlyEqual(e.inUsd, s.inUsd)
+    && nearlyEqual(e.inCdf, s.inCdf)
+    && nearlyEqual(e.outUsd, s.outUsd)
+    && nearlyEqual(e.outCdf, s.outCdf)
   );
+}
+
+function subtractGross(a: GrossDayTotals, b: GrossDayTotals): GrossDayTotals {
+  return {
+    inUsd: a.inUsd - b.inUsd,
+    inCdf: a.inCdf - b.inCdf,
+    outUsd: a.outUsd - b.outUsd,
+    outCdf: a.outCdf - b.outCdf,
+  };
 }
 
 function sumMonthTotals(map: Map<string, DayJournalTotals>): DayJournalTotals {
@@ -247,9 +293,23 @@ export function buildMonthlyConstat(options: {
   const closedMonth = isReportMonthClosed(options.reportMonth);
   const monthPrefix = `${options.reportMonth}-`;
 
-  const excelByDay = aggregateJournalDayTotals(
-    options.excelLines.filter((line) => line.businessDate.startsWith(monthPrefix)),
+  const excelLinesInMonth = options.excelLines.filter(
+    (line) => line.businessDate.startsWith(monthPrefix) && line.lineCategory !== "SKIP",
   );
+  const excelLinesOutsideMonth = options.excelLines.filter(
+    (line) => !line.businessDate.startsWith(monthPrefix) && line.lineCategory !== "SKIP",
+  );
+
+  const excelByDay = aggregateJournalDayTotals(excelLinesInMonth);
+
+  const excelDayKeys = [...excelByDay.keys()].sort();
+  const excelJournalMeta = {
+    linesInMonth: excelLinesInMonth.length,
+    linesOutsideMonth: excelLinesOutsideMonth.length,
+    daysInMonth: excelByDay.size,
+    dateFrom: excelDayKeys[0] ?? null,
+    dateTo: excelDayKeys[excelDayKeys.length - 1] ?? null,
+  };
 
   const allDates = [...new Set([...excelByDay.keys(), ...options.systemByDay.keys()])].sort();
 
@@ -289,6 +349,14 @@ export function buildMonthlyConstat(options: {
   const monthTotalsExcel = sumMonthTotals(excelByDay);
   const monthTotalsSystem = sumMonthTotals(options.systemByDay);
   const monthDelta = subtractTotals(monthTotalsExcel, monthTotalsSystem);
+  const monthGrossExcel = toGrossTotals(monthTotalsExcel);
+  const monthGrossSystem = toGrossTotals(monthTotalsSystem);
+  const monthGrossDelta = subtractGross(monthGrossExcel, monthGrossSystem);
+  const monthGrossAligned =
+    nearlyEqual(monthGrossExcel.inUsd, monthGrossSystem.inUsd)
+    && nearlyEqual(monthGrossExcel.inCdf, monthGrossSystem.inCdf)
+    && nearlyEqual(monthGrossExcel.outUsd, monthGrossSystem.outUsd)
+    && nearlyEqual(monthGrossExcel.outCdf, monthGrossSystem.outCdf);
 
   const aligned = datesToSync.length === 0 && missingInFileDays === 0;
 
@@ -296,7 +364,10 @@ export function buildMonthlyConstat(options: {
   if (!closedMonth) {
     verdict = "Mois en cours : constat partiel (jours du fichier vs système).";
   } else if (aligned) {
-    verdict = "Constat : le mois complet est aligné entre le fichier Excel et le système.";
+    verdict = "Constat : le mois complet est aligné entre le rapport Excel caissière et le journal application (PDF).";
+  } else if (monthGrossAligned && (mismatchDays > 0 || missingInSystemDays > 0)) {
+    verdict =
+      "Totaux mensuels globaux (entrées/sorties) concordent, mais certains jours ou libellés diffèrent — vérifiez le détail.";
   } else if (missingInSystemDays > 0 && mismatchDays === 0) {
     verdict = `Constat : ${missingInSystemDays} jour(s) du fichier absent(s) du système — import recommandé.`;
   } else if (mismatchDays > 0) {
@@ -310,7 +381,9 @@ export function buildMonthlyConstat(options: {
   return {
     reportMonth: options.reportMonth,
     closedMonth,
-    systemSourceLabel: "Journal caisse application (paiements + opérations THE BEST)",
+    excelSideLabel: "Rapport Excel caissière (feuille journal de caisse)",
+    systemSourceLabel: "Journal application = PDF Paiements → « Journal de caisse » (THE BEST)",
+    excelJournalMeta,
     verdict,
     aligned,
     summary: {
@@ -325,6 +398,11 @@ export function buildMonthlyConstat(options: {
       excel: monthTotalsExcel,
       system: monthTotalsSystem,
       delta: monthDelta,
+    },
+    monthGross: {
+      excel: monthGrossExcel,
+      system: monthGrossSystem,
+      delta: monthGrossDelta,
     },
     days,
     datesToSync: [...new Set(datesToSync)].sort(),

@@ -449,6 +449,11 @@ export async function runCashReportExcelImport(options: ImportOptions): Promise<
       ...(parsed.journalLines.length > 0
         ? [`Mois détecté dans le fichier : ${parsed.reportMonth} — comparaison avec le système sur ce mois.`]
         : []),
+      ...(monthlyConstat && monthlyConstat.excelJournalMeta.linesOutsideMonth > 0
+        ? [
+            `${monthlyConstat.excelJournalMeta.linesOutsideMonth} ligne(s) Excel hors ${parsed.reportMonth} (ex. veille de clôture) — ignorées du constat.`,
+          ]
+        : []),
       ...(closingDateAdjusted
         ? [
             `La date saisie (${options.closingDate}) ne correspond pas au mois du fichier ; clôture billetage / virtuel : ${effectiveClosingDate}.`,

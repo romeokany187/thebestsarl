@@ -52,7 +52,15 @@ type ImportPreview = {
   monthlyConstat: {
     reportMonth: string;
     closedMonth: boolean;
+    excelSideLabel: string;
     systemSourceLabel: string;
+    excelJournalMeta: {
+      linesInMonth: number;
+      linesOutsideMonth: number;
+      daysInMonth: number;
+      dateFrom: string | null;
+      dateTo: string | null;
+    };
     verdict: string;
     aligned: boolean;
     summary: {
@@ -64,33 +72,14 @@ type ImportPreview = {
       mismatchDays: number;
     };
     monthTotals: {
-      excel: {
-        lineCount: number;
-        ticketInUsd: number;
-        ticketInCdf: number;
-        otherInUsd: number;
-        otherInCdf: number;
-        outUsd: number;
-        outCdf: number;
-      };
-      system: {
-        lineCount: number;
-        ticketInUsd: number;
-        ticketInCdf: number;
-        otherInUsd: number;
-        otherInCdf: number;
-        outUsd: number;
-        outCdf: number;
-      };
-      delta: {
-        lineCount: number;
-        ticketInUsd: number;
-        ticketInCdf: number;
-        otherInUsd: number;
-        otherInCdf: number;
-        outUsd: number;
-        outCdf: number;
-      };
+      excel: { ticketInUsd: number; ticketInCdf: number; otherInUsd: number; outUsd: number; outCdf: number };
+      system: { ticketInUsd: number; ticketInCdf: number; otherInUsd: number; outUsd: number; outCdf: number };
+      delta: { ticketInUsd: number; ticketInCdf: number; otherInUsd: number; outUsd: number; outCdf: number };
+    };
+    monthGross: {
+      excel: { inUsd: number; inCdf: number; outUsd: number; outCdf: number };
+      system: { inUsd: number; inCdf: number; outUsd: number; outCdf: number };
+      delta: { inUsd: number; inCdf: number; outUsd: number; outCdf: number };
     };
     days: Array<{
       date: string;
@@ -124,8 +113,18 @@ function MonthlyConstatPanel({ constat }: { constat: NonNullable<ImportPreview["
           {constat.closedMonth ? " (mois clôturé)" : " (mois en cours)"}
         </p>
         <p className="mt-1 text-xs text-violet-900/90 dark:text-violet-200/90">{constat.verdict}</p>
-        <p className="mt-1 text-[11px] text-violet-800/80 dark:text-violet-200/75">{constat.systemSourceLabel}</p>
+        <p className="mt-1 text-[11px] text-violet-800/80 dark:text-violet-200/75">{constat.excelSideLabel}</p>
+        <p className="text-[11px] text-violet-800/80 dark:text-violet-200/75">{constat.systemSourceLabel}</p>
       </div>
+
+      <p className="text-xs text-violet-900/85 dark:text-violet-200/85">
+        Période couverte dans le fichier ({constat.reportMonth}) :{" "}
+        {constat.excelJournalMeta.dateFrom && constat.excelJournalMeta.dateTo
+          ? `${constat.excelJournalMeta.dateFrom} → ${constat.excelJournalMeta.dateTo}`
+          : "—"}
+        {" · "}
+        {constat.excelJournalMeta.linesInMonth} lignes · {constat.excelJournalMeta.daysInMonth} jours
+      </p>
 
       <ul className="grid gap-1 text-xs sm:grid-cols-2 lg:grid-cols-3">
         <li>Jours dans le fichier : {constat.summary.excelDays}</li>
@@ -137,25 +136,49 @@ function MonthlyConstatPanel({ constat }: { constat: NonNullable<ImportPreview["
       </ul>
 
       <div>
-        <p className="mb-1 text-xs font-semibold">Totaux du mois (fichier vs système)</p>
-        <ul className="grid gap-1 text-xs sm:grid-cols-2">
-          <li>
-            Billets USD — fichier {formatAmount(constat.monthTotals.excel.ticketInUsd, "USD")} · système{" "}
-            {formatAmount(constat.monthTotals.system.ticketInUsd, "USD")} · Δ{" "}
-            {formatAmount(constat.monthTotals.delta.ticketInUsd, "USD")}
-          </li>
-          <li>
-            Billets CDF — fichier {formatAmount(constat.monthTotals.excel.ticketInCdf, "CDF")} · système{" "}
-            {formatAmount(constat.monthTotals.system.ticketInCdf, "CDF")} · Δ{" "}
-            {formatAmount(constat.monthTotals.delta.ticketInCdf, "CDF")}
-          </li>
-          <li>
-            Autres entrées USD — Δ {formatAmount(constat.monthTotals.delta.otherInUsd, "USD")}
-          </li>
-          <li>
-            Sorties USD — Δ {formatAmount(constat.monthTotals.delta.outUsd, "USD")}
-          </li>
-        </ul>
+        <p className="mb-1 text-xs font-semibold">Comparaison mensuelle — entrées / sorties (même logique que deux journaux)</p>
+        <div className="overflow-x-auto rounded-md border border-violet-200/80 text-[11px] dark:border-violet-800">
+          <table className="min-w-full text-left">
+            <thead className="bg-violet-100/80 dark:bg-violet-900/40">
+              <tr>
+                <th className="px-2 py-1 font-semibold">Flux</th>
+                <th className="px-2 py-1 font-semibold">Excel caissière</th>
+                <th className="px-2 py-1 font-semibold">Journal application</th>
+                <th className="px-2 py-1 font-semibold">Écart (Excel − app)</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr className="border-t border-violet-200/60 dark:border-violet-800">
+                <td className="px-2 py-1">Entrées USD</td>
+                <td className="px-2 py-1">{formatAmount(constat.monthGross.excel.inUsd, "USD")}</td>
+                <td className="px-2 py-1">{formatAmount(constat.monthGross.system.inUsd, "USD")}</td>
+                <td className="px-2 py-1">{formatAmount(constat.monthGross.delta.inUsd, "USD")}</td>
+              </tr>
+              <tr className="border-t border-violet-200/60 dark:border-violet-800">
+                <td className="px-2 py-1">Entrées CDF</td>
+                <td className="px-2 py-1">{formatAmount(constat.monthGross.excel.inCdf, "CDF")}</td>
+                <td className="px-2 py-1">{formatAmount(constat.monthGross.system.inCdf, "CDF")}</td>
+                <td className="px-2 py-1">{formatAmount(constat.monthGross.delta.inCdf, "CDF")}</td>
+              </tr>
+              <tr className="border-t border-violet-200/60 dark:border-violet-800">
+                <td className="px-2 py-1">Sorties USD</td>
+                <td className="px-2 py-1">{formatAmount(constat.monthGross.excel.outUsd, "USD")}</td>
+                <td className="px-2 py-1">{formatAmount(constat.monthGross.system.outUsd, "USD")}</td>
+                <td className="px-2 py-1">{formatAmount(constat.monthGross.delta.outUsd, "USD")}</td>
+              </tr>
+              <tr className="border-t border-violet-200/60 dark:border-violet-800">
+                <td className="px-2 py-1">Sorties CDF</td>
+                <td className="px-2 py-1">{formatAmount(constat.monthGross.excel.outCdf, "CDF")}</td>
+                <td className="px-2 py-1">{formatAmount(constat.monthGross.system.outCdf, "CDF")}</td>
+                <td className="px-2 py-1">{formatAmount(constat.monthGross.delta.outCdf, "CDF")}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p className="mt-2 text-[11px] text-violet-900/75 dark:text-violet-200/75">
+          Détail billets vs autres entrées : billets USD Δ {formatAmount(constat.monthTotals.delta.ticketInUsd, "USD")} ·
+          autres entrées USD Δ {formatAmount(constat.monthTotals.delta.otherInUsd, "USD")}
+        </p>
       </div>
 
       {constat.datesToSync.length > 0 ? (
