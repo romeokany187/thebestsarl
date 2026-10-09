@@ -16,6 +16,7 @@ import {
   capturePreImportSnapshot,
   purgeBusinessDatesForExcelImport,
 } from "@/lib/cash-report-import-restore";
+import { resolveCashReportImportPlan, type CashReportImportMode } from "@/lib/cash-report-import-plan";
 
 const IMPORT_SOURCE = "EXCEL_CAISSE2";
 const PRIMARY_CASH_DESK = "THE_BEST";
@@ -71,6 +72,9 @@ type ImportPreview = {
   fileHash: string;
   fileName: string;
   reportMonth: string;
+  importMode: CashReportImportMode;
+  importModeLabel: string;
+  deskSnapshotDate: string | null;
   closingDate: string;
   suggestedClosingDate: string;
   closingDateAdjusted: boolean;
@@ -127,17 +131,6 @@ async function getLastImportedJournalDate(reportMonth: string) {
     select: { businessDate: true },
   });
   return row?.businessDate ?? null;
-}
-
-function resolveDatesToImport(allDates: string[], lastDate: string | null, reconcileDates: string[]) {
-  const reconcileSet = new Set(reconcileDates);
-  const toImport = allDates.filter((date) => {
-    if (reconcileSet.has(date)) return true;
-    if (!lastDate) return true;
-    return date > lastDate;
-  });
-  const skipped = allDates.filter((date) => !toImport.includes(date));
-  return { toImport, skipped };
 }
 
 type TicketMatchCandidate = {
@@ -244,6 +237,7 @@ async function buildImportAnalysis(options: {
   reconcileDates: string[];
   monthlyConstat: MonthlyConstat | null;
   ticketCandidates: TicketMatchCandidate[];
+  importPlan: ReturnType<typeof resolveCashReportImportPlan>;
 }): Promise<CashReportImportAnalysis> {
   const { from, to } = options.journalDates.length
     ? { from: options.journalDates[0], to: options.journalDates[options.journalDates.length - 1] }
@@ -256,12 +250,16 @@ async function buildImportAnalysis(options: {
     statusLabel = "Aucune ligne de journal reconnue dans le fichier.";
   } else if (options.datesToImport.length === 0) {
     status = "UP_TO_DATE";
-    statusLabel = options.monthlyConstat?.closedMonth && options.monthlyConstat.aligned
-      ? options.monthlyConstat.verdict
-      : "Journal déjà à jour pour ce mois (aucun jour nouveau).";
-  } else if (options.monthlyConstat?.closedMonth) {
-    status = "RECONCILE_ONLY";
-    statusLabel = options.monthlyConstat.verdict;
+    statusLabel =
+      options.importPlan.mode === "CURRENT_MONTH_DAILY"
+        ? "Aucun jour à mettre à jour (vérifiez que le fichier couvre le mois en cours jusqu'à aujourd'hui)."
+        : "Journal déjà à jour pour ce mois (aucun jour à remplacer).";
+  } else if (options.importPlan.mode === "HISTORICAL_FULL_MONTH") {
+    status = "NEW_DAYS";
+    statusLabel = options.importPlan.modeLabel;
+  } else if (options.importPlan.mode === "CURRENT_MONTH_DAILY") {
+    status = "NEW_DAYS";
+    statusLabel = options.importPlan.modeLabel;
   } else if (options.reconcileDates.length > 0 && options.skippedDates.length > 0) {
     status = "RECONCILE_ONLY";
     statusLabel = "Réconciliation de dates sélectionnées.";
@@ -320,6 +318,13 @@ export async function runCashReportExcelImport(options: ImportOptions): Promise<
   const lastDate = await getLastImportedJournalDate(parsed.reportMonth);
   const reconcileDates = options.reconcileDates ?? [];
 
+  const importPlan = resolveCashReportImportPlan({
+    reportMonth: parsed.reportMonth,
+    journalDates,
+    reconcileDates,
+  });
+  const { datesToImport, skippedDates } = importPlan;
+
   const systemByDay = await loadLiveCashJournalByDay(parsed.reportMonth);
   const monthlyConstat =
     parsed.journalLines.length > 0
@@ -329,17 +334,6 @@ export async function runCashReportExcelImport(options: ImportOptions): Promise<
           systemByDay,
         })
       : null;
-
-  let datesToImport: string[];
-  let skippedDates: string[];
-  if (reconcileDates.length > 0) {
-    ({ toImport: datesToImport, skipped: skippedDates } = resolveDatesToImport(journalDates, lastDate, reconcileDates));
-  } else if (monthlyConstat?.closedMonth) {
-    datesToImport = monthlyConstat.datesToSync;
-    skippedDates = journalDates.filter((date) => !datesToImport.includes(date));
-  } else {
-    ({ toImport: datesToImport, skipped: skippedDates } = resolveDatesToImport(journalDates, lastDate, reconcileDates));
-  }
 
   const linesToImport = parsed.journalLines.filter((line) => datesToImport.includes(line.businessDate));
   const stats = buildStats(linesToImport);
@@ -364,12 +358,16 @@ export async function runCashReportExcelImport(options: ImportOptions): Promise<
     reconcileDates,
     monthlyConstat,
     ticketCandidates,
+    importPlan,
   });
 
   const previewBase = {
     fileHash,
     fileName: options.fileName,
     reportMonth: parsed.reportMonth,
+    importMode: importPlan.mode,
+    importModeLabel: importPlan.modeLabel,
+    deskSnapshotDate: importPlan.deskSnapshotDate,
     closingDate: effectiveClosingDate,
     suggestedClosingDate,
     closingDateAdjusted,
@@ -409,6 +407,17 @@ export async function runCashReportExcelImport(options: ImportOptions): Promise<
             `${datesToImport.length} jour(s) seront remplacés : une sauvegarde automatique permettra la restauration via « Restaurer » après import.`,
           ]
         : []),
+      importPlan.modeLabel,
+      ...(importPlan.applyDeskSnapshots && importPlan.deskSnapshotDate
+        ? [
+            `Billetage / virtuel : enregistrement pour le ${importPlan.deskSnapshotDate} (état du jour dans le fichier).`,
+          ]
+        : importPlan.closedMonth
+          ? ["Billetage / virtuel : non importés pour un mois passé (feuilles = jour courant uniquement)."]
+          : []),
+      ...(importPlan.skippedDates.some((date) => date > importPlan.todayKey)
+        ? [`Jours futurs ignorés : ${importPlan.skippedDates.filter((date) => date > importPlan.todayKey).join(", ")}.`]
+        : []),
     ],
     analysis,
     monthlyConstat,
@@ -438,7 +447,8 @@ export async function runCashReportExcelImport(options: ImportOptions): Promise<
   const preImportSnapshot = await capturePreImportSnapshot({
     reportMonth: parsed.reportMonth,
     businessDates: datesToImport,
-    closingDate: effectiveClosingDate,
+    closingDate: importPlan.deskSnapshotDate ?? effectiveClosingDate,
+    includeDeskClosingSnapshots: importPlan.applyDeskSnapshots,
   });
 
   const importRecord = await prisma.$transaction(async (tx) => {
@@ -526,15 +536,42 @@ export async function runCashReportExcelImport(options: ImportOptions): Promise<
       });
     }
 
-    for (const billetage of parsed.billetages) {
-      if (billetage.variant !== "THE_BEST") {
+    if (importPlan.applyDeskSnapshots && importPlan.deskSnapshotDate) {
+      const deskDate = importPlan.deskSnapshotDate;
+      for (const billetage of parsed.billetages) {
+        if (billetage.variant !== "THE_BEST") {
+          await tx.cashBilletageSnapshot.upsert({
+            where: {
+              date_cashDesk: { date: deskDate, cashDesk: billetage.variant },
+            },
+            create: {
+              date: deskDate,
+            cashDesk: billetage.variant,
+            usdCounts: billetage.usdCounts,
+            cdfCounts: billetage.cdfCounts,
+            expectedUsd: billetage.totalUsd,
+            expectedCdf: billetage.totalCdf,
+            savedById: options.importedById,
+          },
+            update: {
+              usdCounts: billetage.usdCounts,
+              cdfCounts: billetage.cdfCounts,
+              expectedUsd: billetage.totalUsd,
+              expectedCdf: billetage.totalCdf,
+              savedById: options.importedById,
+              savedAt: new Date(),
+            },
+          });
+          continue;
+        }
+
         await tx.cashBilletageSnapshot.upsert({
           where: {
-            date_cashDesk: { date: effectiveClosingDate, cashDesk: billetage.variant },
+            date_cashDesk: { date: deskDate, cashDesk: "THE_BEST" },
           },
           create: {
-            date: effectiveClosingDate,
-            cashDesk: billetage.variant,
+            date: deskDate,
+            cashDesk: "THE_BEST",
             usdCounts: billetage.usdCounts,
             cdfCounts: billetage.cdfCounts,
             expectedUsd: billetage.totalUsd,
@@ -550,55 +587,31 @@ export async function runCashReportExcelImport(options: ImportOptions): Promise<
             savedAt: new Date(),
           },
         });
-        continue;
       }
 
-      await tx.cashBilletageSnapshot.upsert({
-        where: {
-          date_cashDesk: { date: effectiveClosingDate, cashDesk: "THE_BEST" },
-        },
-        create: {
-          date: effectiveClosingDate,
-          cashDesk: "THE_BEST",
-          usdCounts: billetage.usdCounts,
-          cdfCounts: billetage.cdfCounts,
-          expectedUsd: billetage.totalUsd,
-          expectedCdf: billetage.totalCdf,
-          savedById: options.importedById,
-        },
-        update: {
-          usdCounts: billetage.usdCounts,
-          cdfCounts: billetage.cdfCounts,
-          expectedUsd: billetage.totalUsd,
-          expectedCdf: billetage.totalCdf,
-          savedById: options.importedById,
-          savedAt: new Date(),
-        },
-      });
-    }
-
-    if (parsed.virtualChannels.length > 0) {
-      const totalUsd = parsed.virtualChannels.reduce((sum, channel) => sum + channel.usd, 0);
-      const totalCdf = parsed.virtualChannels.reduce((sum, channel) => sum + channel.cdf, 0);
-      await tx.cashReportVirtualSnapshot.upsert({
-        where: {
-          closingDate_cashDesk: { closingDate: effectiveClosingDate, cashDesk: "THE_BEST" },
-        },
-        create: {
-          closingDate: effectiveClosingDate,
-          cashDesk: "THE_BEST",
-          channels: parsed.virtualChannels,
-          totalUsd,
-          totalCdf,
-          importId: createdImport.id,
-        },
-        update: {
-          channels: parsed.virtualChannels,
-          totalUsd,
-          totalCdf,
-          importId: createdImport.id,
-        },
-      });
+      if (parsed.virtualChannels.length > 0) {
+        const totalUsd = parsed.virtualChannels.reduce((sum, channel) => sum + channel.usd, 0);
+        const totalCdf = parsed.virtualChannels.reduce((sum, channel) => sum + channel.cdf, 0);
+        await tx.cashReportVirtualSnapshot.upsert({
+          where: {
+            closingDate_cashDesk: { closingDate: deskDate, cashDesk: "THE_BEST" },
+          },
+          create: {
+            closingDate: deskDate,
+            cashDesk: "THE_BEST",
+            channels: parsed.virtualChannels,
+            totalUsd,
+            totalCdf,
+            importId: createdImport.id,
+          },
+          update: {
+            channels: parsed.virtualChannels,
+            totalUsd,
+            totalCdf,
+            importId: createdImport.id,
+          },
+        });
+      }
     }
 
     return tx.cashReportImport.update({

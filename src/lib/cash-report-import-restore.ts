@@ -121,6 +121,7 @@ export async function capturePreImportSnapshot(options: {
   reportMonth: string;
   businessDates: string[];
   closingDate: string;
+  includeDeskClosingSnapshots?: boolean;
 }): Promise<CashReportImportRestoreSnapshot> {
   const uniqueDates = [...new Set(options.businessDates)].sort();
   const [cashOperations, payments] = await Promise.all([
@@ -128,13 +129,18 @@ export async function capturePreImportSnapshot(options: {
     loadExcelPaymentsForBusinessDates(options.reportMonth, uniqueDates),
   ]);
 
-  const billetageTheBest = await prisma.cashBilletageSnapshot.findUnique({
-    where: { date_cashDesk: { date: options.closingDate, cashDesk: "THE_BEST" } },
-  });
+  const captureDesk = options.includeDeskClosingSnapshots === true;
+  const billetageTheBest = captureDesk
+    ? await prisma.cashBilletageSnapshot.findUnique({
+        where: { date_cashDesk: { date: options.closingDate, cashDesk: "THE_BEST" } },
+      })
+    : null;
 
-  const virtualTheBest = await prisma.cashReportVirtualSnapshot.findUnique({
-    where: { closingDate_cashDesk: { closingDate: options.closingDate, cashDesk: "THE_BEST" } },
-  });
+  const virtualTheBest = captureDesk
+    ? await prisma.cashReportVirtualSnapshot.findUnique({
+        where: { closingDate_cashDesk: { closingDate: options.closingDate, cashDesk: "THE_BEST" } },
+      })
+    : null;
 
   return {
     version: RESTORE_SNAPSHOT_VERSION,

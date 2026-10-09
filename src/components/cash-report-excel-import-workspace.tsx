@@ -8,6 +8,9 @@ type ImportPreview = {
   importId?: string;
   fileName: string;
   reportMonth: string;
+  importMode?: "HISTORICAL_FULL_MONTH" | "CURRENT_MONTH_DAILY";
+  importModeLabel?: string;
+  deskSnapshotDate?: string | null;
   closingDate: string;
   suggestedClosingDate: string;
   closingDateAdjusted: boolean;
@@ -356,8 +359,20 @@ function CashReportImportAnalysisPanel({ preview }: { preview: ImportPreview }) 
           <span className="text-black/55 dark:text-white/55">Mois détecté (fichier)</span><br />
           <span className="font-semibold">{preview.reportMonth}</span>
         </p>
+        <p className="sm:col-span-2">
+          <span className="text-black/55 dark:text-white/55">Mode d&apos;import</span><br />
+          {preview.importModeLabel ?? preview.analysis.statusLabel}
+        </p>
         <p>
-          <span className="text-black/55 dark:text-white/55">Clôture billetage / virtuel</span><br />
+          <span className="text-black/55 dark:text-white/55">Billetage / virtuel (fichier)</span><br />
+          {preview.deskSnapshotDate ? (
+            <>Enregistrés pour le {preview.deskSnapshotDate}</>
+          ) : (
+            <span className="text-black/55 dark:text-white/55">Non appliqués (mois passé ou hors mois courant)</span>
+          )}
+        </p>
+        <p>
+          <span className="text-black/55 dark:text-white/55">Date de clôture (réf.)</span><br />
           {preview.closingDate}
           {preview.closingDateAdjusted ? (
             <span className="text-amber-700 dark:text-amber-300"> · ajustée au journal</span>
