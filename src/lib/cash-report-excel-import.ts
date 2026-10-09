@@ -6,6 +6,11 @@ import {
   type ParsedJournalLine,
   uniqueSortedDates,
 } from "@/lib/cash-report-excel-parse";
+import {
+  buildMonthlyConstat,
+  loadSystemJournalByDay,
+  type MonthlyConstat,
+} from "@/lib/cash-report-month-constat";
 
 const IMPORT_SOURCE = "EXCEL_CAISSE2";
 const PRIMARY_CASH_DESK = "THE_BEST";
@@ -78,6 +83,7 @@ type ImportPreview = {
   virtualChannelCount: number;
   warnings: string[];
   analysis: CashReportImportAnalysis;
+  monthlyConstat: MonthlyConstat | null;
 };
 
 type ImportResult = ImportPreview & {
@@ -277,6 +283,7 @@ async function buildImportAnalysis(options: {
   lastImportedDate: string | null;
   duplicateFile: boolean;
   reconcileDates: string[];
+  monthlyConstat: MonthlyConstat | null;
 }): Promise<CashReportImportAnalysis> {
   const { from, to } = options.journalDates.length
     ? { from: options.journalDates[0], to: options.journalDates[options.journalDates.length - 1] }
@@ -289,7 +296,12 @@ async function buildImportAnalysis(options: {
     statusLabel = "Aucune ligne de journal reconnue dans le fichier.";
   } else if (options.datesToImport.length === 0) {
     status = "UP_TO_DATE";
-    statusLabel = "Journal déjà à jour pour ce mois (aucun jour nouveau).";
+    statusLabel = options.monthlyConstat?.closedMonth && options.monthlyConstat.aligned
+      ? options.monthlyConstat.verdict
+      : "Journal déjà à jour pour ce mois (aucun jour nouveau).";
+  } else if (options.monthlyConstat?.closedMonth) {
+    status = "RECONCILE_ONLY";
+    statusLabel = options.monthlyConstat.verdict;
   } else if (options.reconcileDates.length > 0 && options.skippedDates.length > 0) {
     status = "RECONCILE_ONLY";
     statusLabel = "Réconciliation de dates sélectionnées.";
@@ -342,7 +354,27 @@ export async function runCashReportExcelImport(options: ImportOptions): Promise<
   const journalDates = uniqueSortedDates(parsed.journalLines);
   const lastDate = await getLastImportedJournalDate(parsed.reportMonth);
   const reconcileDates = options.reconcileDates ?? [];
-  const { toImport: datesToImport, skipped: skippedDates } = resolveDatesToImport(journalDates, lastDate, reconcileDates);
+
+  const systemByDay = await loadSystemJournalByDay(parsed.reportMonth);
+  const monthlyConstat =
+    parsed.journalLines.length > 0
+      ? buildMonthlyConstat({
+          reportMonth: parsed.reportMonth,
+          excelLines: parsed.journalLines,
+          systemByDay,
+        })
+      : null;
+
+  let datesToImport: string[];
+  let skippedDates: string[];
+  if (reconcileDates.length > 0) {
+    ({ toImport: datesToImport, skipped: skippedDates } = resolveDatesToImport(journalDates, lastDate, reconcileDates));
+  } else if (monthlyConstat?.closedMonth) {
+    datesToImport = monthlyConstat.datesToSync;
+    skippedDates = journalDates.filter((date) => !datesToImport.includes(date));
+  } else {
+    ({ toImport: datesToImport, skipped: skippedDates } = resolveDatesToImport(journalDates, lastDate, reconcileDates));
+  }
 
   const linesToImport = parsed.journalLines.filter((line) => datesToImport.includes(line.businessDate));
   const stats = buildStats(linesToImport);
@@ -351,7 +383,7 @@ export async function runCashReportExcelImport(options: ImportOptions): Promise<
     where: { fileHash, status: "COMPLETED" },
     orderBy: { createdAt: "desc" },
   });
-  const duplicateFile = Boolean(duplicate && reconcileDates.length === 0);
+  const duplicateFile = Boolean(duplicate && reconcileDates.length === 0 && datesToImport.length === 0);
 
   const analysis = await buildImportAnalysis({
     fileName: options.fileName,
@@ -363,6 +395,7 @@ export async function runCashReportExcelImport(options: ImportOptions): Promise<
     lastImportedDate: lastDate,
     duplicateFile,
     reconcileDates,
+    monthlyConstat,
   });
 
   const previewBase = {
@@ -383,8 +416,14 @@ export async function runCashReportExcelImport(options: ImportOptions): Promise<
     warnings: [
       ...parsed.warnings,
       ...(duplicateFile ? ["Ce fichier a déjà été importé tel quel. Indiquez des dates à réconcilier pour réimporter."] : []),
+      ...(monthlyConstat?.closedMonth && monthlyConstat.summary.missingInFileDays > 0
+        ? [
+            `${monthlyConstat.summary.missingInFileDays} jour(s) présent(s) en système mais absent(s) du fichier Excel — vérifiez le rapport.`,
+          ]
+        : []),
     ],
     analysis,
+    monthlyConstat,
   };
 
   if (options.dryRun) {

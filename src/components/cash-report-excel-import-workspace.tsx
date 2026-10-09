@@ -47,10 +47,136 @@ type ImportPreview = {
       channels: Array<{ label: string; usd: number; cdf: number }>;
     };
   };
+  monthlyConstat: {
+    reportMonth: string;
+    closedMonth: boolean;
+    verdict: string;
+    aligned: boolean;
+    summary: {
+      excelDays: number;
+      systemDays: number;
+      alignedDays: number;
+      missingInSystemDays: number;
+      missingInFileDays: number;
+      mismatchDays: number;
+    };
+    monthTotals: {
+      excel: {
+        lineCount: number;
+        ticketInUsd: number;
+        ticketInCdf: number;
+        otherInUsd: number;
+        otherInCdf: number;
+        outUsd: number;
+        outCdf: number;
+      };
+      system: {
+        lineCount: number;
+        ticketInUsd: number;
+        ticketInCdf: number;
+        otherInUsd: number;
+        otherInCdf: number;
+        outUsd: number;
+        outCdf: number;
+      };
+      delta: {
+        lineCount: number;
+        ticketInUsd: number;
+        ticketInCdf: number;
+        otherInUsd: number;
+        otherInCdf: number;
+        outUsd: number;
+        outCdf: number;
+      };
+    };
+    days: Array<{
+      date: string;
+      status: "ALIGNED" | "MISSING_IN_SYSTEM" | "MISSING_IN_FILE" | "MISMATCH";
+      excel: { lineCount: number; ticketInUsd: number; ticketInCdf: number };
+      system: { lineCount: number; ticketInUsd: number; ticketInCdf: number };
+    }>;
+    datesToSync: string[];
+  } | null;
 };
 
 function formatAmount(value: number, currency: string) {
   return `${new Intl.NumberFormat("fr-FR", { maximumFractionDigits: 2 }).format(value)} ${currency}`;
+}
+
+function dayStatusLabel(status: NonNullable<ImportPreview["monthlyConstat"]>["days"][number]["status"]) {
+  if (status === "ALIGNED") return "Aligné";
+  if (status === "MISSING_IN_SYSTEM") return "Absent du système";
+  if (status === "MISSING_IN_FILE") return "Absent du fichier";
+  return "Écart de totaux";
+}
+
+function MonthlyConstatPanel({ constat }: { constat: NonNullable<ImportPreview["monthlyConstat"]> }) {
+  const issueDays = constat.days.filter((day) => day.status !== "ALIGNED");
+
+  return (
+    <div className="space-y-3 rounded-xl border border-violet-300/80 bg-violet-50/80 p-4 dark:border-violet-800 dark:bg-violet-950/25">
+      <div>
+        <p className="text-sm font-semibold text-violet-950 dark:text-violet-100">
+          Constat mensuel {constat.reportMonth}
+          {constat.closedMonth ? " (mois clôturé)" : " (mois en cours)"}
+        </p>
+        <p className="mt-1 text-xs text-violet-900/90 dark:text-violet-200/90">{constat.verdict}</p>
+      </div>
+
+      <ul className="grid gap-1 text-xs sm:grid-cols-2 lg:grid-cols-3">
+        <li>Jours dans le fichier : {constat.summary.excelDays}</li>
+        <li>Jours en système : {constat.summary.systemDays}</li>
+        <li>Jours alignés : {constat.summary.alignedDays}</li>
+        <li>Absents du système : {constat.summary.missingInSystemDays}</li>
+        <li>Écarts de totaux : {constat.summary.mismatchDays}</li>
+        <li>Absents du fichier : {constat.summary.missingInFileDays}</li>
+      </ul>
+
+      <div>
+        <p className="mb-1 text-xs font-semibold">Totaux du mois (fichier vs système)</p>
+        <ul className="grid gap-1 text-xs sm:grid-cols-2">
+          <li>
+            Billets USD — fichier {formatAmount(constat.monthTotals.excel.ticketInUsd, "USD")} · système{" "}
+            {formatAmount(constat.monthTotals.system.ticketInUsd, "USD")} · Δ{" "}
+            {formatAmount(constat.monthTotals.delta.ticketInUsd, "USD")}
+          </li>
+          <li>
+            Billets CDF — fichier {formatAmount(constat.monthTotals.excel.ticketInCdf, "CDF")} · système{" "}
+            {formatAmount(constat.monthTotals.system.ticketInCdf, "CDF")} · Δ{" "}
+            {formatAmount(constat.monthTotals.delta.ticketInCdf, "CDF")}
+          </li>
+          <li>
+            Autres entrées USD — Δ {formatAmount(constat.monthTotals.delta.otherInUsd, "USD")}
+          </li>
+          <li>
+            Sorties USD — Δ {formatAmount(constat.monthTotals.delta.outUsd, "USD")}
+          </li>
+        </ul>
+      </div>
+
+      {constat.datesToSync.length > 0 ? (
+        <p className="text-xs font-semibold text-emerald-900 dark:text-emerald-200">
+          Jours proposés à l&apos;import : {constat.datesToSync.join(", ")}
+        </p>
+      ) : null}
+
+      {issueDays.length > 0 ? (
+        <div>
+          <p className="mb-1 text-xs font-semibold">Détail des écarts ({issueDays.length} jour(s))</p>
+          <ul className="max-h-48 space-y-1 overflow-y-auto text-xs">
+            {issueDays.map((day) => (
+              <li key={day.date} className="rounded-md border border-violet-200/80 px-2 py-1 dark:border-violet-800">
+                <span className="font-mono">{day.date}</span> · {dayStatusLabel(day.status)} · fichier {day.excel.lineCount}{" "}
+                lignes / système {day.system.lineCount} lignes
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : (
+        <p className="text-xs text-violet-900/80 dark:text-violet-200/80">Aucun écart jour par jour.</p>
+      )}
+    </div>
+  );
 }
 
 function statusTone(status: ImportPreview["analysis"]["status"]) {
@@ -68,6 +194,8 @@ function CashReportImportAnalysisPanel({ preview }: { preview: ImportPreview }) 
 
   return (
     <div className="space-y-3 rounded-xl border border-black/10 bg-black/[0.02] p-4 text-xs dark:border-white/10 dark:bg-white/[0.03]">
+      {preview.monthlyConstat ? <MonthlyConstatPanel constat={preview.monthlyConstat} /> : null}
+
       <div className={`rounded-lg border px-3 py-2 font-semibold ${statusTone(analysis.status)}`}>
         {analysis.statusLabel}
       </div>
@@ -218,7 +346,13 @@ export function CashReportExcelImportWorkspace() {
 
       const data = payload?.data as ImportPreview;
       setPreview(data);
-      setMessage(dryRun ? "Analyse terminée. Vérifiez le résumé avant de confirmer." : "Import enregistré.");
+      setMessage(
+        dryRun
+          ? data.monthlyConstat?.closedMonth
+            ? "Constat mensuel prêt. Vérifiez les écarts avant de confirmer l'import."
+            : "Analyse terminée. Vérifiez le résumé avant de confirmer."
+          : "Import enregistré.",
+      );
       if (!dryRun) {
         window.location.reload();
       }
@@ -258,7 +392,8 @@ export function CashReportExcelImportWorkspace() {
       <div>
         <h2 className="text-sm font-semibold">Import rapport Excel (Caisse 2 / THE BEST)</h2>
         <p className="mt-1 text-xs text-black/60 dark:text-white/60">
-          Le fichier est analysé automatiquement dès la sélection. Confirmez seulement après lecture du résumé.
+          Dès la sélection du fichier, un constat compare le journal Excel au système (mois complet si le mois est déjà
+          passé, ex. septembre). Validez l&apos;import seulement après lecture de ce constat.
         </p>
       </div>
 
