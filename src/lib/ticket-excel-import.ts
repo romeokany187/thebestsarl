@@ -1175,8 +1175,6 @@ export async function importTicketWorkbookFromBuffer(options: TicketWorkbookImpo
     });
   }
 
-  const touchedAfterDepositRuleIds = new Set<string>();
-
   async function resolveSeller(input: { sellerEmail: string | null; sellerName: string | null }) {
     const sellerEmail = input.sellerEmail?.trim().toLowerCase() ?? null;
     const sellerName = input.sellerName?.trim() ?? null;
@@ -1424,20 +1422,10 @@ export async function importTicketWorkbookFromBuffer(options: TicketWorkbookImpo
         let commissionModeApplied = activeRule?.commissionMode ?? CommissionMode.IMMEDIATE;
 
         if (afterDepositRule) {
-          const targetAmount = afterDepositRule.depositStockTargetAmount ?? 0;
-          const batchAmount = afterDepositRule.batchCommissionAmount ?? 0;
-          if (targetAmount > 0 && batchAmount > 0) {
-            const consumedBefore = consumedAmountByAirlineId.get(airline.id) ?? 0;
-            const consumedAfter = consumedBefore + amount;
-            const batchesBefore = Math.floor(consumedBefore / targetAmount);
-            const batchesAfter = Math.floor(consumedAfter / targetAmount);
-            const newBatches = Math.max(0, batchesAfter - batchesBefore);
-            commissionAmount += newBatches * batchAmount;
-            consumedAmountByAirlineId.set(airline.id, consumedAfter);
-            if (newBatches > 0) {
-              touchedAfterDepositRuleIds.add(afterDepositRule.id);
-            }
-          }
+          const consumedBefore = consumedAmountByAirlineId.get(airline.id) ?? 0;
+          consumedAmountByAirlineId.set(airline.id, consumedBefore + amount);
+          commissionRateUsed = 0;
+          commissionModeApplied = CommissionMode.AFTER_DEPOSIT;
         } else if (isAirFast) {
           const nextAirfastTicketNumber = (ticketCountByAirlineId.get(airline.id) ?? 0) + 1;
           ticketCountByAirlineId.set(airline.id, nextAirfastTicketNumber);
@@ -1454,7 +1442,7 @@ export async function importTicketWorkbookFromBuffer(options: TicketWorkbookImpo
           commissionModeApplied = computedCommission.modeApplied;
         }
 
-        if ((afterDepositRule || isAirFast) && agencyMarkupAmount > 0) {
+        if (isAirFast && agencyMarkupAmount > 0) {
           commissionAmount += agencyMarkupAmount;
         }
 
@@ -1573,28 +1561,6 @@ export async function importTicketWorkbookFromBuffer(options: TicketWorkbookImpo
         }
       }
     }
-  }
-
-  if (!dryRun && touchedAfterDepositRuleIds.size > 0) {
-    const updates = [...touchedAfterDepositRuleIds].map(async (ruleId) => {
-      const rule = airlines
-        .flatMap((airline) => airline.commissionRules)
-        .find((candidate) => candidate.id === ruleId);
-      if (!rule) return;
-
-      const ownerAirline = airlines.find((airline) => airline.commissionRules.some((candidate) => candidate.id === ruleId));
-      if (!ownerAirline) return;
-
-      const consumedAmount = consumedAmountByAirlineId.get(ownerAirline.id);
-      if (consumedAmount === undefined) return;
-
-      await prisma.commissionRule.update({
-        where: { id: ruleId },
-        data: { depositStockConsumedAmount: consumedAmount },
-      });
-    });
-
-    await Promise.all(updates);
   }
 
   return {

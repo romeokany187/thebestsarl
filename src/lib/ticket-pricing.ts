@@ -14,6 +14,11 @@ function round2(value: number) {
   return Number(value.toFixed(2));
 }
 
+/** Commission CAA : saisie manuelle en fin de mois, exclue de tous les totaux automatiques. */
+export function isCaaTicketExcludedFromAutomaticCommission(ticket: TicketPricingInput) {
+  return (ticket.airline?.code ?? "").trim().toUpperCase() === "CAA";
+}
+
 function commissionAlreadyIncludesMarkup(ticket: TicketPricingInput) {
   const mode = (ticket.commissionModeApplied ?? "").trim().toUpperCase();
   if (mode === "AFTER_DEPOSIT") {
@@ -59,6 +64,10 @@ function shouldUseMarkupOnly(ticket: TicketPricingInput) {
 }
 
 export function getTicketCommissionAmount(ticket: TicketPricingInput, overrideCommissionAmount?: number | null) {
+  if (isCaaTicketExcludedFromAutomaticCommission(ticket)) {
+    return 0;
+  }
+
   if (shouldUseMarkupOnly(ticket)) {
     return getTicketMarkupAmount(ticket);
   }

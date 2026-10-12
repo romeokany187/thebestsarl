@@ -7,6 +7,19 @@ import { requireApiModuleAccess } from "@/lib/rbac";
 import { getUserModuleAccessMap } from "@/lib/user-module-access";
 import { getTicketCommissionAmount, getTicketTotalAmount } from "@/lib/ticket-pricing";
 
+type CommissionCalc = (ticket: {
+  id: string;
+  airline?: { code?: string | null };
+  amount: number;
+  commissionAmount?: number | null;
+  commissionRateUsed?: number | null;
+  agencyMarkupAmount?: number | null;
+  commissionModeApplied?: string | null;
+  commissionCalculationStatus?: string | null;
+  baseFareAmount?: number | null;
+  commissionBaseAmount?: number | null;
+}) => number;
+
 type SearchParams = {
   startDate?: string;
   endDate?: string;
@@ -94,12 +107,6 @@ function getSundayEnd(value: Date) {
   return addUtcDays(getMondayStart(value), 6);
 }
 
-function normalizeStatus(status: string) {
-  if (status === "PAID") return "PAYE";
-  if (status === "PARTIAL") return "PARTIEL";
-  return "NON PAYE";
-}
-
 function normalizeAirlineDisplay(codeOrName: string) {
   const normalized = (codeOrName ?? "").trim().toUpperCase();
   if (normalized === "AIRCONGO" || normalized === "ACG") return "AIR CONGO";
@@ -183,12 +190,12 @@ function buildMonthSegments(period: PeriodBucket) {
   return segments;
 }
 
-function aggregateByAirline(tickets: any[]) {
+function aggregateByAirline(tickets: any[], commissionOf: CommissionCalc) {
   const map = new Map<string, { amount: number; count: number; commission: number }>();
   for (const ticket of tickets) {
     const airline = normalizeAirlineDisplay(ticket.airline?.code ?? ticket.airline?.name ?? "AUTRE");
     const current = map.get(airline) ?? { amount: 0, count: 0, commission: 0 };
-    const commission = getTicketCommissionAmount(ticket);
+    const commission = commissionOf(ticket);
     current.amount += getTicketTotalAmount(ticket, commission);
     current.count += 1;
     current.commission += commission;
@@ -249,16 +256,14 @@ function configureDailySheet(sheet: ExcelJS.Worksheet, title: string, logoId: nu
     { width: 16 },
     { width: 12 },
     { width: 16 },
-    { width: 16 },
-    { width: 12 },
     { width: 14 },
   ];
 
-  sheet.mergeCells("B1:K1");
+  sheet.mergeCells("B1:I1");
   sheet.getCell("B1").value = title;
   styleCell(sheet.getCell("B1"), { bold: true, align: "center" });
 
-  const headers = ["N°", "EMETEUR", "COMPAGNIE", "BENEFICIARE", "PNR", "ITINERAIRE", "MONTANT", "NATURE DE VENTE", "PAYANT", "STATUT", "Commission"];
+  const headers = ["N°", "EMETEUR", "COMPAGNIE", "BENEFICIARE", "PNR", "ITINERAIRE", "MONTANT", "PAYANT", "Commission"];
   headers.forEach((header, index) => {
     const cell = sheet.getRow(2).getCell(index + 1);
     cell.value = header;
@@ -273,10 +278,10 @@ function configureDailySheet(sheet: ExcelJS.Worksheet, title: string, logoId: nu
   }
 }
 
-function fillDailySheet(sheet: ExcelJS.Worksheet, tickets: any[]) {
+function fillDailySheet(sheet: ExcelJS.Worksheet, tickets: any[], commissionOf: CommissionCalc) {
   tickets.forEach((ticket, index) => {
     const row = sheet.getRow(index + 3);
-    const commission = getTicketCommissionAmount(ticket);
+    const commission = commissionOf(ticket);
     row.values = [
       index + 1,
       ticket.sellerName ?? ticket.seller?.name ?? "-",
@@ -285,33 +290,31 @@ function fillDailySheet(sheet: ExcelJS.Worksheet, tickets: any[]) {
       ticket.ticketNumber ?? "-",
       ticket.route ?? "-",
       getTicketTotalAmount(ticket, commission),
-      ticket.saleNature ?? "-",
       ticket.payerName ?? "-",
-      normalizeStatus(ticket.paymentStatus ?? "UNPAID"),
       commission || "",
     ];
-    for (let index = 1; index <= 11; index += 1) {
+    for (let index = 1; index <= 9; index += 1) {
       styleCell(row.getCell(index), { align: index === 1 || index >= 7 ? "center" : "left" });
     }
     row.getCell(7).numFmt = '$ #,##0.00';
-    row.getCell(11).numFmt = '$ #,##0.00';
+    row.getCell(9).numFmt = '$ #,##0.00';
   });
 
   const totalTickets = tickets.length;
-  const totalAmount = tickets.reduce((sum, ticket) => sum + getTicketTotalAmount(ticket, getTicketCommissionAmount(ticket)), 0);
-  const totalCommission = tickets.reduce((sum, ticket) => sum + getTicketCommissionAmount(ticket), 0);
+  const totalAmount = tickets.reduce((sum, ticket) => sum + getTicketTotalAmount(ticket, commissionOf(ticket)), 0);
+  const totalCommission = tickets.reduce((sum, ticket) => sum + commissionOf(ticket), 0);
   const totalRow = sheet.getRow(tickets.length + 4);
-  totalRow.getCell(10).value = totalTickets;
-  totalRow.getCell(10).fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFFFFF00" } };
-  styleCell(totalRow.getCell(10), { bold: true, align: "center" });
+  totalRow.getCell(8).value = totalTickets;
+  totalRow.getCell(8).fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFFFFF00" } };
+  styleCell(totalRow.getCell(8), { bold: true, align: "center" });
 
   const amountRow = sheet.getRow(tickets.length + 5);
-  amountRow.getCell(10).value = totalAmount;
-  amountRow.getCell(11).value = totalCommission || "-";
-  amountRow.getCell(10).numFmt = '$ #,##0.00';
-  amountRow.getCell(11).numFmt = '$ #,##0.00';
-  styleCell(amountRow.getCell(10), { bold: true, align: "center", fill: "FFFFFF00" });
-  styleCell(amountRow.getCell(11), { bold: true, align: "center" });
+  amountRow.getCell(8).value = totalAmount;
+  amountRow.getCell(9).value = totalCommission || "-";
+  amountRow.getCell(8).numFmt = '$ #,##0.00';
+  amountRow.getCell(9).numFmt = '$ #,##0.00';
+  styleCell(amountRow.getCell(8), { bold: true, align: "center", fill: "FFFFFF00" });
+  styleCell(amountRow.getCell(9), { bold: true, align: "center" });
 }
 
 function configureWeeklySheet(sheet: ExcelJS.Worksheet, title: string) {
@@ -332,13 +335,13 @@ function configureWeeklySheet(sheet: ExcelJS.Worksheet, title: string) {
   });
 }
 
-function fillWeeklySheet(sheet: ExcelJS.Worksheet, period: PeriodBucket, tickets: any[]) {
+function fillWeeklySheet(sheet: ExcelJS.Worksheet, period: PeriodBucket, tickets: any[], commissionOf: CommissionCalc) {
   const startColumn = 5;
   const airlineColumns = airlineColumnsFromTickets(tickets);
   const rows = listDays(period.start, period.endExclusive).map((date) => {
     const key = formatIsoDate(date);
     const dayTickets = tickets.filter((ticket) => formatIsoDate(startOfUtcDay(new Date(ticket.soldAt))) === key);
-    return { date, tickets: dayTickets, airlineMap: aggregateByAirline(dayTickets) };
+    return { date, tickets: dayTickets, airlineMap: aggregateByAirline(dayTickets, commissionOf) };
   });
 
   const headers = ["DATE", "BILLETS", ...airlineColumns, "MONTANTS", "Commission"];
@@ -351,8 +354,8 @@ function fillWeeklySheet(sheet: ExcelJS.Worksheet, period: PeriodBucket, tickets
 
   rows.forEach((entry, rowIndex) => {
     const row = sheet.getRow(7 + rowIndex);
-    const totalAmount = entry.tickets.reduce((sum, ticket) => sum + getTicketTotalAmount(ticket, getTicketCommissionAmount(ticket)), 0);
-    const totalCommission = entry.tickets.reduce((sum, ticket) => sum + getTicketCommissionAmount(ticket), 0);
+    const totalAmount = entry.tickets.reduce((sum, ticket) => sum + getTicketTotalAmount(ticket, commissionOf(ticket)), 0);
+    const totalCommission = entry.tickets.reduce((sum, ticket) => sum + commissionOf(ticket), 0);
     row.getCell(startColumn).value = entry.date;
     row.getCell(startColumn).numFmt = 'dd/mm/yyyy';
     row.getCell(startColumn + 1).value = entry.tickets.length;
@@ -381,16 +384,16 @@ function fillWeeklySheet(sheet: ExcelJS.Worksheet, period: PeriodBucket, tickets
   styleCell(totalRow.getCell(startColumn + 1), { bold: true, align: "center", fill: "FFF4C7" });
   airlineColumns.forEach((name, index) => {
     const cell = totalRow.getCell(startColumn + 2 + index);
-    cell.value = aggregateByAirline(tickets).get(name)?.amount ?? 0;
+    cell.value = aggregateByAirline(tickets, commissionOf).get(name)?.amount ?? 0;
     cell.numFmt = '$ #,##0.00';
     styleCell(cell, { bold: true, align: "center", fill: "FFF4C7" });
   });
   const totalAmountCell = totalRow.getCell(startColumn + 2 + airlineColumns.length);
-  totalAmountCell.value = tickets.reduce((sum, ticket) => sum + getTicketTotalAmount(ticket, getTicketCommissionAmount(ticket)), 0);
+  totalAmountCell.value = tickets.reduce((sum, ticket) => sum + getTicketTotalAmount(ticket, commissionOf(ticket)), 0);
   totalAmountCell.numFmt = '$ #,##0.00';
   styleCell(totalAmountCell, { bold: true, align: "center", fill: "FFF4C7" });
   const totalCommissionCell = totalRow.getCell(startColumn + 3 + airlineColumns.length);
-  totalCommissionCell.value = tickets.reduce((sum, ticket) => sum + getTicketCommissionAmount(ticket), 0);
+  totalCommissionCell.value = tickets.reduce((sum, ticket) => sum + commissionOf(ticket), 0);
   totalCommissionCell.numFmt = '$ #,##0.00';
   styleCell(totalCommissionCell, { bold: true, align: "center", fill: "FFF4C7" });
 }
@@ -408,7 +411,7 @@ function configureMonthlySheet(sheet: ExcelJS.Worksheet, title: string, logoId: 
   styleCell(sheet.getCell("D6"), { bold: true, align: "center", fill: "FFF3CF" });
 }
 
-function fillMonthlySheet(sheet: ExcelJS.Worksheet, period: PeriodBucket, tickets: any[]) {
+function fillMonthlySheet(sheet: ExcelJS.Worksheet, period: PeriodBucket, tickets: any[], commissionOf: CommissionCalc) {
   const segments = buildMonthSegments(period);
   const airlineColumns = airlineColumnsFromTickets(tickets);
   const headers = ["N°", "PERIODES", "BILLETS", ...airlineColumns, "TOTAUX", "COMMISSION"];
@@ -425,7 +428,7 @@ function fillMonthlySheet(sheet: ExcelJS.Worksheet, period: PeriodBucket, ticket
       const soldAt = startOfUtcDay(new Date(ticket.soldAt));
       return soldAt >= segment.start && soldAt < segment.endExclusive;
     });
-    const airlineMap = aggregateByAirline(segmentTickets);
+    const airlineMap = aggregateByAirline(segmentTickets, commissionOf);
     const row = sheet.getRow(headerRow + 1 + index);
     row.getCell(3).value = index + 1;
     row.getCell(4).value = segment.label;
@@ -440,17 +443,17 @@ function fillMonthlySheet(sheet: ExcelJS.Worksheet, period: PeriodBucket, ticket
       styleCell(cell, { align: "center" });
     });
     const totalCell = row.getCell(6 + airlineColumns.length);
-    totalCell.value = segmentTickets.reduce((sum, ticket) => sum + getTicketTotalAmount(ticket, getTicketCommissionAmount(ticket)), 0);
+    totalCell.value = segmentTickets.reduce((sum, ticket) => sum + getTicketTotalAmount(ticket, commissionOf(ticket)), 0);
     totalCell.numFmt = '$ #,##0.00';
     styleCell(totalCell, { align: "center" });
     const commissionCell = row.getCell(7 + airlineColumns.length);
-    commissionCell.value = segmentTickets.reduce((sum, ticket) => sum + getTicketCommissionAmount(ticket), 0);
+    commissionCell.value = segmentTickets.reduce((sum, ticket) => sum + commissionOf(ticket), 0);
     commissionCell.numFmt = '$ #,##0.00';
     styleCell(commissionCell, { align: "center" });
   });
 
   const totalRow = sheet.getRow(headerRow + 1 + segments.length);
-  const totalAirlineMap = aggregateByAirline(tickets);
+  const totalAirlineMap = aggregateByAirline(tickets, commissionOf);
   totalRow.getCell(4).value = "TOTAL GENERAL";
   totalRow.getCell(5).value = tickets.length;
   styleCell(totalRow.getCell(4), { bold: true, fill: "FFF3CF" });
@@ -462,11 +465,11 @@ function fillMonthlySheet(sheet: ExcelJS.Worksheet, period: PeriodBucket, ticket
     styleCell(cell, { bold: true, align: "center", fill: "FFF3CF" });
   });
   const totalCell = totalRow.getCell(6 + airlineColumns.length);
-  totalCell.value = tickets.reduce((sum, ticket) => sum + getTicketTotalAmount(ticket, getTicketCommissionAmount(ticket)), 0);
+  totalCell.value = tickets.reduce((sum, ticket) => sum + getTicketTotalAmount(ticket, commissionOf(ticket)), 0);
   totalCell.numFmt = '$ #,##0.00';
   styleCell(totalCell, { bold: true, align: "center", fill: "FFF3CF" });
   const commissionCell = totalRow.getCell(7 + airlineColumns.length);
-  commissionCell.value = tickets.reduce((sum, ticket) => sum + getTicketCommissionAmount(ticket), 0);
+  commissionCell.value = tickets.reduce((sum, ticket) => sum + commissionOf(ticket), 0);
   commissionCell.numFmt = '$ #,##0.00';
   styleCell(commissionCell, { bold: true, align: "center", fill: "FFF3CF" });
 }
@@ -493,6 +496,8 @@ export async function GET(request: NextRequest) {
     orderBy: [{ soldAt: "asc" }, { createdAt: "asc" }],
   });
 
+  const commissionOf: CommissionCalc = (ticket) => getTicketCommissionAmount(ticket);
+
   const workbook = new ExcelJS.Workbook();
   workbook.creator = "THE BEST SARL";
   workbook.created = new Date();
@@ -506,7 +511,7 @@ export async function GET(request: NextRequest) {
     const dayKey = formatIsoDate(day);
     const sheet = workbook.addWorksheet(formatSheetDay(day));
     configureDailySheet(sheet, `RAPPORT VENTE BILLETS ${String(day.getUTCDate()).padStart(2, "0")} ${formatFrenchMonth(day)} ${day.getUTCFullYear()}`, logoId);
-    fillDailySheet(sheet, tickets.filter((ticket) => formatIsoDate(startOfUtcDay(new Date(ticket.soldAt))) === dayKey));
+    fillDailySheet(sheet, tickets.filter((ticket) => formatIsoDate(startOfUtcDay(new Date(ticket.soldAt))) === dayKey), commissionOf);
 
     const week = weeksByEndDay.get(dayKey);
     if (week) {
@@ -515,7 +520,7 @@ export async function GET(request: NextRequest) {
       fillWeeklySheet(weekSheet, week, tickets.filter((ticket) => {
         const soldAt = startOfUtcDay(new Date(ticket.soldAt));
         return soldAt >= week.start && soldAt < week.endExclusive;
-      }));
+      }), commissionOf);
     }
   }
 
@@ -526,7 +531,7 @@ export async function GET(request: NextRequest) {
     fillMonthlySheet(sheet, month, tickets.filter((ticket) => {
       const soldAt = startOfUtcDay(new Date(ticket.soldAt));
       return soldAt >= month.start && soldAt < month.endExclusive;
-    }));
+    }), commissionOf);
   });
 
   const buffer = await workbook.xlsx.writeBuffer();

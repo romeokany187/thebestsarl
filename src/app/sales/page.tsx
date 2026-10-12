@@ -6,7 +6,6 @@ import { prisma } from "@/lib/prisma";
 import { requirePageModuleAccess } from "@/lib/rbac";
 import { ensureAirlineCatalog } from "@/lib/airline-catalog";
 import { buildAirlineDepositAccountSummaries } from "@/lib/airline-deposit";
-import { computeCaaCommissionMap } from "@/lib/caa-commission";
 import { canImportTicketWorkbook, canManageTicketRecord, canSellTickets } from "@/lib/assignment";
 import { listTicketWorkbookImportHistory } from "@/lib/ticket-excel-import";
 import { getTicketCommissionAmount, getTicketTotalAmount } from "@/lib/ticket-pricing";
@@ -36,10 +35,6 @@ function rangeFromSearch(params: SearchParams) {
     startRaw,
     endRaw,
   };
-}
-
-function saleNatureLabel(value: string) {
-  return value === "CREDIT" ? "Crédit" : "Cash";
 }
 
 function salesAgencyLabelFromTeam(teamName: string | null | undefined) {
@@ -160,43 +155,9 @@ export default async function SalesPage({
     ),
   ]);
 
-  const caaAirline = airlines.find((airline) => airline.code === "CAA");
-  const caaRule = caaAirline?.commissionRules
-    .filter((rule) => rule.isActive && rule.commissionMode === "AFTER_DEPOSIT")
-    .sort((a, b) => b.startsAt.getTime() - a.startsAt.getTime())[0];
-  const caaTargetAmount = caaRule?.depositStockTargetAmount ?? 0;
-  const caaBatchCommission = caaRule?.batchCommissionAmount ?? 0;
-  const orderedCaaTicketsUntilPeriodEnd = caaAirline
-    ? await prisma.ticketSale.findMany({
-      where: {
-        ...roleTicketFilter,
-        airlineId: caaAirline.id,
-        soldAt: { lt: dateRange.endExclusive },
-      },
-      select: { id: true, soldAt: true, amount: true },
-      orderBy: [{ soldAt: "asc" }, { id: "asc" }],
-    })
-    : [];
-
-  const caaTicketsInPeriod = caaAirline
-    ? tickets.filter((ticket) => ticket.airlineId === caaAirline.id)
-    : [];
-
-  const caaCommissionMap = caaAirline
-    ? computeCaaCommissionMap({
-      periodTicketIds: caaTicketsInPeriod.map((ticket) => ticket.id),
-      orderedCaaTicketsUntilPeriodEnd,
-      targetAmount: caaTargetAmount,
-      batchCommissionAmount: caaBatchCommission,
-    })
-    : new Map<string, number>();
-
-  const commissionOf = (ticket: { id: string; airline: { code: string }; amount: number; commissionAmount: number | null; commissionRateUsed: number; agencyMarkupAmount?: number | null; commissionCalculationStatus?: string | null; baseFareAmount?: number | null; commissionBaseAmount?: number | null }) => {
-    if (ticket.airline.code === "CAA" && caaCommissionMap.has(ticket.id)) {
-      return getTicketCommissionAmount(ticket, caaCommissionMap.get(ticket.id) ?? 0);
-    }
-    return getTicketCommissionAmount(ticket);
-  };
+  const commissionOf = (ticket: { id: string; airline: { code: string }; amount: number; commissionAmount: number | null; commissionRateUsed: number; agencyMarkupAmount?: number | null; commissionCalculationStatus?: string | null; baseFareAmount?: number | null; commissionBaseAmount?: number | null; commissionModeApplied?: string | null }) => (
+    getTicketCommissionAmount(ticket)
+  );
 
   const agencyOrder = ["Kinshasa", "Lubumbashi", "Mbuji-Mayi", "Autres"];
   const agencySalesMap = new Map<string, { tickets: number; totalUsd: number; totalCdf: number; sellers: Map<string, { tickets: number; totalUsd: number; totalCdf: number }> }>();
@@ -443,7 +404,6 @@ export default async function SalesPage({
                 <th className="px-3 py-2 text-left">BaseFare</th>
                 <th className="px-3 py-2 text-left">Commission</th>
                 <th className="px-3 py-2 text-left">Montant total</th>
-                <th className="px-3 py-2 text-left">Nature vente</th>
                 <th className="px-3 py-2 text-left">Payant</th>
                 {canManageTickets ? <th className="px-3 py-2 text-left">Actions</th> : null}
               </tr>
@@ -463,7 +423,6 @@ export default async function SalesPage({
                     <td className="px-3 py-2">{(ticket.baseFareAmount ?? ticket.commissionBaseAmount).toFixed(2)} {ticket.currency}</td>
                     <td className="px-3 py-2 font-medium">{commissionAmount.toFixed(2)} {ticket.currency}</td>
                     <td className="px-3 py-2">{totalTicketAmount.toFixed(2)} {ticket.currency}</td>
-                    <td className="px-3 py-2">{saleNatureLabel(ticket.saleNature)}</td>
                     <td className="px-3 py-2">{ticket.payerName ?? "-"}</td>
                     {canManageTickets ? (
                       <td className="px-3 py-2">

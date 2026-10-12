@@ -143,12 +143,6 @@ function drawTopInfo(
   });
 }
 
-function normalizeStatus(status: string) {
-  if (status === "PAID") return "PAYE";
-  if (status === "PARTIAL") return "PARTIEL";
-  return "NON PAYE";
-}
-
 function dateRangeFromParams(params: SearchParams) {
   const now = new Date();
   const defaultDay = now.toISOString().slice(0, 10);
@@ -532,9 +526,18 @@ export async function GET(request: NextRequest) {
     },
   });
 
-  const ticketCommission = (ticket: { amount: number; commissionAmount?: number | null; commissionRateUsed?: number | null; agencyMarkupAmount?: number | null; commissionCalculationStatus?: string | null; baseFareAmount?: number | null; commissionBaseAmount?: number | null }) => (
-    getTicketCommissionAmount(ticket)
-  );
+  const ticketCommission = (ticket: {
+    id: string;
+    airline: { code: string };
+    amount: number;
+    commissionAmount?: number | null;
+    commissionRateUsed?: number | null;
+    agencyMarkupAmount?: number | null;
+    commissionModeApplied?: string | null;
+    commissionCalculationStatus?: string | null;
+    baseFareAmount?: number | null;
+    commissionBaseAmount?: number | null;
+  }) => getTicketCommissionAmount(ticket);
 
   // Common aggregates
   const byAgency = new Map<string, { count: number; amount: number }>();
@@ -992,8 +995,8 @@ export async function GET(request: NextRequest) {
   };
 
   if (reportKind === "DAILY") {
-    const headers = ["N°", "EMETEUR", "COMPAGNIE", "BENEFICIAIRE", "PNR", "ITINERAIRE", "MONTANT", "NATURE", "PAYANT", "STATUT", "COM."];
-    const colWidths = [24, 62, 54, 78, 48, 54, 44, 42, 52, 42, 30];
+    const headers = ["N°", "EMETEUR", "COMPAGNIE", "BENEFICIAIRE", "PNR", "ITINERAIRE", "MONTANT", "PAYANT", "COM."];
+    const colWidths = [24, 62, 54, 78, 48, 54, 44, 52, 30];
     const tableWidth = colWidths.reduce((sum, w) => sum + w, 0);
     const startX = (LW - tableWidth) / 2;
     const estimatedHeight = 18 + (rowH + 9) + tickets.length * (rowH + 9) + 48;
@@ -1024,10 +1027,8 @@ export async function GET(request: NextRequest) {
         ticket.ticketNumber,
         ticket.route,
         fmtNumber(getTicketTotalAmount(ticket, ticketCommission(ticket))),
-        ticket.saleNature,
         ticket.payerName ?? "-",
-        normalizeStatus(ticket.paymentStatus),
-        fmtNumber(ticket.commissionAmount ?? 0),
+        fmtNumber(ticketCommission(ticket)),
       ];
       values.forEach((value, idx) => drawLandText(value.slice(0, 26), xs[idx], lY, 8));
       lY -= rowH;

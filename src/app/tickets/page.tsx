@@ -3,7 +3,6 @@ import { KpiCard } from "@/components/kpi-card";
 import { requirePageModuleAccess } from "@/lib/rbac";
 import { prisma } from "@/lib/prisma";
 import { ensureAirlineCatalog } from "@/lib/airline-catalog";
-import { computeCaaCommissionMap } from "@/lib/caa-commission";
 import { getTicketCommissionAmount, getTicketTotalAmount } from "@/lib/ticket-pricing";
 
 export const dynamic = "force-dynamic";
@@ -286,65 +285,24 @@ export default async function TicketsPage({
     .filter((rule) => rule.isActive && rule.commissionMode === "AFTER_DEPOSIT")
     .sort((a, b) => b.startsAt.getTime() - a.startsAt.getTime())[0];
   const caaTargetAmount = caaRule?.depositStockTargetAmount ?? 0;
-  const caaBatchCommission = caaRule?.batchCommissionAmount ?? 0;
-  const [orderedMonitorCurrentCaaTickets, orderedComparisonCaaTickets] = caaAirline
-    ? await Promise.all([
-      prisma.ticketSale.findMany({
-        where: {
-          ...roleTicketFilter,
-          airlineId: caaAirline.id,
-          soldAt: { lt: range.end },
-        },
-        select: { id: true, soldAt: true, amount: true },
-        orderBy: [{ soldAt: "asc" }, { id: "asc" }],
-      }),
-      prisma.ticketSale.findMany({
-        where: {
-          ...roleTicketFilter,
-          airlineId: caaAirline.id,
-          soldAt: { lt: comparisonRange.end },
-        },
-        select: { id: true, soldAt: true, amount: true },
-        orderBy: [{ soldAt: "asc" }, { id: "asc" }],
-      }),
-    ])
-    : [[], []];
-
-  const monitorCurrentCaaCommissionMap = caaAirline
-    ? computeCaaCommissionMap({
-      periodTicketIds: monitorCurrentTickets
-        .filter((ticket) => ticket.airlineId === caaAirline.id)
-        .map((ticket) => ticket.id),
-      orderedCaaTicketsUntilPeriodEnd: orderedMonitorCurrentCaaTickets,
-      targetAmount: caaTargetAmount,
-      batchCommissionAmount: caaBatchCommission,
+  const orderedMonitorCurrentCaaTickets = caaAirline
+    ? await prisma.ticketSale.findMany({
+      where: {
+        airlineId: caaAirline.id,
+        soldAt: { lt: range.end },
+      },
+      select: { id: true, soldAt: true, amount: true },
+      orderBy: [{ soldAt: "asc" }, { id: "asc" }],
     })
-    : new Map<string, number>();
+    : [];
 
-  const comparisonCaaCommissionMap = caaAirline
-    ? computeCaaCommissionMap({
-      periodTicketIds: comparisonTickets
-        .filter((ticket) => ticket.airlineId === caaAirline.id)
-        .map((ticket) => ticket.id),
-      orderedCaaTicketsUntilPeriodEnd: orderedComparisonCaaTickets,
-      targetAmount: caaTargetAmount,
-      batchCommissionAmount: caaBatchCommission,
-    })
-    : new Map<string, number>();
+  const monitorCurrentCommissionOf = (ticket: { id: string; airline: { code: string }; amount: number; commissionAmount: number | null; commissionRateUsed: number; agencyMarkupAmount?: number | null; commissionModeApplied?: string | null; commissionCalculationStatus?: string | null; baseFareAmount?: number | null; commissionBaseAmount?: number | null }) => (
+    getTicketCommissionAmount(ticket)
+  );
 
-  const monitorCurrentCommissionOf = (ticket: { id: string; airline: { code: string }; amount: number; commissionAmount: number | null; commissionRateUsed: number; agencyMarkupAmount?: number | null; commissionCalculationStatus?: string | null; baseFareAmount?: number | null; commissionBaseAmount?: number | null }) => {
-    if (ticket.airline.code === "CAA" && monitorCurrentCaaCommissionMap.has(ticket.id)) {
-      return getTicketCommissionAmount(ticket, monitorCurrentCaaCommissionMap.get(ticket.id) ?? 0);
-    }
-    return getTicketCommissionAmount(ticket);
-  };
-
-  const comparisonCommissionOf = (ticket: { id: string; airline: { code: string }; amount: number; commissionAmount: number | null; commissionRateUsed: number; agencyMarkupAmount?: number | null; commissionCalculationStatus?: string | null; baseFareAmount?: number | null; commissionBaseAmount?: number | null }) => {
-    if (ticket.airline.code === "CAA" && comparisonCaaCommissionMap.has(ticket.id)) {
-      return getTicketCommissionAmount(ticket, comparisonCaaCommissionMap.get(ticket.id) ?? 0);
-    }
-    return getTicketCommissionAmount(ticket);
-  };
+  const comparisonCommissionOf = (ticket: { id: string; airline: { code: string }; amount: number; commissionAmount: number | null; commissionRateUsed: number; agencyMarkupAmount?: number | null; commissionModeApplied?: string | null; commissionCalculationStatus?: string | null; baseFareAmount?: number | null; commissionBaseAmount?: number | null }) => (
+    getTicketCommissionAmount(ticket)
+  );
 
   const monitorCurrentTotalOf = (ticket: { amount: number; commissionAmount: number | null; commissionRateUsed: number; agencyMarkupAmount?: number | null; airline: { code: string }; id: string }) => (
     getTicketTotalAmount(ticket, monitorCurrentCommissionOf(ticket))
@@ -358,8 +316,6 @@ export default async function TicketsPage({
     ? monitorCurrentTickets.filter((ticket) => ticket.airlineId === caaAirline.id)
     : [];
   const caaConsumed = caaTicketsInPeriod.reduce((sum, ticket) => sum + ticket.amount, 0);
-  const caaCommissionEarned = caaTicketsInPeriod.reduce((sum, ticket) => sum + monitorCurrentCommissionOf(ticket), 0);
-  const caaLotsReached = caaBatchCommission > 0 ? Math.round(caaCommissionEarned / caaBatchCommission) : 0;
   const caaConsumedUntilPeriodEnd = orderedMonitorCurrentCaaTickets.reduce((sum, ticket) => sum + ticket.amount, 0);
   const caaRemainder = caaTargetAmount > 0 ? caaConsumedUntilPeriodEnd % caaTargetAmount : 0;
   const caaRemainingToNextLot = caaTargetAmount > 0
@@ -793,7 +749,7 @@ export default async function TicketsPage({
               <div className="rounded-md border border-black/10 px-3 py-2 dark:border-white/10">
                 <p className="font-semibold">Suivi CAA</p>
                 <p className="text-black/60 dark:text-white/60">
-                  Cumul: {caaConsumed.toFixed(2)} USD • Lots: {caaLotsReached} • Commission: {caaCommissionEarned.toFixed(2)} USD • Reste: {caaRemainingToNextLot.toFixed(2)} USD
+                  Période: {caaConsumed.toFixed(2)} USD • Cumul historique: {caaConsumedUntilPeriodEnd.toFixed(2)} USD • Reste avant lot {caaTargetAmount.toFixed(0)} USD: {caaRemainingToNextLot.toFixed(2)} USD — commission CAA hors totaux (calcul manuel fin de mois)
                 </p>
               </div>
             ) : null}

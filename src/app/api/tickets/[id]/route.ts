@@ -220,6 +220,7 @@ export async function PATCH(request: NextRequest, { params }: Params) {
     const isAirCongo = targetAirline.code === "ACG";
     const isMontGabaon = targetAirline.code === "MGB";
     const isAirFast = targetAirline.code === "FST";
+    const isCaa = targetAirline.code === "CAA";
     const isAfterDepositMode = rule?.commissionMode === CommissionMode.AFTER_DEPOSIT;
     const consumedBeforeForAfterDeposit = isAfterDepositMode
       ? (
@@ -260,7 +261,13 @@ export async function PATCH(request: NextRequest, { params }: Params) {
       })
       : 0;
 
-    const baseCommission = isAirCongo
+    const baseCommission = isCaa && isAfterDepositMode
+      ? {
+        ratePercent: 0,
+        amount: 0,
+        modeApplied: CommissionMode.AFTER_DEPOSIT,
+      }
+      : isAirCongo
       ? {
         ratePercent: 5,
         amount: commissionBaseAmount * 0.05,
@@ -294,7 +301,7 @@ export async function PATCH(request: NextRequest, { params }: Params) {
 
     const commission = {
       ...baseCommission,
-      amount: baseCommission.amount + agencyMarkupAmount,
+      amount: isCaa ? 0 : baseCommission.amount + agencyMarkupAmount,
       ratePercent: baseCommission.ratePercent,
     };
 

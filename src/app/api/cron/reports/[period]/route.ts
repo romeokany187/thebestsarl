@@ -6,7 +6,6 @@ import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { prisma } from "@/lib/prisma";
 import { isMailConfigured, sendMailBatch } from "@/lib/mail";
-import { computeCaaCommissionMap } from "@/lib/caa-commission";
 import { getTicketCommissionAmount, getTicketTotalAmount } from "@/lib/ticket-pricing";
 
 type Frequency = "daily" | "weekly" | "monthly";
@@ -428,45 +427,19 @@ export async function GET(request: NextRequest, { params }: Params) {
     }),
   ]);
 
-  const caaAirline = await prisma.airline.findUnique({
-    where: { code: "CAA" },
-    select: {
-      id: true,
-      commissionRules: {
-        where: { isActive: true },
-        orderBy: { startsAt: "desc" },
-        select: {
-          commissionMode: true,
-          depositStockTargetAmount: true,
-          batchCommissionAmount: true,
-        },
-      },
-    },
-  });
-
-  const caaRule = caaAirline?.commissionRules.find((rule) => rule.commissionMode === "AFTER_DEPOSIT");
-  const caaCommissionMap = caaAirline && caaRule
-    ? computeCaaCommissionMap({
-      periodTicketIds: tickets.filter((ticket) => ticket.airlineId === caaAirline.id).map((ticket) => ticket.id),
-      orderedCaaTicketsUntilPeriodEnd: await prisma.ticketSale.findMany({
-        where: {
-          airlineId: caaAirline.id,
-          soldAt: { lt: range.end },
-        },
-        select: { id: true, soldAt: true, amount: true },
-        orderBy: [{ soldAt: "asc" }, { id: "asc" }],
-      }),
-      targetAmount: caaRule.depositStockTargetAmount ?? 0,
-      batchCommissionAmount: caaRule.batchCommissionAmount ?? 0,
-    })
-    : new Map<string, number>();
-
-  const ticketCommission = (ticket: { id: string; airlineId: string; amount: number; commissionAmount: number | null; commissionRateUsed: number; agencyMarkupAmount?: number | null; commissionCalculationStatus?: string | null; baseFareAmount?: number | null; commissionBaseAmount?: number | null }) => {
-    if (caaAirline && ticket.airlineId === caaAirline.id && caaCommissionMap.has(ticket.id)) {
-      return getTicketCommissionAmount(ticket, caaCommissionMap.get(ticket.id) ?? 0);
-    }
-    return getTicketCommissionAmount(ticket);
-  };
+  const ticketCommission = (ticket: {
+    id: string;
+    airlineId: string;
+    airline: { code: string };
+    amount: number;
+    commissionAmount: number | null;
+    commissionRateUsed: number;
+    agencyMarkupAmount?: number | null;
+    commissionModeApplied?: string | null;
+    commissionCalculationStatus?: string | null;
+    baseFareAmount?: number | null;
+    commissionBaseAmount?: number | null;
+  }) => getTicketCommissionAmount(ticket);
 
   const reportsRecipient = getReportsRecipient();
   const financeRecipients = await prisma.user.findMany({

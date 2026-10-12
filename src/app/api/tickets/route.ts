@@ -196,7 +196,14 @@ export async function POST(request: NextRequest) {
       ? (await prisma.ticketSale.count({ where: { airlineId: parsed.data.airlineId } })) + 1
       : 0;
 
-    const baseCommission = isAirCongo
+    const isCaa = airline.code === "CAA";
+    const baseCommission = isCaa && isAfterDepositMode
+      ? {
+        ratePercent: 0,
+        amount: 0,
+        modeApplied: CommissionMode.AFTER_DEPOSIT,
+      }
+      : isAirCongo
       ? {
         ratePercent: 5,
         amount: commissionBaseAmount * 0.05,
@@ -230,7 +237,7 @@ export async function POST(request: NextRequest) {
 
     const commission = {
       ...baseCommission,
-      amount: baseCommission.amount + agencyMarkupAmount,
+      amount: isCaa ? 0 : baseCommission.amount + agencyMarkupAmount,
       ratePercent: baseCommission.ratePercent,
     };
 

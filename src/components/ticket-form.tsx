@@ -70,6 +70,10 @@ type ItineraryFormState = {
   travelMessage: string;
 };
 
+/** Encodage ventes : cash par défaut ; le paiement réel se fait au module Paiements. */
+const DEFAULT_TICKET_SALE_NATURE = "CASH" as const;
+const DEFAULT_TICKET_PAYMENT_STATUS = "UNPAID" as const;
+
 const EMPTY_FORM: FormState = {
   ticketNumber: "",
   customerName: "",
@@ -81,8 +85,8 @@ const EMPTY_FORM: FormState = {
   currency: "USD",
   airlineId: "",
   sellerId: "",
-  saleNature: "CASH" as const,
-  paymentStatus: "UNPAID" as const,
+  saleNature: DEFAULT_TICKET_SALE_NATURE,
+  paymentStatus: DEFAULT_TICKET_PAYMENT_STATUS,
   payerName: "",
   agencyMarkupAmount: "0",
   notes: "",
@@ -348,8 +352,8 @@ export function TicketForm({
       currency: form.currency,
       airlineId: form.airlineId,
       ...(form.sellerId.trim() ? { sellerId: form.sellerId } : {}),
-      saleNature: form.saleNature,
-      paymentStatus: form.paymentStatus,
+      saleNature: editTicketId ? form.saleNature : DEFAULT_TICKET_SALE_NATURE,
+      paymentStatus: editTicketId ? form.paymentStatus : DEFAULT_TICKET_PAYMENT_STATUS,
       payerName: form.payerName,
       agencyMarkupPercent: 0,
       agencyMarkupAmount,
@@ -481,36 +485,25 @@ export function TicketForm({
         </select>
       </div>
 
-      <div className="grid gap-3 sm:grid-cols-2">
-        {allowAdminEncodingDate ? (
-          <div>
-            <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-black/60 dark:text-white/60">
-              Date d'encodage (admin)
-            </label>
-            <input
-              type="date"
-              name="travelDate"
-              required
-              value={form.travelDate}
-              onChange={(event) => updateField("travelDate", event.target.value)}
-              className="w-full rounded-md border px-3 py-2"
-            />
-          </div>
-        ) : (
-          <div className="rounded-md border px-3 py-2 text-sm">
-            Date d'encodage : <span className="font-semibold">{form.travelDate}</span>
-          </div>
-        )}
-        <select
-          name="saleNature"
-          value={form.saleNature}
-          onChange={(event) => updateField("saleNature", event.target.value as typeof form.saleNature)}
-          className="rounded-md border px-3 py-2"
-        >
-          <option value="CASH">Cash</option>
-          <option value="CREDIT">Crédit</option>
-        </select>
-      </div>
+      {allowAdminEncodingDate ? (
+        <div>
+          <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-black/60 dark:text-white/60">
+            Date d&apos;encodage (admin)
+          </label>
+          <input
+            type="date"
+            name="travelDate"
+            required
+            value={form.travelDate}
+            onChange={(event) => updateField("travelDate", event.target.value)}
+            className="w-full rounded-md border px-3 py-2"
+          />
+        </div>
+      ) : (
+        <div className="rounded-md border px-3 py-2 text-sm">
+          Date d&apos;encodage : <span className="font-semibold">{form.travelDate}</span>
+        </div>
+      )}
 
       <div className="grid gap-3 sm:grid-cols-2">
         <input
@@ -589,49 +582,37 @@ export function TicketForm({
         </select>
       </div>
 
-      <div className="grid gap-3 sm:grid-cols-2">
-        <select
-          name="paymentStatus"
-          value={form.paymentStatus}
-          onChange={(event) => updateField("paymentStatus", event.target.value as typeof form.paymentStatus)}
-          className="rounded-md border px-3 py-2"
-        >
-          <option value="PAID">Payé</option>
-          <option value="PARTIAL">Partiel</option>
-          <option value="UNPAID">Non payé</option>
-        </select>
-        <select
-          name="payerName"
-          required
-          value={form.payerName}
-          onChange={(event) => updateField("payerName", event.target.value)}
-          className="rounded-md border px-3 py-2"
-        >
-          {form.payerName && !payerOptions.includes(form.payerName) ? (
-            <option value={form.payerName}>Historique - {form.payerName}</option>
-          ) : null}
-          <optgroup label="Client">
-            <option value={clientPayerValue}>{clientPayerValue}</option>
-          </optgroup>
-          <optgroup label="Agents de l'agence">
-            {agentPayerOptions.map((option) => (
-              <option key={option} value={option}>
-                {option}
-              </option>
-            ))}
-          </optgroup>
-          <optgroup label="Équipes">
-            {teamPayerOptions.map((option) => (
-              <option key={option} value={option}>
-                {option}
-              </option>
-            ))}
-          </optgroup>
-        </select>
-      </div>
+      <select
+        name="payerName"
+        required
+        value={form.payerName}
+        onChange={(event) => updateField("payerName", event.target.value)}
+        className="rounded-md border px-3 py-2"
+      >
+        {form.payerName && !payerOptions.includes(form.payerName) ? (
+          <option value={form.payerName}>Historique - {form.payerName}</option>
+        ) : null}
+        <optgroup label="Client">
+          <option value={clientPayerValue}>{clientPayerValue}</option>
+        </optgroup>
+        <optgroup label="Agents de l'agence">
+          {agentPayerOptions.map((option) => (
+            <option key={option} value={option}>
+              {option}
+            </option>
+          ))}
+        </optgroup>
+        <optgroup label="Équipes">
+          {teamPayerOptions.map((option) => (
+            <option key={option} value={option}>
+              {option}
+            </option>
+          ))}
+        </optgroup>
+      </select>
 
       <p className="text-xs text-black/60 dark:text-white/60">
-        Le champ payant est auto-rempli: Client, Agent de l&apos;agence ou Équipe (Lubumbashi/Partenaires selon les équipes disponibles).
+        Payeur : Client, agent ou équipe (auto-rempli sur le client). Pas de statut paiement ici — encaissement au module Paiements.
       </p>
       <p className="text-xs text-black/60 dark:text-white/60">
         Les doublons de PNR sont autorisés si les billets correspondent à des passagers ou dossiers distincts.
