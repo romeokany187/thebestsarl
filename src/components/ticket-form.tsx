@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { AIRLINE_TICKET_DEPOSIT_START_LABEL } from "@/lib/airline-deposit";
 import { defaultTravelMessage, extractTicketItinerary, getPlainTicketNotes, mergeTicketNotesWithItinerary, type TicketItineraryData } from "@/lib/ticket-itinerary";
 
 type UserOption = { id: string; name: string };
@@ -238,13 +237,11 @@ export function TicketForm({
 
   const isAirCongo = selectedAirline?.code === "ACG";
   const isMontGabaon = selectedAirline?.code === "MGB";
-  const isAirFast = selectedAirline?.code === "FST";
   const selectedDepositAccount = useMemo(
     () => depositAccounts.find((account) => selectedAirline?.code ? account.airlineCodes.includes(selectedAirline.code) : false) ?? null,
     [depositAccounts, selectedAirline],
   );
   const requestedTicketAmount = Number(form.amount) || 0;
-  const isBackdatedAdminEntry = allowAdminEncodingDate && Boolean(form.travelDate) && form.travelDate !== todayDateInputValue();
 
   const clientPayerValue = useMemo(() => {
     const customer = form.customerName.trim();
@@ -611,47 +608,10 @@ export function TicketForm({
         </optgroup>
       </select>
 
-      <p className="text-xs text-black/60 dark:text-white/60">
-        Payeur : Client, agent ou équipe (auto-rempli sur le client). Pas de statut paiement ici — encaissement au module Paiements.
-      </p>
-      <p className="text-xs text-black/60 dark:text-white/60">
-        Les doublons de PNR sont autorisés si les billets correspondent à des passagers ou dossiers distincts.
-      </p>
-      {allowAdminEncodingDate ? (
-        <p className="text-xs text-black/60 dark:text-white/60">
-          Admin uniquement: vous pouvez ajuster la date d&apos;encodage du billet pour la conformité des données.
+      {selectedDepositAccount && requestedTicketAmount > selectedDepositAccount.balance ? (
+        <p className="text-xs text-red-600 dark:text-red-300">
+          Solde {selectedDepositAccount.label} insuffisant ({selectedDepositAccount.balance.toFixed(2)} USD disponibles).
         </p>
-      ) : null}
-
-      {isAirCongo ? (
-        <p className="text-xs text-black/60 dark:text-white/60">
-          Air Congo: commission fixe 5% sur le BaseFare saisi.
-        </p>
-      ) : null}
-      {isMontGabaon ? (
-        <p className="text-xs text-black/60 dark:text-white/60">
-          Mont Gabaon: commission fixe 9% sur le BaseFare saisi.
-        </p>
-      ) : null}
-      <p className="text-xs text-black/60 dark:text-white/60">
-        Règle standard: commission compagnie (%) sur le BaseFare + majoration agence en montant (devise).
-      </p>
-      {isAirFast ? (
-        <p className="text-xs text-black/60 dark:text-white/60">
-          Air Fast: bonus spécial conservé (après 12 billets vendus, le 13ème est compté comme commission).
-        </p>
-      ) : null}
-      {selectedDepositAccount ? (
-        <div className={`space-y-1 text-xs ${requestedTicketAmount > selectedDepositAccount.balance ? "text-red-600 dark:text-red-300" : "text-black/60 dark:text-white/60"}`}>
-          <p>
-            {selectedDepositAccount.label}: solde disponible {selectedDepositAccount.balance.toFixed(2)} USD. Les billets vendus à partir du {AIRLINE_TICKET_DEPOSIT_START_LABEL} débitent ou recréditent automatiquement ce compte.
-          </p>
-          {isBackdatedAdminEntry ? (
-            <p className="text-black/55 dark:text-white/55">
-              Les billets datés avant le {AIRLINE_TICKET_DEPOSIT_START_LABEL} restent exclus de ces opérations, même en cas d&apos;encodage antidaté.
-            </p>
-          ) : null}
-        </div>
       ) : null}
 
       <textarea

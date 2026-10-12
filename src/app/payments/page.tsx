@@ -1162,7 +1162,6 @@ export default async function PaymentsPage({
     <section className="overflow-hidden rounded-2xl border border-amber-300 bg-amber-50 shadow-sm dark:border-amber-800 dark:bg-amber-950/20">
       <div className="border-b border-amber-300 px-4 py-3 dark:border-amber-800">
         <h2 className="text-sm font-semibold">Demandes d'approbation en attente</h2>
-        <p className="mt-1 text-xs text-black/65 dark:text-white/65">Quand le plafond journalier est dépassé, la sortie est mise ici en attente. Une approbation exécute automatiquement l'opération; un rejet la laisse bloquée.</p>
       </div>
       <div className="overflow-x-auto">
         <table className="min-w-full text-sm">
@@ -1204,7 +1203,6 @@ export default async function PaymentsPage({
     <section className="overflow-hidden rounded-2xl border border-black/10 bg-white shadow-sm dark:border-white/10 dark:bg-zinc-900">
       <div className="border-b border-black/10 px-4 py-3 dark:border-white/10">
         <h2 className="text-sm font-semibold">Historique complet modifiable</h2>
-        <p className="mt-1 text-xs text-black/60 dark:text-white/60">Cette vue charge au-delà du mois sélectionné pour permettre au comptable de corriger ou supprimer des écritures plus anciennes.</p>
       </div>
       <div className="overflow-x-auto">
         <table className="min-w-full text-sm">
@@ -1264,7 +1262,6 @@ export default async function PaymentsPage({
     <section className="overflow-hidden rounded-2xl border border-black/10 bg-white shadow-sm dark:border-white/10 dark:bg-zinc-900">
       <div className="border-b border-black/10 px-4 py-3 dark:border-white/10">
         <h2 className="text-sm font-semibold">Historique complet proxy banking</h2>
-        <p className="mt-1 text-xs text-black/60 dark:text-white/60">Affiche les opérations proxy de toutes les périodes chargées pour permettre les corrections anciennes.</p>
       </div>
       <div className="overflow-x-auto">
         <table className="min-w-full text-sm">
@@ -1335,20 +1332,8 @@ export default async function PaymentsPage({
   const paymentOrdersExecutionCount = paymentOrdersReadyForExecution.length;
   const needsExecutionCount = needsReadyForExecution.length;
 
-  function separatedDeskSummary(label: string) {
-    return (
-      <section className="rounded-2xl border border-dashed border-black/20 bg-white px-4 py-5 text-sm text-black/65 dark:border-white/20 dark:bg-zinc-900 dark:text-white/65">
-        {label} n&apos;utilise pas les données actuelles de <span className="font-semibold">THE BEST / Caisse 2 siège</span>. Aucun récapitulatif séparé n&apos;est encore enregistré ici.
-      </section>
-    );
-  }
-
-  function separatedDeskWorkspace(label: string) {
-    return (
-      <section className="rounded-2xl border border-dashed border-black/20 bg-white px-4 py-5 text-sm text-black/65 dark:border-white/20 dark:bg-zinc-900 dark:text-white/65">
-        Aucun historique ni aucune opération distincte n&apos;est encore enregistré pour <span className="font-semibold">{label}</span>. Les écritures actuelles restent réservées à <span className="font-semibold">THE BEST / Caisse 2 siège</span>.
-      </section>
-    );
+  function separatedDeskSummary(_label: string) {
+    return null;
   }
 
   const workspaceOverrides = {
@@ -1515,16 +1500,9 @@ export default async function PaymentsPage({
           <section className="space-y-4 rounded-2xl border border-black/10 bg-white p-4 dark:border-white/10 dark:bg-zinc-900">
             <div>
               <h2 className="text-sm font-semibold">OP à exécuter</h2>
-              <p className="mt-1 text-xs text-black/55 dark:text-white/55">
-                Marquer exécuté est indicatif : aucune sortie caisse ni ligne au journal (suivi et notification comptable uniquement).
-              </p>
             </div>
 
-            {paymentOrdersReadyForExecution.length === 0 ? (
-              <p className="rounded-xl border border-dashed border-black/20 px-4 py-5 text-xs text-black/60 dark:border-white/20 dark:text-white/60">
-                Aucun OP en attente d&apos;exécution.
-              </p>
-            ) : (
+            {paymentOrdersReadyForExecution.length === 0 ? null : (
               <div className="grid gap-3 lg:grid-cols-2">
                 {paymentOrdersReadyForExecution.map((order) => (
                   <article key={order.id} className="rounded-xl border border-black/10 bg-black/2 p-3 dark:border-white/10 dark:bg-white/3">
@@ -1552,16 +1530,9 @@ export default async function PaymentsPage({
           <section className="space-y-4 rounded-2xl border border-black/10 bg-white p-4 dark:border-white/10 dark:bg-zinc-900">
             <div>
               <h2 className="text-sm font-semibold">EDB à exécuter</h2>
-              <p className="mt-1 text-xs text-black/55 dark:text-white/55">
-                Marquer exécuté est indicatif : aucune sortie caisse ni ligne au journal (suivi et notification comptable uniquement).
-              </p>
             </div>
 
-            {needsReadyForExecution.length === 0 ? (
-              <p className="rounded-xl border border-dashed border-black/20 px-4 py-5 text-xs text-black/60 dark:border-white/20 dark:text-white/60">
-                Aucun EDB en attente d&apos;exécution.
-              </p>
-            ) : (
+            {needsReadyForExecution.length === 0 ? null : (
               <div className="grid gap-3 lg:grid-cols-2">
                 {needsReadyForExecution.map((need) => (
                   <article key={need.id} className="rounded-xl border border-black/10 bg-black/2 p-3 dark:border-white/10 dark:bg-white/3">
@@ -1598,9 +1569,6 @@ export default async function PaymentsPage({
           <section className="space-y-4 rounded-2xl border border-black/10 bg-white p-4 dark:border-white/10 dark:bg-zinc-900">
             <div>
               <h2 className="text-sm font-semibold">Centre de rapports caisse</h2>
-              <p className="mt-2 text-xs text-black/60 dark:text-white/60">
-                Lancez rapidement les rapports PDF de paiements billets, journal de caisse et synthèse caisse pour la période active.
-              </p>
             </div>
 
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
@@ -1730,9 +1698,6 @@ export default async function PaymentsPage({
                   Billets partiels (PDF)
                 </a>
               </div>
-              <p className="mt-3 text-xs text-black/60 dark:text-white/60">
-                {range.label}
-              </p>
             </section>
 
             <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
@@ -1795,13 +1760,7 @@ export default async function PaymentsPage({
               </div>
             </section>
 
-            {canWrite ? (
-              <PaymentEntryForm tickets={paymentTickets} />
-            ) : (
-              <section className="rounded-2xl border border-dashed border-black/20 bg-white/80 p-4 text-xs text-black/65 dark:border-white/20 dark:bg-zinc-900/70 dark:text-white/65">
-                Profil en lecture seule sur les écritures billets. Vous pouvez consulter les indicateurs et l&apos;historique.
-              </section>
-            )}
+            {canWrite ? <PaymentEntryForm tickets={paymentTickets} /> : null}
 
             <section className="overflow-hidden rounded-2xl border border-black/10 bg-white shadow-sm dark:border-white/10 dark:bg-zinc-900">
               <div className="border-b border-black/10 px-4 py-3 dark:border-white/10">
@@ -1873,15 +1832,6 @@ export default async function PaymentsPage({
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div className="max-w-3xl">
                   <h2 className="text-sm font-semibold">Synthèse caisse</h2>
-                  <p className="mt-2 text-xs text-black/60 dark:text-white/60">
-                    {cashRange.label}. Solde USD: ouverture {journalOpeningUsd.toFixed(2)} USD, clôture {journalClosingUsd.toFixed(2)} USD. Solde CDF: ouverture {journalOpeningCdf.toFixed(2)} CDF, clôture {journalClosingCdf.toFixed(2)} CDF.
-                    {journalFromExcelImport
-                      ? " Journal affiché ligne à ligne depuis l’import Excel (USD et CDF séparés)."
-                      : usesExcelDailyJournalOpenings
-                        ? " Report à nouveau par jour = fichier Excel importé."
-                        : ""}
-                    Contrôle global (équivalent USD): ouverture {openingBalance.toFixed(2)} USD, entrées {grossInflows.toFixed(2)} USD, sorties {cashOutflows.toFixed(2)} USD, variation nette {netCashVariation.toFixed(2)} USD, clôture {closingBalance.toFixed(2)} USD ({accountingConsistency ? "OK" : "écart"}).
-                  </p>
                 </div>
 
                 <form method="GET" className="flex flex-wrap items-end gap-2 text-xs">
@@ -1919,12 +1869,8 @@ export default async function PaymentsPage({
             </section>
 
             {canWrite ? (
-                    <CashOperationForm hasInitialOpening={hasInitialOpeningRecorded} descriptionPrefix={`${selectedDeskKey}:`} />
-            ) : (
-              <section className="rounded-2xl border border-dashed border-black/20 bg-white/80 p-4 text-xs text-black/65 dark:border-white/20 dark:bg-zinc-900/70 dark:text-white/65">
-                Profil en lecture seule sur les autres écritures de caisse. Les encodages restent réservés aux profils autorisés.
-              </section>
-            )}
+              <CashOperationForm hasInitialOpening={hasInitialOpeningRecorded} descriptionPrefix={`${selectedDeskKey}:`} />
+            ) : null}
 
             <section className="overflow-hidden rounded-2xl border border-black/10 bg-white shadow-sm dark:border-white/10 dark:bg-zinc-900">
               <div className="border-b border-black/10 px-4 py-3 dark:border-white/10">
@@ -2024,9 +1970,6 @@ export default async function PaymentsPage({
           <div className="space-y-4">
             <section className="rounded-2xl border border-black/10 bg-white p-4 dark:border-white/10 dark:bg-zinc-900">
               <h2 className="text-sm font-semibold">Comptes virtuels</h2>
-              <p className="mt-2 text-xs text-black/60 dark:text-white/60">
-                Conformément à la feuille VIRTUEL, suivi des canaux Airtel Money, Orange Money, M-Pesa, Equity, et Rawbank & Illicocash avec soldes par devise.
-              </p>
             </section>
 
             <div className="overflow-hidden rounded-2xl border border-black/10 bg-white shadow-sm dark:border-white/10 dark:bg-zinc-900">

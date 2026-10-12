@@ -613,13 +613,7 @@ export function CashReportExcelImportWorkspace() {
 
   return (
     <section className="space-y-4 rounded-2xl border border-black/10 bg-white p-4 dark:border-white/10 dark:bg-zinc-900">
-      <div>
-        <h2 className="text-sm font-semibold">Import rapport Excel (Caisse 2 / THE BEST)</h2>
-        <p className="mt-1 text-xs text-black/60 dark:text-white/60">
-          Le mois est lu dans le fichier Excel (journal de caisse), pas la date du jour. Le constat compare ce mois-là au
-          système. La date de clôture sert au billetage / virtuel et est proposée automatiquement (dernier jour du journal).
-        </p>
-      </div>
+      <h2 className="text-sm font-semibold">Import rapport Excel (Caisse 2 / THE BEST)</h2>
 
       <form className="grid gap-3" onSubmit={(event) => void submit(event, true)}>
         <input
@@ -675,10 +669,6 @@ export function CashReportExcelImportWorkspace() {
       </form>
 
       {message ? <p className="text-xs text-black/65 dark:text-white/65">{message}</p> : null}
-
-      {loading && !preview ? (
-        <p className="text-xs text-black/55 dark:text-white/55">Lecture des feuilles journal, billetage et virtuel…</p>
-      ) : null}
 
       {preview ? <CashReportImportAnalysisPanel preview={preview} /> : null}
 

@@ -178,18 +178,6 @@ export function AuditWorkspace({
     [employeeAudits, selectedAgent],
   );
 
-  const missionGuide = mission === "GLOBAL"
-    ? "Vue IA globale: priorise les dossiers a risque, propose une decision de cloture et un plan d'actions transverse."
-    : mission === "VENTES_COMPAGNIE"
-      ? "Mission ventes globale: le rapport externe melange toutes les compagnies; l'IA compare ensuite compagnie par compagnie avec les billets du systeme."
-      : mission === "MOUVEMENTS_CAISSE"
-        ? "Mission caisse: confronte paiements + benefices avec depenses (depenses attendues via etats des besoins) puis sort risques et recommandations."
-        : mission === "BESOINS_VS_CAISSE"
-          ? "Mission besoins vs caisse: rapproche besoins approuves et sorties effectives de caisse."
-          : mission === "ARCHIVES"
-            ? "Mission archives: verifie que le registre externe correspond aux dossiers archives dans l'application."
-            : "Mission agent: evalue la performance d'un employe via presences, rapports et billets vendus.";
-
   async function runExternalCompare() {
     if (!canWrite) {
       setStatus("Mode lecture: comparaison externe reservee a l'auditeur.");
@@ -302,7 +290,6 @@ export function AuditWorkspace({
           className={`rounded-2xl border p-4 text-left transition ${focusPane === "ASSISTANT" ? "border-black/25 bg-black/5 dark:border-white/30 dark:bg-white/10" : "border-black/10 bg-white dark:border-white/10 dark:bg-zinc-900"}`}
         >
           <p className="text-base font-semibold">Assistant IA Audit</p>
-          <p className="mt-1 text-xs text-black/60 dark:text-white/60">Filtres, dossiers et supervision. Cette vue prend tout l'espace quand elle est active.</p>
         </button>
         <button
           type="button"
@@ -310,7 +297,6 @@ export function AuditWorkspace({
           className={`rounded-2xl border p-4 text-left transition ${focusPane === "ENGINE" ? "border-black/25 bg-black/5 dark:border-white/30 dark:bg-white/10" : "border-black/10 bg-white dark:border-white/10 dark:bg-zinc-900"}`}
         >
           <p className="text-base font-semibold">Moteur IA</p>
-          <p className="mt-1 text-xs text-black/60 dark:text-white/60">Mission, comparaison externe, raisonnement IA et plan d'actions. Cette vue prend tout l'espace quand elle est active.</p>
         </button>
       </section>
 
@@ -318,7 +304,6 @@ export function AuditWorkspace({
         <section className="flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto rounded-2xl border border-black/10 bg-white p-5 dark:border-white/10 dark:bg-zinc-900">
           <div className="shrink-0">
             <h2 className="text-base font-semibold">Assistant IA Audit</h2>
-            <p className="mt-1 text-xs text-black/60 dark:text-white/60">Espace de travail audit: filtrez, visualisez et priorisez les dossiers.</p>
           </div>
 
           <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-5">
@@ -398,7 +383,6 @@ export function AuditWorkspace({
       {focusPane === "ENGINE" ? (
         <section className="flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto rounded-2xl border border-black/10 bg-white p-5 dark:border-white/10 dark:bg-zinc-900">
           <h2 className="text-base font-semibold">Moteur IA</h2>
-          <p className="mt-1 text-xs text-black/60 dark:text-white/60">{missionGuide}</p>
 
           <div className="mt-4 space-y-3 rounded-xl border border-black/10 p-4 dark:border-white/10">
           <select value={mission} onChange={(e) => setMission(e.target.value as AiAnalysis["mission"])} className="w-full rounded-md border border-black/15 px-3 py-2 text-sm dark:border-white/20">

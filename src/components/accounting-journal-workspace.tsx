@@ -605,11 +605,6 @@ export function AccountingJournalWorkspace({
           <div className="min-w-0">
             <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-black/60 dark:text-white/60">Date</label>
             <input type="datetime-local" value={entryDate} onChange={(event) => setEntryDate(event.target.value)} className="w-full rounded-md border border-black/15 bg-white px-3 py-2 text-sm dark:border-white/15 dark:bg-zinc-900" />
-            <p className="mt-1 text-[11px] text-black/50 dark:text-white/50">
-              {selectedEntryRate
-                ? `Taux appliqué pour cette date: 1 USD = ${selectedEntryRate.exchangeRate.toFixed(2)} CDF`
-                : "Aucun taux du jour enregistré pour cette date. Enregistre-le dans le bloc ci-dessus avant de passer l'écriture."}
-            </p>
           </div>
           <div className="min-w-0">
             <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-black/60 dark:text-white/60">Pôle(x)</label>
@@ -672,9 +667,7 @@ export function AccountingJournalWorkspace({
                     );
                   })}
                 </div>
-              ) : (
-                <p className="px-2 py-1 text-xs text-black/50 dark:text-white/50">Aucune facture trouvée pour cette recherche.</p>
-              )}
+              ) : null}
             </div>
           </div>
           <div className="min-w-0">
@@ -704,9 +697,6 @@ export function AccountingJournalWorkspace({
         <div className="mt-3">
           <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-black/60 dark:text-white/60">Libellé</label>
           <input value={libelle} onChange={(event) => setLibelle(event.target.value)} placeholder="Libellé de l'écriture comptable" className="w-full rounded-md border border-black/15 bg-white px-3 py-2 text-sm dark:border-white/15 dark:bg-zinc-900" />
-          <p className="mt-1 text-[11px] text-black/50 dark:text-white/50">
-            Si tu choisis une facture billet, le libellé se propose automatiquement sous la forme vente billet + nom client, puis reste modifiable.
-          </p>
         </div>
 
         <div className="mt-4 grid gap-4 xl:grid-cols-2">
@@ -732,7 +722,7 @@ export function AccountingJournalWorkspace({
                             placeholder="Ex: 5711"
                             className="w-full rounded-md border border-black/15 bg-white px-3 py-2 text-sm font-mono dark:border-white/15 dark:bg-zinc-900"
                           />
-                          <p className="mt-1 text-[11px] text-black/50 dark:text-white/50">{account ? account.label : "Code du plan comptable"}</p>
+                          {account ? <p className="mt-1 text-[11px] text-black/50 dark:text-white/50">{account.label}</p> : null}
                         </div>
                         <div>
                           <label className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-black/55 dark:text-white/55">USD</label>

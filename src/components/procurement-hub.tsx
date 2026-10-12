@@ -656,9 +656,6 @@ export function ProcurementHub({
       <section className="rounded-xl border border-black/10 bg-white p-4 dark:border-white/10 dark:bg-zinc-900">
         <div className="flex flex-wrap items-end justify-between gap-3">
           <h2 className="text-base font-semibold">Liste</h2>
-          <p className="text-xs text-black/55 dark:text-white/55">
-            {needs.length} EDB · {submittedCount} en attente
-          </p>
         </div>
         <div className="mt-3 grid gap-2 sm:grid-cols-[180px,1fr]">
           <select
@@ -815,11 +812,7 @@ export function ProcurementHub({
             {stockStatus ? <p className="mt-2 text-xs text-black/60 dark:text-white/60">{stockStatus}</p> : null}
           </section>
         </div>
-      ) : (
-        <p className="rounded-xl border border-dashed border-black/20 px-4 py-3 text-sm text-black/70 dark:border-white/20 dark:text-white/70">
-          Gestion du stock réservée au service approvisionnement.
-        </p>
-      )}
+      ) : null}
 
       <section className="rounded-xl border border-black/10 bg-white p-4 dark:border-white/10 dark:bg-zinc-900">
         <div className="flex flex-wrap items-center justify-between gap-3">
@@ -879,9 +872,7 @@ export function ProcurementHub({
               {" · "}{movement.referenceDoc}
               {" · "}{new Date(movement.createdAt).toLocaleDateString()}
             </p>
-          )) : (
-            <p className="text-xs text-black/60 dark:text-white/60">Aucun mouvement.</p>
-          )}
+          )) : null}
         </div>
       </section>
     </div>

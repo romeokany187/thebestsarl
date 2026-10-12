@@ -109,11 +109,6 @@ export function PaymentOrderForm({ issuerRole = "DIRECTEUR_GENERAL" }: { issuerR
   return (
     <form onSubmit={(event) => void submitOrder(event)} className="mb-6 rounded-2xl border border-black/10 bg-white p-4 shadow-sm dark:border-white/10 dark:bg-zinc-900">
       <h2 className="text-sm font-semibold">{isAdminIssuer ? "Nouvel ordre de paiement (Admin)" : "Nouvel ordre de paiement (DG)"}</h2>
-      <p className="mt-1 text-xs text-black/60 dark:text-white/60">
-        {isAdminIssuer
-          ? "Un OP émis par l'admin part directement en exécution caisse, sans attente d'approbation."
-          : "Un OP émis par la DG part d'abord à l'approbation admin puis à l'exécution caisse."}
-      </p>
 
       <div className="mt-3 grid gap-3 md:grid-cols-2">
         <input

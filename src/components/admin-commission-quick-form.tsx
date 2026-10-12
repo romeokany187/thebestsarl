@@ -56,9 +56,6 @@ export function AdminCommissionQuickForm({ airlines }: { airlines: AirlineOption
   return (
     <section className="rounded-xl border border-black/10 bg-white p-4 dark:border-white/10 dark:bg-zinc-900">
       <h2 className="text-lg font-semibold">Commission rapide</h2>
-      <p className="mt-1 text-xs text-black/60 dark:text-white/60">
-        Choisissez une compagnie, indiquez le pourcentage de commission, puis enregistrez.
-      </p>
 
       <form className="mt-4 grid gap-3 sm:grid-cols-[1fr_180px_auto] sm:items-end" onSubmit={onSubmit}>
         <label className="text-xs font-semibold text-black/70 dark:text-white/70">

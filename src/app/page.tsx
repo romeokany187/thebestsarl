@@ -111,15 +111,12 @@ export default async function Home() {
 
           <div className="mt-8 grid gap-3 sm:grid-cols-3">
             <div className="rounded-xl border border-black/10 bg-white px-4 py-3 text-center shadow-sm transition hover:-translate-y-0.5 hover:shadow dark:border-white/10 dark:bg-zinc-900">
-              <p className="text-xs text-black/60 dark:text-white/60">Modules</p>
               <p className="text-xl font-semibold">12+</p>
             </div>
             <div className="rounded-xl border border-black/10 bg-white px-4 py-3 text-center shadow-sm transition hover:-translate-y-0.5 hover:shadow dark:border-white/10 dark:bg-zinc-900">
-              <p className="text-xs text-black/60 dark:text-white/60">Vue direction</p>
               <p className="text-xl font-semibold">Temps réel</p>
             </div>
             <div className="rounded-xl border border-black/10 bg-white px-4 py-3 text-center shadow-sm transition hover:-translate-y-0.5 hover:shadow dark:border-white/10 dark:bg-zinc-900">
-              <p className="text-xs text-black/60 dark:text-white/60">Accès mobile</p>
               <p className="text-xl font-semibold">Responsive</p>
             </div>
           </div>

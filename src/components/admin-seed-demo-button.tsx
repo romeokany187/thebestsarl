@@ -30,9 +30,6 @@ export function AdminSeedDemoButton() {
   return (
     <div className="rounded-xl border border-black/10 bg-white p-4 dark:border-white/10 dark:bg-zinc-900">
       <h2 className="text-base font-semibold">Données de test production</h2>
-      <p className="mt-1 text-xs text-black/60 dark:text-white/60">
-        Injecte instantanément les données de démonstration Approvisionnement dans la base active.
-      </p>
       <button
         type="button"
         onClick={handleSeed}

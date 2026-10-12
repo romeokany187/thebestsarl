@@ -117,9 +117,7 @@ export default async function AttendancePage({
                 ))}
               </select>
             </div>
-          ) : (
-            <div className="text-xs text-black/60 dark:text-white/60">Vue personnelle uniquement.</div>
-          )}
+          ) : null}
           <button type="submit" className="rounded-md bg-black px-4 py-2 text-sm font-semibold text-white dark:bg-white dark:text-black">
             Filtrer
           </button>
@@ -142,7 +140,6 @@ export default async function AttendancePage({
             </a>
           </div>
         ) : null}
-        <p className="mt-2 text-xs text-black/60 dark:text-white/60">{range.label}</p>
       </section>
 
       <div className="grid gap-6 lg:grid-cols-[380px,1fr]">

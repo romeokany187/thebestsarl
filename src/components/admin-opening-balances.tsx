@@ -33,9 +33,6 @@ export function AdminOpeningBalances({ entries }: { entries: OpeningBalanceRow[]
     <section className="rounded-xl border border-black/10 bg-white p-4 dark:border-white/10 dark:bg-zinc-900">
       <div className="mb-3">
         <h2 className="text-lg font-semibold">Rectification des soldes d&apos;ouverture</h2>
-        <p className="text-xs text-black/60 dark:text-white/60">
-          L&apos;administrateur peut corriger ici toutes les entrées de <strong>solde d&apos;ouverture</strong> déjà saisies, toutes caisses confondues.
-        </p>
       </div>
 
       <div className="overflow-hidden rounded-lg border border-black/10 dark:border-white/10">

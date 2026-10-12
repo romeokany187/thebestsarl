@@ -95,9 +95,6 @@ export function AdminReportsSections({
     <section className="space-y-4">
       <div className="rounded-2xl border border-black/10 bg-linear-to-br from-white to-zinc-50 p-4 dark:border-white/10 dark:from-zinc-900 dark:to-zinc-950">
         <h2 className="text-base font-semibold">Rapports soumis par fonction</h2>
-        <p className="mt-1 text-xs text-black/60 dark:text-white/60">
-          Cliquez sur une section pour afficher tous les rapports soumis dans une fenetre detaillee.
-        </p>
       </div>
 
       <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
@@ -108,7 +105,6 @@ export function AdminReportsSections({
                 {folderIcon(section.accentClass)}
                 <div>
                   <h3 className="text-sm font-semibold">{section.title}</h3>
-                  <p className="mt-0.5 text-[11px] text-black/60 dark:text-white/60">{section.description}</p>
                 </div>
               </div>
               <span className="rounded-full border border-black/15 bg-black/5 px-2 py-0.5 text-[11px] font-semibold dark:border-white/15 dark:bg-white/10">

@@ -180,9 +180,6 @@ export default async function FacturesPage({
           <button type="submit" className="rounded-md bg-black px-4 py-2 text-sm font-semibold text-white dark:bg-white dark:text-black">Filtrer</button>
         </form>
 
-        <p className="mt-3 text-xs text-black/60 dark:text-white/60">
-          {sortedInvoices.length} facture(s) • Total: {totalBilled.toFixed(2)} USD • Solde: {totalBalance.toFixed(2)} USD
-        </p>
       </section>
 
       <section className="overflow-hidden rounded-2xl border border-black/10 bg-white dark:border-white/10 dark:bg-zinc-900">

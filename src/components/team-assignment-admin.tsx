@@ -339,9 +339,6 @@ export function TeamAssignmentAdmin({
   return (
     <section className="rounded-xl border border-black/10 bg-white p-4 dark:border-white/10 dark:bg-zinc-900">
       <h2 className="text-lg font-semibold">Gestion des groupes (agences & partenaires)</h2>
-      <p className="text-xs text-black/60 dark:text-white/60">
-        Cliquez sur une équipe pour afficher ses membres, puis affectez, désaffectez ou gérez le chef d&apos;équipe.
-      </p>
 
       <div className="mt-4 grid gap-3 lg:grid-cols-3">
         {teamOptions.map((team) => (

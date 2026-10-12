@@ -261,7 +261,6 @@ export async function AppShell({
           <div className="mb-6">
             <Link href="/" className="block rounded-lg p-1 transition hover:bg-black/5 dark:hover:bg-white/10">
               <p className="text-base font-semibold tracking-tight">THEBEST SARL</p>
-              <p className="text-xs text-black/55 dark:text-white/55">Travel Agency Workspace</p>
             </Link>
           </div>
 
@@ -294,7 +293,6 @@ export async function AppShell({
             <div className="flex flex-wrap items-start justify-between gap-3 sm:items-center">
               <Link href="/" className="rounded-lg p-1 transition hover:bg-black/5 dark:hover:bg-white/10">
                 <p className="text-sm font-semibold tracking-tight">THEBEST SARL</p>
-                <p className="text-xs text-black/60 dark:text-white/60">Gestion de projet et opérations</p>
               </Link>
               <div className="ml-auto flex flex-wrap items-center justify-end gap-2">
                 {session?.user?.id ? (

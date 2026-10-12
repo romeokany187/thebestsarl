@@ -130,7 +130,6 @@ export default async function ArchivesPage({
               >
                 <p className="text-lg">📁</p>
                 <p className="mt-1 text-sm font-semibold">{folder.label}</p>
-                <p className="mt-1 text-xs text-black/60 dark:text-white/60">{folder.description}</p>
                 <p className="mt-2 text-xs font-semibold text-black/70 dark:text-white/70">{count} document(s)</p>
               </Link>
             );

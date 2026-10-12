@@ -412,12 +412,7 @@ export function TicketImportForm({
       onSubmit={onSubmit}
       className="grid gap-3 rounded-xl border border-black/10 bg-white p-4 dark:border-white/10 dark:bg-zinc-900"
     >
-      <div>
-        <h3 className="text-sm font-semibold">Import Excel billets</h3>
-        <p className="text-xs text-black/60 dark:text-white/60">
-          Le fichier doit contenir les billets <span className="font-semibold">ligne par ligne</span>. Aucune compagnie, aucun émetteur et aucun payant ne sont créés automatiquement.
-        </p>
-      </div>
+      <h3 className="text-sm font-semibold">Import Excel billets</h3>
 
       <input
         type="file"
@@ -670,7 +665,6 @@ export function TicketImportForm({
                   </tbody>
                 </table>
               </div>
-              {result.previewTruncated ? <p className="text-xs text-black/60 dark:text-white/60">Prévisualisation tronquée aux premières lignes pour garder l&apos;interface lisible.</p> : null}
             </div>
           ) : null}
           {result.errors.length > 0 ? (
@@ -688,7 +682,6 @@ export function TicketImportForm({
       <div className="grid gap-2 rounded-lg border border-black/10 p-3 text-sm dark:border-white/10">
         <div>
           <h4 className="font-semibold">Historique des imports</h4>
-          <p className="text-xs text-black/60 dark:text-white/60">Qui a lancé quoi, quand, et avec quel résultat.</p>
         </div>
         <div className="grid gap-2 sm:grid-cols-4">
           <input
@@ -725,9 +718,7 @@ export function TicketImportForm({
             {histLoading ? "..." : "Filtrer"}
           </button>
         </div>
-        {history.length === 0 ? (
-          <p className="text-xs text-black/60 dark:text-white/60">Aucun import journalisé pour le moment.</p>
-        ) : (
+        {history.length === 0 ? null : (
           <div className="max-h-64 overflow-auto rounded-md border border-black/10 dark:border-white/10">
             <table className="min-w-full text-xs">
               <thead className="bg-black/5 dark:bg-white/10">

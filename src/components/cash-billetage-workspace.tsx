@@ -69,9 +69,6 @@ function CountTable({
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h3 className="text-sm font-semibold">{title}</h3>
-          <p className="mt-1 text-xs text-black/60 dark:text-white/60">
-            Billetage manuel des coupures pour rapprocher le physique du solde de caisse.
-          </p>
         </div>
         <div className={`rounded-full border px-3 py-1 text-xs font-semibold ${status.tone}`}>
           {status.label} {currency}
@@ -116,11 +113,6 @@ function CountTable({
         </table>
       </div>
 
-      <p className="mt-3 text-xs text-black/60 dark:text-white/60">
-        {disabled
-          ? "Billetage verrouillé. Cliquez sur Ouvrir ou Modifier pour saisir les coupures de cette date."
-          : `Saisie active • Attendu ${formatFrDecimal(expected, currency === "USD" ? 2 : 0)} ${currency}`}
-      </p>
     </section>
   );
 }
@@ -252,9 +244,6 @@ export function CashBilletageWorkspace({ expectedUsd, expectedCdf, cashDesk }: {
     <div className="space-y-4">
       <section className="rounded-2xl border border-black/10 bg-white p-4 dark:border-white/10 dark:bg-zinc-900">
         <h2 className="text-sm font-semibold">Billetage de caisse</h2>
-        <p className="mt-2 text-xs text-black/60 dark:text-white/60">
-          Pour chaque jour, choisissez la date puis cliquez sur <strong>Ouvrir</strong> pour activer la saisie. Après <strong>Enregistrer</strong>, le billetage est visible par tous les utilisateurs autorisés.
-        </p>
 
         <div className="mt-3 flex flex-wrap items-center gap-2">
           <p className={`inline-flex rounded-full border px-3 py-1 text-xs font-semibold ${overallTone}`}>

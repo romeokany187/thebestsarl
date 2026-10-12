@@ -439,10 +439,7 @@ export function ProxyBankingForm() {
   return (
     <section className="rounded-2xl border border-black/10 bg-white p-4 dark:border-white/10 dark:bg-zinc-900">
       <h2 className="text-sm font-semibold">Proxy Banking</h2>
-      <p className="mt-2 text-xs text-black/60 dark:text-white/60">
-        Dépôt client : <strong>cash +</strong> et <strong>virtuel -</strong>. Retrait client : <strong>virtuel +</strong> et <strong>cash -</strong>. <strong>Change client</strong> : la caisse cash est créditée dans la devise reçue et débitée dans la devise remise au client, sans toucher aux comptes virtuels.
-      </p>
-      <p className="mt-1 text-xs text-amber-700 dark:text-amber-400">
+      <p className="mt-2 text-xs text-amber-700 dark:text-amber-400">
         <strong>Seuls l'administrateur et le comptable peuvent supprimer ou modifier une opération proxy banking, toutes caisses confondues.</strong>
       </p>
 
@@ -564,9 +561,6 @@ export function ProxyBankingForm() {
 
       <div className="mt-4 border-t border-black/10 pt-4 dark:border-white/10">
         <h3 className="text-xs font-semibold uppercase tracking-wide text-black/60 dark:text-white/60">Opération de change cash USD/CDF</h3>
-        <p className="mt-1 text-xs text-black/60 dark:text-white/60">
-          Indiquez la <strong>devise reçue du client</strong>. Le système crédite cette devise dans la caisse et débite automatiquement la devise remise au client.
-        </p>
 
         <form onSubmit={onChangeSubmit} className="mt-3 grid gap-3 lg:grid-cols-5 lg:items-end">
           <div>
@@ -667,10 +661,6 @@ export function ProxyBankingForm() {
 
       <div className="mt-4 border-t border-black/10 pt-4 dark:border-white/10">
         <h3 className="text-xs font-semibold uppercase tracking-wide text-black/60 dark:text-white/60">Gestion du float (transferts internes)</h3>
-        <p className="mt-1 text-xs text-black/60 dark:text-white/60">
-          <strong>Cash → Virtuel</strong> : la caissière dépose du cash pour approvisionner un compte virtuel (banque / super-agent).{" "}
-          <strong>Virtuel → Cash</strong> : retrait d&apos;un compte virtuel pour obtenir du cash physique.
-        </p>
 
         <form onSubmit={onFloatSubmit} className="mt-3 grid gap-3 lg:grid-cols-4 lg:items-end">
           <div>

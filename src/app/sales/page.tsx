@@ -282,7 +282,6 @@ export default async function SalesPage({
         <div className="overflow-hidden rounded-xl border border-black/10 bg-white dark:border-white/10 dark:bg-zinc-900">
           <div className="border-b border-black/10 px-4 py-3 dark:border-white/10">
             <h2 className="text-sm font-semibold">Synthèse ventes par agence</h2>
-            <p className="mt-1 text-xs text-black/60 dark:text-white/60">Billets vendus et montants sur la période filtrée.</p>
           </div>
           <div className="overflow-x-auto">
             <table className="min-w-full text-sm">
@@ -305,9 +304,7 @@ export default async function SalesPage({
                 ))}
                 {agencySalesRows.length === 0 ? (
                   <tr>
-                    <td colSpan={4} className="px-4 py-6 text-center text-sm text-black/55 dark:text-white/55">
-                      Aucune vente sur cette période.
-                    </td>
+                    <td colSpan={4} className="px-4 py-6" />
                   </tr>
                 ) : null}
               </tbody>
@@ -318,7 +315,6 @@ export default async function SalesPage({
         <div className="overflow-hidden rounded-xl border border-black/10 bg-white dark:border-white/10 dark:bg-zinc-900">
           <div className="border-b border-black/10 px-4 py-3 dark:border-white/10">
             <h2 className="text-sm font-semibold">Qui a vendu quoi</h2>
-            <p className="mt-1 text-xs text-black/60 dark:text-white/60">Détail vendeur par agence (nombre de billets et montants).</p>
           </div>
           <div className="overflow-x-auto">
             <table className="min-w-full text-sm">
@@ -343,9 +339,7 @@ export default async function SalesPage({
                 ))}
                 {sellerSalesRows.length === 0 ? (
                   <tr>
-                    <td colSpan={5} className="px-4 py-6 text-center text-sm text-black/55 dark:text-white/55">
-                      Aucun émetteur trouvé sur cette période.
-                    </td>
+                    <td colSpan={5} className="px-4 py-6" />
                   </tr>
                 ) : null}
               </tbody>
@@ -385,11 +379,7 @@ export default async function SalesPage({
               />
             ) : null}
           </div>
-        ) : (
-          <section className="rounded-xl border border-black/10 bg-white p-4 text-sm text-black/70 dark:border-white/10 dark:bg-zinc-900 dark:text-white/70">
-            Encodage des billets autorisé sur ce profil. Seul l&apos;import Excel est limité au profil admin ventes.
-          </section>
-        )}
+        ) : null}
 
         <div className="overflow-hidden rounded-xl border border-black/10 bg-white dark:border-white/10 dark:bg-zinc-900">
           <div className="tickets-scroll h-[70vh] w-full overflow-scroll overscroll-contain">

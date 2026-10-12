@@ -63,9 +63,6 @@ export default async function PaymentReportsPage({
       <section className="space-y-6">
         <header>
           <h1 className="text-2xl font-semibold tracking-tight">Rapports paiements et caisse</h1>
-          <p className="mt-2 text-sm text-black/65 dark:text-white/65">
-            Espace dédié pour tirer les rapports PDF de la caisse active: {deskState.deskOptions.find((desk) => desk.value === selectedDesk)?.label ?? selectedDesk}.
-          </p>
         </header>
 
         <section className="rounded-2xl border border-black/10 bg-white p-4 shadow-sm dark:border-white/10 dark:bg-zinc-900">
@@ -99,27 +96,21 @@ export default async function PaymentReportsPage({
         <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
           <a href={`/api/payments/report?${paymentsQuery}`} target="_blank" rel="noreferrer" className="rounded-2xl border border-black/10 bg-white p-4 shadow-sm hover:bg-black/5 dark:border-white/10 dark:bg-zinc-900 dark:hover:bg-white/5">
             <h2 className="text-sm font-semibold">Lire PDF paiements billets</h2>
-            <p className="mt-2 text-xs text-black/60 dark:text-white/60">Affiche les encaissements billets selon la période et la caisse active.</p>
           </a>
           <a href={`/api/payments/report?${paymentsQuery}&download=1`} className="rounded-2xl border border-black/10 bg-white p-4 shadow-sm hover:bg-black/5 dark:border-white/10 dark:bg-zinc-900 dark:hover:bg-white/5">
             <h2 className="text-sm font-semibold">Télécharger PDF paiements billets</h2>
-            <p className="mt-2 text-xs text-black/60 dark:text-white/60">Version téléchargeable du rapport des paiements billets.</p>
           </a>
           <a href={`/api/payments/report?${cashJournalQuery}`} target="_blank" rel="noreferrer" className="rounded-2xl border border-black/10 bg-white p-4 shadow-sm hover:bg-black/5 dark:border-white/10 dark:bg-zinc-900 dark:hover:bg-white/5">
             <h2 className="text-sm font-semibold">Voir journal de caisse</h2>
-            <p className="mt-2 text-xs text-black/60 dark:text-white/60">Journal mensuel de caisse filtré sur la caisse active.</p>
           </a>
           <a href={`/api/payments/report?${cashJournalQuery}&download=1`} className="rounded-2xl border border-black/10 bg-white p-4 shadow-sm hover:bg-black/5 dark:border-white/10 dark:bg-zinc-900 dark:hover:bg-white/5">
             <h2 className="text-sm font-semibold">Télécharger journal de caisse</h2>
-            <p className="mt-2 text-xs text-black/60 dark:text-white/60">Téléchargement direct du journal mensuel de caisse.</p>
           </a>
           <a href={`/api/payments/report?${cashSummaryQuery}`} target="_blank" rel="noreferrer" className="rounded-2xl border border-black/10 bg-white p-4 shadow-sm hover:bg-black/5 dark:border-white/10 dark:bg-zinc-900 dark:hover:bg-white/5">
             <h2 className="text-sm font-semibold">Voir synthèse caisse</h2>
-            <p className="mt-2 text-xs text-black/60 dark:text-white/60">Vue synthétique des soldes, flux et engagements de la caisse.</p>
           </a>
           <a href={`/api/payments/report?${cashSummaryQuery}&download=1`} className="rounded-2xl border border-black/10 bg-white p-4 shadow-sm hover:bg-black/5 dark:border-white/10 dark:bg-zinc-900 dark:hover:bg-white/5">
             <h2 className="text-sm font-semibold">Télécharger synthèse caisse</h2>
-            <p className="mt-2 text-xs text-black/60 dark:text-white/60">Téléchargement direct du récapitulatif mensuel.</p>
           </a>
         </section>
       </section>

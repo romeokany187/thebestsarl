@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useState } from "react";
 
 type JobTitle =
   | "COMMERCIAL"
@@ -63,11 +63,6 @@ export function UserJobTitleAdmin({ users, currentUserId }: { users: UserRow[]; 
   const [rows, setRows] = useState(users);
   const [status, setStatus] = useState<string>("");
   const [savingId, setSavingId] = useState<string>("");
-
-  const hasChanges = useMemo(
-    () => rows.some((row, index) => row.jobTitle !== users[index]?.jobTitle || row.role !== users[index]?.role),
-    [rows, users],
-  );
 
   function updateJobTitle(userId: string, jobTitle: JobTitle) {
     setRows((prev) => prev.map((row) => (row.id === userId ? { ...row, jobTitle } : row)));
@@ -165,9 +160,6 @@ export function UserJobTitleAdmin({ users, currentUserId }: { users: UserRow[]; 
     <section className="rounded-xl border border-black/10 bg-white p-4 dark:border-white/10 dark:bg-zinc-900">
       <div className="mb-3">
         <h2 className="text-lg font-semibold">Attribution des rôles et des fonctions</h2>
-        <p className="text-xs text-black/60 dark:text-white/60">
-          Le <strong>rôle système</strong> et la <strong>fonction métier</strong> sont désormais indépendants : changer l&apos;un ne modifie plus automatiquement l&apos;autre.
-        </p>
       </div>
 
       <div className="overflow-hidden rounded-lg border border-black/10 dark:border-white/10">
@@ -210,7 +202,6 @@ export function UserJobTitleAdmin({ users, currentUserId }: { users: UserRow[]; 
                       </option>
                     ))}
                   </select>
-                  <p className="mt-1 text-[10px] text-black/55 dark:text-white/55">Actuel: {roleLabel(user.role)}</p>
                 </td>
                 <td className="px-3 py-2">{user.teamName}</td>
                 <td className="px-3 py-2">
@@ -261,8 +252,7 @@ export function UserJobTitleAdmin({ users, currentUserId }: { users: UserRow[]; 
         </div>
       </div>
 
-      <p className="mt-2 text-xs text-black/60 dark:text-white/60">{hasChanges ? "Des changements sont en attente de sauvegarde." : status}</p>
-      {hasChanges ? <p className="text-xs text-black/60 dark:text-white/60">Clique sur &quot;Enregistrer&quot; pour chaque ligne modifiée.</p> : null}
+      {status ? <p className="mt-2 text-xs text-black/60 dark:text-white/60">{status}</p> : null}
     </section>
   );
 }

@@ -582,9 +582,6 @@ export default async function TicketsPage({
           </div>
         </form>
 
-        <p className="mt-3 text-xs text-black/60 dark:text-white/60">
-          {range.label} • Période du {range.start.toISOString().slice(0, 10)} au {new Date(range.end.getTime() - 1).toISOString().slice(0, 10)}
-        </p>
       </section>
 
       <div className="mb-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -621,9 +618,6 @@ export default async function TicketsPage({
               </p>
             </div>
             <p className="text-sm font-semibold text-black dark:text-zinc-100">{formatCurrency(salesEnd)}</p>
-            <p className="mb-2 text-[11px] text-black/60 dark:text-zinc-400">
-              {selectedPeriodLabel} • Réf {comparisonPeriodLabel}: {formatCurrency(comparisonTotalSales)}
-            </p>
             <svg viewBox="0 0 280 80" className="h-20 w-full">
               <defs>
                 <linearGradient id="salesAreaGradient" x1="0" y1="0" x2="0" y2="1">
@@ -647,7 +641,6 @@ export default async function TicketsPage({
               <span>{compactDate(cumulativeDailyPerformance[0]?.day ?? "")}</span>
               <span>{compactDate(cumulativeDailyPerformance[cumulativeDailyPerformance.length - 1]?.day ?? "")}</span>
             </div>
-            <p className="mt-1 text-[10px] text-black/45 dark:text-zinc-500">Ligne claire: {comparisonPeriodLabel}</p>
           </div>
 
           <div className="rounded-xl border border-black/10 bg-white p-3 text-black dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-100">
@@ -658,9 +651,6 @@ export default async function TicketsPage({
               </p>
             </div>
             <p className="text-sm font-semibold text-black dark:text-zinc-100">{formatCurrency(commissionEnd)}</p>
-            <p className="mb-2 text-[11px] text-black/60 dark:text-zinc-400">
-              {selectedPeriodLabel} • Réf {comparisonPeriodLabel}: {formatCurrency(comparisonTotalCommissions)}
-            </p>
             <svg viewBox="0 0 280 80" className="h-20 w-full">
               <defs>
                 <linearGradient id="commissionAreaGradient" x1="0" y1="0" x2="0" y2="1">
@@ -684,16 +674,11 @@ export default async function TicketsPage({
               <span>{compactDate(cumulativeDailyPerformance[0]?.day ?? "")}</span>
               <span>{compactDate(cumulativeDailyPerformance[cumulativeDailyPerformance.length - 1]?.day ?? "")}</span>
             </div>
-            <p className="mt-1 text-[10px] text-black/45 dark:text-zinc-500">Ligne claire: {comparisonPeriodLabel}</p>
           </div>
 
           <div className="rounded-xl border border-black/10 p-3 dark:border-white/10">
             <p className="text-xs font-semibold uppercase tracking-wide text-black/60 dark:text-white/60">Compagnie la plus vendue</p>
             <p className="mt-1 text-sm font-semibold">{topAirline ? `${topAirline.code} • ${topAirline.tickets} billets` : "Aucune donnée"}</p>
-            <p className="mb-2 text-[11px] text-black/60 dark:text-white/60">
-              Part de volume: {topAirlineShare.toFixed(1)}%
-              {comparisonTopAirline ? ` • Réf: ${comparisonTopAirline.code} • ${comparisonTopAirline.tickets} billets` : ""}
-            </p>
             <div className="space-y-1.5">
               {topAirlineBars.map((item) => {
                 const widthPercent = maxTopAirlineSales > 0 ? (item.sales / maxTopAirlineSales) * 100 : 0;
@@ -715,10 +700,6 @@ export default async function TicketsPage({
           <div className="rounded-xl border border-black/10 p-3 dark:border-white/10">
             <p className="text-xs font-semibold uppercase tracking-wide text-black/60 dark:text-white/60">Agence la plus performante</p>
             <p className="mt-1 text-sm font-semibold">{topAgency ? `${topAgency.agency} • ${topAgency.tickets} billets` : "Aucune donnée"}</p>
-            <p className="mb-2 text-[11px] text-black/60 dark:text-white/60">
-              Calcul basé sur le payant (équipe/agence/partenaire)
-              {comparisonTopAgency ? ` • Réf: ${comparisonTopAgency.agency} • ${comparisonTopAgency.tickets} billets` : ""}
-            </p>
             <div className="space-y-1.5">
               {topAgencyBars.map((item) => {
                 const widthPercent = maxTopAgencySales > 0 ? (item.sales / maxTopAgencySales) * 100 : 0;
@@ -737,9 +718,6 @@ export default async function TicketsPage({
             </div>
           </div>
         </div>
-        {cumulativeDailyPerformance.length === 0 ? (
-          <p className="mt-3 text-xs text-black/55 dark:text-white/55">Aucune performance à afficher pour cette période.</p>
-        ) : null}
       </section>
 
       {(caaRule || airFastAirline) ? (
@@ -749,7 +727,7 @@ export default async function TicketsPage({
               <div className="rounded-md border border-black/10 px-3 py-2 dark:border-white/10">
                 <p className="font-semibold">Suivi CAA</p>
                 <p className="text-black/60 dark:text-white/60">
-                  Période: {caaConsumed.toFixed(2)} USD • Cumul historique: {caaConsumedUntilPeriodEnd.toFixed(2)} USD • Reste avant lot {caaTargetAmount.toFixed(0)} USD: {caaRemainingToNextLot.toFixed(2)} USD — commission CAA hors totaux (calcul manuel fin de mois)
+                  {caaConsumed.toFixed(2)} USD / {caaConsumedUntilPeriodEnd.toFixed(2)} USD • reste lot {caaRemainingToNextLot.toFixed(2)} USD
                 </p>
               </div>
             ) : null}
@@ -765,9 +743,6 @@ export default async function TicketsPage({
         </section>
       ) : null}
 
-      <section className="rounded-2xl border border-black/10 bg-white p-4 text-sm text-black/70 dark:border-white/10 dark:bg-zinc-900 dark:text-white/70">
-        Le tableau détaillé des billets est disponible dans la page ventes. Cette page présente uniquement la vue synthétique et l&apos;export PDF.
-      </section>
     </AppShell>
   );
 }

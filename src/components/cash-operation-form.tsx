@@ -342,12 +342,6 @@ export function CashOperationForm({
           </button>
         ) : null}
       </div>
-      <p className="mb-3 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-xs text-blue-900 dark:border-blue-800/60 dark:bg-blue-950/30 dark:text-blue-100">
-        Le <strong>solde d&apos;ouverture</strong> correspond au <strong>report à nouveau initial</strong>. Il ne s&apos;encode qu&apos;une seule fois au démarrage pour une caisse/canal donné, puis le dernier solde du jour devient automatiquement le report à nouveau du lendemain.
-      </p>
-      <p className="mb-3 text-xs text-black/60 dark:text-white/60">
-        Pour initialiser une caisse ou un compte virtuel, choisissez la catégorie <strong>Report à nouveau initial (solde d&apos;ouverture)</strong>, puis la méthode souhaitée <strong>(Cash, Billets, Airtel Money, Orange Money, M-Pesa, Equity, TMB, Rawbank & Illicocash)</strong>. Ensuite, n&apos;encodez plus de nouveaux soldes d&apos;ouverture: seuls les mouvements réels restent à saisir.
-      </p>
       {hasInitialOpening ? (
         <p className="mb-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900 dark:border-amber-800/60 dark:bg-amber-950/30 dark:text-amber-100">
           Un report à nouveau initial existe déjà. Le reste du report à nouveau est désormais automatique de jour en jour.
@@ -560,9 +554,6 @@ export function CashOperationForm({
             </div>
           </form>
 
-          <p className="mt-2 text-xs text-black/60 dark:text-white/60">
-            Toute entrée, sortie ou conversion doit être rattachée à une pièce justificative. Crédit cible estimé: {conversionTargetAmountPreview.toFixed(2)} {conversionTargetCurrency} (taux 1 USD = {Number.isFinite(numericRatePreview) ? numericRatePreview.toFixed(2) : "0.00"} CDF)
-          </p>
         </div>
       ) : null}
 

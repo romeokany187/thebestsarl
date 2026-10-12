@@ -185,28 +185,6 @@ export function AttendanceForm({
       >
         {isSigning ? "Traitement..." : "Signer la sortie"}
       </button>
-      {!hasClockIn ? (
-        <p className="text-xs text-black/60 dark:text-white/60">
-          Signe d&apos;abord l&apos;entrée du jour pour débloquer la sortie.
-        </p>
-      ) : null}
-      {hasClockOut ? (
-        <p className="text-xs text-black/60 dark:text-white/60">La sortie du jour est déjà signée.</p>
-      ) : null}
-      {canManageTeamAttendance ? (
-        <p className="text-xs text-black/60 dark:text-white/60">
-          {targetUserId
-            ? `Mode admin/direction: la signature sera enregistrée pour ${resolvedTargetLabel}.`
-            : "Mode admin/direction: sans employé filtré, la signature s'applique à votre propre session."}
-        </p>
-      ) : role !== "EMPLOYEE" ? (
-        <p className="text-xs text-black/60 dark:text-white/60">
-          Signature sur votre propre session ({role}).
-        </p>
-      ) : null}
-      <p className="text-xs text-black/60 dark:text-white/60">
-        Toutes les données sont récupérées automatiquement: date, heure et localisation.
-      </p>
       <div className="rounded-lg border border-black/10 bg-black/5 px-3 py-2 text-xs dark:border-white/10 dark:bg-white/5">
         <p>Entrée: {clockIn ? new Date(clockIn).toLocaleTimeString() : "Non signée"}</p>
         <p>Sortie: {clockOut ? new Date(clockOut).toLocaleTimeString() : "Non signée"}</p>

@@ -89,9 +89,6 @@ export function ReportsLibraryModal({
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h3 className="text-sm font-semibold">Bibliotheque des rapports</h3>
-          <p className="mt-1 text-xs text-black/60 dark:text-white/60">
-            Acces rapide a vos rapports classes par statut dans une fenetre modale.
-          </p>
         </div>
         <button
           type="button"

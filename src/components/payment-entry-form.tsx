@@ -254,16 +254,6 @@ export function PaymentEntryForm({ tickets }: { tickets: TicketOption[] }) {
         </button>
       </form>
 
-      {selected ? (
-        <>
-          <p className="mt-3 text-xs text-black/60 dark:text-white/60">
-            Facturé: {selected.amount.toFixed(2)} {ticketCurrency} • Déjà encaissé: {selected.paidAmount.toFixed(2)} {ticketCurrency} • Reste: {remaining.toFixed(2)} {ticketCurrency} • Statut: {selected.paymentStatus}
-          </p>
-          <p className="mt-2 text-xs text-black/60 dark:text-white/60">
-            La facture du billet est affichée automatiquement. Saisissez ensuite la pièce justificative d'encaissement (n° BEC ou reçu). {paymentCurrency !== ticketCurrency ? `La conversion vers ${ticketCurrency} se fait automatiquement au taux du jour.` : `Le billet est actuellement libellé en ${ticketCurrency}.`}
-          </p>
-        </>
-      ) : null}
       {message ? <p className="mt-2 text-xs text-emerald-600">{message}</p> : null}
       {error ? <p className="mt-2 text-xs text-red-600">{error}</p> : null}
     </section>

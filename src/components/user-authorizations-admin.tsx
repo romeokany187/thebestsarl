@@ -117,10 +117,6 @@ export function UserAuthorizationsAdmin({
     <section className="rounded-xl border border-black/10 bg-white p-4 dark:border-white/10 dark:bg-zinc-900">
       <div className="mb-4">
         <h2 className="text-lg font-semibold">Autorisations par employe</h2>
-        <p className="text-xs text-black/60 dark:text-white/60">
-          Action 1: choisir le service (module). Action 2: choisir le niveau d&apos;acces.
-          <strong> Acces complet</strong> donne les memes possibilites qu&apos;un admin sur le module choisi.
-        </p>
       </div>
 
       <div className="overflow-hidden rounded-lg border border-black/10 dark:border-white/10">
