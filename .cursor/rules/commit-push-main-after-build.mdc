@@ -10,6 +10,7 @@ Quand une tâche de code est **terminée** (fonctionnalité, correctif, refacto)
 1. Vérifier que le build passe : `npm run build:mysql` (ou `npx tsc --noEmit` si le changement est très local, puis build avant push).
 2. **Commit** sur `main` avec un message clair en français (style du dépôt).
 3. **Push** `origin main` — le hook pre-push relance le build ; ne pas utiliser `--no-verify`.
-4. Si le push sur `main` est bloqué (branche protégée), indiquer à l’utilisateur qu’il doit approuver dans Cursor ou lancer `git push origin main` localement, et revérifier `git fetch` + Actions Hostinger.
+4. Si Cursor bloque le push sur `main`, relancer `git push origin main` avec l’approbation Smart Mode (carte native) — ne pas demander à l’utilisateur de pousser à sa place sauf si l’approbation échoue plusieurs fois.
+5. Après push réussi, vérifier `git fetch` + workflow **Deploy to Hostinger** sur GitHub Actions.
 
 Ne pas laisser de livraison « finie » uniquement en local sans au moins tenter commit + push, sauf si l’utilisateur demande explicitement de ne pas pousser.
