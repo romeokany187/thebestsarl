@@ -1,0 +1,15 @@
+---
+description: Après livraison de code — build, commit et push sur main
+alwaysApply: true
+---
+
+# Commit et push sur main après build
+
+Quand une tâche de code est **terminée** (fonctionnalité, correctif, refacto) et qu’il y a des modifications dans le dépôt :
+
+1. Vérifier que le build passe : `npm run build:mysql` (ou `npx tsc --noEmit` si le changement est très local, puis build avant push).
+2. **Commit** sur `main` avec un message clair en français (style du dépôt).
+3. **Push** `origin main` — le hook pre-push relance le build ; ne pas utiliser `--no-verify`.
+4. Si le push sur `main` est bloqué (branche protégée), indiquer à l’utilisateur qu’il doit approuver dans Cursor ou lancer `git push origin main` localement, et revérifier `git fetch` + Actions Hostinger.
+
+Ne pas laisser de livraison « finie » uniquement en local sans au moins tenter commit + push, sauf si l’utilisateur demande explicitement de ne pas pousser.
