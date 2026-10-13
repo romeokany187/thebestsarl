@@ -14,6 +14,9 @@ import type { ModuleAccessLevel } from "@/lib/user-module-access";
 
 type WritingMode = "none" | "tickets" | "cash" | "virtual" | "billetage" | "payment-orders" | "needs" | "float" | "reports" | "cash-report-import";
 type DeskWorkspaceOverride = Partial<Record<Exclude<WritingMode, "none"> | "summary", React.ReactNode>>;
+type PaymentsUiMode = "simple" | "full";
+
+const PAYMENTS_UI_STORAGE_KEY = "thebest-payments-ui-mode";
 
 function getAllowedActionsForDesk(deskValue: CashDeskValue | string): Array<Exclude<WritingMode, "none">> {
   if (deskValue === "THE_BEST") {
@@ -51,6 +54,8 @@ export function PaymentsWritingWorkspace({
   initialDesk,
   initialScope,
   initialMode,
+  preferSimpleUi = false,
+  initialUi,
 }: {
   ticketWorkspace?: React.ReactNode;
   cashWorkspace?: React.ReactNode;
@@ -71,14 +76,42 @@ export function PaymentsWritingWorkspace({
   initialDesk?: CashDeskValue;
   initialScope?: AdminCashRoleScope;
   initialMode?: WritingMode;
+  preferSimpleUi?: boolean;
+  initialUi?: PaymentsUiMode;
 }) {
   const [mode, setMode] = useState<WritingMode>(initialMode ?? "none");
+  const [simpleUi, setSimpleUi] = useState(() => {
+    if (initialUi === "full") return false;
+    if (initialUi === "simple") return true;
+    return preferSimpleUi;
+  });
   const scopeOptions = useMemo(() => getVisibleCashRoleOptions(jobTitle, role, customModuleAccessLevel), [jobTitle, role, customModuleAccessLevel]);
   const [adminScope, setAdminScope] = useState<AdminCashRoleScope>(() => initialScope ?? getDefaultCashRoleScope(jobTitle, role, customModuleAccessLevel));
   const deskOptions = useMemo(() => getManagedCashDesks(jobTitle, role, adminScope, customModuleAccessLevel), [jobTitle, role, adminScope, customModuleAccessLevel]);
   const [selectedDesk, setSelectedDesk] = useState<CashDeskValue | "">(initialDesk ?? deskOptions[0]?.value ?? "");
 
   const router = useRouter();
+
+  useEffect(() => {
+    try {
+      const stored = window.localStorage.getItem(PAYMENTS_UI_STORAGE_KEY);
+      if (stored === "full") {
+        setSimpleUi(false);
+      } else if (stored === "simple") {
+        setSimpleUi(true);
+      }
+    } catch {
+      // ignore
+    }
+  }, []);
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(PAYMENTS_UI_STORAGE_KEY, simpleUi ? "simple" : "full");
+    } catch {
+      // ignore
+    }
+  }, [simpleUi]);
 
   useEffect(() => {
     try {
@@ -164,6 +197,9 @@ export function PaymentsWritingWorkspace({
     }
   }, [mode, visibleActionItems]);
 
+  const simpleTicketAction = visibleActionItems.find((item) => item.key === "tickets");
+  const simpleCashAction = visibleActionItems.find((item) => item.key === "cash");
+
   function actionToneClass(itemTone: string, active: boolean) {
     if (!active) {
       return "border border-black/15 text-black/75 hover:bg-black/5 dark:border-white/15 dark:text-white/75 dark:hover:bg-white/10";
@@ -177,8 +213,135 @@ export function PaymentsWritingWorkspace({
     return "border border-violet-500 bg-violet-50 text-violet-700 dark:border-violet-600 dark:bg-violet-950/40 dark:text-violet-300";
   }
 
+  const workspaceContent = (
+    <>
+      {mode === "none" ? resolvedClosedSummary : null}
+      {mode === "tickets" ? resolvedTicketWorkspace : null}
+      {mode === "cash" ? resolvedCashWorkspace : null}
+      {mode === "virtual" ? resolvedVirtualWorkspace : null}
+      {mode === "billetage" ? resolvedBilletageWorkspace : null}
+      {mode === "payment-orders" ? resolvedPaymentOrdersWorkspace : null}
+      {mode === "needs" ? resolvedNeedsWorkspace : null}
+      {mode === "float" ? resolvedFloatWorkspace : null}
+      {mode === "reports" ? resolvedReportsWorkspace : null}
+      {mode === "cash-report-import" ? (
+        <Suspense
+          fallback={
+            <section className="rounded-2xl border border-black/10 bg-white p-4 text-xs text-black/60 dark:border-white/10 dark:bg-zinc-900 dark:text-white/60">
+              Chargement de l&apos;import Excel…
+            </section>
+          }
+        >
+          {cashReportImportWorkspace}
+        </Suspense>
+      ) : null}
+    </>
+  );
+
+  if (simpleUi) {
+    return (
+      <section className="mb-6 space-y-4">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <h2 className="text-sm font-semibold">Caisse — mode simple</h2>
+          <button
+            type="button"
+            onClick={() => setSimpleUi(false)}
+            className="rounded-md border border-black/20 px-3 py-1.5 text-xs font-semibold hover:bg-black/5 dark:border-white/20 dark:hover:bg-white/10"
+          >
+            Mode complet
+          </button>
+        </div>
+
+        <div className="grid gap-3 sm:grid-cols-2 lg:max-w-xl">
+          {scopeOptions.length > 0 ? (
+            <div className="sm:col-span-2">
+              <label className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-black/60 dark:text-white/60">Caisse générale</label>
+              <select
+                value={adminScope}
+                onChange={(event) => {
+                  setAdminScope(event.target.value as AdminCashRoleScope);
+                  setMode("none");
+                }}
+                disabled={scopeOptions.length === 1}
+                className="w-full rounded-md border border-black/15 bg-white px-3 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-70 dark:border-white/15 dark:bg-zinc-900"
+              >
+                {scopeOptions.map((option) => (
+                  <option key={option.value} value={option.value}>{option.label}</option>
+                ))}
+              </select>
+            </div>
+          ) : null}
+          <div className="sm:col-span-2">
+            <label className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-black/60 dark:text-white/60">Caisse active</label>
+            <select
+              value={selectedDesk}
+              onChange={(event) => {
+                setSelectedDesk(event.target.value as CashDeskValue);
+                setMode("none");
+              }}
+              className="w-full rounded-md border border-black/15 bg-white px-3 py-2 text-sm dark:border-white/15 dark:bg-zinc-900"
+            >
+              {deskOptions.map((desk) => (
+                <option key={desk.value} value={desk.value}>{desk.label}</option>
+              ))}
+            </select>
+          </div>
+        </div>
+
+        {mode === "none" ? (
+          <div className="grid gap-3 sm:grid-cols-2 lg:max-w-2xl">
+            {simpleTicketAction ? (
+              <button
+                type="button"
+                onClick={() => startTransition(() => setMode("tickets"))}
+                className="rounded-2xl border border-emerald-500 bg-emerald-50 px-5 py-6 text-left font-semibold text-emerald-800 transition hover:bg-emerald-100 dark:border-emerald-600 dark:bg-emerald-950/40 dark:text-emerald-200 dark:hover:bg-emerald-950/60"
+              >
+                Encaisser un billet
+                <p className="mt-2 text-xs font-normal opacity-80">Paiement d&apos;un billet déjà vendu</p>
+              </button>
+            ) : null}
+            {simpleCashAction ? (
+              <button
+                type="button"
+                onClick={() => startTransition(() => setMode("cash"))}
+                className="rounded-2xl border border-blue-500 bg-blue-50 px-5 py-6 text-left font-semibold text-blue-800 transition hover:bg-blue-100 dark:border-blue-600 dark:bg-blue-950/40 dark:text-blue-200 dark:hover:bg-blue-950/60"
+              >
+                Opération de caisse
+                <p className="mt-2 text-xs font-normal opacity-80">Entrée ou sortie (hors billet)</p>
+              </button>
+            ) : null}
+          </div>
+        ) : (
+          <div className="space-y-4">
+            <button
+              type="button"
+              onClick={() => setMode("none")}
+              className="rounded-md border border-black/20 px-3 py-1.5 text-xs font-semibold hover:bg-black/5 dark:border-white/20 dark:hover:bg-white/10"
+            >
+              ← Retour aux actions
+            </button>
+            {workspaceContent}
+          </div>
+        )}
+
+        {mode === "none" ? resolvedClosedSummary : null}
+      </section>
+    );
+  }
+
   return (
     <>
+      <div className="mb-4 flex justify-end">
+        {preferSimpleUi ? (
+          <button
+            type="button"
+            onClick={() => setSimpleUi(true)}
+            className="rounded-md border border-black/20 px-3 py-1.5 text-xs font-semibold hover:bg-black/5 dark:border-white/20 dark:hover:bg-white/10"
+          >
+            Mode simple
+          </button>
+        ) : null}
+      </div>
       <section className="mb-6 grid items-start gap-4 lg:grid-cols-[280px_minmax(0,1fr)] xl:grid-cols-[320px_minmax(0,1fr)]">
         <aside className="rounded-2xl border border-black/10 bg-white p-4 shadow-sm lg:sticky lg:top-24 lg:max-h-[calc(100vh-7rem)] lg:overflow-y-auto dark:border-white/10 dark:bg-zinc-900">
           <h2 className="text-sm font-semibold">Paiements</h2>
@@ -254,28 +417,7 @@ export function PaymentsWritingWorkspace({
         </aside>
 
         <div className="min-w-0">
-          <div className="space-y-4">
-            {mode === "none" ? resolvedClosedSummary : null}
-            {mode === "tickets" ? resolvedTicketWorkspace : null}
-            {mode === "cash" ? resolvedCashWorkspace : null}
-            {mode === "virtual" ? resolvedVirtualWorkspace : null}
-            {mode === "billetage" ? resolvedBilletageWorkspace : null}
-            {mode === "payment-orders" ? resolvedPaymentOrdersWorkspace : null}
-            {mode === "needs" ? resolvedNeedsWorkspace : null}
-            {mode === "float" ? resolvedFloatWorkspace : null}
-            {mode === "reports" ? resolvedReportsWorkspace : null}
-            {mode === "cash-report-import" ? (
-              <Suspense
-                fallback={
-                  <section className="rounded-2xl border border-black/10 bg-white p-4 text-xs text-black/60 dark:border-white/10 dark:bg-zinc-900 dark:text-white/60">
-                    Chargement de l&apos;import Excel…
-                  </section>
-                }
-              >
-                {cashReportImportWorkspace}
-              </Suspense>
-            ) : null}
-          </div>
+          <div className="space-y-4">{workspaceContent}</div>
         </div>
       </section>
 

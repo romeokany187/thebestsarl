@@ -3,24 +3,39 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/auth";
 import { AppShell } from "@/components/app-shell";
 import { DashboardOverview } from "@/components/dashboard-overview";
-import type { AppRole } from "@/lib/rbac";
+import { WorkspaceHome } from "@/components/workspace-home";
+import { getUserModuleAccessMap } from "@/lib/user-module-access";
+import { buildHomeQuickActions, homeWelcomeTitle } from "@/lib/workspace-home";
+import { extractRole, type AppRole } from "@/lib/rbac";
 
 export const dynamic = "force-dynamic";
 
 export default async function Home() {
   const session = await getServerSession(authOptions);
   const isConnected = Boolean(session?.user?.email);
-  const userRole = session?.user?.role;
-  const isDirectionGenerale = (session?.user?.jobTitle ?? "") === "DIRECTION_GENERALE";
-  const canAccessExecutiveDashboard = userRole === "ADMIN" || isDirectionGenerale;
 
-  if (canAccessExecutiveDashboard) {
+  if (isConnected && session?.user) {
+    const role = extractRole(session.user.role, session.user.jobTitle) ?? "EMPLOYEE";
+    const accessMap = await getUserModuleAccessMap(session.user.id);
+    const actions = buildHomeQuickActions({
+      role: role as AppRole,
+      jobTitle: session.user.jobTitle,
+      teamName: session.user.teamName,
+      accessMap,
+    });
+    const title = homeWelcomeTitle(role as AppRole, session.user.jobTitle);
+    const isDirectionGenerale = (session.user.jobTitle ?? "") === "DIRECTION_GENERALE";
+    const showExecutiveDashboard = role === "ADMIN" || isDirectionGenerale;
+
     return (
-      <AppShell role={userRole as AppRole}>
-        <section className="mb-6">
-          <h1 className="text-2xl font-semibold">Dashboard direction</h1>
-        </section>
-        <DashboardOverview />
+      <AppShell role={role as AppRole}>
+        <WorkspaceHome title={title} actions={actions} />
+        {showExecutiveDashboard ? (
+          <section className="mt-10 space-y-4">
+            <h2 className="text-lg font-semibold">Synthèse direction</h2>
+            <DashboardOverview />
+          </section>
+        ) : null}
       </AppShell>
     );
   }
@@ -54,30 +69,9 @@ export default async function Home() {
             THEBEST SARL
           </Link>
           <div className="flex items-center gap-2 text-sm">
-            <Link href="/reports" className="rounded-md px-3 py-2 hover:bg-black/5 dark:hover:bg-white/10">
-              Produit
+            <Link href="/auth/signin" className="rounded-md border border-black/15 px-3 py-2 font-semibold hover:bg-black/5 dark:border-white/20 dark:hover:bg-white/10">
+              Connexion équipe
             </Link>
-            {isConnected ? (
-              <>
-                <div className="hidden rounded-lg border border-black/10 bg-white px-3 py-1.5 text-right dark:border-white/10 dark:bg-zinc-900 sm:block">
-                  <p className="text-xs font-semibold leading-tight">{session?.user?.name ?? "Utilisateur"}</p>
-                  <p className="text-[11px] leading-tight text-black/60 dark:text-white/60">{session?.user?.email}</p>
-                </div>
-                <Link
-                  href="/profile"
-                  className="rounded-md border border-black/15 px-3 py-2 font-semibold hover:bg-black/5 dark:border-white/20 dark:hover:bg-white/10"
-                >
-                  Mon profil
-                </Link>
-              </>
-            ) : (
-              <Link
-                href="/auth/signin"
-                className="rounded-md border border-black/15 px-3 py-2 font-semibold hover:bg-black/5 dark:border-white/20 dark:hover:bg-white/10"
-              >
-                Se connecter
-              </Link>
-            )}
           </div>
         </div>
       </header>
@@ -90,35 +84,10 @@ export default async function Home() {
           <h1 className="text-4xl font-semibold tracking-tight sm:text-5xl">
             Gère les équipes, rapports, présences et ventes dans un seul espace.
           </h1>
-          <p className="mt-5 max-w-xl text-base text-black/65 dark:text-white/65">
-            Une expérience claire, moderne et professionnelle pour piloter l&apos;activité quotidienne,
-            hebdomadaire, mensuelle et annuelle de ton agence.
-          </p>
           <div className="mt-8 flex flex-wrap gap-3">
-            <Link href="/reports" className="rounded-xl bg-black px-5 py-3 text-sm font-semibold text-white dark:bg-white dark:text-black">
-              Découvrir la plateforme
+            <Link href="/auth/signin" className="rounded-xl bg-black px-5 py-3 text-sm font-semibold text-white dark:bg-white dark:text-black">
+              Connexion équipe
             </Link>
-            {isConnected ? (
-              <Link href="/profile" className="rounded-xl border border-black/15 px-5 py-3 text-sm font-semibold dark:border-white/20">
-                Voir mon profil
-              </Link>
-            ) : (
-              <Link href="/auth/signin" className="rounded-xl border border-black/15 px-5 py-3 text-sm font-semibold dark:border-white/20">
-                Connexion équipe
-              </Link>
-            )}
-          </div>
-
-          <div className="mt-8 grid gap-3 sm:grid-cols-3">
-            <div className="rounded-xl border border-black/10 bg-white px-4 py-3 text-center shadow-sm transition hover:-translate-y-0.5 hover:shadow dark:border-white/10 dark:bg-zinc-900">
-              <p className="text-xl font-semibold">12+</p>
-            </div>
-            <div className="rounded-xl border border-black/10 bg-white px-4 py-3 text-center shadow-sm transition hover:-translate-y-0.5 hover:shadow dark:border-white/10 dark:bg-zinc-900">
-              <p className="text-xl font-semibold">Temps réel</p>
-            </div>
-            <div className="rounded-xl border border-black/10 bg-white px-4 py-3 text-center shadow-sm transition hover:-translate-y-0.5 hover:shadow dark:border-white/10 dark:bg-zinc-900">
-              <p className="text-xl font-semibold">Responsive</p>
-            </div>
           </div>
         </div>
 
@@ -135,33 +104,8 @@ export default async function Home() {
                 </span>
               </div>
               <p className="text-sm text-black/65 dark:text-white/65">{item.text}</p>
-              <div className="mt-3 h-1 w-full overflow-hidden rounded-full bg-black/5 dark:bg-white/10">
-                <div className="h-full w-2/3 rounded-full bg-black/20 transition-all duration-300 group-hover:w-full dark:bg-white/30" />
-              </div>
             </article>
           ))}
-        </div>
-      </section>
-
-      <section className="relative z-10 border-t border-black/10 bg-white/50 px-4 py-10 sm:px-6 lg:px-8 dark:border-white/10 dark:bg-zinc-950/40">
-        <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-4">
-          <p className="text-sm text-black/70 dark:text-white/70">
-            Un cadre de travail moderne, pensé pour la direction et les équipes terrain.
-          </p>
-          <div className="flex flex-wrap gap-2">
-            {isConnected ? (
-              <Link href="/profile" className="rounded-lg border border-black/15 px-4 py-2 text-sm font-semibold dark:border-white/20">
-                Mon profil
-              </Link>
-            ) : (
-              <Link href="/auth/signin" className="rounded-lg border border-black/15 px-4 py-2 text-sm font-semibold dark:border-white/20">
-                Commencer
-              </Link>
-            )}
-            <Link href="/reports" className="rounded-lg bg-black px-4 py-2 text-sm font-semibold text-white dark:bg-white dark:text-black">
-              Voir les modules
-            </Link>
-          </div>
         </div>
       </section>
     </main>

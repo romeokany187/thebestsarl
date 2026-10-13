@@ -125,6 +125,7 @@ type SearchParams = {
   cashMonth?: string;
   desk?: string;
   mode?: string;
+  ui?: string;
 };
 
 function dateRangeFromParams(params: SearchParams) {
@@ -499,6 +500,14 @@ export default async function PaymentsPage({
   const selectedDeskKey = deskState.desk;
   const isMainDesk = isMainCashDesk(selectedDeskKey);
   const initialWorkspaceMode = resolveInitialWorkspaceMode(resolvedSearchParams.mode);
+  const preferSimplePaymentsUi = (isCashier || session.user.jobTitle === "COMPTABLE")
+    && !isAdmin
+    && !isDirecteurGeneral;
+  const initialPaymentsUi = resolvedSearchParams.ui === "full"
+    ? "full"
+    : resolvedSearchParams.ui === "simple"
+      ? "simple"
+      : undefined;
   const scopedCashOperationsWhere = buildDeskScopedCashOperationWhere(selectedDeskKey);
   const journalCashOperationsWhere = isMainDesk ? buildMainCashJournalOperationWhere() : scopedCashOperationsWhere;
   const range = dateRangeFromParams(resolvedSearchParams);
@@ -1495,6 +1504,8 @@ export default async function PaymentsPage({
         initialDesk={deskState.desk}
         initialScope={deskState.scope}
         initialMode={initialWorkspaceMode}
+        preferSimpleUi={preferSimplePaymentsUi}
+        initialUi={initialPaymentsUi}
         workspaceOverrides={workspaceOverrides}
         paymentOrdersWorkspace={canWrite ? (
           <section className="space-y-4 rounded-2xl border border-black/10 bg-white p-4 dark:border-white/10 dark:bg-zinc-900">

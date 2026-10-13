@@ -9,6 +9,8 @@ import { buildAirlineDepositAccountSummaries } from "@/lib/airline-deposit";
 import { canImportTicketWorkbook, canManageTicketRecord, canSellTickets } from "@/lib/assignment";
 import { listTicketWorkbookImportHistory } from "@/lib/ticket-excel-import";
 import { getTicketCommissionAmount, getTicketTotalAmount } from "@/lib/ticket-pricing";
+import { SalesHubTabs, type SalesHubView } from "@/components/sales-hub-tabs";
+import { TicketsStatsPanel } from "@/components/tickets-stats-panel";
 
 export const dynamic = "force-dynamic";
 
@@ -16,6 +18,7 @@ type SearchParams = {
   startDate?: string;
   endDate?: string;
   q?: string;
+  view?: string;
 };
 
 function rangeFromSearch(params: SearchParams) {
@@ -100,6 +103,37 @@ export default async function SalesPage({
   const searchQuery = resolvedSearchParams.q?.trim() ?? "";
   const { session, role, customModuleAccess } = await requirePageModuleAccess("sales", ["ADMIN", "DIRECTEUR_GENERAL", "MANAGER", "EMPLOYEE", "ACCOUNTANT"]);
   const currentJobTitle = session.user.jobTitle ?? "AGENT_TERRAIN";
+  const canCreateTicketEarly = canSellTickets(currentJobTitle, customModuleAccess);
+  const requestedView = resolvedSearchParams.view?.trim().toLowerCase();
+  const activeView: SalesHubView = requestedView === "stats"
+    ? "stats"
+    : requestedView === "list"
+      ? "list"
+      : requestedView === "sell" && canCreateTicketEarly
+        ? "sell"
+        : canCreateTicketEarly
+          ? "sell"
+          : "list";
+
+  if (activeView === "stats") {
+    return (
+      <AppShell role={role}>
+        <section className="mb-2">
+          <h1 className="text-2xl font-semibold">Billets & ventes</h1>
+        </section>
+        <SalesHubTabs
+          active="stats"
+          showSellTab={canCreateTicketEarly}
+          searchParams={{
+            startDate: resolvedSearchParams.startDate,
+            endDate: resolvedSearchParams.endDate,
+            q: resolvedSearchParams.q,
+          }}
+        />
+        <TicketsStatsPanel searchParams={Promise.resolve(resolvedSearchParams)} />
+      </AppShell>
+    );
+  }
   const roleTicketFilter = {};
   const canCreateTicket = canSellTickets(currentJobTitle, customModuleAccess);
   const canManageTickets = canManageTicketRecord(role, currentJobTitle, customModuleAccess);
@@ -238,14 +272,29 @@ export default async function SalesPage({
     .map(([, airline]) => airline)
     .sort((a, b) => a.name.localeCompare(b.name, "fr", { sensitivity: "base" }));
 
+  const showSellSection = activeView === "sell";
+  const showListSection = activeView === "list";
+
   return (
     <AppShell role={role}>
-      <section className="mb-6">
-        <h1 className="text-2xl font-semibold">Gestion des billets</h1>
+      <section className="mb-2">
+        <h1 className="text-2xl font-semibold">Billets & ventes</h1>
       </section>
 
+      <SalesHubTabs
+        active={activeView}
+        showSellTab={canCreateTicket}
+        searchParams={{
+          startDate: resolvedSearchParams.startDate,
+          endDate: resolvedSearchParams.endDate,
+          q: resolvedSearchParams.q,
+        }}
+      />
+
+      {showListSection ? (
       <section className="mb-6 rounded-xl border border-black/10 bg-white p-4 dark:border-white/10 dark:bg-zinc-900">
         <form method="GET" className="grid gap-3 sm:grid-cols-[1fr,1fr,2fr,auto] sm:items-end">
+          <input type="hidden" name="view" value="list" />
           <div>
             <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-black/60 dark:text-white/60">Du</label>
             <input
@@ -277,7 +326,9 @@ export default async function SalesPage({
           <button type="submit" className="rounded-md bg-black px-4 py-2 text-sm font-semibold text-white dark:bg-white dark:text-black">Rechercher</button>
         </form>
       </section>
+      ) : null}
 
+      {showListSection ? (
       <section className="mb-6 grid gap-4 xl:grid-cols-2">
         <div className="overflow-hidden rounded-xl border border-black/10 bg-white dark:border-white/10 dark:bg-zinc-900">
           <div className="border-b border-black/10 px-4 py-3 dark:border-white/10">
@@ -347,9 +398,10 @@ export default async function SalesPage({
           </div>
         </div>
       </section>
+      ) : null}
 
-      <div className="grid gap-6 lg:grid-cols-[400px,1fr]">
-        {canCreateTicket ? (
+      <div className={`grid gap-6 ${showSellSection && showListSection ? "lg:grid-cols-[400px,1fr]" : ""}`}>
+        {showSellSection && canCreateTicket ? (
           <div className="grid gap-6">
             <TicketForm
               users={users}
@@ -381,6 +433,7 @@ export default async function SalesPage({
           </div>
         ) : null}
 
+        {showListSection ? (
         <div className="overflow-hidden rounded-xl border border-black/10 bg-white dark:border-white/10 dark:bg-zinc-900">
           <div className="tickets-scroll h-[70vh] w-full overflow-scroll overscroll-contain">
           <table className="min-w-300 text-sm">
@@ -447,6 +500,7 @@ export default async function SalesPage({
           </table>
           </div>
         </div>
+        ) : null}
       </div>
     </AppShell>
   );

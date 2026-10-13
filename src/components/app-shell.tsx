@@ -12,7 +12,7 @@ import { prisma } from "@/lib/prisma";
 import { getEffectiveModuleAccessLevel, getUserModuleAccessMap, hasRequiredModuleAccessLevel } from "@/lib/user-module-access";
 
 const links = [
-  { href: "/", label: "Dashboard", module: "home" as AppModule, roles: ["ADMIN", "DIRECTEUR_GENERAL", "MANAGER", "EMPLOYEE", "ACCOUNTANT"] as AppRole[] },
+  { href: "/", label: "Accueil", module: "home" as AppModule, roles: ["ADMIN", "DIRECTEUR_GENERAL", "MANAGER", "EMPLOYEE", "ACCOUNTANT"] as AppRole[] },
   {
     href: "/profile",
     label: "Profil",
@@ -39,14 +39,8 @@ const links = [
   },
   {
     href: "/sales",
-    label: "Ventes",
+    label: "Billets & ventes",
     module: "sales" as AppModule,
-    roles: ["ADMIN", "DIRECTEUR_GENERAL", "MANAGER", "EMPLOYEE", "ACCOUNTANT"] as AppRole[],
-  },
-  {
-    href: "/tickets",
-    label: "Billets",
-    module: "tickets" as AppModule,
     roles: ["ADMIN", "DIRECTEUR_GENERAL", "MANAGER", "EMPLOYEE", "ACCOUNTANT"] as AppRole[],
   },
   {

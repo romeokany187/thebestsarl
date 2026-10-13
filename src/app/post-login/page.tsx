@@ -2,6 +2,7 @@ import { getServerSession } from "next-auth";
 import { redirect } from "next/navigation";
 import { authOptions } from "@/auth";
 import { isPasswordAuthActive } from "@/lib/auth-rollout";
+import { resolvePostLoginPath } from "@/lib/workspace-home";
 import { prisma } from "@/lib/prisma";
 
 export const dynamic = "force-dynamic";
@@ -30,9 +31,5 @@ export default async function PostLoginPage() {
     redirect(`/auth/signin?setup=required&email=${encodeURIComponent(email)}`);
   }
 
-  if (dbUser.role === "ADMIN") {
-    redirect("/admin");
-  }
-
-  redirect("/reports");
+  redirect(resolvePostLoginPath());
 }
