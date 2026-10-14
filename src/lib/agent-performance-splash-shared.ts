@@ -20,12 +20,11 @@ export function resolvePerformanceTier(totalTickets: number): PerformanceTier {
 }
 
 export type PerformancePresentation = {
-  title: string;
-  subtitle: string;
   message: string;
   accentClass: string;
   glowClass: string;
   badgeLabel: string;
+  alert: boolean;
 };
 
 export function presentationForPerformance(
@@ -34,17 +33,16 @@ export function presentationForPerformance(
 ): PerformancePresentation {
   const collectionHint =
     stats.openCount > 0
-      ? ` Encaissements caisse : ${stats.paidCount} soldé(s), ${stats.openCount} encore ouvert(s) — priorisez le recouvrement.`
+      ? ` ${stats.paidCount} billet(s) soldé(s) en caisse, ${stats.openCount} encore ouvert(s) — le recouvrement est urgent.`
       : stats.totalTickets > 0
-        ? " Tous vos billets du mois sont soldés selon la caisse. Excellent suivi."
+        ? " Tous vos billets du mois sont soldés selon la caisse."
         : "";
 
   if (tier === "high") {
     return {
-      badgeLabel: "Excellent rendement",
-      title: "Vous êtes sur la bonne trajectoire",
-      subtitle: "Plus de 15 billets ce mois — payant",
-      message: `Volume solide pour ${stats.totalTickets} billet(s). Continuez la rigueur sur les encaissements et la qualité client.${collectionHint}`,
+      badgeLabel: "Excellent mois",
+      alert: false,
+      message: `Félicitations — volume solide.${collectionHint} Maintenez cette cadence et la qualité de service.`,
       accentClass: "from-emerald-600 via-teal-600 to-cyan-700",
       glowClass: "shadow-[0_0_80px_rgba(16,185,129,0.45)]",
     };
@@ -52,24 +50,29 @@ export function presentationForPerformance(
 
   if (tier === "medium") {
     return {
-      badgeLabel: "Rendement moyen",
-      title: "Bonne base — accélérez maintenant",
-      subtitle: "Entre 6 et 15 billets ce mois — payant",
-      message: `${stats.totalTickets} billet(s) enregistré(s). Visez la régularité quotidienne et le suivi des impayés pour passer au niveau supérieur.${collectionHint}`,
+      badgeLabel: "Bon rythme",
+      alert: false,
+      message: `Vous progressez.${collectionHint} Gardez le cap : chaque nouvelle vente compte pour atteindre vos objectifs.`,
       accentClass: "from-blue-700 via-indigo-700 to-violet-800",
       glowClass: "shadow-[0_0_80px_rgba(59,130,246,0.4)]",
     };
   }
 
+  if (stats.totalTickets === 0) {
+    return {
+      badgeLabel: "Alerte performance",
+      alert: true,
+      message: `Aucune vente enregistrée à votre nom payant ce mois.${collectionHint} Relancez vos clients, vérifiez avec la caisse que rien ne manque, et reprenez l'activité dès aujourd'hui.`,
+      accentClass: "from-red-950 via-red-700 to-orange-700",
+      glowClass: "shadow-[0_0_100px_rgba(239,68,68,0.55)]",
+    };
+  }
+
   return {
-    badgeLabel: "Rendement à renforcer",
-    title: "Chaque billet compte",
-    subtitle: "5 billets ou moins ce mois — payant",
-    message:
-      stats.totalTickets === 0
-        ? "Aucun billet rattaché à votre nom payant ce mois. Contactez la caisse si des ventes manquent, et relancez vos prospects dès aujourd'hui."
-        : `${stats.totalTickets} billet(s) seulement. Structurez vos relances, sécurisez les encaissements et visez au moins 6 ventes d'ici la fin du mois.${collectionHint}`,
-    accentClass: "from-amber-600 via-orange-600 to-rose-700",
-    glowClass: "shadow-[0_0_80px_rgba(245,158,11,0.35)]",
+    badgeLabel: "Alerte performance",
+    alert: true,
+    message: `Volume insuffisant pour le mois en cours.${collectionHint} Structurez vos relances, sécurisez les encaissements et accélérez vos ventes immédiatement.`,
+    accentClass: "from-red-950 via-red-700 to-orange-700",
+    glowClass: "shadow-[0_0_100px_rgba(239,68,68,0.55)]",
   };
 }

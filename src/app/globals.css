@@ -141,6 +141,84 @@ video {
   background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
 }
 
+@keyframes agentSplashHeroPop {
+  from {
+    opacity: 0;
+    transform: scale(0.88);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes agentSplashAlertPulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(248, 113, 113, 0.45);
+  }
+  50% {
+    box-shadow: 0 0 0 12px rgba(248, 113, 113, 0);
+  }
+}
+
+@keyframes agentSplashBadgePulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.75;
+  }
+}
+
+@keyframes agentSplashAlertIcon {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.08);
+  }
+}
+
+@keyframes agentSplashAlertStripes {
+  0% {
+    background-position: 0 0;
+  }
+  100% {
+    background-position: 48px 48px;
+  }
+}
+
+.agent-splash-hero-count {
+  animation: agentSplashHeroPop 0.9s cubic-bezier(0.22, 1, 0.36, 1) 0.2s both;
+  text-shadow: 0 4px 32px rgba(0, 0, 0, 0.35);
+}
+
+.agent-splash-alert-pulse {
+  animation: agentSplashAlertPulse 1.6s ease-in-out infinite;
+}
+
+.agent-splash-badge-pulse {
+  animation: agentSplashBadgePulse 1.2s ease-in-out infinite;
+}
+
+.agent-splash-alert-icon {
+  animation: agentSplashAlertIcon 1.4s ease-in-out infinite;
+}
+
+.agent-splash-alert-stripes {
+  background: repeating-linear-gradient(
+    -45deg,
+    transparent,
+    transparent 12px,
+    rgba(0, 0, 0, 0.12) 12px,
+    rgba(0, 0, 0, 0.12) 24px
+  );
+  animation: agentSplashAlertStripes 4s linear infinite;
+}
+
 .tickets-scroll {
   scrollbar-width: thin;
   scrollbar-color: rgba(24, 28, 37, 0.45) rgba(24, 28, 37, 0.12);
