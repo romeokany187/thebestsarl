@@ -124,6 +124,14 @@ export function buildHomeQuickActions(params: {
     });
   }
 
+  if (canUseModule("recouvrement", role, jobTitle, teamName, accessMap, "READ")) {
+    pushUnique(actions, {
+      href: "/recouvrement",
+      label: "Recouvrement billets",
+      description: "Créances par payant et par mois (encaissements caisse).",
+    });
+  }
+
   if (canUseModule("invoices", role, jobTitle, teamName, accessMap, "READ")) {
     pushUnique(actions, {
       href: "/factures",

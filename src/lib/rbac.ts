@@ -27,7 +27,8 @@ export type AppModule =
   | "news"
   | "settings"
   | "audit"
-  | "dao";
+  | "dao"
+  | "recouvrement";
 
 const ALL_ROLES: AppRole[] = ["ADMIN", "DIRECTEUR_GENERAL", "MANAGER", "EMPLOYEE", "ACCOUNTANT"];
 
@@ -92,6 +93,11 @@ export function hasModuleAccess(params: {
 
   if (module === "comptabilite") {
     if (role === "ADMIN") return true;
+    return role === "ACCOUNTANT" || jobTitle === "COMPTABLE";
+  }
+
+  if (module === "recouvrement") {
+    if (role === "ADMIN" || role === "DIRECTEUR_GENERAL") return true;
     return role === "ACCOUNTANT" || jobTitle === "COMPTABLE";
   }
 

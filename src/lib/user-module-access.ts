@@ -23,7 +23,8 @@ export type AuthorizationModule =
   | "news"
   | "settings"
   | "audit"
-  | "dao";
+  | "dao"
+  | "recouvrement";
 
 const AUTHORIZATION_MODULE_VALUES: AuthorizationModule[] = [
   "home",
@@ -47,6 +48,7 @@ const AUTHORIZATION_MODULE_VALUES: AuthorizationModule[] = [
   "settings",
   "audit",
   "dao",
+  "recouvrement",
 ];
 
 export const AUTHORIZATION_MODULE_OPTIONS: Array<{ value: AuthorizationModule; label: string }> = [
@@ -58,6 +60,7 @@ export const AUTHORIZATION_MODULE_OPTIONS: Array<{ value: AuthorizationModule; l
   { value: "caisse_2_siege", label: "Caisse 2 siege" },
   { value: "caisse_agence", label: "Caisse agence" },
   { value: "comptabilite", label: "Comptabilite" },
+  { value: "recouvrement", label: "Recouvrement billets" },
   { value: "procurement", label: "Approvisionnement" },
   { value: "reports", label: "Rapports" },
   { value: "attendance", label: "Presences" },
@@ -98,6 +101,7 @@ const MODULE_ACCESS_ALIASES: Record<AuthorizationModule, AuthorizationModule[]> 
   settings: ["settings"],
   audit: ["audit"],
   dao: ["dao"],
+  recouvrement: ["recouvrement"],
 };
 
 function levelRank(level: ModuleAccessLevel) {
