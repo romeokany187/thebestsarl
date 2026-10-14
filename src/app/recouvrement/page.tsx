@@ -31,7 +31,6 @@ export default async function RecouvrementPage({
     recipients: matchKinshasaUsersForPayer(group.payerLabel, kinshasaUsers).map((user) => ({
       id: user.id,
       name: user.name,
-      whatsappPhone: user.whatsappPhone,
     })),
   }));
 

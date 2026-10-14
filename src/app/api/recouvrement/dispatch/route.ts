@@ -52,7 +52,6 @@ export async function POST(req: NextRequest) {
       id: user.id,
       name: user.name,
       email: user.email,
-      whatsappPhone: user.whatsappPhone,
     })),
     rows: scopedRows,
     payerLabel: displayPayerLabel,

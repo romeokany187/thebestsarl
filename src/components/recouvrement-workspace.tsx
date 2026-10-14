@@ -3,7 +3,7 @@
 import { Fragment, useState } from "react";
 import type { PayerRecoveryGroup } from "@/lib/ticket-recovery";
 
-type RecipientPreview = { id: string; name: string; whatsappPhone: string | null };
+type RecipientPreview = { id: string; name: string };
 
 export type RecouvrementGroupRow = PayerRecoveryGroup & {
   recipients: RecipientPreview[];
@@ -75,10 +75,6 @@ export function RecouvrementWorkspace({
           Cible d&apos;envoi : utilisateurs de l&apos;equipe Kinshasa uniquement ({kinshasaUserCount} compte
           {kinshasaUserCount > 1 ? "s" : ""}), dont le nom ou l&apos;e-mail correspond au payant renseigne sur la vente.
         </p>
-        <p className="mt-1 text-xs text-black/60 dark:text-white/60">
-          WhatsApp : message texte automatique (liste des billets, sans PDF) si l&apos;agent a renseigne son numero dans Profil
-          et si WHATSAPP_ACCESS_TOKEN / WHATSAPP_PHONE_NUMBER_ID sont configures sur le serveur.
-        </p>
       </section>
 
       {feedback ? (
@@ -139,9 +135,7 @@ export function RecouvrementWorkspace({
                         <td className="px-3 py-2 font-semibold">{group.remainingUsd.toFixed(2)}</td>
                         <td className="px-3 py-2 text-xs">
                           {canSend
-                            ? group.recipients
-                                .map((r) => `${r.name}${r.whatsappPhone ? " (WA)" : " (sans WA)"}`)
-                                .join(", ")
+                            ? group.recipients.map((r) => r.name).join(", ")
                             : "Aucun compte Kinshasa ne correspond au payant"}
                         </td>
                         <td className="px-3 py-2">

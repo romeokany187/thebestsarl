@@ -9,8 +9,6 @@ import {
   loadTheBestDocumentFonts,
   shortPdfLabel,
 } from "@/lib/thebest-pdf";
-import { buildRecoveryTextMessage } from "@/lib/ticket-recovery-text";
-import { isWhatsAppConfigured, sendWhatsAppText } from "@/lib/whatsapp";
 
 export const TICKET_PAYMENT_SELECT = {
   amount: true,
@@ -182,7 +180,7 @@ export async function buildRecoveryPdf(params: {
   return Buffer.from(await pdf.save());
 }
 
-type RecoveryRecipient = { id: string; name: string; email: string; whatsappPhone?: string | null };
+type RecoveryRecipient = { id: string; name: string; email: string };
 
 export async function dispatchRecoveryToRecipients(params: {
   recipients: RecoveryRecipient[];
@@ -243,33 +241,8 @@ export async function dispatchRecoveryToRecipients(params: {
   });
 
   let mailsSent = 0;
-  let whatsappSent = 0;
-  let whatsappFailed = 0;
-  let whatsappSkippedNoPhone = 0;
   const appUrl = process.env.NEXTAUTH_URL?.trim() || "";
   const recouvrementUrl = appUrl ? `${appUrl}/recouvrement?month=${monthKey}` : `/recouvrement?month=${monthKey}`;
-
-  for (const user of recipients) {
-    const textBody = buildRecoveryTextMessage({
-      recipientName: user.name,
-      payerLabel,
-      periodLabel,
-      rows,
-      includePdfMention: isMailConfigured(),
-      appUrl: recouvrementUrl,
-    });
-
-    if (isWhatsAppConfigured() && user.whatsappPhone) {
-      const waResult = await sendWhatsAppText(user.whatsappPhone, textBody);
-      if (waResult.ok) {
-        whatsappSent += 1;
-      } else if (!waResult.skipped) {
-        whatsappFailed += 1;
-      }
-    } else if (isWhatsAppConfigured() && !user.whatsappPhone) {
-      whatsappSkippedNoPhone += 1;
-    }
-  }
 
   if (isMailConfigured()) {
     for (const user of recipients) {
@@ -342,18 +315,12 @@ export async function dispatchRecoveryToRecipients(params: {
   const parts = [
     `Notification in-app : ${recipients.length}`,
     mailsSent > 0 ? `E-mails : ${mailsSent}` : isMailConfigured() ? null : "E-mail non configuré",
-    isWhatsAppConfigured()
-      ? `WhatsApp texte : ${whatsappSent} envoyé(s)${whatsappFailed > 0 ? `, ${whatsappFailed} échec(s)` : ""}${whatsappSkippedNoPhone > 0 ? `, ${whatsappSkippedNoPhone} sans numéro` : ""}`
-      : "WhatsApp non configuré (WHATSAPP_ACCESS_TOKEN)",
   ].filter(Boolean);
 
   return {
     sent: recipients.length,
     notified: recipients.length,
     mailsSent,
-    whatsappSent,
-    whatsappFailed,
-    whatsappSkippedNoPhone,
     message: parts.join(" · "),
   };
 }

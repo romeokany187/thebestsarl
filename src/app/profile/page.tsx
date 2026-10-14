@@ -1,6 +1,4 @@
 import { AppShell } from "@/components/app-shell";
-import { ProfileWhatsappPhoneForm } from "@/components/profile-whatsapp-phone-form";
-import { ensureUserWhatsappPhoneColumn } from "@/lib/user-whatsapp-phone";
 import { AppMailComposer } from "@/components/app-mail-composer";
 import { PaymentOrderAdminActions } from "@/components/payment-order-admin-actions";
 import { PaymentOrderCashExecutionActions } from "@/components/payment-order-cash-execution-actions";
@@ -24,8 +22,6 @@ export default async function ProfilePage() {
   const canExecuteNeedFromInbox = role === "ADMIN" || role === "ACCOUNTANT" || isCashierJobTitle(currentJobTitle) || currentJobTitle === "COMPTABLE";
   const canApprovePaymentOrderFromInbox = role === "ADMIN";
   const canExecutePaymentOrderFromInbox = role === "ADMIN" || role === "ACCOUNTANT" || isCashierJobTitle(currentJobTitle) || currentJobTitle === "COMPTABLE";
-
-  await ensureUserWhatsappPhoneColumn();
 
   const user = session?.user?.email
     ? await prisma.user.findUnique({
@@ -75,11 +71,6 @@ export default async function ProfilePage() {
         </section>
 
         <section className="rounded-2xl border border-black/10 bg-white p-5 shadow-sm dark:border-white/10 dark:bg-zinc-900">
-          <h2 className="text-lg font-semibold">WhatsApp</h2>
-          <ProfileWhatsappPhoneForm initialPhone={user?.whatsappPhone ?? null} />
-        </section>
-
-        <section className="rounded-2xl border border-black/10 bg-white p-5 shadow-sm dark:border-white/10 dark:bg-zinc-900 md:col-span-2">
           <h2 className="text-lg font-semibold">Enregistrement BDD</h2>
           <ul className="mt-3 space-y-2 text-sm text-black/75 dark:text-white/75">
             <li><span className="font-semibold">ID utilisateur :</span> {user?.id ?? "Non trouvé"}</li>
