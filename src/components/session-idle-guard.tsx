@@ -2,6 +2,7 @@
 
 import { useEffect, useRef } from "react";
 import { signOut } from "next-auth/react";
+import { PERFORMANCE_SPLASH_PENDING_KEY } from "@/lib/agent-performance-splash-shared";
 import { SESSION_INACTIVITY_TIMEOUT_MS } from "@/lib/session-security";
 
 const LAST_ACTIVITY_STORAGE_KEY = "thebest:last-activity-at";
@@ -35,6 +36,7 @@ export function SessionIdleGuard({ sessionKey }: { sessionKey: string }) {
       isSigningOutRef.current = true;
       clearExistingTimer();
       window.localStorage.removeItem(LAST_ACTIVITY_STORAGE_KEY);
+      window.localStorage.setItem(PERFORMANCE_SPLASH_PENDING_KEY, "1");
       await signOut({ callbackUrl: "/auth/signin" });
     }
 
