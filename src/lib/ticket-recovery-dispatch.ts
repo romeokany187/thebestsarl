@@ -1,8 +1,14 @@
 import { PaymentStatus } from "@prisma/client";
-import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
+import { PDFDocument } from "pdf-lib";
 import { prisma } from "@/lib/prisma";
 import { isMailConfigured, sendMailBatch } from "@/lib/mail";
-import { buildTicketReceivableBalance, type TicketReceivableBalance } from "@/lib/ticket-payment-balance";
+import { buildTicketReceivableBalance, normalizeMoneyCurrency, type TicketReceivableBalance } from "@/lib/ticket-payment-balance";
+import {
+  THEBEST_PDF_COLORS,
+  drawTheBestDocumentFooter,
+  loadTheBestDocumentFonts,
+  shortPdfLabel,
+} from "@/lib/thebest-pdf";
 
 export const TICKET_PAYMENT_SELECT = {
   amount: true,
@@ -65,92 +71,113 @@ export async function buildRecoveryPdf(params: {
   recipientName: string;
   payerLabel: string;
   periodLabel: string;
+  generatedBy: string;
   rows: OpenReceivableRow[];
 }) {
-  const { recipientName, payerLabel, periodLabel, rows } = params;
-  const pdfDoc = await PDFDocument.create();
-  const normalFont = await pdfDoc.embedFont(StandardFonts.Helvetica);
-  const boldFont = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
-
-  let page = pdfDoc.addPage([595, 842]);
-  let y = 810;
-  const left = 40;
-  const lineHeight = 14;
-  const maxChars = 95;
-
-  const drawLine = (
-    text: string,
-    options?: { bold?: boolean; size?: number; color?: { r: number; g: number; b: number } },
-  ) => {
-    if (y < 60) {
-      page = pdfDoc.addPage([595, 842]);
-      y = 810;
-    }
-    page.drawText(text, {
-      x: left,
-      y,
-      size: options?.size ?? 10,
-      font: options?.bold ? boldFont : normalFont,
-      color: options?.color ? rgb(options.color.r, options.color.g, options.color.b) : rgb(0, 0, 0),
-    });
-    y -= lineHeight;
-  };
-
-  const drawWrapped = (text: string, options?: { bold?: boolean; size?: number }) => {
-    if (text.length <= maxChars) {
-      drawLine(text, options);
-      return;
-    }
-
-    let remaining = text;
-    while (remaining.length > 0) {
-      const chunk = remaining.slice(0, maxChars);
-      if (remaining.length <= maxChars) {
-        drawLine(remaining, options);
-        break;
-      }
-      const lastSpace = chunk.lastIndexOf(" ");
-      const line = lastSpace > 20 ? chunk.slice(0, lastSpace) : chunk;
-      drawLine(line, options);
-      remaining = remaining.slice(line.length).trimStart();
-    }
-  };
+  const { recipientName, payerLabel, periodLabel, generatedBy, rows } = params;
+  const { textBlack, lineGray } = THEBEST_PDF_COLORS;
+  const pdf = await PDFDocument.create();
+  const { body: font, bold: fontBold } = await loadTheBestDocumentFonts(pdf);
 
   const totalUnpaid = rows.filter(({ balance }) => balance.computedStatus === PaymentStatus.UNPAID).length;
   const totalPartial = rows.filter(({ balance }) => balance.computedStatus === PaymentStatus.PARTIAL).length;
+  const totalBilledUsd = rows.reduce((sum, { balance }) => sum + balance.amountUsd, 0);
+  const totalPaidUsd = rows.reduce((sum, { balance }) => sum + balance.paidAmountUsd, 0);
   const totalRemainingUsd = rows.reduce((sum, { balance }) => sum + balance.remainingUsd, 0);
+  const issuedOn = new Date().toLocaleDateString("fr-FR");
 
-  drawLine("THEBEST SARL - Recouvrement billets", { bold: true, size: 14 });
-  drawLine(`Destinataire: ${recipientName}`, { bold: true, size: 11 });
-  drawLine(`Payant: ${payerLabel}`, { bold: true, size: 11 });
-  drawLine(`Periode: ${periodLabel}`, { size: 10 });
-  drawLine(`Date: ${new Date().toLocaleDateString("fr-FR")}`, { size: 10 });
-  drawLine("Statut calcule depuis les encaissements caisse (Payment).", { size: 9 });
-  drawLine("", { size: 8 });
-  drawLine(`Nombre de billets: ${rows.length}`, { bold: true });
-  drawLine(`Non payes: ${totalUnpaid} | Partiels: ${totalPartial}`);
-  if (totalRemainingUsd > 0) {
-    drawLine(`Reste estime (USD eq.): ${totalRemainingUsd.toFixed(2)}`);
-  }
-  drawLine("", { size: 8 });
-  drawLine("Details des billets:", { bold: true });
-  drawLine("", { size: 8 });
+  let page = pdf.addPage([842, 595]);
+  const pageWidth = 842;
 
-  rows.forEach(({ ticket, balance }, index) => {
-    const statusLabel = balance.computedStatus === PaymentStatus.UNPAID ? "Non paye" : "Partiel";
-    const soldAt = ticket.soldAt.toLocaleDateString("fr-FR");
-    drawWrapped(
-      `${index + 1}. ${ticket.ticketNumber} | Client: ${ticket.customerName} | Cie: ${ticket.airline.code} | ${balance.totalTicketAmount.toFixed(2)} ${balance.currency} | ${statusLabel}`,
-      { bold: true },
-    );
-    drawWrapped(`   Vendu le: ${soldAt} | Route: ${ticket.route}`);
-    if (balance.remainingUsd > 0) {
-      drawWrapped(`   Reste: ${balance.remainingAmount.toFixed(2)} ${balance.currency} (~ ${balance.remainingUsd.toFixed(2)} USD)`);
+  const drawHeader = (continuation = false) => {
+    page.drawText(`THEBEST SARL - Recouvrement billets${continuation ? " (suite)" : ""}`, {
+      x: 24,
+      y: 566,
+      size: 13,
+      font: fontBold,
+      color: textBlack,
+    });
+    page.drawText(`${periodLabel} • Payant : ${payerLabel} • Destinataire : ${recipientName}`, {
+      x: 24,
+      y: 550,
+      size: 9,
+      font,
+      color: textBlack,
+    });
+    page.drawText(`Émis le ${issuedOn} • Statut calculé depuis les encaissements caisse`, {
+      x: 24,
+      y: 538,
+      size: 8.2,
+      font,
+      color: textBlack,
+    });
+    page.drawLine({ start: { x: 24, y: 532 }, end: { x: pageWidth - 24, y: 532 }, thickness: 0.8, color: lineGray });
+  };
+
+  const drawSummary = () => {
+    page.drawText("Synthèse", { x: 24, y: 518, size: 8.8, font: fontBold, color: textBlack });
+    page.drawText(`Billets ouverts : ${rows.length}`, { x: 120, y: 518, size: 8.4, font, color: textBlack });
+    page.drawText(`Impayés : ${totalUnpaid} • Partiels : ${totalPartial}`, { x: 280, y: 518, size: 8.4, font, color: textBlack });
+    page.drawText(`Facturé : ${totalBilledUsd.toFixed(2)} USD eq.`, { x: 24, y: 505, size: 8.4, font: fontBold, color: textBlack });
+    page.drawText(`Encaissé : ${totalPaidUsd.toFixed(2)} USD eq.`, { x: 190, y: 505, size: 8.4, font: fontBold, color: textBlack });
+    page.drawText(`Reste : ${totalRemainingUsd.toFixed(2)} USD eq.`, { x: 360, y: 505, size: 8.4, font: fontBold, color: textBlack });
+    page.drawLine({ start: { x: 24, y: 451 }, end: { x: pageWidth - 24, y: 451 }, thickness: 0.7, color: lineGray });
+  };
+
+  const headers = ["Date", "PNR", "Client", "Compagnie", "Route", "Facturé", "Encaissé", "Reste", "Statut"];
+  const x = [24, 92, 158, 248, 308, 408, 488, 568, 648];
+  const drawTableHeader = (topY: number) => {
+    headers.forEach((header, index) => {
+      page.drawText(header, { x: x[index], y: topY, size: 8, font: fontBold, color: textBlack });
+    });
+    page.drawLine({ start: { x: 24, y: topY - 4 }, end: { x: pageWidth - 24, y: topY - 4 }, thickness: 0.6, color: lineGray });
+  };
+
+  drawHeader();
+  drawSummary();
+  drawTableHeader(436);
+  let y = 420;
+
+  for (const { ticket, balance } of rows) {
+    if (y < 38) {
+      page = pdf.addPage([842, 595]);
+      drawHeader(true);
+      drawTableHeader(516);
+      y = 500;
     }
-    drawLine("", { size: 8 });
-  });
 
-  return Buffer.from(await pdfDoc.save());
+    const currency = normalizeMoneyCurrency(balance.currency);
+    const billedLabel = `${balance.totalTicketAmount.toFixed(2)} ${currency}`;
+    const paidLabel = `${balance.paidAmount.toFixed(2)} ${currency}`;
+    const remainingLabel = `${balance.remainingAmount.toFixed(2)} ${currency}`;
+    const statusLabel =
+      balance.computedStatus === PaymentStatus.UNPAID
+        ? "NON PAYÉ"
+        : balance.computedStatus === PaymentStatus.PARTIAL
+          ? "PARTIEL"
+          : "PAYÉ";
+
+    const values = [
+      new Date(ticket.soldAt).toISOString().slice(0, 10),
+      shortPdfLabel(ticket.ticketNumber, 10),
+      shortPdfLabel(ticket.customerName, 22),
+      ticket.airline.code,
+      shortPdfLabel(ticket.route, 14),
+      billedLabel,
+      paidLabel,
+      remainingLabel,
+      statusLabel,
+    ];
+
+    values.forEach((value, index) => {
+      page.drawText(value, { x: x[index], y, size: 7.7, font, color: textBlack });
+    });
+    page.drawLine({ start: { x: 24, y: y - 3 }, end: { x: pageWidth - 24, y: y - 3 }, thickness: 0.25, color: lineGray });
+    y -= 11.5;
+  }
+
+  drawTheBestDocumentFooter(pdf, font, generatedBy);
+  return Buffer.from(await pdf.save());
 }
 
 type RecoveryRecipient = { id: string; name: string; email: string };
@@ -231,6 +258,7 @@ export async function dispatchRecoveryToRecipients(params: {
         recipientName: user.name,
         payerLabel,
         periodLabel,
+        generatedBy: senderName,
         rows,
       });
 

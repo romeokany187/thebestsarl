@@ -4,7 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { requireApiRoles } from "@/lib/rbac";
 import { isMailConfigured, sendMailBatch } from "@/lib/mail";
 import { buildTicketReceivableBalance } from "@/lib/ticket-payment-balance";
-import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
+import { buildRecoveryPdf, type OpenReceivableRow as RecoveryPdfRow } from "@/lib/ticket-recovery-dispatch";
 
 const APRIL_START_2026 = new Date(2026, 3, 1); // April 1, 2026
 
@@ -53,87 +53,21 @@ async function fetchOpenReceivableTickets() {
     );
 }
 
-async function buildRecipientPdf(recipientName: string, rows: OpenReceivableRow[]) {
-  const pdfDoc = await PDFDocument.create();
-  const normalFont = await pdfDoc.embedFont(StandardFonts.Helvetica);
-  const boldFont = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
-
-  let page = pdfDoc.addPage([595, 842]); // A4 portrait
-  let y = 810;
-  const left = 40;
-  const lineHeight = 14;
-  const maxChars = 95;
-
-  const drawLine = (
-    text: string,
-    options?: { bold?: boolean; size?: number; color?: { r: number; g: number; b: number } },
-  ) => {
-    if (y < 60) {
-      page = pdfDoc.addPage([595, 842]);
-      y = 810;
-    }
-    page.drawText(text, {
-      x: left,
-      y,
-      size: options?.size ?? 10,
-      font: options?.bold ? boldFont : normalFont,
-      color: options?.color ? rgb(options.color.r, options.color.g, options.color.b) : rgb(0, 0, 0),
-    });
-    y -= lineHeight;
-  };
-
-  const drawWrapped = (text: string, options?: { bold?: boolean; size?: number }) => {
-    if (text.length <= maxChars) {
-      drawLine(text, options);
-      return;
-    }
-
-    let remaining = text;
-    while (remaining.length > 0) {
-      const chunk = remaining.slice(0, maxChars);
-      if (remaining.length <= maxChars) {
-        drawLine(remaining, options);
-        break;
-      }
-      const lastSpace = chunk.lastIndexOf(" ");
-      const line = lastSpace > 20 ? chunk.slice(0, lastSpace) : chunk;
-      drawLine(line, options);
-      remaining = remaining.slice(line.length).trimStart();
-    }
-  };
-
-  const totalUnpaid = rows.filter(({ balance }) => balance.computedStatus === PaymentStatus.UNPAID).length;
-  const totalPartial = rows.filter(({ balance }) => balance.computedStatus === PaymentStatus.PARTIAL).length;
-  const totalRemainingUsd = rows.reduce((sum, { balance }) => sum + balance.remainingUsd, 0);
-
-  drawLine("THEBEST SARL - Recouvrement billets (encaissements caisse)", { bold: true, size: 14 });
-  drawLine(`Destinataire: ${recipientName}`, { bold: true, size: 11 });
-  drawLine(`Date: ${new Date().toLocaleDateString("fr-FR")}`, { size: 10 });
-  drawLine("", { size: 8 });
-  drawLine(`Nombre de billets a traiter: ${rows.length}`, { bold: true });
-  drawLine(`Non payes: ${totalUnpaid} | Partiels: ${totalPartial}`);
-  if (totalRemainingUsd > 0) {
-    drawLine(`Reste estime (USD): ${totalRemainingUsd.toFixed(2)}`);
-  }
-  drawLine("", { size: 8 });
-  drawLine("Details des billets:", { bold: true });
-  drawLine("", { size: 8 });
-
-  rows.forEach(({ ticket, balance }, index) => {
-    const statusLabel = balance.computedStatus === PaymentStatus.UNPAID ? "Non paye" : "Partiel";
-    const soldAt = ticket.soldAt.toLocaleDateString("fr-FR");
-    drawWrapped(
-      `${index + 1}. ${ticket.ticketNumber} | Client: ${ticket.customerName} | Cie: ${ticket.airline.code} | ${balance.totalTicketAmount.toFixed(2)} ${balance.currency} | Statut: ${statusLabel}`,
-      { bold: true },
-    );
-    drawWrapped(`   Vendu le: ${soldAt} | Route: ${ticket.route} | Payant: ${ticket.payerName ?? "N/A"}`);
-    if (balance.remainingUsd > 0) {
-      drawWrapped(`   Reste estime: ${balance.remainingUsd.toFixed(2)} USD eq.`);
-    }
-    drawLine("", { size: 8 });
-  });
-
-  return Buffer.from(await pdfDoc.save());
+function toRecoveryPdfRows(rows: OpenReceivableRow[]): RecoveryPdfRow[] {
+  return rows.map(({ ticket, balance }) => ({
+    ticket: {
+      id: ticket.id,
+      ticketNumber: ticket.ticketNumber,
+      customerName: ticket.customerName,
+      payerName: ticket.payerName,
+      route: ticket.route,
+      soldAt: ticket.soldAt,
+      amount: ticket.amount,
+      currency: ticket.currency,
+      airline: ticket.airline,
+    },
+    balance,
+  }));
 }
 
 async function dispatchUnpaidAlerts(senderName: string) {
@@ -281,7 +215,14 @@ async function dispatchUnpaidAlerts(senderName: string) {
           .join("\n");
 
         const moreCount = scopedRows.length > 30 ? `\n... et ${scopedRows.length - 30} autre(s).` : "";
-        const attachment = await buildRecipientPdf(user.name, scopedRows);
+        const payerLabel = scopedRows[0]?.ticket.payerName?.trim() || user.name;
+        const attachment = await buildRecoveryPdf({
+          recipientName: user.name,
+          payerLabel,
+          periodLabel: "Depuis avril 2026",
+          generatedBy: senderName,
+          rows: toRecoveryPdfRows(scopedRows),
+        });
 
         await sendMailBatch({
           recipients: [{ email: user.email, name: user.name }],
