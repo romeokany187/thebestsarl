@@ -19,11 +19,6 @@ export function resolvePerformanceTier(totalTickets: number): PerformanceTier {
   return "low";
 }
 
-export function shouldShowPerformanceSplashForRole(role: string) {
-  const normalized = role.trim().toUpperCase();
-  return normalized !== "ADMIN" && normalized !== "DIRECTEUR_GENERAL";
-}
-
 export type PerformancePresentation = {
   title: string;
   subtitle: string;

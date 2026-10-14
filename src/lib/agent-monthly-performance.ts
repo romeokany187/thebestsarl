@@ -10,11 +10,7 @@ import {
 } from "@/lib/agent-performance-splash-shared";
 
 export type { AgentMonthlyPerformance, PerformanceTier } from "@/lib/agent-performance-splash-shared";
-export {
-  PERFORMANCE_SPLASH_PENDING_KEY,
-  presentationForPerformance,
-  shouldShowPerformanceSplashForRole,
-} from "@/lib/agent-performance-splash-shared";
+export { PERFORMANCE_SPLASH_PENDING_KEY, presentationForPerformance } from "@/lib/agent-performance-splash-shared";
 
 function userMatchesPayer(
   payerName: string | null | undefined,

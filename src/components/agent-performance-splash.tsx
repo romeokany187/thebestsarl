@@ -14,12 +14,10 @@ const FADE_OUT_MS = 700;
 export function AgentPerformanceSplash({
   stats,
   redirectPath,
-  enabledForRole,
   userName,
 }: {
   stats: AgentMonthlyPerformance;
   redirectPath: string;
-  enabledForRole: boolean;
   userName: string;
 }) {
   const router = useRouter();
@@ -30,9 +28,8 @@ export function AgentPerformanceSplash({
 
   useEffect(() => {
     const pending = window.localStorage.getItem(PERFORMANCE_SPLASH_PENDING_KEY) === "1";
-    const shouldShow = enabledForRole && pending;
 
-    if (!shouldShow) {
+    if (!pending) {
       router.replace(redirectPath);
       return;
     }
@@ -52,7 +49,7 @@ export function AgentPerformanceSplash({
     }, 50);
 
     return () => window.clearInterval(tick);
-  }, [enabledForRole, redirectPath, router]);
+  }, [redirectPath, router]);
 
   useEffect(() => {
     if (phase !== "leaving") return;
