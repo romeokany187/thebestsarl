@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { payerRecoveryKey } from "@/lib/ticket-recovery";
+import { ensureUserWhatsappPhoneColumn } from "@/lib/user-whatsapp-phone";
 
 export function isKinshasaTeamName(teamName: string | null | undefined) {
   return (teamName ?? "").trim().toLowerCase().includes("kinshasa");
@@ -9,6 +10,7 @@ export type KinshasaWorkspaceUser = {
   id: string;
   name: string;
   email: string;
+  whatsappPhone: string | null;
   jobTitle: string | null;
   role: string;
   teamName: string | null;
@@ -20,6 +22,7 @@ function normalize(value: string | null | undefined) {
 
 /** Tous les comptes rattachés à une équipe Kinshasa (tous grades / rôles). */
 export async function loadKinshasaWorkspaceUsers(): Promise<KinshasaWorkspaceUser[]> {
+  await ensureUserWhatsappPhoneColumn();
   const users = await prisma.user.findMany({
     where: {
       team: {
@@ -30,6 +33,7 @@ export async function loadKinshasaWorkspaceUsers(): Promise<KinshasaWorkspaceUse
       id: true,
       name: true,
       email: true,
+      whatsappPhone: true,
       jobTitle: true,
       role: true,
       team: { select: { name: true } },
@@ -41,6 +45,7 @@ export async function loadKinshasaWorkspaceUsers(): Promise<KinshasaWorkspaceUse
     id: user.id,
     name: user.name,
     email: user.email,
+    whatsappPhone: user.whatsappPhone,
     jobTitle: user.jobTitle,
     role: user.role,
     teamName: user.team?.name ?? null,

@@ -48,7 +48,12 @@ export async function POST(req: NextRequest) {
   }
 
   const result = await dispatchRecoveryToRecipients({
-    recipients: recipients.map((user) => ({ id: user.id, name: user.name, email: user.email })),
+    recipients: recipients.map((user) => ({
+      id: user.id,
+      name: user.name,
+      email: user.email,
+      whatsappPhone: user.whatsappPhone,
+    })),
     rows: scopedRows,
     payerLabel: displayPayerLabel,
     periodLabel,
