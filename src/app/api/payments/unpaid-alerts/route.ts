@@ -1,30 +1,31 @@
 import { NextRequest, NextResponse } from "next/server";
+import { PaymentStatus } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { requireApiRoles } from "@/lib/rbac";
 import { isMailConfigured, sendMailBatch } from "@/lib/mail";
+import { buildTicketReceivableBalance } from "@/lib/ticket-payment-balance";
 import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
 
 const APRIL_START_2026 = new Date(2026, 3, 1); // April 1, 2026
 
-type UnpaidTicket = Awaited<ReturnType<typeof fetchUnpaidTickets>>[number];
+const TICKET_PAYMENT_SELECT = {
+  amount: true,
+  currency: true,
+  amountUsd: true,
+  amountCdf: true,
+  fxRateUsdToCdf: true,
+} as const;
+
+type OpenReceivableRow = Awaited<ReturnType<typeof fetchOpenReceivableTickets>>[number];
 
 function normalize(value: string | null | undefined) {
   return (value ?? "").trim().toLowerCase();
 }
 
-function remainingUsd(ticket: UnpaidTicket) {
-  const paid = ticket.payments.reduce((sum, payment) => {
-    return sum + (payment.currency === "USD" ? payment.amount : 0);
-  }, 0);
-  return ticket.currency === "USD" ? Math.max(ticket.amount - paid, 0) : 0;
-}
-
-async function fetchUnpaidTickets() {
-  return prisma.ticketSale.findMany({
-    where: {
-      paymentStatus: { in: ["UNPAID", "PARTIAL"] },
-      soldAt: { gte: APRIL_START_2026 },
-    },
+/** Billets impayés / partiels selon les encaissements caisse uniquement. */
+async function fetchOpenReceivableTickets() {
+  const tickets = await prisma.ticketSale.findMany({
+    where: { soldAt: { gte: APRIL_START_2026 } },
     include: {
       airline: { select: { code: true, name: true } },
       seller: {
@@ -36,13 +37,23 @@ async function fetchUnpaidTickets() {
           team: { select: { id: true, name: true } },
         },
       },
-      payments: { select: { amount: true, currency: true } },
+      payments: { select: TICKET_PAYMENT_SELECT },
     },
     orderBy: { soldAt: "asc" },
   });
+
+  return tickets
+    .map((ticket) => ({
+      ticket,
+      balance: buildTicketReceivableBalance(ticket),
+    }))
+    .filter(
+      ({ balance }) =>
+        balance.computedStatus === PaymentStatus.UNPAID || balance.computedStatus === PaymentStatus.PARTIAL,
+    );
 }
 
-async function buildRecipientPdf(recipientName: string, tickets: UnpaidTicket[]) {
+async function buildRecipientPdf(recipientName: string, rows: OpenReceivableRow[]) {
   const pdfDoc = await PDFDocument.create();
   const normalFont = await pdfDoc.embedFont(StandardFonts.Helvetica);
   const boldFont = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
@@ -91,15 +102,15 @@ async function buildRecipientPdf(recipientName: string, tickets: UnpaidTicket[])
     }
   };
 
-  const totalUnpaid = tickets.filter((ticket) => ticket.paymentStatus === "UNPAID").length;
-  const totalPartial = tickets.filter((ticket) => ticket.paymentStatus === "PARTIAL").length;
-  const totalRemainingUsd = tickets.reduce((sum, ticket) => sum + remainingUsd(ticket), 0);
+  const totalUnpaid = rows.filter(({ balance }) => balance.computedStatus === PaymentStatus.UNPAID).length;
+  const totalPartial = rows.filter(({ balance }) => balance.computedStatus === PaymentStatus.PARTIAL).length;
+  const totalRemainingUsd = rows.reduce((sum, { balance }) => sum + balance.remainingUsd, 0);
 
-  drawLine("THEBEST SARL - Alerte Recouvrement", { bold: true, size: 14 });
+  drawLine("THEBEST SARL - Recouvrement billets (encaissements caisse)", { bold: true, size: 14 });
   drawLine(`Destinataire: ${recipientName}`, { bold: true, size: 11 });
   drawLine(`Date: ${new Date().toLocaleDateString("fr-FR")}`, { size: 10 });
   drawLine("", { size: 8 });
-  drawLine(`Nombre de billets a traiter: ${tickets.length}`, { bold: true });
+  drawLine(`Nombre de billets a traiter: ${rows.length}`, { bold: true });
   drawLine(`Non payes: ${totalUnpaid} | Partiels: ${totalPartial}`);
   if (totalRemainingUsd > 0) {
     drawLine(`Reste estime (USD): ${totalRemainingUsd.toFixed(2)}`);
@@ -108,17 +119,16 @@ async function buildRecipientPdf(recipientName: string, tickets: UnpaidTicket[])
   drawLine("Details des billets:", { bold: true });
   drawLine("", { size: 8 });
 
-  tickets.forEach((ticket, index) => {
-    const statusLabel = ticket.paymentStatus === "UNPAID" ? "Non paye" : "Partiel";
+  rows.forEach(({ ticket, balance }, index) => {
+    const statusLabel = balance.computedStatus === PaymentStatus.UNPAID ? "Non paye" : "Partiel";
     const soldAt = ticket.soldAt.toLocaleDateString("fr-FR");
     drawWrapped(
-      `${index + 1}. ${ticket.ticketNumber} | Client: ${ticket.customerName} | Cie: ${ticket.airline.code} | ${ticket.amount.toFixed(2)} ${ticket.currency} | Statut: ${statusLabel}`,
+      `${index + 1}. ${ticket.ticketNumber} | Client: ${ticket.customerName} | Cie: ${ticket.airline.code} | ${balance.totalTicketAmount.toFixed(2)} ${balance.currency} | Statut: ${statusLabel}`,
       { bold: true },
     );
     drawWrapped(`   Vendu le: ${soldAt} | Route: ${ticket.route} | Payant: ${ticket.payerName ?? "N/A"}`);
-    const remaining = remainingUsd(ticket);
-    if (remaining > 0) {
-      drawWrapped(`   Reste estime: ${remaining.toFixed(2)} USD`);
+    if (balance.remainingUsd > 0) {
+      drawWrapped(`   Reste estime: ${balance.remainingUsd.toFixed(2)} USD eq.`);
     }
     drawLine("", { size: 8 });
   });
@@ -127,10 +137,10 @@ async function buildRecipientPdf(recipientName: string, tickets: UnpaidTicket[])
 }
 
 async function dispatchUnpaidAlerts(senderName: string) {
-  const unpaidTickets = await fetchUnpaidTickets();
+  const openRows = await fetchOpenReceivableTickets();
 
-  if (unpaidTickets.length === 0) {
-    return { message: "Aucun billet non payé trouvé depuis avril.", sent: 0, ticketCount: 0 };
+  if (openRows.length === 0) {
+    return { message: "Aucune créance ouverte depuis avril (selon paiements caisse).", sent: 0, ticketCount: 0 };
   }
 
   const allUsers = await prisma.user.findMany({
@@ -158,7 +168,7 @@ async function dispatchUnpaidAlerts(senderName: string) {
     }
   }
 
-  const ticketById = new Map(unpaidTickets.map((ticket) => [ticket.id, ticket]));
+  const rowByTicketId = new Map(openRows.map((row) => [row.ticket.id, row]));
   const userTicketIds = new Map<string, Set<string>>();
 
   const addAssignment = (userId: string, ticketId: string) => {
@@ -168,33 +178,21 @@ async function dispatchUnpaidAlerts(senderName: string) {
     userTicketIds.set(userId, assigned);
   };
 
-  for (const ticket of unpaidTickets) {
+  for (const { ticket } of openRows) {
     const payerKey = normalize(ticket.payerName);
-    if (payerKey) {
-      const payerMatches = [...(usersByEmail.get(payerKey) ?? []), ...(usersByName.get(payerKey) ?? [])];
-      for (const payer of payerMatches) {
-        addAssignment(payer.id, ticket.id);
-      }
-    }
-
-    if (ticket.sellerId) {
-      addAssignment(ticket.sellerId, ticket.id);
-    }
-
-    if (ticket.seller?.teamId) {
-      const managers = managersByTeamId.get(ticket.seller.teamId) ?? [];
-      for (const manager of managers) {
-        addAssignment(manager.id, ticket.id);
-      }
+    if (!payerKey) continue;
+    const payerMatches = [...(usersByEmail.get(payerKey) ?? []), ...(usersByName.get(payerKey) ?? [])];
+    for (const payer of payerMatches) {
+      addAssignment(payer.id, ticket.id);
     }
   }
 
   const targetUserIds = Array.from(userTicketIds.keys());
   if (targetUserIds.length === 0) {
     return {
-      message: "Aucune cible d'alerte trouvée (payant, vendeur, chef d'équipe).",
+      message: "Aucun utilisateur ne correspond au payant renseigné sur les créances ouvertes.",
       sent: 0,
-      ticketCount: unpaidTickets.length,
+      ticketCount: openRows.length,
     };
   }
 
@@ -213,19 +211,19 @@ async function dispatchUnpaidAlerts(senderName: string) {
       const ticketIds = userTicketIds.get(userId);
       if (!user || !ticketIds || ticketIds.size === 0) return null;
 
-      const scopedTickets = Array.from(ticketIds)
-        .map((ticketId) => ticketById.get(ticketId))
-        .filter((ticket): ticket is UnpaidTicket => Boolean(ticket));
+      const scopedRows = Array.from(ticketIds)
+        .map((ticketId) => rowByTicketId.get(ticketId))
+        .filter((row): row is OpenReceivableRow => Boolean(row));
 
-      const scopedUnpaid = scopedTickets.filter((ticket) => ticket.paymentStatus === "UNPAID").length;
-      const scopedPartial = scopedTickets.filter((ticket) => ticket.paymentStatus === "PARTIAL").length;
-      const scopedRemainingUsd = scopedTickets.reduce((sum, ticket) => sum + remainingUsd(ticket), 0);
+      const scopedUnpaid = scopedRows.filter(({ balance }) => balance.computedStatus === PaymentStatus.UNPAID).length;
+      const scopedPartial = scopedRows.filter(({ balance }) => balance.computedStatus === PaymentStatus.PARTIAL).length;
+      const scopedRemainingUsd = scopedRows.reduce((sum, { balance }) => sum + balance.remainingUsd, 0);
 
-      const title = `🚨 URGENT — ${scopedTickets.length} billet${scopedTickets.length > 1 ? "s" : ""} à recouvrer`;
+      const title = `Recouvrement — ${scopedRows.length} billet${scopedRows.length > 1 ? "s" : ""} (payant)`;
       const message = [
-        `Billets concernés: ${scopedTickets.length}`,
+        `Billets concernés: ${scopedRows.length}`,
         `Non payés: ${scopedUnpaid} | Partiels: ${scopedPartial}`,
-        scopedRemainingUsd > 0 ? `Reste à encaisser ≈ ${scopedRemainingUsd.toFixed(2)} USD` : null,
+        scopedRemainingUsd > 0 ? `Reste à encaisser ≈ ${scopedRemainingUsd.toFixed(2)} USD (caisse)` : null,
       ]
         .filter(Boolean)
         .join(" — ");
@@ -237,14 +235,14 @@ async function dispatchUnpaidAlerts(senderName: string) {
         type: "UNPAID_TICKET_ALERT",
         isRead: false,
         metadata: {
-          totalCount: scopedTickets.length,
+          totalCount: scopedRows.length,
           unpaidCount: scopedUnpaid,
           partialCount: scopedPartial,
           totalAmountUsd: scopedRemainingUsd,
           sentBy: senderName,
           sentAt: new Date().toISOString(),
           since: APRIL_START_2026.toISOString(),
-          ticketIds: scopedTickets.map((ticket) => ticket.id),
+          ticketIds: scopedRows.map(({ ticket }) => ticket.id),
         },
       };
     })
@@ -264,35 +262,35 @@ async function dispatchUnpaidAlerts(senderName: string) {
         const ticketIds = userTicketIds.get(userId);
         if (!user || !ticketIds || ticketIds.size === 0) continue;
 
-        const scopedTickets = Array.from(ticketIds)
-          .map((ticketId) => ticketById.get(ticketId))
-          .filter((ticket): ticket is UnpaidTicket => Boolean(ticket));
+        const scopedRows = Array.from(ticketIds)
+          .map((ticketId) => rowByTicketId.get(ticketId))
+          .filter((row): row is OpenReceivableRow => Boolean(row));
 
-        if (scopedTickets.length === 0) continue;
+        if (scopedRows.length === 0) continue;
 
-        const scopedUnpaid = scopedTickets.filter((ticket) => ticket.paymentStatus === "UNPAID").length;
-        const scopedPartial = scopedTickets.filter((ticket) => ticket.paymentStatus === "PARTIAL").length;
-        const scopedRemainingUsd = scopedTickets.reduce((sum, ticket) => sum + remainingUsd(ticket), 0);
+        const scopedUnpaid = scopedRows.filter(({ balance }) => balance.computedStatus === PaymentStatus.UNPAID).length;
+        const scopedPartial = scopedRows.filter(({ balance }) => balance.computedStatus === PaymentStatus.PARTIAL).length;
+        const scopedRemainingUsd = scopedRows.reduce((sum, { balance }) => sum + balance.remainingUsd, 0);
 
-        const ticketLines = scopedTickets
+        const ticketLines = scopedRows
           .slice(0, 30)
-          .map((ticket, index) => {
-            const status = ticket.paymentStatus === "UNPAID" ? "Non payé" : "Partiel";
-            return `${index + 1}. ${ticket.ticketNumber} — ${ticket.customerName} — ${ticket.airline.code} — ${ticket.amount.toFixed(2)} ${ticket.currency} [${status}]`;
+          .map(({ ticket, balance }, index) => {
+            const status = balance.computedStatus === PaymentStatus.UNPAID ? "Non payé" : "Partiel";
+            return `${index + 1}. ${ticket.ticketNumber} — ${ticket.customerName} — ${ticket.airline.code} — ${balance.totalTicketAmount.toFixed(2)} ${balance.currency} [${status}]`;
           })
           .join("\n");
 
-        const moreCount = scopedTickets.length > 30 ? `\n... et ${scopedTickets.length - 30} autre(s).` : "";
-        const attachment = await buildRecipientPdf(user.name, scopedTickets);
+        const moreCount = scopedRows.length > 30 ? `\n... et ${scopedRows.length - 30} autre(s).` : "";
+        const attachment = await buildRecipientPdf(user.name, scopedRows);
 
         await sendMailBatch({
           recipients: [{ email: user.email, name: user.name }],
-          subject: `URGENT — ${scopedTickets.length} billet(s) non payé(s) vous concernant`,
+          subject: `Recouvrement — ${scopedRows.length} billet(s) au nom payant`,
           text: [
-            `ALERTE RECOUVREMENT — ${new Date().toLocaleDateString("fr-FR")}`,
+            `RECOUVREMENT BILLETS (encaissements caisse) — ${new Date().toLocaleDateString("fr-FR")}`,
             "",
             `Bonjour ${user.name},`,
-            `${scopedTickets.length} billet(s) non payé(s) vous sont assignés pour suivi:`,
+            `${scopedRows.length} billet(s) ouverts vous sont rattachés en tant que payant:`,
             `  - Non payés: ${scopedUnpaid}`,
             `  - Partiels: ${scopedPartial}`,
             scopedRemainingUsd > 0 ? `  - Reste estimé: ${scopedRemainingUsd.toFixed(2)} USD` : "",
@@ -309,29 +307,29 @@ async function dispatchUnpaidAlerts(senderName: string) {
             .join("\n"),
           html: `
 <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto">
-  <div style="background:#dc2626;color:white;padding:16px 20px;border-radius:8px 8px 0 0">
-    <h2 style="margin:0;font-size:18px">🚨 URGENT — Recouvrement billets</h2>
+  <div style="background:#1d4ed8;color:white;padding:16px 20px;border-radius:8px 8px 0 0">
+    <h2 style="margin:0;font-size:18px">Recouvrement billets (caisse)</h2>
     <p style="margin:4px 0 0;font-size:13px;opacity:0.9">${new Date().toLocaleDateString("fr-FR", { weekday: "long", year: "numeric", month: "long", day: "numeric" })}</p>
   </div>
-  <div style="background:#fff5f5;border:1px solid #fecaca;padding:20px;border-radius:0 0 8px 8px">
+  <div style="background:#f8fafc;border:1px solid #e2e8f0;padding:20px;border-radius:0 0 8px 8px">
     <p style="margin:0 0 12px;font-size:15px">Bonjour <strong>${user.name}</strong>,</p>
-    <p style="margin:0 0 12px;font-size:15px"><strong>${scopedTickets.length} billet(s)</strong> non payé(s) vous concernent.</p>
+    <p style="margin:0 0 12px;font-size:15px"><strong>${scopedRows.length} billet(s)</strong> restent ouverts (statut calculé depuis la caisse).</p>
     <table style="width:100%;border-collapse:collapse;font-size:13px">
-      <tr style="background:#fee2e2">
+      <tr style="background:#e2e8f0">
         <td style="padding:6px 10px;font-weight:bold">Non payés</td>
-        <td style="padding:6px 10px;color:#dc2626;font-weight:bold">${scopedUnpaid}</td>
+        <td style="padding:6px 10px;font-weight:bold">${scopedUnpaid}</td>
       </tr>
       <tr style="background:#fff">
         <td style="padding:6px 10px;font-weight:bold">Partiels</td>
-        <td style="padding:6px 10px;color:#ea580c;font-weight:bold">${scopedPartial}</td>
+        <td style="padding:6px 10px;font-weight:bold">${scopedPartial}</td>
       </tr>
-      ${scopedRemainingUsd > 0 ? `<tr style="background:#fee2e2"><td style="padding:6px 10px;font-weight:bold">Reste estimé</td><td style="padding:6px 10px;color:#dc2626;font-weight:bold">${scopedRemainingUsd.toFixed(2)} USD</td></tr>` : ""}
+      ${scopedRemainingUsd > 0 ? `<tr style="background:#e2e8f0"><td style="padding:6px 10px;font-weight:bold">Reste estimé</td><td style="padding:6px 10px;font-weight:bold">${scopedRemainingUsd.toFixed(2)} USD eq.</td></tr>` : ""}
     </table>
     <p style="margin:12px 0 0;font-size:13px">Le détail complet est joint en PDF.</p>
     <div style="margin-top:16px;text-align:center">
-      <a href="${ticketsUrl}" style="display:inline-block;background:#dc2626;color:white;padding:10px 24px;border-radius:6px;text-decoration:none;font-weight:bold;font-size:14px">Voir les paiements</a>
+      <a href="${ticketsUrl}" style="display:inline-block;background:#1d4ed8;color:white;padding:10px 24px;border-radius:6px;text-decoration:none;font-weight:bold;font-size:14px">Voir les paiements</a>
     </div>
-    <p style="margin:16px 0 0;font-size:11px;color:#9ca3af;text-align:center">Alerte envoyée par ${senderName} · The Best SARL</p>
+    <p style="margin:16px 0 0;font-size:11px;color:#9ca3af;text-align:center">Envoyé par ${senderName} · The Best SARL</p>
   </div>
 </div>`,
           attachments: [
@@ -351,7 +349,7 @@ async function dispatchUnpaidAlerts(senderName: string) {
   return {
     message: `Alertes envoyées à ${targetUserIds.length} utilisateur(s).`,
     sent: targetUserIds.length,
-    ticketCount: unpaidTickets.length,
+    ticketCount: openRows.length,
   };
 }
 

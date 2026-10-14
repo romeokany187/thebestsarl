@@ -31,7 +31,9 @@ import {
   isMainCashDesk,
   resolvePaymentsDeskState,
 } from "@/lib/payments-desk";
-import { getTicketTotalAmount } from "@/lib/ticket-pricing";
+import { buildTicketReceivableBalance } from "@/lib/ticket-payment-balance";
+import { groupOpenReceivablesByPayer } from "@/lib/ticket-recovery";
+import { TicketRecoveryWorkspace } from "@/components/ticket-recovery-workspace";
 
 type AirlineRow = { id: string; code: string; name: string };
 type TicketPaymentRow = {
@@ -93,6 +95,7 @@ type TicketSaleRow = {
   airlineId: string;
   ticketNumber: string;
   customerName: string;
+  payerName?: string | null;
   amount: number;
   commissionAmount?: number | null;
   commissionRateUsed?: number | null;
@@ -477,7 +480,6 @@ export default async function PaymentsPage({
   const isComptable = role === "ACCOUNTANT" || session.user.jobTitle === "COMPTABLE";
   const isAdmin = role === "ADMIN";
   const isDirecteurGeneral = role === "DIRECTEUR_GENERAL";
-  const canSendUnpaidAlerts = isAdmin || isDirecteurGeneral || isComptable;
   const hasPaymentsFullAccess = hasRequiredModuleAccessLevel(customModuleAccess, "FULL");
   const canWrite = isCashier || isAdmin || isComptable || hasPaymentsFullAccess;
   const canManageLedger = isAdmin || isComptable || hasPaymentsFullAccess;
@@ -543,7 +545,6 @@ export default async function PaymentsPage({
   const yearEnd = new Date(Date.UTC(selectedYear + 1, 0, 1, 0, 0, 0, 0));
 
 
-  const UnpaidAlertsButton = (await import("@/components/unpaid-alerts-button")).UnpaidAlertsButton;
 
   const paymentsData = await Promise.all([
     prisma.airline.findMany({
@@ -726,28 +727,7 @@ export default async function PaymentsPage({
     });
 
   const ticketsWithComputedStatus = tickets.map((ticket) => {
-    const paidAmount = ticket.payments.reduce(
-      (
-        sum: number,
-        payment: { amount: number; currency?: string | null; amountUsd?: number | null; amountCdf?: number | null; fxRateToUsd?: number | null; fxRateUsdToCdf?: number | null },
-      ) => sum + normalizePaymentAmountForTicket(payment, ticket.currency),
-      0,
-    );
-    const paidAmountUsd = ticket.payments.reduce(
-      (
-        sum: number,
-        payment: { amount: number; currency?: string | null; amountUsd?: number | null; amountCdf?: number | null; fxRateToUsd?: number | null; fxRateUsdToCdf?: number | null },
-      ) => sum + normalizeCashAmountUsd(payment),
-      0,
-    );
-    const totalTicketAmount = getTicketTotalAmount(ticket);
-    const amountUsd = normalizeCashAmountUsd({ amount: totalTicketAmount, currency: ticket.currency });
-    const computedStatus = paidAmount <= 0
-      ? PaymentStatus.UNPAID
-      : paidAmount + 0.0001 >= totalTicketAmount
-        ? PaymentStatus.PAID
-        : PaymentStatus.PARTIAL;
-
+    const balance = buildTicketReceivableBalance(ticket);
     const invoiceNumber = invoiceNumberFromChronology({
       soldAt: new Date(ticket.soldAt),
       sellerTeamName: ticket.seller?.team?.name ?? null,
@@ -756,14 +736,23 @@ export default async function PaymentsPage({
 
     return {
       ...ticket,
-      paidAmount,
-      paidAmountUsd,
-      amountUsd,
-      totalTicketAmount,
-      computedStatus,
+      paidAmount: balance.paidAmount,
+      paidAmountUsd: balance.paidAmountUsd,
+      amountUsd: balance.amountUsd,
+      totalTicketAmount: balance.totalTicketAmount,
+      computedStatus: balance.computedStatus,
+      remainingAmount: balance.remainingAmount,
+      remainingUsd: balance.remainingUsd,
       invoiceNumber,
     };
   });
+
+  const receivableBalances = tickets.map((ticket) => buildTicketReceivableBalance(ticket));
+  const recoveryGroups = groupOpenReceivablesByPayer(receivableBalances);
+  const openReceivableTickets = receivableBalances.filter(
+    (ticket) => ticket.computedStatus === PaymentStatus.UNPAID || ticket.computedStatus === PaymentStatus.PARTIAL,
+  );
+  const totalOpenReceivableUsd = openReceivableTickets.reduce((sum, ticket) => sum + ticket.remainingUsd, 0);
 
   const totalTicketAmount = ticketsWithComputedStatus.reduce((sum, ticket) => sum + ticket.amountUsd, 0);
   const totalPaid = ticketsWithComputedStatus.reduce((sum, ticket) => sum + ticket.paidAmountUsd, 0);
@@ -1725,12 +1714,12 @@ export default async function PaymentsPage({
               <KpiCard label="Tickets totalement payés" value={`${collectedTotal.toFixed(2)} USD`} />
             </div>
 
-            <section className="rounded-2xl border border-red-200 bg-red-50/40 p-4 dark:border-red-900/50 dark:bg-red-950/20">
-              <div className="flex flex-wrap items-center justify-between gap-4">
-                <h2 className="text-sm font-semibold">Relance billets non payés</h2>
-                <UnpaidAlertsButton canSend={canSendUnpaidAlerts} />
-              </div>
-            </section>
+            <TicketRecoveryWorkspace
+              groups={recoveryGroups}
+              paymentsReportQuery={reportQuery}
+              totalOpenTickets={openReceivableTickets.length}
+              totalRemainingUsd={totalOpenReceivableUsd}
+            />
 
             <section className="overflow-hidden rounded-2xl border border-black/10 bg-white shadow-sm dark:border-white/10 dark:bg-zinc-900">
               <div className="border-b border-black/10 px-4 py-3 dark:border-white/10">
@@ -1743,6 +1732,7 @@ export default async function PaymentsPage({
                       <th className="px-4 py-3 text-left font-semibold">Date</th>
                       <th className="px-4 py-3 text-left font-semibold">N° billet</th>
                       <th className="px-4 py-3 text-left font-semibold">Client</th>
+                      <th className="px-4 py-3 text-left font-semibold">Payant</th>
                       <th className="px-4 py-3 text-left font-semibold">Montant billet</th>
                       <th className="px-4 py-3 text-left font-semibold">Montant encaissé</th>
                       <th className="px-4 py-3 text-left font-semibold">Statut calculé</th>
@@ -1754,6 +1744,7 @@ export default async function PaymentsPage({
                         <td className="px-4 py-3">{new Date(ticket.soldAt).toLocaleDateString("fr-FR")}</td>
                         <td className="px-4 py-3 font-medium">{ticket.ticketNumber}</td>
                         <td className="px-4 py-3">{ticket.customerName}</td>
+                        <td className="px-4 py-3">{ticket.payerName ?? "—"}</td>
                         <td className="px-4 py-3">{ticket.totalTicketAmount.toFixed(2)} {normalizeMoneyCurrency(ticket.currency)}</td>
                         <td className="px-4 py-3">{ticket.paidAmount.toFixed(2)} {normalizeMoneyCurrency(ticket.currency)}</td>
                         <td className="px-4 py-3">{ticket.computedStatus}</td>
@@ -1761,7 +1752,7 @@ export default async function PaymentsPage({
                     ))}
                     {ticketsWithComputedStatus.length === 0 ? (
                       <tr>
-                        <td colSpan={6} className="px-4 py-8 text-center text-sm text-black/55 dark:text-white/55">
+                        <td colSpan={7} className="px-4 py-8 text-center text-sm text-black/55 dark:text-white/55">
                           Aucun billet trouvé pour ce filtre.
                         </td>
                       </tr>

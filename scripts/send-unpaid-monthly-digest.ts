@@ -1,6 +1,7 @@
 import { PaymentStatus, PrismaClient } from "@prisma/client";
 import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
 import { sendMailBatch, isMailConfigured } from "@/lib/mail";
+import { buildTicketReceivableBalance } from "@/lib/ticket-payment-balance";
 
 const prisma = new PrismaClient();
 const MONTH_START = new Date(Date.UTC(2026, 3, 1, 0, 0, 0, 0));
@@ -39,11 +40,8 @@ function teamNameFromTicket(ticket: TicketRow) {
 }
 
 async function fetchUnpaidTickets() {
-  return prisma.ticketSale.findMany({
-    where: {
-      paymentStatus: { in: [PaymentStatus.UNPAID, PaymentStatus.PARTIAL] },
-      soldAt: { gte: MONTH_START },
-    },
+  const tickets = await prisma.ticketSale.findMany({
+    where: { soldAt: { gte: MONTH_START } },
     select: {
       id: true,
       ticketNumber: true,
@@ -55,6 +53,13 @@ async function fetchUnpaidTickets() {
       paymentStatus: true,
       payerName: true,
       sellerName: true,
+      baseFareAmount: true,
+      commissionAmount: true,
+      commissionRateUsed: true,
+      agencyMarkupAmount: true,
+      commissionBaseAmount: true,
+      commissionCalculationStatus: true,
+      commissionModeApplied: true,
       seller: {
         select: {
           id: true,
@@ -65,9 +70,22 @@ async function fetchUnpaidTickets() {
         },
       },
       airline: { select: { code: true, name: true } },
-      payments: { select: { amount: true, currency: true } },
+      payments: {
+        select: {
+          amount: true,
+          currency: true,
+          amountUsd: true,
+          amountCdf: true,
+          fxRateUsdToCdf: true,
+        },
+      },
     },
     orderBy: [{ soldAt: "asc" }, { ticketNumber: "asc" }],
+  });
+
+  return tickets.filter((ticket) => {
+    const balance = buildTicketReceivableBalance(ticket);
+    return balance.computedStatus === PaymentStatus.UNPAID || balance.computedStatus === PaymentStatus.PARTIAL;
   });
 }
 
@@ -91,11 +109,15 @@ async function ensureDigestDispatchTable() {
 }
 
 function remainingAmountUsd(ticket: TicketRow) {
-  const paidUsd = ticket.payments.reduce((sum, payment) => {
-    if (payment.currency !== "USD") return sum;
-    return sum + payment.amount;
-  }, 0);
-  return ticket.currency === "USD" ? Math.max(ticket.amount - paidUsd, 0) : 0;
+  return buildTicketReceivableBalance(ticket).remainingUsd;
+}
+
+function computedStatus(ticket: TicketRow) {
+  return buildTicketReceivableBalance(ticket).computedStatus;
+}
+
+function totalTicketAmount(ticket: TicketRow) {
+  return buildTicketReceivableBalance(ticket).totalTicketAmount;
 }
 
 function groupTickets(tickets: TicketRow[]) {
@@ -171,8 +193,8 @@ async function buildMonthlyPdf(group: DigestGroup) {
     }
   };
 
-  const unpaidCount = group.tickets.filter((ticket) => ticket.paymentStatus === PaymentStatus.UNPAID).length;
-  const partialCount = group.tickets.filter((ticket) => ticket.paymentStatus === PaymentStatus.PARTIAL).length;
+  const unpaidCount = group.tickets.filter((ticket) => computedStatus(ticket) === PaymentStatus.UNPAID).length;
+  const partialCount = group.tickets.filter((ticket) => computedStatus(ticket) === PaymentStatus.PARTIAL).length;
   const totalRemainingUsd = group.tickets.reduce((sum, ticket) => sum + remainingAmountUsd(ticket), 0);
 
   drawLine("THEBEST SARL - Suivi mensuel des billets non payés", { bold: true, size: 14 });
@@ -189,9 +211,10 @@ async function buildMonthlyPdf(group: DigestGroup) {
   drawLine("", { size: 8 });
 
   for (const [index, ticket] of group.tickets.entries()) {
-    const statusLabel = ticket.paymentStatus === PaymentStatus.UNPAID ? "Non payé" : "Partiel";
+    const status = computedStatus(ticket);
+    const statusLabel = status === PaymentStatus.UNPAID ? "Non payé" : "Partiel";
     drawWrapped(
-      `${index + 1}. ${ticket.ticketNumber} | Client: ${ticket.customerName} | Route: ${ticket.route} | ${ticket.amount.toFixed(2)} ${ticket.currency} | Statut: ${statusLabel}`,
+      `${index + 1}. ${ticket.ticketNumber} | Client: ${ticket.customerName} | Route: ${ticket.route} | ${totalTicketAmount(ticket).toFixed(2)} ${ticket.currency} | Statut: ${statusLabel}`,
       { bold: true },
     );
     drawWrapped(`   Payant: ${normalize(ticket.payerName) || normalize(ticket.seller?.name) || "N/A"}`);
@@ -245,8 +268,8 @@ async function sendDigest() {
     }
 
     const attachment = await buildMonthlyPdf(group);
-    const unpaidCount = group.tickets.filter((ticket) => ticket.paymentStatus === PaymentStatus.UNPAID).length;
-    const partialCount = group.tickets.filter((ticket) => ticket.paymentStatus === PaymentStatus.PARTIAL).length;
+    const unpaidCount = group.tickets.filter((ticket) => computedStatus(ticket) === PaymentStatus.UNPAID).length;
+    const partialCount = group.tickets.filter((ticket) => computedStatus(ticket) === PaymentStatus.PARTIAL).length;
     const totalRemainingUsd = group.tickets.reduce((sum, ticket) => sum + remainingAmountUsd(ticket), 0);
 
     const subject = `THEBEST SARL - Impayés ${group.monthLabel} - ${group.teamName}`;
