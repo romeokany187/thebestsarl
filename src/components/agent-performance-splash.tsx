@@ -2,11 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import {
-  PERFORMANCE_SPLASH_PENDING_KEY,
-  presentationForPerformance,
-  type AgentMonthlyPerformance,
-} from "@/lib/agent-performance-splash-shared";
+import { presentationForPerformance, type AgentMonthlyPerformance } from "@/lib/agent-performance-splash-shared";
 
 const SPLASH_DURATION_MS = 12_000;
 const FADE_OUT_MS = 700;
@@ -21,22 +17,12 @@ export function AgentPerformanceSplash({
   userName: string;
 }) {
   const router = useRouter();
-  const [phase, setPhase] = useState<"checking" | "visible" | "leaving" | "done">("checking");
+  const [phase, setPhase] = useState<"visible" | "leaving" | "done">("visible");
   const [progress, setProgress] = useState(100);
 
   const presentation = useMemo(() => presentationForPerformance(stats.tier, stats), [stats]);
 
   useEffect(() => {
-    const pending = window.localStorage.getItem(PERFORMANCE_SPLASH_PENDING_KEY) === "1";
-
-    if (!pending) {
-      router.replace(redirectPath);
-      return;
-    }
-
-    window.localStorage.removeItem(PERFORMANCE_SPLASH_PENDING_KEY);
-    setPhase("visible");
-
     const startedAt = Date.now();
     const tick = window.setInterval(() => {
       const elapsed = Date.now() - startedAt;
@@ -60,12 +46,8 @@ export function AgentPerformanceSplash({
     return () => window.clearTimeout(timer);
   }, [phase, redirectPath, router]);
 
-  if (phase === "checking" || phase === "done") {
-    return (
-      <div className="fixed inset-0 z-[100] flex items-center justify-center bg-zinc-950 text-white">
-        <p className="text-sm text-white/70">Chargement de votre espace…</p>
-      </div>
-    );
+  if (phase === "done") {
+    return null;
   }
 
   const leaving = phase === "leaving";

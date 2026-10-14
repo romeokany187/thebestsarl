@@ -324,7 +324,7 @@ export default function SignInClientPage({ initialMode, passwordAuthActive, laun
       const callbackInput = document.createElement("input");
       callbackInput.type = "hidden";
       callbackInput.name = "callbackUrl";
-      callbackInput.value = "/auth/signin";
+      callbackInput.value = "/post-login";
       form.appendChild(callbackInput);
 
       document.body.appendChild(form);
