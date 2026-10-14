@@ -8,7 +8,7 @@
   "scripts": {
     "dev": "sh -c 'PRISMA_RESOLVED_SCHEMA=$(node scripts/resolve-prisma-schema.js) && prisma generate --schema \"$PRISMA_RESOLVED_SCHEMA\" && next dev'",
     "dev:mysql": "PRISMA_SCHEMA_FILE=prisma/schema.mysql.prisma npm run dev",
-    "build": "sh -c 'PRISMA_RESOLVED_SCHEMA=$(node scripts/resolve-prisma-schema.js) && prisma generate --schema \"$PRISMA_RESOLVED_SCHEMA\" && next build'",
+    "build": "sh -c 'PRISMA_RESOLVED_SCHEMA=$(node scripts/resolve-prisma-schema.js) && prisma generate --schema \"$PRISMA_RESOLVED_SCHEMA\" && next build --webpack'",
     "build:mysql": "PRISMA_SCHEMA_FILE=prisma/schema.mysql.prisma npm run build",
     "start": "next start",
     "lint": "eslint",
