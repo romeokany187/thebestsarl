@@ -54,16 +54,142 @@ function normalizeText(value: unknown) {
 
 export function parseMoneyCell(value: unknown): number {
   if (typeof value === "number" && Number.isFinite(value)) return value;
-  const raw = String(value ?? "")
+
+  let raw = String(value ?? "")
     .replace(/\u00a0/g, " ")
-    .replace(/\s+/g, "")
-    .replace(/fc/gi, "")
-    .replace(/\$/g, "")
-    .replace(/,/g, "")
     .trim();
   if (!raw || raw === "-" || raw === "-." || raw === "−") return 0;
+
+  raw = raw.replace(/\s*fc\b/gi, "").replace(/\$/g, "").trim();
+
+  const hasComma = raw.includes(",");
+  const hasDot = raw.includes(".");
+
+  if (hasComma && hasDot) {
+    const lastComma = raw.lastIndexOf(",");
+    const lastDot = raw.lastIndexOf(".");
+    if (lastComma > lastDot) {
+      raw = raw.replace(/\./g, "").replace(",", ".");
+    } else {
+      raw = raw.replace(/,/g, "");
+    }
+  } else if (hasComma) {
+    const parts = raw.split(",");
+    const fractional = parts[parts.length - 1]?.replace(/\s/g, "") ?? "";
+    if (parts.length === 2 && fractional.length > 0 && fractional.length <= 2) {
+      raw = `${parts[0].replace(/\s/g, "").replace(/\./g, "")}.${fractional}`;
+    } else {
+      raw = raw.replace(/,/g, "").replace(/\s/g, "");
+    }
+  } else {
+    raw = raw.replace(/\s/g, "");
+    if ((raw.match(/\./g) ?? []).length > 1) {
+      raw = raw.replace(/\./g, "");
+    }
+  }
+
   const parsed = Number.parseFloat(raw);
   return Number.isFinite(parsed) ? parsed : 0;
+}
+
+type JournalMoneyColumnMap = {
+  usdIn: number;
+  usdOut: number;
+  usdBalance: number | null;
+  cdfIn: number;
+  cdfOut: number;
+  cdfBalance: number | null;
+};
+
+const LEGACY_JOURNAL_COLUMNS: JournalMoneyColumnMap = {
+  usdIn: 3,
+  usdOut: 4,
+  usdBalance: 5,
+  cdfIn: 6,
+  cdfOut: 7,
+  cdfBalance: 8,
+};
+
+function combinedHeaderLabel(rows: unknown[][], headerRowIndex: number, columnIndex: number) {
+  const parts = [headerRowIndex, headerRowIndex + 1]
+    .map((rowIndex) => normalizeText(String(rows[rowIndex]?.[columnIndex] ?? "")))
+    .filter(Boolean);
+  return parts.join(" ");
+}
+
+function resolveJournalMoneyColumns(rows: unknown[][], headerRowIndex: number): JournalMoneyColumnMap {
+  const map: Partial<JournalMoneyColumnMap> = {};
+  const headerRow = rows[headerRowIndex] ?? [];
+  const maxCols = Math.max(headerRow.length, (rows[headerRowIndex + 1] ?? []).length, 12);
+
+  for (let col = 0; col < maxCols; col += 1) {
+    const label = combinedHeaderLabel(rows, headerRowIndex, col);
+    if (!label) continue;
+
+    const isCdf = label.includes("cdf") || label.includes(" fc") || label.endsWith("fc") || label.includes("franc");
+    const isUsd = label.includes("usd") || label.includes("dollar");
+    const isIn = label.includes("entree") || label.includes("entree caisse");
+    const isOut = label.includes("sortie");
+    const isBalance = label.includes("solde") || label.includes("balance");
+
+    if (isBalance && isCdf) map.cdfBalance = col;
+    else if (isBalance && isUsd) map.usdBalance = col;
+    else if (isIn && isCdf) map.cdfIn = col;
+    else if (isOut && isCdf) map.cdfOut = col;
+    else if (isIn && isUsd) map.usdIn = col;
+    else if (isOut && isUsd) map.usdOut = col;
+  }
+
+  const candidates: JournalMoneyColumnMap[] = [];
+
+  if (map.usdIn !== undefined && map.usdOut !== undefined && map.cdfIn !== undefined && map.cdfOut !== undefined) {
+    candidates.push({
+      usdIn: map.usdIn,
+      usdOut: map.usdOut,
+      usdBalance: map.usdBalance ?? null,
+      cdfIn: map.cdfIn,
+      cdfOut: map.cdfOut,
+      cdfBalance: map.cdfBalance ?? null,
+    });
+  }
+
+  candidates.push(LEGACY_JOURNAL_COLUMNS);
+  candidates.push({
+    usdIn: 3,
+    usdOut: 4,
+    usdBalance: null,
+    cdfIn: 5,
+    cdfOut: 6,
+    cdfBalance: 8,
+  });
+  candidates.push({
+    usdIn: 3,
+    usdOut: 4,
+    usdBalance: 7,
+    cdfIn: 5,
+    cdfOut: 6,
+    cdfBalance: 8,
+  });
+
+  const sampleRows = rows.slice(headerRowIndex + 2, headerRowIndex + 40);
+  let best = LEGACY_JOURNAL_COLUMNS;
+  let bestScore = -1;
+
+  for (const candidate of candidates) {
+    let cdfScore = 0;
+    let usdScore = 0;
+    for (const row of sampleRows) {
+      cdfScore += parseMoneyCell(row[candidate.cdfIn]) + parseMoneyCell(row[candidate.cdfOut]);
+      usdScore += parseMoneyCell(row[candidate.usdIn]) + parseMoneyCell(row[candidate.usdOut]);
+    }
+    const score = cdfScore * 2 + usdScore;
+    if (score > bestScore) {
+      bestScore = score;
+      best = candidate;
+    }
+  }
+
+  return best;
 }
 
 /** Entrées / sorties négatives dans Excel → colonne opposée (USD et CDF séparés). */
@@ -262,6 +388,7 @@ function parseJournalSheet(rows: unknown[][], fallbackYear: number, reportMonthH
     return { lines: [], warnings };
   }
 
+  const moneyColumns = resolveJournalMoneyColumns(rows, headerRowIndex);
   const lines: ParsedJournalLine[] = [];
 
   for (let i = headerRowIndex + 2; i < rows.length; i += 1) {
@@ -278,13 +405,13 @@ function parseJournalSheet(rows: unknown[][], fallbackYear: number, reportMonthH
     }
 
     const { usdIn, usdOut, cdfIn, cdfOut } = normalizeJournalMovementColumns({
-      usdIn: parseMoneyCell(row[3]),
-      usdOut: parseMoneyCell(row[4]),
-      cdfIn: parseMoneyCell(row[6]),
-      cdfOut: parseMoneyCell(row[7]),
+      usdIn: parseMoneyCell(row[moneyColumns.usdIn]),
+      usdOut: parseMoneyCell(row[moneyColumns.usdOut]),
+      cdfIn: parseMoneyCell(row[moneyColumns.cdfIn]),
+      cdfOut: parseMoneyCell(row[moneyColumns.cdfOut]),
     });
-    const usdBalanceRaw = row[5];
-    const cdfBalanceRaw = row[8];
+    const usdBalanceRaw = moneyColumns.usdBalance == null ? null : row[moneyColumns.usdBalance];
+    const cdfBalanceRaw = moneyColumns.cdfBalance == null ? null : row[moneyColumns.cdfBalance];
     const usdBalance = usdBalanceRaw === "" || usdBalanceRaw == null ? null : parseMoneyCell(usdBalanceRaw);
     const cdfBalance = cdfBalanceRaw === "" || cdfBalanceRaw == null ? null : parseMoneyCell(cdfBalanceRaw);
 
