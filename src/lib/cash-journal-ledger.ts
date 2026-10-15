@@ -181,11 +181,8 @@ export async function resolveMainCashJournalLedger(options: {
   periodFallbackOpening: { usd: number; cdf: number };
 }) {
   const importedLines = await loadImportedJournalLinesForDateRange(options.periodStart, options.periodEnd);
-  const hasImportedMovements = importedLines.some(
-    (line) => line.lineCategory !== "OPENING" && (line.usdIn > 0 || line.usdOut > 0 || line.cdfIn > 0 || line.cdfOut > 0),
-  );
 
-  if (hasImportedMovements) {
+  if (importedLines.length > 0) {
     return {
       ...buildCashJournalLedgerFromImportedLines(importedLines),
       source: "excel-import" as const,

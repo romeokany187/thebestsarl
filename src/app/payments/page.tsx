@@ -1,6 +1,7 @@
 import { PaymentStatus } from "@prisma/client";
 import { AppShell } from "@/components/app-shell";
 import { CashBilletageWorkspace } from "@/components/cash-billetage-workspace";
+import { CashExcelJournalAnalysisPanel } from "@/components/cash-excel-journal-analysis-panel";
 import { CashOperationApprovalActions } from "@/components/cash-operation-approval-actions";
 import { CashOperationForm } from "@/components/cash-operation-form";
 import { CashOperationRowActions } from "@/components/cash-operation-row-actions";
@@ -21,10 +22,11 @@ import { requirePageModuleAccess } from "@/lib/rbac";
 import { prisma } from "@/lib/prisma";
 import { cashOperationApprovalRequestClient, canReviewCashOperationApprovals, ensureCashOperationApprovalRequestTable } from "@/lib/cash-operation-approvals";
 import { getUserModuleAccessMap, hasRequiredModuleAccessLevel } from "@/lib/user-module-access";
+import { type CashJournalLedgerRow } from "@/lib/cash-journal-ledger";
 import {
-  resolveMainCashJournalLedger,
-  type CashJournalLedgerRow,
-} from "@/lib/cash-journal-ledger";
+  loadExcelJournalBilletageAnalysis,
+  resolveExcelOnlyMainCashJournalLedger,
+} from "@/lib/cash-excel-journal-analysis";
 import {
   buildDeskScopedCashOperationWhere,
   buildMainCashJournalOperationWhere,
@@ -832,28 +834,23 @@ export default async function PaymentsPage({
   const closingUsd = openingUsd + cashInflowUsd - cashOutflowUsd;
   const closingCdf = openingCdf + cashInflowCdf - cashOutflowCdf;
 
+  const excelJournalAnalysis = isMainDesk
+    ? await loadExcelJournalBilletageAnalysis(
+        cashRange.monthRaw,
+        cashRange.startRaw,
+        cashRange.endRaw,
+        selectedDeskKey,
+      )
+    : null;
+
   const journalLedgerBuilt = isMainDesk
-    ? await resolveMainCashJournalLedger({
-        periodStart: cashRange.startRaw,
-        periodEnd: cashRange.endRaw,
-        periodStartDate: cashRange.startRaw,
-        operations: cashOperationsWithoutOpeningBalance.map((operation) => ({
-          id: operation.id,
-          occurredAt: new Date(operation.occurredAt),
-          direction: operation.direction,
-          currency: operation.currency ?? "USD",
-          amount: operation.amount,
-          description: operation.description,
-          reference: operation.reference ?? null,
-          method: operation.method,
-          category: operation.category ?? null,
-        })),
-        periodFallbackOpening: { usd: openingUsd, cdf: openingCdf },
-      })
+    ? await resolveExcelOnlyMainCashJournalLedger(cashRange.startRaw, cashRange.endRaw)
     : null;
 
   const usesExcelDailyJournalOpenings = journalLedgerBuilt?.usesExcelDailyOpenings ?? false;
-  const journalFromExcelImport = journalLedgerBuilt?.source === "excel-import";
+  const journalFromExcelImport = isMainDesk ? true : journalLedgerBuilt?.source === "excel-import";
+  const billetageReferenceUsd = excelJournalAnalysis?.journalClosingUsd ?? closingUsd;
+  const billetageReferenceCdf = excelJournalAnalysis?.journalClosingCdf ?? closingCdf;
   const journalOpeningUsd = journalLedgerBuilt?.periodOpeningUsd ?? openingUsd;
   const journalOpeningCdf = journalLedgerBuilt?.periodOpeningCdf ?? openingCdf;
   const journalClosingUsd = journalLedgerBuilt?.periodClosingUsd ?? closingUsd;
@@ -1823,12 +1820,7 @@ export default async function PaymentsPage({
         cashWorkspace={(
           <div className="space-y-4">
             {approvalQueueSection}
-            <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-              <KpiCard label="Solde ouverture USD" value={`${openingUsd.toFixed(2)} USD`} />
-              <KpiCard label="Solde clôture USD" value={`${closingUsd.toFixed(2)} USD`} hint={`Entrées USD ${cashInflowUsd.toFixed(2)} - sorties USD ${cashOutflowUsd.toFixed(2)} (hors billets)`} />
-              <KpiCard label="Solde ouverture CDF" value={`${openingCdf.toFixed(2)} CDF`} />
-              <KpiCard label="Solde clôture CDF" value={`${closingCdf.toFixed(2)} CDF`} hint={`Entrées CDF ${cashInflowCdf.toFixed(2)} - sorties CDF ${cashOutflowCdf.toFixed(2)} (hors billets)`} />
-            </div>
+            {excelJournalAnalysis ? <CashExcelJournalAnalysisPanel analysis={excelJournalAnalysis} /> : null}
 
             <section className="rounded-2xl border border-black/10 bg-white p-4 dark:border-white/10 dark:bg-zinc-900">
               <div className="flex flex-wrap items-start justify-between gap-3">
@@ -1876,7 +1868,7 @@ export default async function PaymentsPage({
 
             <section className="overflow-hidden rounded-2xl border border-black/10 bg-white shadow-sm dark:border-white/10 dark:bg-zinc-900">
               <div className="border-b border-black/10 px-4 py-3 dark:border-white/10">
-                <h2 className="text-sm font-semibold">Journal caisse (opérations saisies + import Excel — sans paiements billets)</h2>
+                <h2 className="text-sm font-semibold">Journal caisse (fichier Excel importé — reports à nouveau et mouvements)</h2>
               </div>
               <div className="overflow-x-auto">
                 <table className="min-w-full text-sm">
@@ -1896,26 +1888,6 @@ export default async function PaymentsPage({
                     </tr>
                   </thead>
                   <tbody>
-                    {!usesExcelDailyJournalOpenings && !journalFromExcelImport ? (
-                      <tr className="border-t border-black/5 bg-black/2 dark:border-white/10 dark:bg-white/3">
-                        <td className="px-4 py-3 font-semibold">{cashRange.startRaw}</td>
-                        <td className="px-4 py-3 font-semibold">Report à nouveau / solde d&apos;ouverture</td>
-                        <td className="px-4 py-3 text-black/60 dark:text-white/60">
-                          {hasOpeningInsideSelectedRange
-                            ? "Ouverture de caisse saisie manuellement"
-                            : "Solde calculé depuis l’historique (importez l’Excel pour figer le report à nouveau par jour)"}
-                        </td>
-                        <td className="px-4 py-3">-</td>
-                        <td className="px-4 py-3">-</td>
-                        <td className="px-4 py-3 font-semibold">{journalOpeningUsd.toFixed(2)} USD</td>
-                        <td className="px-4 py-3">-</td>
-                        <td className="px-4 py-3">-</td>
-                        <td className="px-4 py-3 font-semibold">{journalOpeningCdf.toFixed(2)} CDF</td>
-                        <td className="px-4 py-3">-</td>
-                        {canManageLedger ? <td className="px-4 py-3">-</td> : null}
-                      </tr>
-                    ) : null}
-
                     {caisseLedger.map((row, index) => (
                       <tr
                         key={`${row.occurredAt.toISOString()}-${index}`}
@@ -1955,7 +1927,8 @@ export default async function PaymentsPage({
                     {caisseLedger.length === 0 ? (
                       <tr>
                         <td colSpan={canManageLedger ? 11 : 10} className="px-4 py-8 text-center text-sm text-black/55 dark:text-white/55">
-                          Aucune opération de caisse sur cette période.
+                          Aucune ligne pour ce mois. Importez le fichier Excel caissière (à partir d&apos;avril 2026) via
+                          Import Excel caisse.
                         </td>
                       </tr>
                     ) : null}
@@ -2023,7 +1996,11 @@ export default async function PaymentsPage({
           </div>
         )}
         billetageWorkspace={canWrite ? (
-          <CashBilletageWorkspace expectedUsd={closingUsd} expectedCdf={closingCdf} cashDesk={selectedDeskKey} />
+          <CashBilletageWorkspace
+            expectedUsd={billetageReferenceUsd}
+            expectedCdf={billetageReferenceCdf}
+            cashDesk={selectedDeskKey}
+          />
         ) : null}
         cashReportImportWorkspace={canImportCashReport && isMainDesk ? <CashReportExcelImportWorkspace /> : undefined}
       />
