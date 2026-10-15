@@ -3,7 +3,7 @@ import { monthLabelFromKey, monthRangeFromValue } from "@/lib/month-range";
 import { kinshasaDateKey } from "@/lib/kinshasa-time";
 import { prisma } from "@/lib/prisma";
 import { buildTicketReceivableBalance } from "@/lib/ticket-payment-balance";
-import { ticketPayerMatchesUser } from "@/lib/ticket-payer-user-match";
+import { loadPayerRecoveryTargetUsers, matchPayerToWorkspaceUsers } from "@/lib/ticket-payer-recovery-targets";
 import { TICKET_PAYMENT_SELECT } from "@/lib/ticket-recovery-dispatch";
 import {
   resolvePerformanceTier,
@@ -26,41 +26,38 @@ function emptyPerformance(monthKey: string): AgentMonthlyPerformance {
   };
 }
 
-export async function loadAgentMonthlyPayantPerformance(user: {
-  name: string;
-  email: string;
-  teamName?: string | null;
-}): Promise<AgentMonthlyPerformance> {
-  const monthKey = kinshasaDateKey().slice(0, 7);
-  const range = monthRangeFromValue(monthKey);
-  const profile = {
-    name: user.name.trim(),
-    email: user.email.trim().toLowerCase(),
-    teamName: user.teamName ?? null,
-  };
-
-  const tickets = await prisma.ticketSale.findMany({
-    where: { soldAt: { gte: range.start, lt: range.end } },
-    select: {
-      id: true,
-      ticketNumber: true,
-      customerName: true,
-      soldAt: true,
-      payerName: true,
-      currency: true,
-      amount: true,
-      baseFareAmount: true,
-      commissionAmount: true,
-      commissionRateUsed: true,
-      agencyMarkupAmount: true,
-      commissionBaseAmount: true,
-      commissionCalculationStatus: true,
-      commissionModeApplied: true,
-      payments: { select: TICKET_PAYMENT_SELECT },
-    },
+function ticketCountsForUser(
+  tickets: Array<{
+    payerName: string | null;
+    id: string;
+    ticketNumber: string;
+    customerName: string;
+    soldAt: Date;
+    currency: string;
+    amount: number;
+    baseFareAmount: number | null;
+    commissionAmount: number | null;
+    commissionRateUsed: number | null;
+    agencyMarkupAmount: number | null;
+    commissionBaseAmount: number | null;
+    commissionCalculationStatus: string | null;
+    commissionModeApplied: string | null;
+    payments: Array<{
+      amount: number;
+      currency: string | null;
+      amountUsd: number | null;
+      amountCdf: number | null;
+      fxRateUsdToCdf: number | null;
+    }>;
+  }>,
+  userId: string,
+  workspaceUsers: Awaited<ReturnType<typeof loadPayerRecoveryTargetUsers>>,
+) {
+  const mine = tickets.filter((ticket) => {
+    const payerLabel = ticket.payerName?.trim() ?? "";
+    if (!payerLabel) return false;
+    return matchPayerToWorkspaceUsers(payerLabel, workspaceUsers).some((user) => user.id === userId);
   });
-
-  const mine = tickets.filter((ticket) => ticketPayerMatchesUser(ticket.payerName, profile));
 
   let paidCount = 0;
   let unpaidCount = 0;
@@ -74,16 +71,12 @@ export async function loadAgentMonthlyPayantPerformance(user: {
   }
 
   const totalTickets = mine.length;
-  const openCount = unpaidCount + partialCount;
-
   return {
-    monthKey: range.monthRaw,
-    monthLabel: monthLabelFromKey(range.monthRaw),
     totalTickets,
     paidCount,
     unpaidCount,
     partialCount,
-    openCount,
+    openCount: unpaidCount + partialCount,
     tier: resolvePerformanceTier(totalTickets),
   };
 }
@@ -91,22 +84,45 @@ export async function loadAgentMonthlyPayantPerformance(user: {
 export async function loadAgentMonthlyPayantPerformanceByEmail(email: string): Promise<AgentMonthlyPerformance> {
   const monthKey = kinshasaDateKey().slice(0, 7);
   const normalizedEmail = email.trim().toLowerCase();
-  const dbUser = await prisma.user.findUnique({
-    where: { email: normalizedEmail },
-    select: {
-      name: true,
-      email: true,
-      team: { select: { name: true } },
-    },
-  });
+  const range = monthRangeFromValue(monthKey);
+
+  const [dbUser, workspaceUsers, tickets] = await Promise.all([
+    prisma.user.findUnique({
+      where: { email: normalizedEmail },
+      select: { id: true },
+    }),
+    loadPayerRecoveryTargetUsers(),
+    prisma.ticketSale.findMany({
+      where: { soldAt: { gte: range.start, lt: range.end } },
+      select: {
+        id: true,
+        ticketNumber: true,
+        customerName: true,
+        soldAt: true,
+        payerName: true,
+        currency: true,
+        amount: true,
+        baseFareAmount: true,
+        commissionAmount: true,
+        commissionRateUsed: true,
+        agencyMarkupAmount: true,
+        commissionBaseAmount: true,
+        commissionCalculationStatus: true,
+        commissionModeApplied: true,
+        payments: { select: TICKET_PAYMENT_SELECT },
+      },
+    }),
+  ]);
 
   if (!dbUser) {
     return emptyPerformance(monthKey);
   }
 
-  return loadAgentMonthlyPayantPerformance({
-    name: dbUser.name,
-    email: dbUser.email,
-    teamName: dbUser.team?.name ?? null,
-  });
+  const counts = ticketCountsForUser(tickets, dbUser.id, workspaceUsers);
+
+  return {
+    monthKey: range.monthRaw,
+    monthLabel: monthLabelFromKey(range.monthRaw),
+    ...counts,
+  };
 }

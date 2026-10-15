@@ -7,19 +7,20 @@ type RecipientPreview = { id: string; name: string; email: string };
 
 export type RecouvrementGroupRow = PayerRecoveryGroup & {
   recipients: RecipientPreview[];
+  resolutionHint?: string | null;
 };
 
 export function RecouvrementWorkspace({
   monthRaw,
   periodLabel,
   groups,
-  workspaceUserCount,
+  kinshasaUserCount,
   reportQuery,
 }: {
   monthRaw: string;
   periodLabel: string;
   groups: RecouvrementGroupRow[];
-  workspaceUserCount: number;
+  kinshasaUserCount: number;
   reportQuery: string;
 }) {
   const [busyPayerKey, setBusyPayerKey] = useState<string | null>(null);
@@ -72,9 +73,9 @@ export function RecouvrementWorkspace({
           table Payment) comparee au montant billet ; a chaque encaissement le statut billet en base est aussi mis a jour.
         </p>
         <p className="mt-1 text-xs text-black/60 dark:text-white/60">
-          Cible d&apos;envoi : compte applicatif lie au payant ({workspaceUserCount} utilisateur
-          {workspaceUserCount > 1 ? "s" : ""} en base). Pour « Agent - Nom », le nom apres le prefixe est rapproche du
-          profil (e-mail de connexion).
+          Envoi recouvrement : agents <strong>Kinshasa</strong> uniquement ({kinshasaUserCount} compte
+          {kinshasaUserCount > 1 ? "s" : ""}). Le payant « Agent - Nom » est rapproche du profil utilisateur (id + e-mail
+          de connexion) dans toute la base, puis filtre Kinshasa.
         </p>
       </section>
 
@@ -119,7 +120,7 @@ export function RecouvrementWorkspace({
                   <th className="px-3 py-2 text-left font-semibold">Payant</th>
                   <th className="px-3 py-2 text-left font-semibold">Billets</th>
                   <th className="px-3 py-2 text-left font-semibold">Reste USD eq.</th>
-                  <th className="px-3 py-2 text-left font-semibold">Destinataire (compte + e-mail)</th>
+                  <th className="px-3 py-2 text-left font-semibold">Destinataire Kinshasa (e-mail)</th>
                   <th className="px-3 py-2 text-left font-semibold" />
                 </tr>
               </thead>
@@ -135,9 +136,13 @@ export function RecouvrementWorkspace({
                         </td>
                         <td className="px-3 py-2 font-semibold">{group.remainingUsd.toFixed(2)}</td>
                         <td className="px-3 py-2 text-xs">
-                          {canSend
-                            ? group.recipients.map((r) => `${r.name} (${r.email})`).join(", ")
-                            : "Aucun compte utilisateur ne correspond au payant"}
+                          {canSend ? (
+                            group.recipients.map((r) => `${r.name} (${r.email})`).join(", ")
+                          ) : (
+                            <span className="text-amber-800 dark:text-amber-200">
+                              {group.resolutionHint ?? "Aucun agent Kinshasa ne correspond au payant"}
+                            </span>
+                          )}
                         </td>
                         <td className="px-3 py-2">
                           <button

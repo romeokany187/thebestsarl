@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
+import { loadKinshasaWorkspaceUsers, resolveKinshasaRecoveryRecipients } from "@/lib/kinshasa-team";
 import { monthLabelFromKey, monthRangeFromValue } from "@/lib/month-range";
 import { requireApiModuleAccess } from "@/lib/rbac";
-import { loadPayerRecoveryTargetUsers, matchPayerToWorkspaceUsers } from "@/lib/ticket-payer-recovery-targets";
+import { loadPayerRecoveryTargetUsers } from "@/lib/ticket-payer-recovery-targets";
 import {
   dispatchRecoveryToRecipients,
   fetchOpenReceivableRowsForSoldAtRange,
@@ -35,13 +36,31 @@ export async function POST(req: NextRequest) {
   }
 
   const displayPayerLabel = scopedRows[0]?.balance.payerName?.trim() || payerKey;
-  const workspaceUsers = await loadPayerRecoveryTargetUsers();
-  const recipients = matchPayerToWorkspaceUsers(displayPayerLabel, workspaceUsers);
+
+  const [workspaceUsers, kinshasaUsers] = await Promise.all([
+    loadPayerRecoveryTargetUsers(),
+    loadKinshasaWorkspaceUsers(),
+  ]);
+
+  const { recipients, matchedOutsideKinshasa } = resolveKinshasaRecoveryRecipients(
+    displayPayerLabel,
+    kinshasaUsers,
+    workspaceUsers,
+  );
 
   if (recipients.length === 0) {
+    if (matchedOutsideKinshasa.length > 0) {
+      return NextResponse.json(
+        {
+          error: `Payant « ${displayPayerLabel} » correspond à ${matchedOutsideKinshasa.map((u) => u.email).join(", ")} mais ce compte n'est pas dans l'équipe Kinshasa.`,
+        },
+        { status: 422 },
+      );
+    }
+
     return NextResponse.json(
       {
-        error: `Aucun compte utilisateur ne correspond au payant « ${displayPayerLabel} ». Verifiez que l'agent est bien enregistre (nom identique apres le prefixe « Agent - ») ou que l'e-mail payant existe en base.`,
+        error: `Aucun agent Kinshasa ne correspond au payant « ${displayPayerLabel} ». Le nom après « Agent - » doit être identique au profil utilisateur (e-mail de connexion).`,
       },
       { status: 422 },
     );

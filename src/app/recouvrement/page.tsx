@@ -1,9 +1,10 @@
 import { AppShell } from "@/components/app-shell";
 import { RecouvrementWorkspace, type RecouvrementGroupRow } from "@/components/recouvrement-workspace";
 import { kinshasaDateKey } from "@/lib/kinshasa-time";
+import { loadKinshasaWorkspaceUsers, resolveKinshasaRecoveryRecipients } from "@/lib/kinshasa-team";
 import { monthLabelFromKey, monthRangeFromValue } from "@/lib/month-range";
 import { requirePageModuleAccess } from "@/lib/rbac";
-import { loadPayerRecoveryTargetUsers, matchPayerToWorkspaceUsers } from "@/lib/ticket-payer-recovery-targets";
+import { loadPayerRecoveryTargetUsers } from "@/lib/ticket-payer-recovery-targets";
 import { fetchOpenReceivableRowsForSoldAtRange } from "@/lib/ticket-recovery-dispatch";
 import { groupOpenReceivablesByPayer } from "@/lib/ticket-recovery";
 
@@ -21,23 +22,38 @@ export default async function RecouvrementPage({
   const range = monthRangeFromValue(monthKey);
   const periodLabel = monthLabelFromKey(range.monthRaw);
 
-  const [openRows, workspaceUsers] = await Promise.all([
+  const [openRows, workspaceUsers, kinshasaUsers] = await Promise.all([
     fetchOpenReceivableRowsForSoldAtRange(range.start, range.end),
     loadPayerRecoveryTargetUsers(),
+    loadKinshasaWorkspaceUsers(),
   ]);
 
   const balances = openRows.map((row) => row.balance);
   const payerGroups = groupOpenReceivablesByPayer(balances);
 
   const groups: RecouvrementGroupRow[] = payerGroups.map((group) => {
-    const matched = matchPayerToWorkspaceUsers(group.payerLabel, workspaceUsers);
+    const { recipients, matchedOutsideKinshasa } = resolveKinshasaRecoveryRecipients(
+      group.payerLabel,
+      kinshasaUsers,
+      workspaceUsers,
+    );
+
+    let resolutionHint: string | null = null;
+    if (recipients.length === 0 && matchedOutsideKinshasa.length > 0) {
+      resolutionHint = `Compte trouvé (${matchedOutsideKinshasa.map((u) => u.email).join(", ")}) mais hors équipe Kinshasa — recouvrement réservé aux agents Kinshasa.`;
+    } else if (recipients.length === 0) {
+      resolutionHint =
+        "Aucun agent Kinshasa : vérifiez que le nom après « Agent - » correspond exactement au profil utilisateur en base.";
+    }
+
     return {
       ...group,
-      recipients: matched.map((user) => ({
+      recipients: recipients.map((user) => ({
         id: user.id,
         name: user.name,
         email: user.email,
       })),
+      resolutionHint,
     };
   });
 
@@ -60,7 +76,7 @@ export default async function RecouvrementPage({
           monthRaw={range.monthRaw}
           periodLabel={periodLabel}
           groups={groups}
-          workspaceUserCount={workspaceUsers.length}
+          kinshasaUserCount={kinshasaUsers.length}
           reportQuery={reportQuery}
         />
       </div>

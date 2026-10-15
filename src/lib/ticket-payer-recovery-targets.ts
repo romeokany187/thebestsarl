@@ -3,6 +3,7 @@ import {
   compactPayerLookupKey,
   extractAgentNameFromPayer,
   extractTeamNameFromPayer,
+  normalizePayerLookupKey,
   ticketPayerMatchesUser,
   type PayerUserMatchProfile,
 } from "@/lib/ticket-payer-user-match";
@@ -43,9 +44,14 @@ function toProfile(user: PayerRecoveryTargetUser): PayerUserMatchProfile {
 }
 
 function matchUsersByCompactName(users: PayerRecoveryTargetUser[], label: string) {
-  const target = compactPayerLookupKey(label);
-  if (!target) return [];
-  return users.filter((user) => compactPayerLookupKey(user.name) === target);
+  const targetCompact = compactPayerLookupKey(label);
+  const targetNorm = normalizePayerLookupKey(label);
+  if (!targetCompact && !targetNorm) return [];
+  return users.filter((user) => {
+    if (targetCompact && compactPayerLookupKey(user.name) === targetCompact) return true;
+    if (targetNorm && normalizePayerLookupKey(user.name) === targetNorm) return true;
+    return false;
+  });
 }
 
 function matchUsersByCompactEmail(users: PayerRecoveryTargetUser[], email: string) {
