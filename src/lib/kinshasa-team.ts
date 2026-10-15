@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { payerRecoveryKey } from "@/lib/ticket-recovery";
+import { matchPayerToWorkspaceUsers, type PayerRecoveryTargetUser } from "@/lib/ticket-payer-recovery-targets";
 
 export function isKinshasaTeamName(teamName: string | null | undefined) {
   return (teamName ?? "").trim().toLowerCase().includes("kinshasa");
@@ -13,10 +14,6 @@ export type KinshasaWorkspaceUser = {
   role: string;
   teamName: string | null;
 };
-
-function normalize(value: string | null | undefined) {
-  return (value ?? "").trim().toLowerCase();
-}
 
 /** Tous les comptes rattachés à une équipe Kinshasa (tous grades / rôles). */
 export async function loadKinshasaWorkspaceUsers(): Promise<KinshasaWorkspaceUser[]> {
@@ -50,15 +47,28 @@ export async function loadKinshasaWorkspaceUsers(): Promise<KinshasaWorkspaceUse
 export function matchKinshasaUsersForPayer(
   payerLabel: string,
   kinshasaUsers: KinshasaWorkspaceUser[],
+  workspaceUsers: PayerRecoveryTargetUser[],
 ): KinshasaWorkspaceUser[] {
   const payerKey = payerRecoveryKey(payerLabel);
   if (payerKey === "__missing_payer__") {
     return [];
   }
 
-  return kinshasaUsers.filter((user) => {
-    const nameKey = payerRecoveryKey(user.name);
-    const emailKey = normalize(user.email);
-    return payerKey === nameKey || payerKey === emailKey;
-  });
+  const matched = matchPayerToWorkspaceUsers(payerLabel, workspaceUsers);
+  const kinshasaIds = new Set(kinshasaUsers.map((user) => user.id));
+  return matched
+    .filter((user) => kinshasaIds.has(user.id))
+    .map((user) => {
+      const kin = kinshasaUsers.find((k) => k.id === user.id);
+      return (
+        kin ?? {
+          id: user.id,
+          name: user.name,
+          email: user.email,
+          jobTitle: null,
+          role: "EMPLOYEE",
+          teamName: user.teamName,
+        }
+      );
+    });
 }

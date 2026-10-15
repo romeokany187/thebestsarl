@@ -235,7 +235,7 @@ export async function dispatchRecoveryToRecipients(params: {
         sentBy: senderName,
         sentAt: new Date().toISOString(),
         ticketIds: rows.map(({ ticket }) => ticket.id),
-        scope: "kinshasa_team",
+        scope: "workspace_payer_account",
       },
     })),
   });

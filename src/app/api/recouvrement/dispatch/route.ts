@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { loadKinshasaWorkspaceUsers, matchKinshasaUsersForPayer } from "@/lib/kinshasa-team";
 import { monthLabelFromKey, monthRangeFromValue } from "@/lib/month-range";
 import { requireApiModuleAccess } from "@/lib/rbac";
+import { loadPayerRecoveryTargetUsers, matchPayerToWorkspaceUsers } from "@/lib/ticket-payer-recovery-targets";
 import {
   dispatchRecoveryToRecipients,
   fetchOpenReceivableRowsForSoldAtRange,
@@ -35,13 +35,13 @@ export async function POST(req: NextRequest) {
   }
 
   const displayPayerLabel = scopedRows[0]?.balance.payerName?.trim() || payerKey;
-  const kinshasaUsers = await loadKinshasaWorkspaceUsers();
-  const recipients = matchKinshasaUsersForPayer(displayPayerLabel, kinshasaUsers);
+  const workspaceUsers = await loadPayerRecoveryTargetUsers();
+  const recipients = matchPayerToWorkspaceUsers(displayPayerLabel, workspaceUsers);
 
   if (recipients.length === 0) {
     return NextResponse.json(
       {
-        error: `Aucun utilisateur de l'equipe Kinshasa ne correspond au payant « ${displayPayerLabel} ».`,
+        error: `Aucun compte utilisateur ne correspond au payant « ${displayPayerLabel} ». Verifiez que l'agent est bien enregistre (nom identique apres le prefixe « Agent - ») ou que l'e-mail payant existe en base.`,
       },
       { status: 422 },
     );

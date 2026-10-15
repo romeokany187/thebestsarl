@@ -1,8 +1,9 @@
 import { PaymentStatus } from "@prisma/client";
 import { monthLabelFromKey, monthRangeFromValue } from "@/lib/month-range";
+import { kinshasaDateKey } from "@/lib/kinshasa-time";
 import { prisma } from "@/lib/prisma";
 import { buildTicketReceivableBalance } from "@/lib/ticket-payment-balance";
-import { payerRecoveryKey } from "@/lib/ticket-recovery";
+import { ticketPayerMatchesUser } from "@/lib/ticket-payer-user-match";
 import { TICKET_PAYMENT_SELECT } from "@/lib/ticket-recovery-dispatch";
 import {
   resolvePerformanceTier,
@@ -12,22 +13,32 @@ import {
 export type { AgentMonthlyPerformance, PerformanceTier } from "@/lib/agent-performance-splash-shared";
 export { PERFORMANCE_SPLASH_PENDING_KEY, presentationForPerformance } from "@/lib/agent-performance-splash-shared";
 
-function userMatchesPayer(
-  payerName: string | null | undefined,
-  user: { name: string; email: string },
-) {
-  const payerKey = payerRecoveryKey(payerName);
-  if (payerKey === "__missing_payer__") return false;
-  const nameKey = payerRecoveryKey(user.name);
-  const emailKey = user.email.trim().toLowerCase();
-  return payerKey === nameKey || payerKey === emailKey;
+function emptyPerformance(monthKey: string): AgentMonthlyPerformance {
+  return {
+    monthKey,
+    monthLabel: monthLabelFromKey(monthKey),
+    totalTickets: 0,
+    paidCount: 0,
+    unpaidCount: 0,
+    partialCount: 0,
+    openCount: 0,
+    tier: "low",
+  };
 }
 
 export async function loadAgentMonthlyPayantPerformance(user: {
   name: string;
   email: string;
+  teamName?: string | null;
 }): Promise<AgentMonthlyPerformance> {
-  const range = monthRangeFromValue();
+  const monthKey = kinshasaDateKey().slice(0, 7);
+  const range = monthRangeFromValue(monthKey);
+  const profile = {
+    name: user.name.trim(),
+    email: user.email.trim().toLowerCase(),
+    teamName: user.teamName ?? null,
+  };
+
   const tickets = await prisma.ticketSale.findMany({
     where: { soldAt: { gte: range.start, lt: range.end } },
     select: {
@@ -49,7 +60,7 @@ export async function loadAgentMonthlyPayantPerformance(user: {
     },
   });
 
-  const mine = tickets.filter((ticket) => userMatchesPayer(ticket.payerName, user));
+  const mine = tickets.filter((ticket) => ticketPayerMatchesUser(ticket.payerName, profile));
 
   let paidCount = 0;
   let unpaidCount = 0;
@@ -75,4 +86,27 @@ export async function loadAgentMonthlyPayantPerformance(user: {
     openCount,
     tier: resolvePerformanceTier(totalTickets),
   };
+}
+
+export async function loadAgentMonthlyPayantPerformanceByEmail(email: string): Promise<AgentMonthlyPerformance> {
+  const monthKey = kinshasaDateKey().slice(0, 7);
+  const normalizedEmail = email.trim().toLowerCase();
+  const dbUser = await prisma.user.findUnique({
+    where: { email: normalizedEmail },
+    select: {
+      name: true,
+      email: true,
+      team: { select: { name: true } },
+    },
+  });
+
+  if (!dbUser) {
+    return emptyPerformance(monthKey);
+  }
+
+  return loadAgentMonthlyPayantPerformance({
+    name: dbUser.name,
+    email: dbUser.email,
+    teamName: dbUser.team?.name ?? null,
+  });
 }

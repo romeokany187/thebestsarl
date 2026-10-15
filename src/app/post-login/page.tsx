@@ -2,7 +2,7 @@ import { getServerSession } from "next-auth";
 import { redirect } from "next/navigation";
 import { authOptions } from "@/auth";
 import { isPasswordAuthActive } from "@/lib/auth-rollout";
-import { loadAgentMonthlyPayantPerformance } from "@/lib/agent-monthly-performance";
+import { loadAgentMonthlyPayantPerformanceByEmail } from "@/lib/agent-monthly-performance";
 import { resolvePostLoginPath } from "@/lib/workspace-home";
 import { prisma } from "@/lib/prisma";
 import { AgentPerformanceSplash } from "@/components/agent-performance-splash";
@@ -21,7 +21,6 @@ export default async function PostLoginPage() {
     where: { email },
     select: {
       name: true,
-      role: true,
       passwordHash: true,
     },
   });
@@ -36,7 +35,7 @@ export default async function PostLoginPage() {
 
   const redirectPath = resolvePostLoginPath();
   const displayName = dbUser.name?.trim() || session.user.name?.trim() || "Agent";
-  const stats = await loadAgentMonthlyPayantPerformance({ name: displayName, email });
+  const stats = await loadAgentMonthlyPayantPerformanceByEmail(email);
 
   return (
     <AgentPerformanceSplash stats={stats} redirectPath={redirectPath} userName={displayName} />

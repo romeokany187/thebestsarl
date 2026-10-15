@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { requireApiRoles } from "@/lib/rbac";
 import { isMailConfigured, sendMailBatch } from "@/lib/mail";
 import { buildTicketReceivableBalance } from "@/lib/ticket-payment-balance";
+import { loadPayerRecoveryTargetUsers, matchPayerToWorkspaceUsers } from "@/lib/ticket-payer-recovery-targets";
 import { buildRecoveryPdf, type OpenReceivableRow as RecoveryPdfRow } from "@/lib/ticket-recovery-dispatch";
 
 const APRIL_START_2026 = new Date(2026, 3, 1); // April 1, 2026
@@ -17,10 +18,6 @@ const TICKET_PAYMENT_SELECT = {
 } as const;
 
 type OpenReceivableRow = Awaited<ReturnType<typeof fetchOpenReceivableTickets>>[number];
-
-function normalize(value: string | null | undefined) {
-  return (value ?? "").trim().toLowerCase();
-}
 
 /** Billets impayés / partiels selon les encaissements caisse uniquement. */
 async function fetchOpenReceivableTickets() {
@@ -77,30 +74,8 @@ async function dispatchUnpaidAlerts(senderName: string) {
     return { message: "Aucune créance ouverte depuis avril (selon paiements caisse).", sent: 0, ticketCount: 0 };
   }
 
-  const allUsers = await prisma.user.findMany({
-    select: { id: true, name: true, email: true, role: true, teamId: true },
-  });
-
-  const usersById = new Map(allUsers.map((user) => [user.id, user]));
-  const usersByEmail = new Map<string, typeof allUsers>();
-  const usersByName = new Map<string, typeof allUsers>();
-  const managersByTeamId = new Map<string, typeof allUsers>();
-
-  for (const user of allUsers) {
-    const emailKey = normalize(user.email);
-    if (emailKey) {
-      usersByEmail.set(emailKey, [...(usersByEmail.get(emailKey) ?? []), user]);
-    }
-
-    const nameKey = normalize(user.name);
-    if (nameKey) {
-      usersByName.set(nameKey, [...(usersByName.get(nameKey) ?? []), user]);
-    }
-
-    if (user.role === "MANAGER" && user.teamId) {
-      managersByTeamId.set(user.teamId, [...(managersByTeamId.get(user.teamId) ?? []), user]);
-    }
-  }
+  const workspaceUsers = await loadPayerRecoveryTargetUsers();
+  const usersById = new Map(workspaceUsers.map((user) => [user.id, user]));
 
   const rowByTicketId = new Map(openRows.map((row) => [row.ticket.id, row]));
   const userTicketIds = new Map<string, Set<string>>();
@@ -113,9 +88,9 @@ async function dispatchUnpaidAlerts(senderName: string) {
   };
 
   for (const { ticket } of openRows) {
-    const payerKey = normalize(ticket.payerName);
-    if (!payerKey) continue;
-    const payerMatches = [...(usersByEmail.get(payerKey) ?? []), ...(usersByName.get(payerKey) ?? [])];
+    const payerLabel = ticket.payerName?.trim() ?? "";
+    if (!payerLabel) continue;
+    const payerMatches = matchPayerToWorkspaceUsers(payerLabel, workspaceUsers);
     for (const payer of payerMatches) {
       addAssignment(payer.id, ticket.id);
     }

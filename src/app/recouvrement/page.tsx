@@ -1,8 +1,9 @@
 import { AppShell } from "@/components/app-shell";
 import { RecouvrementWorkspace, type RecouvrementGroupRow } from "@/components/recouvrement-workspace";
-import { loadKinshasaWorkspaceUsers, matchKinshasaUsersForPayer } from "@/lib/kinshasa-team";
+import { kinshasaDateKey } from "@/lib/kinshasa-time";
 import { monthLabelFromKey, monthRangeFromValue } from "@/lib/month-range";
 import { requirePageModuleAccess } from "@/lib/rbac";
+import { loadPayerRecoveryTargetUsers, matchPayerToWorkspaceUsers } from "@/lib/ticket-payer-recovery-targets";
 import { fetchOpenReceivableRowsForSoldAtRange } from "@/lib/ticket-recovery-dispatch";
 import { groupOpenReceivablesByPayer } from "@/lib/ticket-recovery";
 
@@ -15,24 +16,30 @@ export default async function RecouvrementPage({
 }) {
   const { role } = await requirePageModuleAccess("recouvrement", ["ADMIN", "DIRECTEUR_GENERAL", "ACCOUNTANT"], "READ");
   const params = await searchParams;
-  const range = monthRangeFromValue(params.month);
+  const monthParam = params.month?.trim();
+  const monthKey = monthParam && /^\d{4}-\d{2}$/.test(monthParam) ? monthParam : kinshasaDateKey().slice(0, 7);
+  const range = monthRangeFromValue(monthKey);
   const periodLabel = monthLabelFromKey(range.monthRaw);
 
-  const [openRows, kinshasaUsers] = await Promise.all([
+  const [openRows, workspaceUsers] = await Promise.all([
     fetchOpenReceivableRowsForSoldAtRange(range.start, range.end),
-    loadKinshasaWorkspaceUsers(),
+    loadPayerRecoveryTargetUsers(),
   ]);
 
   const balances = openRows.map((row) => row.balance);
   const payerGroups = groupOpenReceivablesByPayer(balances);
 
-  const groups: RecouvrementGroupRow[] = payerGroups.map((group) => ({
-    ...group,
-    recipients: matchKinshasaUsersForPayer(group.payerLabel, kinshasaUsers).map((user) => ({
-      id: user.id,
-      name: user.name,
-    })),
-  }));
+  const groups: RecouvrementGroupRow[] = payerGroups.map((group) => {
+    const matched = matchPayerToWorkspaceUsers(group.payerLabel, workspaceUsers);
+    return {
+      ...group,
+      recipients: matched.map((user) => ({
+        id: user.id,
+        name: user.name,
+        email: user.email,
+      })),
+    };
+  });
 
   const reportQuery = new URLSearchParams({
     mode: "month",
@@ -53,7 +60,7 @@ export default async function RecouvrementPage({
           monthRaw={range.monthRaw}
           periodLabel={periodLabel}
           groups={groups}
-          kinshasaUserCount={kinshasaUsers.length}
+          workspaceUserCount={workspaceUsers.length}
           reportQuery={reportQuery}
         />
       </div>
