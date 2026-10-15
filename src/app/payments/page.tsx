@@ -24,9 +24,15 @@ import { cashOperationApprovalRequestClient, canReviewCashOperationApprovals, en
 import { getUserModuleAccessMap, hasRequiredModuleAccessLevel } from "@/lib/user-module-access";
 import { type CashJournalLedgerRow } from "@/lib/cash-journal-ledger";
 import {
+  EXCEL_CAISSE_FIRST_MONTH,
   loadExcelJournalBilletageAnalysis,
   resolveExcelOnlyMainCashJournalLedger,
 } from "@/lib/cash-excel-journal-analysis";
+import {
+  buildVirtualRowsFromExcelSnapshot,
+  loadMainDeskExcelVirtualSnapshot,
+  type AppVirtualChannelKey,
+} from "@/lib/cash-excel-virtual";
 import {
   buildDeskScopedCashOperationWhere,
   buildMainCashJournalOperationWhere,
@@ -843,6 +849,11 @@ export default async function PaymentsPage({
       )
     : null;
 
+  const excelVirtualSnapshot =
+    isMainDesk && cashRange.monthRaw >= EXCEL_CAISSE_FIRST_MONTH
+      ? await loadMainDeskExcelVirtualSnapshot(cashRange.monthRaw, excelJournalAnalysis?.closingDate, selectedDeskKey)
+      : null;
+
   const journalLedgerBuilt = isMainDesk
     ? await resolveExcelOnlyMainCashJournalLedger(cashRange.startRaw, cashRange.endRaw)
     : null;
@@ -938,7 +949,7 @@ export default async function PaymentsPage({
     }
   }
 
-  const virtualRows = virtualChannels.map(({ key, label }) => {
+  const computedVirtualRows = virtualChannels.map(({ key, label }) => {
     const stats = initialVirtualStats[key];
     const closingUsd = stats.openingUsd + stats.inUsd - stats.outUsd;
     const closingCdf = stats.openingCdf + stats.inCdf - stats.outCdf;
@@ -951,7 +962,7 @@ export default async function PaymentsPage({
     };
   });
 
-  const virtualTotals = virtualRows.reduce(
+  const computedVirtualTotals = computedVirtualRows.reduce(
     (sum, row) => {
       sum.openingUsd += row.openingUsd;
       sum.openingCdf += row.openingCdf;
@@ -974,6 +985,15 @@ export default async function PaymentsPage({
       closingCdf: 0,
     },
   );
+
+  const excelVirtualBuilt = excelVirtualSnapshot
+    ? buildVirtualRowsFromExcelSnapshot(excelVirtualSnapshot, virtualChannels as ReadonlyArray<{ key: AppVirtualChannelKey; label: string }>)
+    : null;
+
+  const virtualRowsFromExcel = Boolean(excelVirtualBuilt && excelVirtualBuilt.channelCount > 0);
+  const virtualRows = virtualRowsFromExcel ? excelVirtualBuilt!.rows : computedVirtualRows;
+  const virtualTotals = virtualRowsFromExcel ? excelVirtualBuilt!.totals : computedVirtualTotals;
+  const virtualExcelClosingDate = virtualRowsFromExcel ? excelVirtualBuilt!.closingDate : null;
 
   const proxyOpeningBuckets = computeOpeningBuckets([], proxyCashOperationsBeforeStart);
   const proxyDisplayOpeningBuckets = applyOpeningFallbackFromCurrentPeriod(proxyOpeningBuckets, proxyCashOperations);
@@ -1945,6 +1965,13 @@ export default async function PaymentsPage({
           <div className="space-y-4">
             <section className="rounded-2xl border border-black/10 bg-white p-4 dark:border-white/10 dark:bg-zinc-900">
               <h2 className="text-sm font-semibold">Comptes virtuels</h2>
+              {virtualRowsFromExcel ? (
+                <p className="mt-1 text-xs text-black/60 dark:text-white/60">
+                  Soldes issus de la feuille VIRTUEL (import Excel
+                  {virtualExcelClosingDate ? ` — clôture ${virtualExcelClosingDate}` : ""}
+                  ). Ouverture et mouvements non détaillés dans le fichier : soldes affichés en colonnes Solde.
+                </p>
+              ) : null}
             </section>
 
             <div className="overflow-hidden rounded-2xl border border-black/10 bg-white shadow-sm dark:border-white/10 dark:bg-zinc-900">
