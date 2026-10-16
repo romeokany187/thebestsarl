@@ -19,6 +19,7 @@ type SearchParams = {
   endDate?: string;
   q?: string;
   view?: string;
+  edit?: string;
 };
 
 function rangeFromSearch(params: SearchParams) {
@@ -104,8 +105,11 @@ export default async function SalesPage({
   const { session, role, customModuleAccess } = await requirePageModuleAccess("sales", ["ADMIN", "DIRECTEUR_GENERAL", "MANAGER", "EMPLOYEE", "ACCOUNTANT"]);
   const currentJobTitle = session.user.jobTitle ?? "AGENT_TERRAIN";
   const canCreateTicketEarly = canSellTickets(currentJobTitle, customModuleAccess);
+  const editTicketId = resolvedSearchParams.edit?.trim() ?? "";
   const requestedView = resolvedSearchParams.view?.trim().toLowerCase();
-  const activeView: SalesHubView = requestedView === "stats"
+  const activeView: SalesHubView = editTicketId && canCreateTicketEarly
+    ? "sell"
+    : requestedView === "stats"
     ? "stats"
     : requestedView === "list"
       ? "list"
@@ -143,7 +147,7 @@ export default async function SalesPage({
 
   await ensureAirlineCatalog(prisma);
 
-  const [users, airlines, teams, tickets, importHistory, depositAccounts] = await Promise.all([
+  const [users, airlines, teams, tickets, importHistory, depositAccounts, ticketToEdit] = await Promise.all([
     prisma.user.findMany({
       where: { role: { in: ["EMPLOYEE", "MANAGER", "ADMIN", "ACCOUNTANT"] } },
       select: { id: true, name: true },
@@ -187,6 +191,30 @@ export default async function SalesPage({
     buildAirlineDepositAccountSummaries(
       prisma as unknown as { airlineDepositMovement: { findMany: (args: unknown) => Promise<unknown[]> } },
     ),
+    editTicketId && canCreateTicket
+      ? prisma.ticketSale.findUnique({
+          where: { id: editTicketId },
+          select: {
+            id: true,
+            ticketNumber: true,
+            airlineId: true,
+            sellerId: true,
+            customerName: true,
+            route: true,
+            travelClass: true,
+            travelDate: true,
+            amount: true,
+            baseFareAmount: true,
+            currency: true,
+            saleNature: true,
+            agencyMarkupPercent: true,
+            agencyMarkupAmount: true,
+            paymentStatus: true,
+            payerName: true,
+            notes: true,
+          },
+        })
+      : Promise.resolve(null),
   ]);
 
   const commissionOf = (ticket: { id: string; airline: { code: string }; amount: number; commissionAmount: number | null; commissionRateUsed: number; agencyMarkupAmount?: number | null; commissionCalculationStatus?: string | null; baseFareAmount?: number | null; commissionBaseAmount?: number | null; commissionModeApplied?: string | null }) => (
@@ -271,6 +299,13 @@ export default async function SalesPage({
   )
     .map(([, airline]) => airline)
     .sort((a, b) => a.name.localeCompare(b.name, "fr", { sensitivity: "base" }));
+
+  const airlinesForForm = ticketToEdit && !selectableAirlines.some((airline) => airline.id === ticketToEdit.airlineId)
+    ? [
+        ...selectableAirlines,
+        ...airlines.filter((airline) => airline.id === ticketToEdit.airlineId),
+      ]
+    : selectableAirlines;
 
   const showSellSection = activeView === "sell";
   const showListSection = activeView === "list";
@@ -403,13 +438,38 @@ export default async function SalesPage({
       <div className={`grid gap-6 ${showSellSection && showListSection ? "lg:grid-cols-[400px,1fr]" : ""}`}>
         {showSellSection && canCreateTicket ? (
           <div className="grid gap-6">
+            {editTicketId && !ticketToEdit ? (
+              <p className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-900/60 dark:bg-red-950/40 dark:text-red-300">
+                Ce billet est introuvable. Le formulaire reste disponible pour une nouvelle vente.
+              </p>
+            ) : null}
             <TicketForm
+              key={ticketToEdit?.id ?? "new"}
               users={users}
-              airlines={selectableAirlines.map((airline) => ({
+              airlines={airlinesForForm.map((airline) => ({
                 id: airline.id,
                 name: airline.name,
                 code: airline.code,
               }))}
+              initialTicket={ticketToEdit ? {
+                id: ticketToEdit.id,
+                ticketNumber: ticketToEdit.ticketNumber,
+                airlineId: ticketToEdit.airlineId,
+                sellerId: ticketToEdit.sellerId,
+                customerName: ticketToEdit.customerName,
+                route: ticketToEdit.route,
+                travelClass: ticketToEdit.travelClass,
+                travelDate: ticketToEdit.travelDate.toISOString().slice(0, 10),
+                amount: ticketToEdit.amount,
+                baseFareAmount: ticketToEdit.baseFareAmount,
+                currency: ticketToEdit.currency,
+                saleNature: ticketToEdit.saleNature,
+                agencyMarkupPercent: ticketToEdit.agencyMarkupPercent,
+                agencyMarkupAmount: ticketToEdit.agencyMarkupAmount,
+                paymentStatus: ticketToEdit.paymentStatus,
+                payerName: ticketToEdit.payerName,
+                notes: ticketToEdit.notes,
+              } : null}
               teams={teams.map((team) => ({
                 id: team.id,
                 name: team.name,

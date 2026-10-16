@@ -1,5 +1,6 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import { useState } from "react";
 
 type Props = {
@@ -26,6 +27,7 @@ type Props = {
 };
 
 export function TicketRowActions({ ticket }: Props) {
+  const router = useRouter();
   const [status, setStatus] = useState<string>("");
 
   async function deleteTicket() {
@@ -47,12 +49,10 @@ export function TicketRowActions({ ticket }: Props) {
   }
 
   function editTicket() {
-    window.dispatchEvent(
-      new CustomEvent("ticket:edit", {
-        detail: ticket,
-      }),
-    );
-    setStatus("Billet chargé dans le formulaire.");
+    const params = new URLSearchParams(window.location.search);
+    params.set("view", "sell");
+    params.set("edit", ticket.id);
+    router.push(`/sales?${params.toString()}`);
   }
 
   function editItinerary() {

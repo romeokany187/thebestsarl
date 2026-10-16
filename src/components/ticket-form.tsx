@@ -127,6 +127,33 @@ function formatApiError(error: unknown, fallback = "Erreur de validation.") {
   return fallback;
 }
 
+function ticketToFormState(ticket: EditableTicket): FormState {
+  return {
+    ticketNumber: ticket.ticketNumber,
+    customerName: ticket.customerName,
+    route: ticket.route,
+    travelClass: ticket.travelClass,
+    travelDate: ticket.travelDate,
+    amount: String(ticket.amount),
+    baseFareAmount: ticket.baseFareAmount ? String(ticket.baseFareAmount) : "",
+    currency: ticket.currency,
+    airlineId: ticket.airlineId,
+    sellerId: ticket.sellerId ?? "",
+    saleNature: ticket.saleNature,
+    paymentStatus: ticket.paymentStatus,
+    payerName: ticket.payerName ?? "",
+    agencyMarkupAmount: String(ticket.agencyMarkupAmount ?? 0),
+    notes: getPlainTicketNotes(ticket.notes ?? ""),
+  };
+}
+
+function salesListHref() {
+  const params = new URLSearchParams(window.location.search);
+  params.delete("edit");
+  params.set("view", "list");
+  return `/sales?${params.toString()}`;
+}
+
 function buildItineraryForm(ticket?: Pick<EditableTicket, "customerName" | "notes"> | null): ItineraryFormState {
   const itinerary = extractTicketItinerary(ticket?.notes ?? null);
   return {
@@ -146,19 +173,29 @@ export function TicketForm({
   teams,
   depositAccounts = [],
   allowAdminEncodingDate = false,
+  initialTicket = null,
 }: {
   users: UserOption[];
   airlines: AirlineOption[];
   teams: TeamOption[];
   depositAccounts?: DepositAccountOption[];
   allowAdminEncodingDate?: boolean;
+  initialTicket?: EditableTicket | null;
 }) {
-  const [status, setStatus] = useState<string>("");
+  const [status, setStatus] = useState<string>(
+    initialTicket ? `Billet ${initialTicket.ticketNumber} chargé. Modifiez puis validez.` : "",
+  );
   const [statusType, setStatusType] = useState<"idle" | "success" | "error" | "loading">("idle");
-  const [editTicketId, setEditTicketId] = useState<string | null>(null);
-  const [form, setForm] = useState<FormState>({ ...EMPTY_FORM, travelDate: todayDateInputValue() });
-  const [storedItinerary, setStoredItinerary] = useState<TicketItineraryData | null>(null);
-  const [itineraryNotesBase, setItineraryNotesBase] = useState<string>("");
+  const [editTicketId, setEditTicketId] = useState<string | null>(initialTicket?.id ?? null);
+  const [form, setForm] = useState<FormState>(
+    initialTicket ? ticketToFormState(initialTicket) : { ...EMPTY_FORM, travelDate: todayDateInputValue() },
+  );
+  const [storedItinerary, setStoredItinerary] = useState<TicketItineraryData | null>(
+    initialTicket ? extractTicketItinerary(initialTicket.notes ?? null) : null,
+  );
+  const [itineraryNotesBase, setItineraryNotesBase] = useState<string>(
+    initialTicket ? getPlainTicketNotes(initialTicket.notes ?? "") : "",
+  );
   const [itineraryTicketId, setItineraryTicketId] = useState<string | null>(null);
   const [itineraryTicketLabel, setItineraryTicketLabel] = useState<string>("");
   const [itineraryForm, setItineraryForm] = useState<ItineraryFormState>(buildItineraryForm());
@@ -189,23 +226,7 @@ export function TicketForm({
       setEditTicketId(ticket.id);
       setStoredItinerary(extractTicketItinerary(ticket.notes ?? null));
       setItineraryNotesBase(getPlainTicketNotes(ticket.notes ?? ""));
-      setForm({
-        ticketNumber: ticket.ticketNumber,
-        customerName: ticket.customerName,
-        route: ticket.route,
-        travelClass: ticket.travelClass,
-        travelDate: ticket.travelDate,
-        amount: String(ticket.amount),
-        baseFareAmount: ticket.baseFareAmount ? String(ticket.baseFareAmount) : "",
-        currency: ticket.currency,
-        airlineId: ticket.airlineId,
-        sellerId: ticket.sellerId ?? "",
-        saleNature: ticket.saleNature,
-        paymentStatus: ticket.paymentStatus,
-        payerName: ticket.payerName ?? "",
-        agencyMarkupAmount: String(ticket.agencyMarkupAmount ?? 0),
-        notes: getPlainTicketNotes(ticket.notes ?? ""),
-      });
+      setForm(ticketToFormState(ticket));
 
       setStatusType("idle");
       setStatus("Billet chargé dans le formulaire. Modifiez puis validez.");
@@ -282,6 +303,11 @@ export function TicketForm({
   }
 
   function resetForm() {
+    if (new URLSearchParams(window.location.search).has("edit")) {
+      window.location.assign(salesListHref());
+      return;
+    }
+
     setForm({ ...EMPTY_FORM, travelDate: todayDateInputValue() });
     setEditTicketId(null);
     setStoredItinerary(null);
@@ -383,7 +409,12 @@ export function TicketForm({
         return;
       }
 
-      setStatus(editTicketId ? "Billet modifié." : "Vente enregistrée.");
+      if (editTicketId) {
+        window.location.assign(salesListHref());
+        return;
+      }
+
+      setStatus("Vente enregistrée.");
       resetForm();
       window.location.reload();
       return;
@@ -433,10 +464,14 @@ export function TicketForm({
         {editTicketId ? (
           <button
             type="button"
-            onClick={resetForm}
+            onClick={() => {
+              resetForm();
+              setStatus("");
+              setStatusType("idle");
+            }}
             className="rounded-md border border-black/15 px-2 py-1 text-xs hover:bg-black/5 dark:border-white/20 dark:hover:bg-white/10"
           >
-            Annuler l&apos;édition
+            {initialTicket ? "Retour à la liste" : "Annuler l'édition"}
           </button>
         ) : null}
       </div>
