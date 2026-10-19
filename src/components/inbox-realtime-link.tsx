@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useRef, useState, type MutableRefObject } from "react";
+import { useEffect, useRef, useState } from "react";
 
 type RealtimePayload = {
   unreadCount: number;
@@ -21,53 +21,10 @@ type RealtimePayload = {
   } | null;
 };
 
-async function playNotificationTone(enabled: boolean, contextRef: MutableRefObject<AudioContext | null>) {
-  if (!enabled || typeof window === "undefined") return;
-
-  const AudioContextClass = window.AudioContext || (window as typeof window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
-  if (!AudioContextClass) return;
-
-  if (!contextRef.current) {
-    contextRef.current = new AudioContextClass();
-  }
-  const context = contextRef.current;
-
-  if (context.state === "suspended") {
-    try {
-      await context.resume();
-    } catch {
-      return;
-    }
-  }
-
-  const masterGain = context.createGain();
-  masterGain.gain.value = 0.13;
-  masterGain.connect(context.destination);
-
-  const now = context.currentTime;
-  const notes = [880, 1174, 1567];
-  notes.forEach((frequency, index) => {
-    const start = now + (index * 0.09);
-    const end = start + 0.12;
-    const osc = context.createOscillator();
-    const env = context.createGain();
-
-    osc.type = "sine";
-    osc.frequency.value = frequency;
-
-    env.gain.setValueAtTime(0.0001, start);
-    env.gain.exponentialRampToValueAtTime(0.35, start + 0.02);
-    env.gain.exponentialRampToValueAtTime(0.0001, end);
-
-    osc.connect(env);
-    env.connect(masterGain);
-    osc.start(start);
-    osc.stop(end);
-  });
-
-  window.setTimeout(() => {
-    masterGain.disconnect();
-  }, 600);
+function showUrgentAlert(id: string, urgentAlertCount: number) {
+  window.dispatchEvent(new CustomEvent("urgent-alert:show", {
+    detail: { id, urgentAlertCount },
+  }));
 }
 
 export function InboxRealtimeLink({
@@ -82,57 +39,28 @@ export function InboxRealtimeLink({
   const [unreadCount, setUnreadCount] = useState(initialUnreadCount);
   const [latestId, setLatestId] = useState<string | null>(initialLatestNotificationId);
   const [toast, setToast] = useState<{ title: string; message: string } | null>(null);
-  const [soundEnabled, setSoundEnabled] = useState(false);
   const pollingRef = useRef<number | null>(null);
   const eventSourceRef = useRef<EventSource | null>(null);
   const latestIdRef = useRef<string | null>(initialLatestNotificationId);
   const latestUrgentIdRef = useRef<string | null>(initialLatestUrgentId);
   const unreadCountRef = useRef(initialUnreadCount);
-  const soundEnabledRef = useRef(false);
-  const audioContextRef = useRef<AudioContext | null>(null);
 
-  async function unlockSoundAndSystemNotifications() {
-    setSoundEnabled(true);
-    soundEnabledRef.current = true;
-
-    if (typeof window !== "undefined") {
-      const AudioContextClass = window.AudioContext || (window as typeof window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
-      if (AudioContextClass && !audioContextRef.current) {
-        audioContextRef.current = new AudioContextClass();
-      }
-
-      if (audioContextRef.current?.state === "suspended") {
-        try {
-          await audioContextRef.current.resume();
-        } catch {
-          // Ignore; next user interaction will try again.
-        }
-      }
-
+  useEffect(() => {
+    const askNotificationPermission = () => {
       if ("Notification" in window && Notification.permission === "default") {
         void Notification.requestPermission();
       }
-    }
-  }
-
-  useEffect(() => {
-    const unlock = () => {
-      void unlockSoundAndSystemNotifications();
     };
-    window.addEventListener("pointerdown", unlock, { once: true });
-    window.addEventListener("touchstart", unlock, { once: true });
-    window.addEventListener("click", unlock, { once: true });
-    window.addEventListener("keydown", unlock, { once: true });
+    window.addEventListener("pointerdown", askNotificationPermission, { once: true });
+    window.addEventListener("touchstart", askNotificationPermission, { once: true });
+    window.addEventListener("click", askNotificationPermission, { once: true });
+    window.addEventListener("keydown", askNotificationPermission, { once: true });
 
     return () => {
-      window.removeEventListener("pointerdown", unlock);
-      window.removeEventListener("touchstart", unlock);
-      window.removeEventListener("click", unlock);
-      window.removeEventListener("keydown", unlock);
-      if (audioContextRef.current) {
-        void audioContextRef.current.close();
-        audioContextRef.current = null;
-      }
+      window.removeEventListener("pointerdown", askNotificationPermission);
+      window.removeEventListener("touchstart", askNotificationPermission);
+      window.removeEventListener("click", askNotificationPermission);
+      window.removeEventListener("keydown", askNotificationPermission);
     };
   }, []);
 
@@ -143,10 +71,6 @@ export function InboxRealtimeLink({
   useEffect(() => {
     unreadCountRef.current = unreadCount;
   }, [unreadCount]);
-
-  useEffect(() => {
-    soundEnabledRef.current = soundEnabled;
-  }, [soundEnabled]);
 
   useEffect(() => {
     function applyPayload(payload: RealtimePayload) {
@@ -181,30 +105,18 @@ export function InboxRealtimeLink({
               new Notification(payload.latest.title, {
                 body: payload.latest.message,
                 tag: `notif-${payload.latest.id}`,
+                silent: true,
               });
             } catch {
               // Ignore notification API failures.
             }
           }
         }
-        const isRecoveryAlert = payload.latest?.type === "UNPAID_TICKET_ALERT" || hasNewUrgent;
-        if (isRecoveryAlert) {
-          window.dispatchEvent(new CustomEvent("urgent-alert:ring", {
-            detail: {
-              id: urgentId ?? payload.latest?.id,
-              urgentAlertCount: payload.urgentAlertCount ?? 1,
-            },
-          }));
-        } else {
-          void playNotificationTone(soundEnabledRef.current, audioContextRef);
+        if (payload.latest?.type === "UNPAID_TICKET_ALERT" || hasNewUrgent) {
+          showUrgentAlert(urgentId ?? payload.latest?.id ?? "", payload.urgentAlertCount ?? 1);
         }
       } else if (hasNewUrgent && urgentId) {
-        window.dispatchEvent(new CustomEvent("urgent-alert:ring", {
-          detail: {
-            id: urgentId,
-            urgentAlertCount: payload.urgentAlertCount ?? 1,
-          },
-        }));
+        showUrgentAlert(urgentId, payload.urgentAlertCount ?? 1);
       }
     }
 
