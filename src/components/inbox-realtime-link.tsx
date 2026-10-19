@@ -5,7 +5,15 @@ import { useEffect, useRef, useState, type MutableRefObject } from "react";
 
 type RealtimePayload = {
   unreadCount: number;
+  urgentAlertCount?: number;
   latest: {
+    id: string;
+    title: string;
+    message: string;
+    type?: string;
+    createdAt: string;
+  } | null;
+  latestUrgent?: {
     id: string;
     title: string;
     message: string;
@@ -65,9 +73,11 @@ async function playNotificationTone(enabled: boolean, contextRef: MutableRefObje
 export function InboxRealtimeLink({
   initialUnreadCount,
   initialLatestNotificationId,
+  initialLatestUrgentId = null,
 }: {
   initialUnreadCount: number;
   initialLatestNotificationId: string | null;
+  initialLatestUrgentId?: string | null;
 }) {
   const [unreadCount, setUnreadCount] = useState(initialUnreadCount);
   const [latestId, setLatestId] = useState<string | null>(initialLatestNotificationId);
@@ -76,6 +86,7 @@ export function InboxRealtimeLink({
   const pollingRef = useRef<number | null>(null);
   const eventSourceRef = useRef<EventSource | null>(null);
   const latestIdRef = useRef<string | null>(initialLatestNotificationId);
+  const latestUrgentIdRef = useRef<string | null>(initialLatestUrgentId);
   const unreadCountRef = useRef(initialUnreadCount);
   const soundEnabledRef = useRef(false);
   const audioContextRef = useRef<AudioContext | null>(null);
@@ -141,6 +152,9 @@ export function InboxRealtimeLink({
     function applyPayload(payload: RealtimePayload) {
       const hasNewNotification = payload.latest?.id && payload.latest.id !== latestIdRef.current;
       const countIncreased = payload.unreadCount > unreadCountRef.current;
+      const urgentId = payload.latestUrgent?.id ?? null;
+      const hasNewUrgent = Boolean(urgentId && urgentId !== latestUrgentIdRef.current);
+      if (urgentId) latestUrgentIdRef.current = urgentId;
 
       setUnreadCount(payload.unreadCount);
 
@@ -173,7 +187,24 @@ export function InboxRealtimeLink({
             }
           }
         }
-        void playNotificationTone(soundEnabledRef.current, audioContextRef);
+        const isRecoveryAlert = payload.latest?.type === "UNPAID_TICKET_ALERT" || hasNewUrgent;
+        if (isRecoveryAlert) {
+          window.dispatchEvent(new CustomEvent("urgent-alert:ring", {
+            detail: {
+              id: urgentId ?? payload.latest?.id,
+              urgentAlertCount: payload.urgentAlertCount ?? 1,
+            },
+          }));
+        } else {
+          void playNotificationTone(soundEnabledRef.current, audioContextRef);
+        }
+      } else if (hasNewUrgent && urgentId) {
+        window.dispatchEvent(new CustomEvent("urgent-alert:ring", {
+          detail: {
+            id: urgentId,
+            urgentAlertCount: payload.urgentAlertCount ?? 1,
+          },
+        }));
       }
     }
 

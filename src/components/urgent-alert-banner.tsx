@@ -6,18 +6,18 @@ import { useEffect, useRef, useState, useCallback } from "react";
 type RealtimePayload = {
   unreadCount: number;
   urgentAlertCount?: number;
-  latest: { id: string; title: string; message: string; createdAt: string } | null;
+  latestUrgent?: { id: string; title: string; message: string; createdAt: string } | null;
 };
 
-/** Play a loud repeating alarm: 3 short beeps at 700 Hz, then silence, then repeat once */
-function playUrgentAlarm() {
-  if (typeof window === "undefined") return;
-  const AudioContextClass =
-    window.AudioContext ||
-    (window as typeof window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
-  if (!AudioContextClass) return;
+type UrgentRingDetail = {
+  id?: string;
+  urgentAlertCount?: number;
+};
 
-  const ctx = new AudioContextClass();
+/** Play a loud alarm on an AudioContext already unlocked by a user gesture. */
+function playUrgentAlarm(ctx: AudioContext) {
+  if (ctx.state === "closed") return;
+
   const masterGain = ctx.createGain();
   masterGain.gain.value = 0.45;
   masterGain.connect(ctx.destination);
@@ -47,34 +47,113 @@ function playUrgentAlarm() {
   });
 
   const totalDuration = freqs.length * (beepDuration + gapDuration) + 0.1;
-  window.setTimeout(() => void ctx.close(), totalDuration * 1000 + 500);
+  window.setTimeout(() => {
+    masterGain.disconnect();
+  }, totalDuration * 1000 + 200);
 }
 
 export function UrgentAlertBanner({
   initialUrgentCount,
+  initialLatestUrgentId = null,
 }: {
   initialUrgentCount: number;
+  initialLatestUrgentId?: string | null;
 }) {
   const [urgentCount, setUrgentCount] = useState(initialUrgentCount);
   const [dismissed, setDismissed] = useState(false);
-  const [soundUnlocked, setSoundUnlocked] = useState(false);
   const soundUnlockedRef = useRef(false);
   const urgentCountRef = useRef(initialUrgentCount);
   const intervalRef = useRef<number | null>(null);
   const alarmIntervalRef = useRef<number | null>(null);
+  const audioContextRef = useRef<AudioContext | null>(null);
+  const lastRungIdRef = useRef<string | null>(null);
+  const lastSeenUrgentIdRef = useRef<string | null>(initialLatestUrgentId);
+  const lastPlayAtRef = useRef(0);
+  const dismissedRef = useRef(false);
 
-  // Unlock sound context on first user interaction
+  function ensureAudioContext() {
+    if (audioContextRef.current && audioContextRef.current.state !== "closed") {
+      return audioContextRef.current;
+    }
+    const AudioContextClass =
+      window.AudioContext ||
+      (window as typeof window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+    if (!AudioContextClass) return null;
+    audioContextRef.current = new AudioContextClass();
+    return audioContextRef.current;
+  }
+
+  async function ring() {
+    const now = Date.now();
+    if (now - lastPlayAtRef.current < 800) return;
+    lastPlayAtRef.current = now;
+    const ctx = ensureAudioContext();
+    if (!ctx) return;
+    if (ctx.state === "suspended") {
+      try {
+        await ctx.resume();
+      } catch {
+        return;
+      }
+    }
+    if (ctx.state !== "running") return;
+    playUrgentAlarm(ctx);
+  }
+
+  function ringIfNew(id: string | null | undefined) {
+    if (!id || id === lastRungIdRef.current) return;
+    lastRungIdRef.current = id;
+    if (soundUnlockedRef.current) {
+      void ring();
+    }
+  }
+
+  // Unlock sound context on first user interaction, then ring if a recouvrement alert is already waiting.
   useEffect(() => {
     const unlock = () => {
-      setSoundUnlocked(true);
+      const ctx = ensureAudioContext();
+      if (ctx?.state === "suspended") {
+        void ctx.resume();
+      }
+      const wasUnlocked = soundUnlockedRef.current;
       soundUnlockedRef.current = true;
+      if (!wasUnlocked && urgentCountRef.current > 0) {
+        void ring();
+      }
     };
+    window.addEventListener("pointerdown", unlock, { once: true });
     window.addEventListener("click", unlock, { once: true });
     window.addEventListener("keydown", unlock, { once: true });
     return () => {
+      window.removeEventListener("pointerdown", unlock);
       window.removeEventListener("click", unlock);
       window.removeEventListener("keydown", unlock);
+      if (audioContextRef.current) {
+        void audioContextRef.current.close();
+        audioContextRef.current = null;
+      }
     };
+  }, []);
+
+  useEffect(() => {
+    function onRing(event: Event) {
+      const detail = (event as CustomEvent<UrgentRingDetail>).detail;
+      const count = detail?.urgentAlertCount;
+      if (typeof count === "number") {
+        urgentCountRef.current = count;
+        setUrgentCount(count);
+      } else if (urgentCountRef.current === 0) {
+        urgentCountRef.current = 1;
+        setUrgentCount(1);
+      }
+      dismissedRef.current = false;
+      setDismissed(false);
+      if (detail?.id) lastSeenUrgentIdRef.current = detail.id;
+      ringIfNew(detail?.id ?? null);
+    }
+
+    window.addEventListener("urgent-alert:ring", onRing);
+    return () => window.removeEventListener("urgent-alert:ring", onRing);
   }, []);
 
   // Poll for urgent alerts every 15 seconds
@@ -87,9 +166,16 @@ export function UrgentAlertBanner({
       if (!res.ok) return;
       const data = (await res.json()) as RealtimePayload;
       const count = data.urgentAlertCount ?? 0;
+      const urgentId = data.latestUrgent?.id ?? null;
+      const isNewUrgent = Boolean(urgentId && urgentId !== lastSeenUrgentIdRef.current);
       urgentCountRef.current = count;
       setUrgentCount(count);
-      setDismissed(false); // re-show banner if new alerts arrived
+      if (urgentId) lastSeenUrgentIdRef.current = urgentId;
+      if (isNewUrgent) {
+        dismissedRef.current = false;
+        setDismissed(false);
+        ringIfNew(urgentId);
+      }
     } catch {
       // Silent fail
     }
@@ -105,21 +191,14 @@ export function UrgentAlertBanner({
   // Play alarm every 30 seconds when urgent alerts exist
   useEffect(() => {
     alarmIntervalRef.current = window.setInterval(() => {
-      if (urgentCountRef.current > 0 && soundUnlockedRef.current && !dismissed) {
-        playUrgentAlarm();
+      if (urgentCountRef.current > 0 && soundUnlockedRef.current && !dismissedRef.current) {
+        void ring();
       }
     }, 30_000);
     return () => {
       if (alarmIntervalRef.current) window.clearInterval(alarmIntervalRef.current);
     };
-  }, [dismissed]);
-
-  // Play immediately when urgent count goes from 0 to >0 and sound is unlocked
-  useEffect(() => {
-    if (urgentCount > 0 && soundUnlocked) {
-      playUrgentAlarm();
-    }
-  }, [urgentCount, soundUnlocked]);
+  }, []);
 
   if (urgentCount === 0 || dismissed) return null;
 
@@ -149,8 +228,8 @@ export function UrgentAlertBanner({
         <div className="flex items-center gap-2 shrink-0">
           <button
             onClick={() => {
-              if (soundUnlocked) playUrgentAlarm();
-              else setSoundUnlocked(true);
+              soundUnlockedRef.current = true;
+              void ring();
             }}
             title="Rejouer le son"
             className="rounded-lg border border-white/40 bg-white/10 px-3 py-1 text-xs font-semibold hover:bg-white/20 transition-colors"
@@ -164,7 +243,10 @@ export function UrgentAlertBanner({
             Voir les alertes →
           </Link>
           <button
-            onClick={() => setDismissed(true)}
+            onClick={() => {
+              dismissedRef.current = true;
+              setDismissed(true);
+            }}
             title="Masquer jusqu'au prochain rafraîchissement"
             className="rounded-lg border border-white/40 bg-white/10 px-3 py-1 text-xs font-semibold hover:bg-white/20 transition-colors"
           >

@@ -206,10 +206,11 @@ export async function AppShell({
   let unreadNotifications = 0;
   let urgentAlertCount = 0;
   let latestNotificationId: string | null = null;
+  let latestUrgentNotificationId: string | null = null;
   const moduleAccessMap = await getUserModuleAccessMap(session?.user?.id ?? null);
   if (session?.user?.id) {
     try {
-      const [unread, urgent, latest] = await Promise.all([
+      const [unread, urgent, latest, latestUrgent] = await Promise.all([
         prisma.userNotification.count({
           where: { userId: session.user.id, isRead: false },
         }),
@@ -221,10 +222,16 @@ export async function AppShell({
           select: { id: true },
           orderBy: { createdAt: "desc" },
         }),
+        prisma.userNotification.findFirst({
+          where: { userId: session.user.id, isRead: false, type: "UNPAID_TICKET_ALERT" },
+          select: { id: true },
+          orderBy: { createdAt: "desc" },
+        }),
       ]);
       unreadNotifications = unread;
       urgentAlertCount = urgent;
       latestNotificationId = latest?.id ?? null;
+      latestUrgentNotificationId = latestUrgent?.id ?? null;
     } catch (error) {
       console.error("[app-shell] notification count error", error);
     }
@@ -255,7 +262,7 @@ export async function AppShell({
   return (
     <div className="min-h-screen w-full bg-background text-foreground">
       {session?.user?.id ? <SessionIdleGuard sessionKey={`${session.user.id}:${session.expires}`} /> : null}
-      <UrgentAlertBanner initialUrgentCount={urgentAlertCount} />
+      <UrgentAlertBanner initialUrgentCount={urgentAlertCount} initialLatestUrgentId={latestUrgentNotificationId} />
       <div className="min-h-screen w-full">
         <aside className="fixed inset-y-0 left-0 z-40 hidden h-screen w-72 overflow-y-auto border-r border-black/10 bg-white/70 p-5 backdrop-blur md:block dark:border-white/10 dark:bg-zinc-950/70">
           <div className="mb-6">
@@ -299,6 +306,7 @@ export async function AppShell({
                   <InboxRealtimeLink
                     initialUnreadCount={unreadNotifications}
                     initialLatestNotificationId={latestNotificationId}
+                    initialLatestUrgentId={latestUrgentNotificationId}
                   />
                 ) : null}
                 <ThemeToggle />

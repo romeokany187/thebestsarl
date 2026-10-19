@@ -4,7 +4,15 @@ import { prisma } from "@/lib/prisma";
 
 type StreamPayload = {
   unreadCount: number;
+  urgentAlertCount: number;
   latest: {
+    id: string;
+    title: string;
+    message: string;
+    type: string;
+    createdAt: string;
+  } | null;
+  latestUrgent: {
     id: string;
     title: string;
     message: string;
@@ -29,6 +37,7 @@ export async function GET(request: Request) {
       let closed = false;
       let previousUnread = -1;
       let previousLatestId: string | null = null;
+      let previousUrgentId: string | null = null;
 
       const sendEvent = (payload: StreamPayload) => {
         if (closed) return;
@@ -41,7 +50,7 @@ export async function GET(request: Request) {
       };
 
       const queryPayload = async (): Promise<StreamPayload> => {
-        const [unreadCount, latest] = await Promise.all([
+        const [unreadCount, latest, urgentAlertCount, latestUrgent] = await Promise.all([
           prisma.userNotification.count({
             where: {
               userId,
@@ -54,6 +63,28 @@ export async function GET(request: Request) {
               id: true,
               title: true,
               message: true,
+              type: true,
+              createdAt: true,
+            },
+            orderBy: { createdAt: "desc" },
+          }),
+          prisma.userNotification.count({
+            where: {
+              userId,
+              isRead: false,
+              type: "UNPAID_TICKET_ALERT",
+            },
+          }),
+          prisma.userNotification.findFirst({
+            where: {
+              userId,
+              isRead: false,
+              type: "UNPAID_TICKET_ALERT",
+            },
+            select: {
+              id: true,
+              title: true,
+              message: true,
               createdAt: true,
             },
             orderBy: { createdAt: "desc" },
@@ -62,12 +93,22 @@ export async function GET(request: Request) {
 
         return {
           unreadCount,
+          urgentAlertCount,
           latest: latest
             ? {
                 id: latest.id,
                 title: latest.title,
                 message: latest.message,
+                type: latest.type,
                 createdAt: latest.createdAt.toISOString(),
+              }
+            : null,
+          latestUrgent: latestUrgent
+            ? {
+                id: latestUrgent.id,
+                title: latestUrgent.title,
+                message: latestUrgent.message,
+                createdAt: latestUrgent.createdAt.toISOString(),
               }
             : null,
         };
@@ -79,10 +120,12 @@ export async function GET(request: Request) {
         try {
           const payload = await queryPayload();
           const latestId = payload.latest?.id ?? null;
+          const urgentId = payload.latestUrgent?.id ?? null;
 
-          if (payload.unreadCount !== previousUnread || latestId !== previousLatestId) {
+          if (payload.unreadCount !== previousUnread || latestId !== previousLatestId || urgentId !== previousUrgentId) {
             previousUnread = payload.unreadCount;
             previousLatestId = latestId;
+            previousUrgentId = urgentId;
             sendEvent(payload);
           } else {
             sendHeartbeat();
