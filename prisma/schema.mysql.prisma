@@ -223,6 +223,7 @@ model User {
   accountingEntries       AccountingEntry[]       @relation("AccountingEntryCreator")
   bidFolders              BidFolder[]             @relation("BidFolderCreator")
   bidDocuments            BidDocument[]           @relation("BidDocumentUploader")
+  integrationClients      IntegrationClient[]     @relation("IntegrationClientCreator")
   passwordSetupCodes      PasswordSetupCode[]
   authSessionState        AuthSessionState?
   authDeviceChallenges    AuthDeviceChallenge[]
@@ -856,4 +857,79 @@ model BidDocument {
   @@index([bidFolderId])
   @@index([requirementId])
   @@index([uploadedById])
+}
+
+model IntegrationClient {
+  id            String                     @id @default(cuid())
+  name          String
+  keyPrefix     String                     @unique
+  keyHash       String                     @unique
+  scopes        String                     @default("events:read,events:write,webhooks:read,webhooks:write")
+  enabled       Boolean                    @default(true)
+  createdById   String
+  createdBy     User                       @relation("IntegrationClientCreator", fields: [createdById], references: [id])
+  lastUsedAt    DateTime?
+  revokedAt     DateTime?
+  inboundEvents IntegrationInboundEvent[]
+  webhooks      IntegrationWebhook[]
+  createdAt     DateTime                   @default(now())
+  updatedAt     DateTime                   @updatedAt
+
+  @@index([createdById])
+  @@index([enabled])
+}
+
+model IntegrationInboundEvent {
+  id         String            @id @default(cuid())
+  clientId   String
+  client     IntegrationClient @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  eventType  String
+  externalId String?
+  payload    Json
+  status     String            @default("RECEIVED")
+  receivedAt DateTime          @default(now())
+
+  @@unique([clientId, externalId])
+  @@index([clientId, receivedAt])
+  @@index([eventType])
+}
+
+model IntegrationWebhook {
+  id            String                       @id @default(cuid())
+  clientId      String
+  client        IntegrationClient            @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  url           String
+  signingSecret String
+  eventTypes    String                       @default("")
+  enabled       Boolean                      @default(true)
+  createdAt     DateTime                     @default(now())
+  deliveries    IntegrationWebhookDelivery[]
+
+  @@index([clientId])
+}
+
+model IntegrationOutboundEvent {
+  id         String                       @id @default(cuid())
+  eventType  String
+  payload    Json
+  createdAt  DateTime                     @default(now())
+  deliveries IntegrationWebhookDelivery[]
+
+  @@index([createdAt])
+  @@index([eventType])
+}
+
+model IntegrationWebhookDelivery {
+  id              String                   @id @default(cuid())
+  outboundEventId String
+  outboundEvent   IntegrationOutboundEvent @relation(fields: [outboundEventId], references: [id], onDelete: Cascade)
+  webhookId       String
+  webhook         IntegrationWebhook       @relation(fields: [webhookId], references: [id], onDelete: Cascade)
+  status          String                   @default("PENDING")
+  responseStatus  Int?
+  errorMessage    String?                  @db.Text
+  attemptedAt     DateTime                 @default(now())
+
+  @@index([outboundEventId])
+  @@index([webhookId])
 }
