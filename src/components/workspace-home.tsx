@@ -13,7 +13,7 @@ export function WorkspaceHome({
       <header>
         <h1 className="text-2xl font-semibold tracking-tight">{title}</h1>
         <p className="mt-1 text-sm text-black/60 dark:text-white/60">
-          Choisissez une action — le menu complet reste disponible en haut.
+          Ouvrez un écran. Le menu indique où vous êtes et regroupe les modules par métier.
         </p>
       </header>
 

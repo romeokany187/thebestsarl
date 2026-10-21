@@ -8,6 +8,7 @@ import { UrgentAlertBanner } from "@/components/urgent-alert-banner";
 import { LogoutButton } from "@/components/logout-button";
 import { SessionIdleGuard } from "@/components/session-idle-guard";
 import { ThemeToggle } from "@/components/theme-toggle";
+import { AppMobileNav, AppSidebarNav } from "@/components/app-nav";
 import { prisma } from "@/lib/prisma";
 import { getEffectiveModuleAccessLevel, getUserModuleAccessMap, hasRequiredModuleAccessLevel } from "@/lib/user-module-access";
 
@@ -257,7 +258,7 @@ export async function AppShell({
     return true;
   });
   const roleLabel = role ? `Rôle ${displayRoleLabel(role, session?.user?.jobTitle)}` : null;
-  const mobileQuickLinks = visibleLinks.filter((link) => ["/", "/sales", "/payments", "/inbox", "/profile"].includes(link.href));
+  const navLinks = visibleLinks.map((link) => ({ href: link.href, label: link.label }));
 
   return (
     <div className="min-h-screen w-full bg-background text-foreground">
@@ -277,22 +278,7 @@ export async function AppShell({
             </div>
           ) : null}
 
-          <nav className="space-y-1">
-            {visibleLinks.map((link) => (
-              <Link
-                key={link.href}
-                href={link.href}
-                className="flex items-center justify-between rounded-lg px-3 py-2 text-sm font-medium text-black/75 transition hover:bg-black/5 hover:text-black dark:text-white/75 dark:hover:bg-white/10 dark:hover:text-white"
-              >
-                <span>{link.label}</span>
-                {link.href === "/inbox" && unreadNotifications > 0 ? (
-                  <span className="rounded-full bg-red-600 px-2 py-0.5 text-[10px] font-semibold text-white">
-                    {unreadNotifications > 99 ? "99+" : unreadNotifications}
-                  </span>
-                ) : null}
-              </Link>
-            ))}
-          </nav>
+          <AppSidebarNav links={navLinks} unread={unreadNotifications} />
         </aside>
 
         <div className="min-h-screen min-w-0 overflow-x-hidden md:pl-72">
@@ -328,44 +314,13 @@ export async function AppShell({
               </div>
             </div>
 
-            <nav className="tickets-scroll mt-4 flex gap-2 overflow-x-auto pb-1 md:hidden">
-              {visibleLinks.map((link) => (
-                <Link
-                  key={link.href}
-                  href={link.href}
-                  className="shrink-0 rounded-full border border-black/10 bg-white px-3 py-1.5 text-xs font-semibold text-black/75 dark:border-white/15 dark:bg-zinc-900 dark:text-white/75"
-                >
-                  {link.label}
-                  {link.href === "/inbox" && unreadNotifications > 0 ? ` (${unreadNotifications > 99 ? "99+" : unreadNotifications})` : ""}
-                </Link>
-              ))}
-            </nav>
           </header>
 
-          <main className="mobile-safe-area-bottom min-w-0 px-4 pt-32 pb-24 sm:px-6 md:pt-24 lg:px-8 lg:pb-8 2xl:px-10">
+          <main className="mobile-safe-area-bottom min-w-0 px-4 pt-24 pb-24 sm:px-6 md:pt-24 lg:px-8 lg:pb-8 2xl:px-10">
             {children}
           </main>
 
-          {mobileQuickLinks.length > 0 ? (
-            <nav className="mobile-safe-area-bottom fixed inset-x-0 bottom-0 z-40 border-t border-black/10 bg-white/92 px-3 py-2 backdrop-blur md:hidden dark:border-white/10 dark:bg-zinc-950/92">
-              <div className="grid grid-cols-5 gap-2">
-                {mobileQuickLinks.map((link) => (
-                  <Link
-                    key={link.href}
-                    href={link.href}
-                    className="flex min-w-0 flex-col items-center justify-center rounded-xl px-2 py-2 text-center text-[11px] font-semibold text-black/75 transition hover:bg-black/5 dark:text-white/75 dark:hover:bg-white/10"
-                  >
-                    <span className="truncate">{link.label}</span>
-                    {link.href === "/inbox" && unreadNotifications > 0 ? (
-                      <span className="mt-1 rounded-full bg-red-600 px-1.5 py-0.5 text-[10px] font-semibold text-white">
-                        {unreadNotifications > 99 ? "99+" : unreadNotifications}
-                      </span>
-                    ) : null}
-                  </Link>
-                ))}
-              </div>
-            </nav>
-          ) : null}
+          <AppMobileNav links={navLinks} unread={unreadNotifications} />
         </div>
       </div>
     </div>
