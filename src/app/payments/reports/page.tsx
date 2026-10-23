@@ -44,6 +44,12 @@ export default async function PaymentReportsPage({
     desk: selectedDesk,
   }).toString();
 
+  const ticketStatusQuery = new URLSearchParams({
+    startDate,
+    endDate,
+    scope: "issued",
+  }).toString();
+
   const cashJournalQuery = new URLSearchParams({
     reportType: "cash-journal",
     mode: "month",
@@ -99,6 +105,14 @@ export default async function PaymentReportsPage({
           </a>
           <a href={`/api/payments/report?${paymentsQuery}&download=1`} className="rounded-2xl border border-black/10 bg-white p-4 shadow-sm hover:bg-black/5 dark:border-white/10 dark:bg-zinc-900 dark:hover:bg-white/5">
             <h2 className="text-sm font-semibold">Télécharger PDF paiements billets</h2>
+          </a>
+          <a href={`/api/payments/ticket-status?${ticketStatusQuery}`} target="_blank" rel="noreferrer" className="rounded-2xl border border-black/10 bg-white p-4 shadow-sm hover:bg-black/5 dark:border-white/10 dark:bg-zinc-900 dark:hover:bg-white/5">
+            <h2 className="text-sm font-semibold">JSON statut paiement billets</h2>
+            <p className="mt-1 text-xs text-black/60 dark:text-white/60">Date paiement, émission, passager, PNR, émetteur, payant, montants, statut.</p>
+          </a>
+          <a href={`/api/payments/ticket-status?${ticketStatusQuery}&format=xlsx`} className="rounded-2xl border border-black/10 bg-white p-4 shadow-sm hover:bg-black/5 dark:border-white/10 dark:bg-zinc-900 dark:hover:bg-white/5">
+            <h2 className="text-sm font-semibold">Excel statut paiement billets</h2>
+            <p className="mt-1 text-xs text-black/60 dark:text-white/60">Tableau prêt pour comptabilité (1 ligne par billet).</p>
           </a>
           <a href={`/api/payments/report?${cashJournalQuery}`} target="_blank" rel="noreferrer" className="rounded-2xl border border-black/10 bg-white p-4 shadow-sm hover:bg-black/5 dark:border-white/10 dark:bg-zinc-900 dark:hover:bg-white/5">
             <h2 className="text-sm font-semibold">Voir journal de caisse</h2>
