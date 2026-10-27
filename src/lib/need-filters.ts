@@ -1,4 +1,4 @@
-import { hasNeedExecutionMarker } from "@/lib/inbox-workflow";
+import { hasNeedExecutionMarker } from "@/lib/need-execution-marker";
 
 export type NeedFilter = "total" | "en-attente" | "approuves" | "executes" | "rejetes";
 

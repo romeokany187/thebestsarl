@@ -1,6 +1,9 @@
 import { prisma } from "@/lib/prisma";
 import { isCashierJobTitle } from "@/lib/assignment";
 import { parseNeedQuote } from "@/lib/need-lines";
+import { hasNeedExecutionMarker } from "@/lib/need-execution-marker";
+
+export { hasNeedExecutionMarker } from "@/lib/need-execution-marker";
 
 export type WorkflowPaymentOrder = {
   id: string;
@@ -39,10 +42,6 @@ export type WorkflowNeed = {
   requester?: { name?: string | null; jobTitle?: string | null } | null;
   reviewedBy?: { name?: string | null; jobTitle?: string | null } | null;
 };
-
-export function hasNeedExecutionMarker(value?: string | null) {
-  return (value ?? "").includes("EXECUTION_CAISSE:");
-}
 
 type WorkflowActor = { name?: string | null; jobTitle?: string | null } | null;
 
