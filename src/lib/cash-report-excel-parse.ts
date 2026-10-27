@@ -110,6 +110,24 @@ const LEGACY_JOURNAL_COLUMNS: JournalMoneyColumnMap = {
   cdfBalance: 8,
 };
 
+/** Layout courant THE BEST : USD (3–5), colonne vide, CDF (8–10). */
+const THE_BEST_GAP_JOURNAL_COLUMNS: JournalMoneyColumnMap = {
+  usdIn: 3,
+  usdOut: 4,
+  usdBalance: 5,
+  cdfIn: 8,
+  cdfOut: 9,
+  cdfBalance: 10,
+};
+
+function matchesTheBestGapJournalLayout(rows: unknown[][], headerRowIndex: number) {
+  const sub = rows[headerRowIndex + 1] ?? [];
+  const entreesUsd = normalizeText(String(sub[4] ?? sub[3] ?? ""));
+  const sortiesUsd = normalizeText(String(sub[5] ?? ""));
+  const entreesCdf = normalizeText(String(sub[8] ?? ""));
+  return entreesUsd.includes("entree") && sortiesUsd.includes("sortie") && entreesCdf.includes("entree");
+}
+
 function combinedHeaderLabel(rows: unknown[][], headerRowIndex: number, columnIndex: number) {
   const parts = [headerRowIndex, headerRowIndex + 1]
     .map((rowIndex) => normalizeText(String(rows[rowIndex]?.[columnIndex] ?? "")))
@@ -118,6 +136,10 @@ function combinedHeaderLabel(rows: unknown[][], headerRowIndex: number, columnIn
 }
 
 function resolveJournalMoneyColumns(rows: unknown[][], headerRowIndex: number): JournalMoneyColumnMap {
+  if (matchesTheBestGapJournalLayout(rows, headerRowIndex)) {
+    return THE_BEST_GAP_JOURNAL_COLUMNS;
+  }
+
   const map: Partial<JournalMoneyColumnMap> = {};
   const headerRow = rows[headerRowIndex] ?? [];
   const maxCols = Math.max(headerRow.length, (rows[headerRowIndex + 1] ?? []).length, 12);
@@ -143,16 +165,17 @@ function resolveJournalMoneyColumns(rows: unknown[][], headerRowIndex: number): 
   const candidates: JournalMoneyColumnMap[] = [];
 
   if (map.usdIn !== undefined && map.usdOut !== undefined && map.cdfIn !== undefined && map.cdfOut !== undefined) {
-    candidates.push({
+    return {
       usdIn: map.usdIn,
       usdOut: map.usdOut,
       usdBalance: map.usdBalance ?? null,
       cdfIn: map.cdfIn,
       cdfOut: map.cdfOut,
       cdfBalance: map.cdfBalance ?? null,
-    });
+    };
   }
 
+  candidates.push(THE_BEST_GAP_JOURNAL_COLUMNS);
   candidates.push(LEGACY_JOURNAL_COLUMNS);
   candidates.push({
     usdIn: 3,
@@ -179,10 +202,15 @@ function resolveJournalMoneyColumns(rows: unknown[][], headerRowIndex: number): 
     let cdfScore = 0;
     let usdScore = 0;
     for (const row of sampleRows) {
-      cdfScore += parseMoneyCell(row[candidate.cdfIn]) + parseMoneyCell(row[candidate.cdfOut]);
-      usdScore += parseMoneyCell(row[candidate.usdIn]) + parseMoneyCell(row[candidate.usdOut]);
+      const cdfIn = Math.abs(parseMoneyCell(row[candidate.cdfIn]));
+      const cdfOut = Math.abs(parseMoneyCell(row[candidate.cdfOut]));
+      const usdIn = Math.abs(parseMoneyCell(row[candidate.usdIn]));
+      const usdOut = Math.abs(parseMoneyCell(row[candidate.usdOut]));
+      cdfScore += cdfIn + cdfOut;
+      usdScore += usdIn + usdOut;
     }
-    const score = cdfScore * 2 + usdScore;
+    const layoutBonus = candidate.cdfIn >= 8 ? 50_000 : 0;
+    const score = cdfScore * 2 + usdScore + layoutBonus;
     if (score > bestScore) {
       bestScore = score;
       best = candidate;
@@ -190,6 +218,23 @@ function resolveJournalMoneyColumns(rows: unknown[][], headerRowIndex: number): 
   }
 
   return best;
+}
+
+/** Bon d'entrée avec montants en colonnes « sorties » (Excel caissière). */
+export function refineJournalCategoryFromMovements(
+  category: CashReportJournalCategory,
+  usdIn: number,
+  usdOut: number,
+  cdfIn: number,
+  cdfOut: number,
+): CashReportJournalCategory {
+  if (category === "OPENING" || category === "SKIP" || category === "OUTFLOW") return category;
+  const inflow = usdIn + cdfIn;
+  const outflow = usdOut + cdfOut;
+  if (outflow > 0 && outflow >= inflow) {
+    return "OUTFLOW";
+  }
+  return category;
 }
 
 /** Entrées / sorties négatives dans Excel → colonne opposée (USD et CDF séparés). */
@@ -404,7 +449,7 @@ function parseJournalSheet(rows: unknown[][], fallbackYear: number, reportMonthH
       continue;
     }
 
-    const { usdIn, usdOut, cdfIn, cdfOut } = normalizeJournalMovementColumns({
+    let { usdIn, usdOut, cdfIn, cdfOut } = normalizeJournalMovementColumns({
       usdIn: parseMoneyCell(row[moneyColumns.usdIn]),
       usdOut: parseMoneyCell(row[moneyColumns.usdOut]),
       cdfIn: parseMoneyCell(row[moneyColumns.cdfIn]),
@@ -412,11 +457,26 @@ function parseJournalSheet(rows: unknown[][], fallbackYear: number, reportMonthH
     });
     const usdBalanceRaw = moneyColumns.usdBalance == null ? null : row[moneyColumns.usdBalance];
     const cdfBalanceRaw = moneyColumns.cdfBalance == null ? null : row[moneyColumns.cdfBalance];
-    const usdBalance = usdBalanceRaw === "" || usdBalanceRaw == null ? null : parseMoneyCell(usdBalanceRaw);
-    const cdfBalance = cdfBalanceRaw === "" || cdfBalanceRaw == null ? null : parseMoneyCell(cdfBalanceRaw);
+    let usdBalance = usdBalanceRaw === "" || usdBalanceRaw == null ? null : parseMoneyCell(usdBalanceRaw);
+    let cdfBalance = cdfBalanceRaw === "" || cdfBalanceRaw == null ? null : parseMoneyCell(cdfBalanceRaw);
 
-    const lineCategory = classifyJournalLine(typeOperation, libelle);
+    let lineCategory = classifyJournalLine(typeOperation, libelle);
     if (lineCategory === "SKIP") continue;
+
+    if (lineCategory === "OPENING") {
+      if (moneyColumns.usdBalance != null && (usdIn + usdOut === 0 || usdBalance != null)) {
+        usdBalance = parseMoneyCell(row[moneyColumns.usdBalance]);
+        usdIn = 0;
+        usdOut = 0;
+      }
+      if (moneyColumns.cdfBalance != null) {
+        cdfBalance = parseMoneyCell(row[moneyColumns.cdfBalance]);
+        cdfIn = 0;
+        cdfOut = 0;
+      }
+    } else {
+      lineCategory = refineJournalCategoryFromMovements(lineCategory, usdIn, usdOut, cdfIn, cdfOut);
+    }
 
     const referenceDoc = extractBonReference(typeOperation, libelle);
     const reportMonth = reportMonthHint ?? businessDate.slice(0, 7);

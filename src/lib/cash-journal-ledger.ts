@@ -145,19 +145,40 @@ export function buildCashJournalLedgerFromImportedLines(lines: ImportedJournalLi
   periodClosingUsd: number;
   periodClosingCdf: number;
 } {
-  const rows: CashJournalLedgerRow[] = lines.map((line) => ({
-    occurredAt: new Date(`${line.businessDate}T12:00:00.000Z`),
-    typeOperation: line.typeOperation,
-    libelle: line.libelle,
-    reference: line.referenceDoc ?? "-",
-    usdIn: line.usdIn,
-    usdOut: line.usdOut,
-    cdfIn: line.cdfIn,
-    cdfOut: line.cdfOut,
-    usdBalance: line.usdBalance ?? 0,
-    cdfBalance: line.cdfBalance ?? 0,
-    isOpeningRow: line.lineCategory === "OPENING",
-  }));
+  let runningUsd = 0;
+  let runningCdf = 0;
+  const rows: CashJournalLedgerRow[] = lines.map((line) => {
+    if (line.lineCategory === "OPENING") {
+      if (line.usdBalance != null) runningUsd = line.usdBalance;
+      else runningUsd += line.usdIn - line.usdOut;
+      if (line.cdfBalance != null) runningCdf = line.cdfBalance;
+      else runningCdf += line.cdfIn - line.cdfOut;
+    } else {
+      runningUsd += line.usdIn - line.usdOut;
+      runningCdf += line.cdfIn - line.cdfOut;
+    }
+
+    const usdBalance = line.usdBalance ?? runningUsd;
+    const cdfBalance = line.cdfBalance ?? runningCdf;
+    if (line.usdBalance != null) runningUsd = line.usdBalance;
+    else runningUsd = usdBalance;
+    if (line.cdfBalance != null) runningCdf = line.cdfBalance;
+    else runningCdf = cdfBalance;
+
+    return {
+      occurredAt: new Date(`${line.businessDate}T12:00:00.000Z`),
+      typeOperation: line.typeOperation,
+      libelle: line.libelle,
+      reference: line.referenceDoc ?? "-",
+      usdIn: line.usdIn,
+      usdOut: line.usdOut,
+      cdfIn: line.cdfIn,
+      cdfOut: line.cdfOut,
+      usdBalance,
+      cdfBalance,
+      isOpeningRow: line.lineCategory === "OPENING",
+    };
+  });
 
   const firstOpening = rows.find((row) => row.isOpeningRow) ?? rows[0];
   const last = rows[rows.length - 1];
