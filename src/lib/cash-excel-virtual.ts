@@ -141,6 +141,15 @@ export async function loadMainDeskExcelVirtualSnapshot(
       where: { closingDate_cashDesk: { closingDate: preferredClosingDate, cashDesk } },
     });
     if (exact) return exact;
+
+    const onOrBefore = await prisma.cashReportVirtualSnapshot.findFirst({
+      where: {
+        cashDesk,
+        closingDate: { lte: preferredClosingDate, startsWith: `${reportMonth}-` },
+      },
+      orderBy: { closingDate: "desc" },
+    });
+    if (onOrBefore) return onOrBefore;
   }
 
   return prisma.cashReportVirtualSnapshot.findFirst({

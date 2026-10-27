@@ -404,10 +404,12 @@ export async function runCashReportExcelImport(options: ImportOptions): Promise<
     importPlan,
   });
 
-  const virtualSnapshotDate =
-    importPlan.applyDeskSnapshots && importPlan.deskSnapshotDate
-      ? importPlan.deskSnapshotDate
-      : effectiveClosingDate;
+  const deskSnapshotDate = importPlan.deskSnapshotDate;
+  const virtualSnapshotDate = deskSnapshotDate ?? effectiveClosingDate;
+  const persistDeskSnapshots =
+    importPlan.applyDeskSnapshots &&
+    deskSnapshotDate != null &&
+    (parsed.billetages.length > 0 || parsed.virtualChannels.length > 0);
 
   const previewBase = {
     fileHash,
@@ -456,12 +458,10 @@ export async function runCashReportExcelImport(options: ImportOptions): Promise<
           ]
         : []),
       importPlan.modeLabel,
-      ...(importPlan.applyDeskSnapshots && importPlan.deskSnapshotDate
-        ? [
-            `Billetage : enregistrement pour le ${importPlan.deskSnapshotDate} (état du jour dans le fichier).`,
-          ]
-        : importPlan.closedMonth
-          ? ["Billetage : non importé pour un mois passé (feuille = jour courant uniquement)."]
+      ...(persistDeskSnapshots && parsed.billetages.length > 0
+        ? [`Billetage : enregistrement pour le ${deskSnapshotDate} (feuille Excel = état de ce jour).`]
+        : parsed.billetages.length > 0 && !persistDeskSnapshots
+          ? ["Billetage : feuille détectée mais aucun jour journal importé — billetage non enregistré."]
           : []),
       ...(parsed.virtualChannels.length > 0
         ? [
@@ -501,7 +501,7 @@ export async function runCashReportExcelImport(options: ImportOptions): Promise<
     reportMonth: parsed.reportMonth,
     businessDates: datesToImport,
     closingDate: virtualSnapshotDate,
-    includeDeskClosingSnapshots: importPlan.applyDeskSnapshots || parsed.virtualChannels.length > 0,
+    includeDeskClosingSnapshots: persistDeskSnapshots,
   });
 
   const importRecord = await prisma.$transaction(async (tx) => {
@@ -589,8 +589,8 @@ export async function runCashReportExcelImport(options: ImportOptions): Promise<
       });
     }
 
-    if (importPlan.applyDeskSnapshots && importPlan.deskSnapshotDate) {
-      const deskDate = importPlan.deskSnapshotDate;
+    if (persistDeskSnapshots && deskSnapshotDate) {
+      const deskDate = deskSnapshotDate;
       for (const billetage of parsed.billetages) {
         if (billetage.variant !== "THE_BEST") {
           await tx.cashBilletageSnapshot.upsert({
@@ -643,15 +643,15 @@ export async function runCashReportExcelImport(options: ImportOptions): Promise<
       }
     }
 
-    if (parsed.virtualChannels.length > 0) {
+    if (parsed.virtualChannels.length > 0 && deskSnapshotDate) {
       const totalUsd = parsed.virtualChannels.reduce((sum, channel) => sum + channel.usd, 0);
       const totalCdf = parsed.virtualChannels.reduce((sum, channel) => sum + channel.cdf, 0);
       await tx.cashReportVirtualSnapshot.upsert({
         where: {
-          closingDate_cashDesk: { closingDate: virtualSnapshotDate, cashDesk: "THE_BEST" },
+          closingDate_cashDesk: { closingDate: deskSnapshotDate, cashDesk: "THE_BEST" },
         },
         create: {
-          closingDate: virtualSnapshotDate,
+          closingDate: deskSnapshotDate,
           cashDesk: "THE_BEST",
           channels: parsed.virtualChannels,
           totalUsd,

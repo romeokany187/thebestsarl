@@ -11,7 +11,7 @@ export type CashReportImportPlan = {
   closedMonth: boolean;
   datesToImport: string[];
   skippedDates: string[];
-  /** Date d’archivage billetage / virtuel (jour courant uniquement, mois en cours). */
+  /** Dernier jour importé dans ce lot (billetage / virtuel Excel = état de ce jour). */
   deskSnapshotDate: string | null;
   applyDeskSnapshots: boolean;
 };
@@ -43,7 +43,7 @@ export function resolveCashReportImportPlan(options: {
     mode = "HISTORICAL_FULL_MONTH";
     datesToImport = inMonth;
     modeLabel =
-      "Mois clôturé : remplacement du journal sur tous les jours présents dans le fichier Excel (billetage / virtuel du fichier ignorés).";
+      "Mois clôturé : remplacement du journal sur tous les jours présents dans le fichier Excel (billetage / virtuel enregistrés au dernier jour importé).";
   } else {
     mode = "CURRENT_MONTH_DAILY";
     datesToImport = inMonth.filter((date) => date <= todayKey);
@@ -52,8 +52,15 @@ export function resolveCashReportImportPlan(options: {
   }
 
   const skippedDates = inMonth.filter((date) => !datesToImport.includes(date));
-  const applyDeskSnapshots = mode === "CURRENT_MONTH_DAILY" && options.reportMonth === todayKey.slice(0, 7);
-  const deskSnapshotDate = applyDeskSnapshots ? todayKey : null;
+  const deskSnapshotDate =
+    datesToImport.length > 0
+      ? (() => {
+          const last = datesToImport[datesToImport.length - 1];
+          if (options.reportMonth === todayKey.slice(0, 7) && last > todayKey) return todayKey;
+          return last;
+        })()
+      : null;
+  const applyDeskSnapshots = deskSnapshotDate != null;
 
   return {
     mode,

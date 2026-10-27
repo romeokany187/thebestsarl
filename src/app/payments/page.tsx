@@ -844,14 +844,18 @@ export default async function PaymentsPage({
     ? await loadExcelJournalBilletageAnalysis(
         cashRange.monthRaw,
         cashRange.startRaw,
-        cashRange.endRaw,
+        range.endRaw,
         selectedDeskKey,
       )
     : null;
 
   const excelVirtualSnapshot =
     isMainDesk && cashRange.monthRaw >= EXCEL_CAISSE_FIRST_MONTH
-      ? await loadMainDeskExcelVirtualSnapshot(cashRange.monthRaw, excelJournalAnalysis?.closingDate, selectedDeskKey)
+      ? await loadMainDeskExcelVirtualSnapshot(
+          cashRange.monthRaw,
+          excelJournalAnalysis?.closingDate ?? excelJournalAnalysis?.referenceDate ?? range.endRaw,
+          selectedDeskKey,
+        )
       : null;
 
   const journalLedgerBuilt = isMainDesk
