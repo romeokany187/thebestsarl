@@ -1,5 +1,6 @@
 import { kinshasaDateKey } from "@/lib/kinshasa-time";
 import { prisma } from "@/lib/prisma";
+import { sanitizeImportedJournalLinesForDisplay } from "@/lib/cash-journal-import-sanitize";
 
 export type ExcelDailyOpening = {
   usd: number;
@@ -145,9 +146,10 @@ export function buildCashJournalLedgerFromImportedLines(lines: ImportedJournalLi
   periodClosingUsd: number;
   periodClosingCdf: number;
 } {
+  const normalizedLines = sanitizeImportedJournalLinesForDisplay(lines);
   let runningUsd = 0;
   let runningCdf = 0;
-  const rows: CashJournalLedgerRow[] = lines.map((line) => {
+  const rows: CashJournalLedgerRow[] = normalizedLines.map((line) => {
     if (line.lineCategory === "OPENING") {
       if (line.usdBalance != null) runningUsd = line.usdBalance;
       else runningUsd += line.usdIn - line.usdOut;
@@ -182,7 +184,7 @@ export function buildCashJournalLedgerFromImportedLines(lines: ImportedJournalLi
 
   const firstOpening = rows.find((row) => row.isOpeningRow) ?? rows[0];
   const last = rows[rows.length - 1];
-  const usesExcelDailyOpenings = lines.some((line) => line.lineCategory === "OPENING");
+  const usesExcelDailyOpenings = normalizedLines.some((line) => line.lineCategory === "OPENING");
 
   return {
     rows,
