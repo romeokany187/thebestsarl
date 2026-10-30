@@ -1,6 +1,7 @@
 import { CommissionCalculationStatus, CommissionMode, PaymentStatus, Prisma, SaleNature, TravelClass } from "@prisma/client";
 import * as XLSX from "xlsx";
-import { computeCommissionAmount, pickCommissionRule } from "@/lib/commission";
+import { pickCommissionRule } from "@/lib/commission";
+import { airlineRequiresBaseFareForCommission, resolveTicketCommissionOnSale } from "@/lib/ticket-commission-resolve";
 import { getTicketDepositDebitAmount } from "@/lib/ticket-pricing";
 import { prisma } from "@/lib/prisma";
 import {
@@ -1350,8 +1351,6 @@ export async function importTicketWorkbookFromBuffer(options: TicketWorkbookImpo
         const agencyMarkupAmount = asNumber(pickValue(row, ["agencyMarkupAmount", "majoration", "markup", "majoration agence"])) ?? 0;
         const commissionAmountFromFile = asNumber(pickValue(row, ["commissionAmount", "commission", "commission brute", "com", "comission", "commission mensuelle", "commission hebdo"])) ?? 0;
         const commissionRateFromFile = asNumber(pickValue(row, ["commissionRateUsed", "commissionRate", "taux commission"])) ?? null;
-        const commissionBaseAmount = baseFareAmount && baseFareAmount > 0 ? baseFareAmount : 0;
-
         const sellerEmail = asString(pickValue(row, ["sellerEmail", "commercialEmail", "agentEmail", "email vendeur", "email agent"]));
         const sellerName = asString(pickValue(row, ["sellerName", "commercial", "vendeur", "agent", "emeteur", "emetteur", "emetteur/emitteur", "emitteur", "emeteur/bureau", "emetteur/bureau"]));
         const seller = await resolveSeller({ sellerEmail, sellerName });
@@ -1409,42 +1408,30 @@ export async function importTicketWorkbookFromBuffer(options: TicketWorkbookImpo
           depositBalanceByAccountKey.set(depositAccount.key, availableDepositBalance);
         }
 
-        const resolvedCommissionBaseAmount = commissionBaseAmount > 0
-          ? commissionBaseAmount
-          : afterDepositRule
-            ? amount
-            : 0;
-        const commissionCalculationStatus = CommissionCalculationStatus.FINAL;
+        if (airlineRequiresBaseFareForCommission(airline.code) && !baseFareAmount) {
+          throw new Error(`BaseFare obligatoire pour ${airline.name} (ligne PNR ${normalizedTicketNumber}).`);
+        }
 
-        let commissionAmount = activeRule ? 0 : Math.max(0, commissionAmountFromFile);
-        let commissionRateUsed = commissionRateFromFile
-          ?? (resolvedCommissionBaseAmount > 0 ? (commissionAmount / resolvedCommissionBaseAmount) * 100 : 0);
-        let commissionModeApplied = activeRule?.commissionMode ?? CommissionMode.IMMEDIATE;
-
-        if (afterDepositRule) {
-          const consumedBefore = consumedAmountByAirlineId.get(airline.id) ?? 0;
-          consumedAmountByAirlineId.set(airline.id, consumedBefore + amount);
-          commissionRateUsed = 0;
-          commissionModeApplied = CommissionMode.AFTER_DEPOSIT;
-        } else if (isAirFast) {
-          const nextAirfastTicketNumber = (ticketCountByAirlineId.get(airline.id) ?? 0) + 1;
+        const consumedBefore = afterDepositRule ? (consumedAmountByAirlineId.get(airline.id) ?? 0) : 0;
+        const nextAirfastTicketNumber = isAirFast ? (ticketCountByAirlineId.get(airline.id) ?? 0) + 1 : 0;
+        if (isAirFast) {
           ticketCountByAirlineId.set(airline.id, nextAirfastTicketNumber);
-          if (nextAirfastTicketNumber % 13 === 0) {
-            commissionAmount += amount;
-            commissionRateUsed = 100;
-          } else {
-            commissionRateUsed = 0;
-          }
-        } else if (activeRule) {
-          const computedCommission = computeCommissionAmount(resolvedCommissionBaseAmount, activeRule, 0);
-          commissionAmount = computedCommission.amount + agencyMarkupAmount;
-          commissionRateUsed = computedCommission.ratePercent;
-          commissionModeApplied = computedCommission.modeApplied;
+        }
+        if (afterDepositRule) {
+          consumedAmountByAirlineId.set(airline.id, consumedBefore + amount);
         }
 
-        if (isAirFast && agencyMarkupAmount > 0) {
-          commissionAmount += agencyMarkupAmount;
-        }
+        const resolvedCommission = resolveTicketCommissionOnSale({
+          airlineCode: airline.code,
+          ticketAmount: amount,
+          baseFareAmount,
+          agencyMarkupAmount,
+          rule: activeRule,
+          consumedBeforeForAfterDeposit: consumedBefore,
+          airFastSaleOrder: nextAirfastTicketNumber,
+          commissionAmountFromFile: activeRule ? null : commissionAmountFromFile,
+          commissionRateFromFile: commissionRateFromFile,
+        });
 
         const data: Prisma.TicketSaleUncheckedCreateInput = {
           ticketNumber: normalizedTicketNumber,
@@ -1454,7 +1441,7 @@ export async function importTicketWorkbookFromBuffer(options: TicketWorkbookImpo
           travelDate,
           soldAt,
           amount,
-          baseFareAmount,
+          baseFareAmount: resolvedCommission.baseFareAmount,
           currency,
           airlineId: airline.id,
           ...(seller.id ? { sellerId: seller.id } : {}),
@@ -1469,11 +1456,11 @@ export async function importTicketWorkbookFromBuffer(options: TicketWorkbookImpo
           }),
           agencyMarkupPercent: 0,
           agencyMarkupAmount,
-          commissionBaseAmount: resolvedCommissionBaseAmount,
-          commissionCalculationStatus,
-          commissionRateUsed,
-          commissionAmount,
-          commissionModeApplied,
+          commissionBaseAmount: resolvedCommission.commissionBaseAmount,
+          commissionCalculationStatus: resolvedCommission.commissionCalculationStatus,
+          commissionRateUsed: resolvedCommission.commissionRateUsed,
+          commissionAmount: resolvedCommission.commissionAmount,
+          commissionModeApplied: resolvedCommission.commissionModeApplied,
           notes: [
             asString(pickValue(row, ["notes", "observation", "commentaire"])),
           ].filter(Boolean).join(" | ") || null,
@@ -1483,11 +1470,11 @@ export async function importTicketWorkbookFromBuffer(options: TicketWorkbookImpo
           ? getTicketDepositDebitAmount({
             amount,
             agencyMarkupAmount,
-            commissionAmount,
-            commissionModeApplied,
-            commissionCalculationStatus,
-            commissionBaseAmount: resolvedCommissionBaseAmount,
-            baseFareAmount,
+            commissionAmount: resolvedCommission.commissionAmount,
+            commissionModeApplied: resolvedCommission.commissionModeApplied,
+            commissionCalculationStatus: resolvedCommission.commissionCalculationStatus,
+            commissionBaseAmount: resolvedCommission.commissionBaseAmount,
+            baseFareAmount: resolvedCommission.baseFareAmount,
             airline: { code: airline.code },
           })
           : 0;

@@ -3,7 +3,11 @@ import { prisma } from "@/lib/prisma";
 import { ticketSchema } from "@/lib/validators";
 import { calculateTicketMetrics } from "@/lib/kpi";
 import { requireApiModuleAccess } from "@/lib/rbac";
-import { computeCommissionAmount, pickCommissionRule } from "@/lib/commission";
+import { pickCommissionRule } from "@/lib/commission";
+import {
+  airlineRequiresBaseFareForCommission,
+  resolveTicketCommissionOnSale,
+} from "@/lib/ticket-commission-resolve";
 import { recordAirlineDepositMovement, getAirlineDepositAccountByAirlineCode } from "@/lib/airline-deposit";
 import { CommissionCalculationStatus, CommissionMode } from "@prisma/client";
 import { ensureAirlineCatalog } from "@/lib/airline-catalog";
@@ -142,8 +146,6 @@ export async function POST(request: NextRequest) {
     const rule = pickCommissionRule(airline.commissionRules, parsed.data.route, parsed.data.travelClass);
     const depositAccount = getAirlineDepositAccountByAirlineCode(airline.code);
 
-    const isAirCongo = airline.code === "ACG";
-    const isMontGabaon = airline.code === "MGB";
     const isAirFast = airline.code === "FST";
 
     const isAfterDepositMode = rule?.commissionMode === CommissionMode.AFTER_DEPOSIT;
@@ -174,72 +176,29 @@ export async function POST(request: NextRequest) {
         })
       )._sum.amount ?? 0
       : 0;
-    const requestedAgencyMarkupAmount = parsed.data.agencyMarkupAmount ?? 0;
-    let commissionBaseAmount = parsed.data.baseFareAmount ?? 0;
-    let commissionCalculationStatus: CommissionCalculationStatus = CommissionCalculationStatus.FINAL;
-    let baseFareAmount = parsed.data.baseFareAmount;
+    const agencyMarkupAmount = parsed.data.agencyMarkupAmount ?? 0;
+    const baseFareInput = parsed.data.baseFareAmount;
 
-    if (!isAfterDepositMode) {
-      if (baseFareAmount && baseFareAmount > 0) {
-        commissionBaseAmount = baseFareAmount;
-      } else {
-        baseFareAmount = undefined;
-        commissionBaseAmount = 0;
-      }
-    } else {
-      commissionBaseAmount = parsed.data.amount;
+    if (airlineRequiresBaseFareForCommission(airline.code) && !baseFareInput) {
+      return NextResponse.json(
+        { error: "Pour Air Congo et Ethiopian Airlines, le BaseFare est obligatoire pour calculer la commission." },
+        { status: 400 },
+      );
     }
 
-    const commissionInputAmount = isAfterDepositMode ? parsed.data.amount : commissionBaseAmount;
-    const agencyMarkupAmount = requestedAgencyMarkupAmount;
     const nextAirFastSaleNumber = isAirFast
       ? (await prisma.ticketSale.count({ where: { airlineId: parsed.data.airlineId } })) + 1
       : 0;
 
-    const isCaa = airline.code === "CAA";
-    const baseCommission = isCaa && isAfterDepositMode
-      ? {
-        ratePercent: 0,
-        amount: 0,
-        modeApplied: CommissionMode.AFTER_DEPOSIT,
-      }
-      : isAirCongo
-      ? {
-        ratePercent: 5,
-        amount: commissionBaseAmount * 0.05,
-        modeApplied: CommissionMode.IMMEDIATE,
-      }
-      : isMontGabaon
-        ? {
-          ratePercent: 9,
-          amount: commissionBaseAmount * 0.09,
-          modeApplied: CommissionMode.IMMEDIATE,
-        }
-      : isAirFast
-          ? {
-            ratePercent: nextAirFastSaleNumber % 13 === 0 ? 100 : 0,
-            amount: nextAirFastSaleNumber % 13 === 0 ? parsed.data.amount : 0,
-            modeApplied: CommissionMode.IMMEDIATE,
-          }
-        : rule
-          ? computeCommissionAmount(
-            commissionInputAmount,
-            isAfterDepositMode
-              ? { ...rule, depositStockConsumedAmount: consumedBeforeForAfterDeposit }
-              : rule,
-            0,
-          )
-          : {
-            ratePercent: 0,
-            amount: 0,
-            modeApplied: CommissionMode.IMMEDIATE,
-          };
-
-    const commission = {
-      ...baseCommission,
-      amount: isCaa ? 0 : baseCommission.amount + agencyMarkupAmount,
-      ratePercent: baseCommission.ratePercent,
-    };
+    const resolved = resolveTicketCommissionOnSale({
+      airlineCode: airline.code,
+      ticketAmount: parsed.data.amount,
+      baseFareAmount: baseFareInput,
+      agencyMarkupAmount,
+      rule,
+      consumedBeforeForAfterDeposit,
+      airFastSaleOrder: nextAirFastSaleNumber,
+    });
 
     const ticket = await prisma.$transaction(async (tx) => {
       const created = await tx.ticketSale.create({
@@ -249,14 +208,14 @@ export async function POST(request: NextRequest) {
           travelDate: enforcedTravelDate,
           soldAt: enforcedSoldAt,
           currency: "USD",
-          baseFareAmount,
+          baseFareAmount: resolved.baseFareAmount,
           agencyMarkupPercent: 0,
           agencyMarkupAmount,
-          commissionBaseAmount,
-          commissionCalculationStatus,
-          commissionRateUsed: commission.ratePercent,
-          commissionAmount: commission.amount,
-          commissionModeApplied: commission.modeApplied,
+          commissionBaseAmount: resolved.commissionBaseAmount,
+          commissionCalculationStatus: resolved.commissionCalculationStatus,
+          commissionRateUsed: resolved.commissionRateUsed,
+          commissionAmount: resolved.commissionAmount,
+          commissionModeApplied: resolved.commissionModeApplied,
         },
       });
 

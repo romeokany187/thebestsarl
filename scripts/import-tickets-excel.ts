@@ -675,7 +675,7 @@ async function main() {
         const commissionAmountFromFile = asNumber(pickValue(row, ["commissionAmount", "commission", "commission brute", "com", "comission", "commission mensuelle", "commission hebdo"])) ?? 0;
         const commissionRateFromFile = asNumber(pickValue(row, ["commissionRateUsed", "commissionRate", "taux commission"])) ?? null;
 
-        const commissionBaseAmount = baseFareAmount && baseFareAmount > 0 ? baseFareAmount : amount;
+        const commissionBaseAmount = baseFareAmount && baseFareAmount > 0 ? baseFareAmount : 0;
 
         const sellerEmail = asString(pickValue(row, ["sellerEmail", "commercialEmail", "agentEmail", "email vendeur", "email agent"]));
         const sellerName = asString(pickValue(row, ["sellerName", "commercial", "vendeur", "agent", "emeteur", "emetteur", "emetteur/emitteur", "emitteur", "emeteur/bureau", "emetteur/bureau"]));

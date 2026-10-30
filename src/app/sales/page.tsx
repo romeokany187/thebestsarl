@@ -523,7 +523,11 @@ export default async function SalesPage({
                     <td className="px-3 py-2">{ticket.ticketNumber}</td>
                     <td className="px-3 py-2">{ticket.route}</td>
                     <td className="px-3 py-2">{ticket.amount.toFixed(2)} {ticket.currency}</td>
-                    <td className="px-3 py-2">{(ticket.baseFareAmount ?? ticket.commissionBaseAmount).toFixed(2)} {ticket.currency}</td>
+                    <td className="px-3 py-2">
+                      {ticket.baseFareAmount != null && ticket.baseFareAmount > 0
+                        ? `${ticket.baseFareAmount.toFixed(2)} ${ticket.currency}`
+                        : "—"}
+                    </td>
                     <td className="px-3 py-2 font-medium">{commissionAmount.toFixed(2)} {ticket.currency}</td>
                     <td className="px-3 py-2">{totalTicketAmount.toFixed(2)} {ticket.currency}</td>
                     <td className="px-3 py-2">{ticket.payerName ?? "-"}</td>

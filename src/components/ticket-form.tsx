@@ -257,7 +257,8 @@ export function TicketForm({
   );
 
   const isAirCongo = selectedAirline?.code === "ACG";
-  const isMontGabaon = selectedAirline?.code === "MGB";
+  const isEthiopian = selectedAirline?.code === "ET";
+  const baseFareRequired = isAirCongo || isEthiopian;
   const selectedDepositAccount = useMemo(
     () => depositAccounts.find((account) => selectedAirline?.code ? account.airlineCodes.includes(selectedAirline.code) : false) ?? null,
     [depositAccounts, selectedAirline],
@@ -554,10 +555,10 @@ export function TicketForm({
           type="number"
           step="0.01"
           min="0"
-          required={isAirCongo || isMontGabaon}
+          required={baseFareRequired}
           value={form.baseFareAmount}
           onChange={(event) => updateField("baseFareAmount", event.target.value)}
-          placeholder={isAirCongo || isMontGabaon ? "BaseFare (obligatoire)" : "BaseFare (optionnel)"}
+          placeholder={baseFareRequired ? "BaseFare (obligatoire ACG / ET)" : "BaseFare (informatif, hors ACG/ET)"}
           className="rounded-md border px-3 py-2"
         />
       </div>
@@ -578,7 +579,7 @@ export function TicketForm({
           min="0"
           value={form.agencyMarkupAmount}
           onChange={(event) => updateField("agencyMarkupAmount", event.target.value)}
-          placeholder="Majoration agence (montant manuel)"
+          placeholder="Majoration / commission saisie (montant)"
           className="rounded-md border px-3 py-2"
         />
       </div>
