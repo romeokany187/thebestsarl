@@ -54,7 +54,7 @@ export function mapExcelVirtualLabelToChannel(label: string, parsedKey = ""): Ap
   return null;
 }
 
-function parseSnapshotChannels(raw: unknown): ExcelVirtualChannelRow[] {
+export function parseVirtualSnapshotChannels(raw: unknown): ExcelVirtualChannelRow[] {
   if (!Array.isArray(raw)) return [];
   return raw
     .map((entry) => {
@@ -74,7 +74,7 @@ export function buildVirtualRowsFromExcelSnapshot(
   snapshot: { channels: unknown; closingDate: string },
   channelDefs: ReadonlyArray<{ key: AppVirtualChannelKey; label: string }>,
 ) {
-  const parsed = parseSnapshotChannels(snapshot.channels);
+  const parsed = parseVirtualSnapshotChannels(snapshot.channels);
   const statsByKey = Object.fromEntries(
     channelDefs.map(({ key }) => [
       key,
@@ -129,6 +129,21 @@ export function buildVirtualRowsFromExcelSnapshot(
   );
 
   return { rows, totals, closingDate: snapshot.closingDate, channelCount: parsed.length };
+}
+
+export type VirtualBalanceDisplayRow = {
+  label: string;
+  balanceUsd: number;
+  balanceCdf: number;
+};
+
+/** Lignes feuille VIRTUEL (import Excel) — soldes uniquement, comme dans le fichier. */
+export function listVirtualBalanceRowsFromSnapshot(channels: unknown): VirtualBalanceDisplayRow[] {
+  return parseVirtualSnapshotChannels(channels).map((row) => ({
+    label: row.label || row.key,
+    balanceUsd: row.usd,
+    balanceCdf: row.cdf,
+  }));
 }
 
 export async function loadMainDeskExcelVirtualSnapshot(

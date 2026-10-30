@@ -1,6 +1,7 @@
 import { PaymentStatus } from "@prisma/client";
 import { AppShell } from "@/components/app-shell";
 import { CashBilletageWorkspace } from "@/components/cash-billetage-workspace";
+import { CashVirtualBalancesWorkspace } from "@/components/cash-virtual-balances-workspace";
 import { CashExcelJournalAnalysisPanel } from "@/components/cash-excel-journal-analysis-panel";
 import { CashOperationApprovalActions } from "@/components/cash-operation-approval-actions";
 import { CashOperationForm } from "@/components/cash-operation-form";
@@ -28,11 +29,7 @@ import {
   loadExcelJournalBilletageAnalysis,
   resolveExcelOnlyMainCashJournalLedger,
 } from "@/lib/cash-excel-journal-analysis";
-import {
-  buildVirtualRowsFromExcelSnapshot,
-  loadMainDeskExcelVirtualSnapshot,
-  type AppVirtualChannelKey,
-} from "@/lib/cash-excel-virtual";
+import { listVirtualBalanceRowsFromSnapshot, loadMainDeskExcelVirtualSnapshot } from "@/lib/cash-excel-virtual";
 import {
   buildDeskScopedCashOperationWhere,
   buildMainCashJournalOperationWhere,
@@ -851,12 +848,19 @@ export default async function PaymentsPage({
 
   const excelVirtualSnapshot =
     isMainDesk && cashRange.monthRaw >= EXCEL_CAISSE_FIRST_MONTH
-      ? await loadMainDeskExcelVirtualSnapshot(
-          cashRange.monthRaw,
-          excelJournalAnalysis?.closingDate ?? excelJournalAnalysis?.referenceDate ?? range.endRaw,
-          selectedDeskKey,
-        )
+      ? await loadMainDeskExcelVirtualSnapshot(cashRange.monthRaw, range.endRaw, selectedDeskKey)
       : null;
+
+  const virtualInitialSnapshot = excelVirtualSnapshot
+    ? {
+        closingDate: excelVirtualSnapshot.closingDate,
+        requestedDate: range.endRaw,
+        rows: listVirtualBalanceRowsFromSnapshot(excelVirtualSnapshot.channels),
+        totalUsd: excelVirtualSnapshot.totalUsd,
+        totalCdf: excelVirtualSnapshot.totalCdf,
+        updatedAt: excelVirtualSnapshot.updatedAt.toISOString(),
+      }
+    : null;
 
   const journalLedgerBuilt = isMainDesk
     ? await resolveExcelOnlyMainCashJournalLedger(cashRange.startRaw, cashRange.endRaw)
@@ -912,92 +916,6 @@ export default async function PaymentsPage({
           return rows;
         }, []);
       })();
-
-  const initialVirtualStats = Object.fromEntries(
-    virtualChannels.map(({ key }) => [
-      key,
-      {
-        openingUsd: displayOpeningBuckets[key].usd,
-        openingCdf: displayOpeningBuckets[key].cdf,
-        inUsd: 0,
-        outUsd: 0,
-        inCdf: 0,
-        outCdf: 0,
-      },
-    ]),
-  ) as Record<VirtualChannel, {
-    openingUsd: number;
-    openingCdf: number;
-    inUsd: number;
-    outUsd: number;
-    inCdf: number;
-    outCdf: number;
-  }>;
-
-  for (const operation of cashOperationsWithoutOpeningBalance as Array<{ direction: string; amount: number; method?: string | null; currency?: string | null }>) {
-    const channel = detectVirtualChannel(operation.method);
-    if (!channel) continue;
-    const currency = (operation.currency ?? "USD").toUpperCase();
-    if (currency === "USD") {
-      if (operation.direction === "INFLOW") {
-        initialVirtualStats[channel].inUsd += operation.amount;
-      } else {
-        initialVirtualStats[channel].outUsd += operation.amount;
-      }
-    } else if (currency === "CDF") {
-      if (operation.direction === "INFLOW") {
-        initialVirtualStats[channel].inCdf += operation.amount;
-      } else {
-        initialVirtualStats[channel].outCdf += operation.amount;
-      }
-    }
-  }
-
-  const computedVirtualRows = virtualChannels.map(({ key, label }) => {
-    const stats = initialVirtualStats[key];
-    const closingUsd = stats.openingUsd + stats.inUsd - stats.outUsd;
-    const closingCdf = stats.openingCdf + stats.inCdf - stats.outCdf;
-    return {
-      key,
-      label,
-      ...stats,
-      closingUsd,
-      closingCdf,
-    };
-  });
-
-  const computedVirtualTotals = computedVirtualRows.reduce(
-    (sum, row) => {
-      sum.openingUsd += row.openingUsd;
-      sum.openingCdf += row.openingCdf;
-      sum.inUsd += row.inUsd;
-      sum.outUsd += row.outUsd;
-      sum.inCdf += row.inCdf;
-      sum.outCdf += row.outCdf;
-      sum.closingUsd += row.closingUsd;
-      sum.closingCdf += row.closingCdf;
-      return sum;
-    },
-    {
-      openingUsd: 0,
-      openingCdf: 0,
-      inUsd: 0,
-      outUsd: 0,
-      inCdf: 0,
-      outCdf: 0,
-      closingUsd: 0,
-      closingCdf: 0,
-    },
-  );
-
-  const excelVirtualBuilt = excelVirtualSnapshot
-    ? buildVirtualRowsFromExcelSnapshot(excelVirtualSnapshot, virtualChannels as ReadonlyArray<{ key: AppVirtualChannelKey; label: string }>)
-    : null;
-
-  const virtualRowsFromExcel = Boolean(excelVirtualBuilt && excelVirtualBuilt.channelCount > 0);
-  const virtualRows = virtualRowsFromExcel ? excelVirtualBuilt!.rows : computedVirtualRows;
-  const virtualTotals = virtualRowsFromExcel ? excelVirtualBuilt!.totals : computedVirtualTotals;
-  const virtualExcelClosingDate = virtualRowsFromExcel ? excelVirtualBuilt!.closingDate : null;
 
   const proxyOpeningBuckets = computeOpeningBuckets([], proxyCashOperationsBeforeStart);
   const proxyDisplayOpeningBuckets = applyOpeningFallbackFromCurrentPeriod(proxyOpeningBuckets, proxyCashOperations);
@@ -1966,65 +1884,11 @@ export default async function PaymentsPage({
           </div>
         )}
         virtualWorkspace={(
-          <div className="space-y-4">
-            <section className="rounded-2xl border border-black/10 bg-white p-4 dark:border-white/10 dark:bg-zinc-900">
-              <h2 className="text-sm font-semibold">Comptes virtuels</h2>
-              {virtualRowsFromExcel ? (
-                <p className="mt-1 text-xs text-black/60 dark:text-white/60">
-                  Soldes issus de la feuille VIRTUEL (import Excel
-                  {virtualExcelClosingDate ? ` — clôture ${virtualExcelClosingDate}` : ""}
-                  ). Ouverture et mouvements non détaillés dans le fichier : soldes affichés en colonnes Solde.
-                </p>
-              ) : null}
-            </section>
-
-            <div className="overflow-hidden rounded-2xl border border-black/10 bg-white shadow-sm dark:border-white/10 dark:bg-zinc-900">
-              <div className="overflow-x-auto">
-                <table className="min-w-full text-sm">
-                  <thead className="bg-black/5 dark:bg-white/10">
-                    <tr>
-                      <th className="px-4 py-3 text-left font-semibold">Comptes virtuels</th>
-                      <th className="px-4 py-3 text-left font-semibold">Ouverture USD</th>
-                      <th className="px-4 py-3 text-left font-semibold">Ouverture CDF</th>
-                      <th className="px-4 py-3 text-left font-semibold">Entrées USD</th>
-                      <th className="px-4 py-3 text-left font-semibold">Sorties USD</th>
-                      <th className="px-4 py-3 text-left font-semibold">Solde USD</th>
-                      <th className="px-4 py-3 text-left font-semibold">Entrées CDF</th>
-                      <th className="px-4 py-3 text-left font-semibold">Sorties CDF</th>
-                      <th className="px-4 py-3 text-left font-semibold">Solde CDF</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {virtualRows.map((row) => (
-                      <tr key={row.key} className="border-t border-black/5 dark:border-white/10">
-                        <td className="px-4 py-3 font-medium">{row.label}</td>
-                        <td className="px-4 py-3">{row.openingUsd.toFixed(2)} USD</td>
-                        <td className="px-4 py-3">{row.openingCdf.toFixed(2)} CDF</td>
-                        <td className="px-4 py-3">{row.inUsd.toFixed(2)} USD</td>
-                        <td className="px-4 py-3">{row.outUsd.toFixed(2)} USD</td>
-                        <td className="px-4 py-3 font-semibold">{row.closingUsd.toFixed(2)} USD</td>
-                        <td className="px-4 py-3">{row.inCdf.toFixed(2)} CDF</td>
-                        <td className="px-4 py-3">{row.outCdf.toFixed(2)} CDF</td>
-                        <td className="px-4 py-3 font-semibold">{row.closingCdf.toFixed(2)} CDF</td>
-                      </tr>
-                    ))}
-
-                    <tr className="border-t border-black/10 bg-black/5 font-semibold dark:border-white/10 dark:bg-white/10">
-                      <td className="px-4 py-3">TOTAL</td>
-                      <td className="px-4 py-3">{virtualTotals.openingUsd.toFixed(2)} USD</td>
-                      <td className="px-4 py-3">{virtualTotals.openingCdf.toFixed(2)} CDF</td>
-                      <td className="px-4 py-3">{virtualTotals.inUsd.toFixed(2)} USD</td>
-                      <td className="px-4 py-3">{virtualTotals.outUsd.toFixed(2)} USD</td>
-                      <td className="px-4 py-3">{virtualTotals.closingUsd.toFixed(2)} USD</td>
-                      <td className="px-4 py-3">{virtualTotals.inCdf.toFixed(2)} CDF</td>
-                      <td className="px-4 py-3">{virtualTotals.outCdf.toFixed(2)} CDF</td>
-                      <td className="px-4 py-3">{virtualTotals.closingCdf.toFixed(2)} CDF</td>
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          </div>
+          <CashVirtualBalancesWorkspace
+            cashDesk={selectedDeskKey}
+            defaultDate={range.endRaw}
+            initialSnapshot={virtualInitialSnapshot}
+          />
         )}
         billetageWorkspace={canWrite ? (
           <CashBilletageWorkspace
