@@ -260,86 +260,163 @@ function monthLabelFr(reportMonth: string) {
   return label.charAt(0).toUpperCase() + label.slice(1);
 }
 
+const EXCEL_BRAND = "0017365D";
+const EXCEL_SECTION = "00FFD966";
+const EXCEL_TOTAL = "00FFF2CC";
+const EXCEL_RESULT = "00D9EAD3";
+const EXCEL_RESULT_TEXT = "00274E13";
+const EXCEL_NOTE_TEXT = "00666666";
+const EXCEL_MONEY_FMT = "#,##0.00;[Red](#,##0.00);-";
+const EXCEL_TEMPLATE_NOTE =
+  "Note : les montants en USD et en CDF sont présentés séparément. Pour obtenir un résultat global unique, convertir les opérations en monnaie de présentation selon les taux applicables.";
+
+function solidFill(argb: string): ExcelJS.Fill {
+  return { type: "pattern", pattern: "solid", fgColor: { argb } };
+}
+
+function thinBottomBorder(): Partial<ExcelJS.Borders> {
+  return { bottom: { style: "thin", color: { argb: "00B7B7B7" } } };
+}
+
+function styleExcelRow(sheet: ExcelJS.Worksheet, rowNumber: number, cols: string[], options: {
+  fill?: string;
+  bold?: boolean;
+  color?: string;
+  size?: number;
+  italic?: boolean;
+  border?: boolean;
+  numFmt?: boolean;
+  align?: Partial<ExcelJS.Alignment>;
+}) {
+  for (const col of cols) {
+    const cell = sheet.getCell(`${col}${rowNumber}`);
+    if (options.fill) cell.fill = solidFill(options.fill);
+    cell.font = {
+      name: "Arial",
+      bold: options.bold ?? false,
+      italic: options.italic ?? false,
+      size: options.size ?? 11,
+      color: options.color ? { argb: options.color } : undefined,
+    };
+    if (options.border) cell.border = thinBottomBorder();
+    if (options.numFmt && ["B", "C", "F", "G"].includes(col)) cell.numFmt = EXCEL_MONEY_FMT;
+    if (options.align) cell.alignment = { vertical: "middle", ...options.align };
+    else cell.alignment = { vertical: "middle" };
+  }
+  sheet.getRow(rowNumber).height = 23;
+}
+
 function addSummarySheet(workbook: ExcelJS.Workbook, statement: CashIncomeStatement) {
   const sheet = workbook.addWorksheet("Compte de résultat", {
     views: [{ showGridLines: false }],
   });
 
-  sheet.getColumn(1).width = 34;
-  sheet.getColumn(2).width = 14;
-  sheet.getColumn(3).width = 14;
+  sheet.getColumn(1).width = 30;
+  sheet.getColumn(2).width = 16;
+  sheet.getColumn(3).width = 18;
   sheet.getColumn(4).width = 3;
-  sheet.getColumn(5).width = 34;
-  sheet.getColumn(6).width = 14;
-  sheet.getColumn(7).width = 14;
+  sheet.getColumn(5).width = 30;
+  sheet.getColumn(6).width = 16;
+  sheet.getColumn(7).width = 18;
 
+  sheet.mergeCells("A1:D1");
+  sheet.mergeCells("A2:D2");
   sheet.getCell("A1").value = "THE BEST SARL";
-  sheet.getCell("A1").font = { bold: true, size: 14 };
   sheet.getCell("A2").value = `COMPTE DE RÉSULTAT – ${monthLabelFr(statement.reportMonth).toUpperCase()}`;
-  sheet.getCell("A2").font = { bold: true, size: 12 };
+  styleExcelRow(sheet, 1, ["A", "B", "C", "D"], {
+    fill: EXCEL_BRAND,
+    bold: true,
+    color: "00FFFFFF",
+    size: 16,
+    align: { horizontal: "center", vertical: "middle" },
+  });
+  styleExcelRow(sheet, 2, ["A", "B", "C", "D"], {
+    fill: EXCEL_BRAND,
+    bold: true,
+    color: "00FFFFFF",
+    size: 13,
+    align: { horizontal: "center", vertical: "middle" },
+  });
 
+  styleExcelRow(sheet, 4, ["A", "B", "C", "E", "F", "G"], {
+    fill: EXCEL_SECTION,
+    bold: true,
+    color: "00000000",
+    border: true,
+  });
   sheet.getCell("A4").value = "PRODUITS";
   sheet.getCell("B4").value = "USD";
   sheet.getCell("C4").value = "CDF";
   sheet.getCell("E4").value = "CHARGES";
   sheet.getCell("F4").value = "USD";
   sheet.getCell("G4").value = "CDF";
-  for (const col of ["A", "B", "C", "E", "F", "G"]) sheet.getCell(`${col}4`).font = { bold: true };
 
+  styleExcelRow(sheet, 5, ["A", "B", "C", "E", "F", "G"], {
+    bold: true,
+    color: EXCEL_BRAND,
+    border: true,
+  });
   sheet.getCell("A5").value = "Désignation";
   sheet.getCell("B5").value = "USD";
   sheet.getCell("C5").value = "CDF";
   sheet.getCell("E5").value = "Désignation";
   sheet.getCell("F5").value = "USD";
   sheet.getCell("G5").value = "CDF";
-  for (const col of ["A", "B", "C", "E", "F", "G"]) sheet.getCell(`${col}5`).font = { bold: true };
 
-  const rowCount = Math.max(statement.products.length, statement.charges.length);
+  const rowCount = Math.max(statement.products.length, statement.charges.length, 1);
+  const firstDataRow = 6;
   for (let index = 0; index < rowCount; index += 1) {
-    const excelRow = 6 + index;
+    const excelRow = firstDataRow + index;
     const product = statement.products[index];
     const charge = statement.charges[index];
+    styleExcelRow(sheet, excelRow, ["A", "B", "C", "E", "F", "G"], { border: true, numFmt: true });
     if (product) {
       sheet.getCell(`A${excelRow}`).value = product.label;
       sheet.getCell(`B${excelRow}`).value = product.usd;
       sheet.getCell(`C${excelRow}`).value = product.cdf;
-      sheet.getCell(`B${excelRow}`).numFmt = "#,##0.00";
-      sheet.getCell(`C${excelRow}`).numFmt = "#,##0.00";
     }
     if (charge) {
       sheet.getCell(`E${excelRow}`).value = charge.label;
       sheet.getCell(`F${excelRow}`).value = charge.usd;
       sheet.getCell(`G${excelRow}`).value = charge.cdf;
-      sheet.getCell(`F${excelRow}`).numFmt = "#,##0.00";
-      sheet.getCell(`G${excelRow}`).numFmt = "#,##0.00";
     }
   }
 
-  const totalRow = 6 + rowCount;
+  const lastDataRow = firstDataRow + rowCount - 1;
+  const totalRow = lastDataRow + 1;
+  styleExcelRow(sheet, totalRow, ["A", "B", "C", "D", "E", "F", "G"], {
+    fill: EXCEL_TOTAL,
+    bold: true,
+    border: true,
+    numFmt: true,
+  });
   sheet.getCell(`A${totalRow}`).value = "TOTAL PRODUITS";
-  sheet.getCell(`B${totalRow}`).value = statement.totalProducts.usd;
-  sheet.getCell(`C${totalRow}`).value = statement.totalProducts.cdf;
+  sheet.getCell(`B${totalRow}`).value = { formula: `SUM(B${firstDataRow}:B${lastDataRow})`, result: statement.totalProducts.usd };
+  sheet.getCell(`C${totalRow}`).value = { formula: `SUM(C${firstDataRow}:C${lastDataRow})`, result: statement.totalProducts.cdf };
   sheet.getCell(`E${totalRow}`).value = "TOTAL CHARGES";
-  sheet.getCell(`F${totalRow}`).value = statement.totalCharges.usd;
-  sheet.getCell(`G${totalRow}`).value = statement.totalCharges.cdf;
-  for (const col of ["A", "B", "C", "E", "F", "G"]) sheet.getCell(`${col}${totalRow}`).font = { bold: true };
-  for (const col of ["B", "C", "F", "G"]) sheet.getCell(`${col}${totalRow}`).numFmt = "#,##0.00";
+  sheet.getCell(`F${totalRow}`).value = { formula: `SUM(F${firstDataRow}:F${lastDataRow})`, result: statement.totalCharges.usd };
+  sheet.getCell(`G${totalRow}`).value = { formula: `SUM(G${firstDataRow}:G${lastDataRow})`, result: statement.totalCharges.cdf };
 
   const resultRow = totalRow + 2;
+  styleExcelRow(sheet, resultRow, ["A", "B", "C", "D", "E", "F", "G"], {
+    fill: EXCEL_RESULT,
+    bold: true,
+    color: EXCEL_RESULT_TEXT,
+    border: true,
+    numFmt: true,
+  });
   sheet.getCell(`A${resultRow}`).value = "RÉSULTAT (USD)";
-  sheet.getCell(`B${resultRow}`).value = statement.resultUsd;
-  sheet.getCell(`B${resultRow}`).numFmt = "#,##0.00";
+  sheet.getCell(`B${resultRow}`).value = { formula: `B${totalRow}-F${totalRow}`, result: statement.resultUsd };
   sheet.getCell(`E${resultRow}`).value = "ÉCART EN CDF (non consolidé)";
-  sheet.getCell(`F${resultRow}`).value = statement.resultCdf;
-  sheet.getCell(`F${resultRow}`).numFmt = "#,##0.00";
-  sheet.getCell(`A${resultRow}`).font = { bold: true };
-  sheet.getCell(`E${resultRow}`).font = { bold: true };
+  sheet.getCell(`G${resultRow}`).value = { formula: `C${totalRow}-G${totalRow}`, result: statement.resultCdf };
 
   const noteRow = resultRow + 3;
   sheet.mergeCells(`A${noteRow}:G${noteRow}`);
-  sheet.getCell(`A${noteRow}`).value = statement.notes.join(" ");
-  sheet.getCell(`A${noteRow}`).alignment = { wrapText: true };
-  sheet.getRow(noteRow).height = 60;
+  const extraNotes = statement.notes.filter((note) => !/USD et CDF/i.test(note));
+  sheet.getCell(`A${noteRow}`).value = [EXCEL_TEMPLATE_NOTE, ...extraNotes].join(" ");
+  sheet.getCell(`A${noteRow}`).font = { name: "Arial", italic: true, size: 9, color: { argb: EXCEL_NOTE_TEXT } };
+  sheet.getCell(`A${noteRow}`).alignment = { wrapText: true, vertical: "top" };
+  sheet.getRow(noteRow).height = 48;
 }
 
 function addAuditSheet(workbook: ExcelJS.Workbook, statement: CashIncomeStatement) {
@@ -445,18 +522,13 @@ function wrapPdfText(text: string, font: PDFFont, size: number, maxWidth: number
 
 async function loadIncomeStatementPdfFonts(pdf: PDFDocument) {
   pdf.registerFontkit(fontkit);
-  const fontsDir = path.join(process.cwd(), "public", "fonts");
+  const fontPath = path.join(process.cwd(), "public", "fonts", "MAIAN.TTF");
   try {
-    const [regularBytes, boldBytes] = await Promise.all([
-      readFile(path.join(fontsDir, "Montserrat-Regular.ttf")),
-      readFile(path.join(fontsDir, "Montserrat-Bold.ttf")),
-    ]);
-    return {
-      body: await pdf.embedFont(regularBytes),
-      bold: await pdf.embedFont(boldBytes),
-    };
+    const regularBytes = await readFile(fontPath);
+    const maiandra = await pdf.embedFont(regularBytes);
+    return { body: maiandra, bold: maiandra };
   } catch (error) {
-    console.warn("Failed to load Montserrat for income-statement PDF, falling back to Helvetica.", error);
+    console.warn("Failed to load MAIAN.TTF for income-statement PDF, falling back to Helvetica.", error);
     return {
       body: await pdf.embedFont(StandardFonts.Helvetica),
       bold: await pdf.embedFont(StandardFonts.HelveticaBold),
@@ -469,127 +541,204 @@ function drawRightAligned(page: PDFPage, text: string, xRight: number, y: number
   page.drawText(text, { x: xRight - width, y, size, font, color });
 }
 
+function drawFilledRow(
+  page: PDFPage,
+  x: number,
+  yBottom: number,
+  width: number,
+  height: number,
+  fill: ReturnType<typeof rgb>,
+) {
+  page.drawRectangle({
+    x,
+    y: yBottom,
+    width,
+    height,
+    color: fill,
+    borderWidth: 0.6,
+    borderColor: rgb(0.85, 0.87, 0.91),
+  });
+}
+
 export async function buildCashIncomeStatementPdfBuffer(statement: CashIncomeStatement) {
   const pdf = await PDFDocument.create();
   const { body: font, bold } = await loadIncomeStatementPdfFonts(pdf);
-  const pageWidth = 842;
-  const pageHeight = 595;
-  const margin = 28;
+  // Landscape A4 — même gabarit que les rapports comptables (Maiandra + bandeau sombre).
+  const pageWidth = 1191;
+  const pageHeight = 842;
+  const margin = 24;
   let page = pdf.addPage([pageWidth, pageHeight]);
 
-  const leftLabelX = margin;
-  const leftUsdRight = margin + 250;
-  const leftCdfRight = margin + 330;
-  const rightLabelX = margin + 370;
-  const rightUsdRight = pageWidth - margin - 90;
-  const rightCdfRight = pageWidth - margin;
-  const labelWidth = 170;
-  const fontSize = 9;
-  const lineHeight = 13;
+  const leftBlockX = margin;
+  const leftBlockW = 560;
+  const rightBlockX = margin + 580;
+  const rightBlockW = 560;
+  const labelPad = 10;
+  const usdColW = 110;
+  const cdfColW = 120;
+  const leftLabelW = leftBlockW - usdColW - cdfColW - labelPad * 2;
+  const rightLabelW = rightBlockW - usdColW - cdfColW - labelPad * 2;
+  const fontSize = 9.5;
+  const rowH = 22;
 
-  page.drawRectangle({ x: 0, y: pageHeight - 78, width: pageWidth, height: 78, color: rgb(0.08, 0.1, 0.14) });
-  page.drawText("THE BEST SARL", { x: margin, y: pageHeight - 28, size: 16, font: bold, color: rgb(1, 1, 1) });
-  page.drawText(`COMPTE DE RESULTAT - ${monthLabelFr(statement.reportMonth).toUpperCase()}`, {
-    x: margin,
-    y: pageHeight - 48,
-    size: 11,
-    font: bold,
-    color: rgb(0.92, 0.94, 0.99),
-  });
-  page.drawText(`Periode ${statement.periodStart} -> ${statement.periodEnd} | Source journal caisse + ventes billets`, {
-    x: margin,
-    y: pageHeight - 64,
-    size: 8,
-    font,
-    color: rgb(0.75, 0.79, 0.86),
-  });
+  const brand = rgb(0.08, 0.1, 0.14);
+  const sectionFill = rgb(1, 0.851, 0.4);
+  const totalFill = rgb(1, 0.949, 0.8);
+  const resultFill = rgb(0.851, 0.918, 0.827);
+  const resultText = rgb(0.153, 0.306, 0.075);
+  const ink = rgb(0.14, 0.16, 0.2);
+  const muted = rgb(0.4, 0.45, 0.52);
+  const altRow = rgb(0.985, 0.985, 0.985);
+  const white = rgb(1, 1, 1);
 
-  let y = pageHeight - 104;
-
-  page.drawText("PRODUITS", { x: leftLabelX, y, size: 10, font: bold, color: rgb(0.14, 0.16, 0.2) });
-  drawRightAligned(page, "USD", leftUsdRight, y, 9, bold);
-  drawRightAligned(page, "CDF", leftCdfRight, y, 9, bold);
-  page.drawText("CHARGES", { x: rightLabelX, y, size: 10, font: bold, color: rgb(0.14, 0.16, 0.2) });
-  drawRightAligned(page, "USD", rightUsdRight, y, 9, bold);
-  drawRightAligned(page, "CDF", rightCdfRight, y, 9, bold);
-  y -= 8;
-  page.drawLine({
-    start: { x: margin, y },
-    end: { x: pageWidth - margin, y },
-    thickness: 1,
-    color: rgb(0.85, 0.87, 0.91),
-  });
-  y -= lineHeight;
-
-  const rowCount = Math.max(statement.products.length, statement.charges.length, 1);
-
-  function ensureSpace(needed: number) {
-    if (y - needed >= 40) return;
-    page = pdf.addPage([pageWidth, pageHeight]);
-    y = pageHeight - margin - 12;
-    page.drawText("COMPTE DE RESULTAT (suite)", { x: margin, y, size: 10, font: bold, color: rgb(0.14, 0.16, 0.2) });
-    y -= lineHeight + 4;
+  function drawHeader(subtitle: string) {
+    page.drawRectangle({ x: 0, y: pageHeight - 92, width: pageWidth, height: 92, color: brand });
+    page.drawText("THEBEST SARL", { x: margin, y: pageHeight - 30, size: 18, font: bold, color: white });
+    page.drawText("Compte de resultat (caisse)", {
+      x: margin,
+      y: pageHeight - 52,
+      size: 12.5,
+      font: bold,
+      color: rgb(0.92, 0.94, 0.99),
+    });
+    page.drawText(subtitle, { x: margin, y: pageHeight - 70, size: 8.5, font, color: rgb(0.75, 0.79, 0.86) });
   }
 
+  function moneyX(blockX: number, blockW: number, which: "usd" | "cdf") {
+    if (which === "usd") return blockX + blockW - cdfColW - usdColW + usdColW - labelPad;
+    return blockX + blockW - labelPad;
+  }
+
+  function drawSectionHeader(yBottom: number) {
+    drawFilledRow(page, leftBlockX, yBottom, leftBlockW, rowH, sectionFill);
+    drawFilledRow(page, rightBlockX, yBottom, rightBlockW, rowH, sectionFill);
+    const textY = yBottom + 7;
+    page.drawText("PRODUITS", { x: leftBlockX + labelPad, y: textY, size: 10, font: bold, color: ink });
+    drawRightAligned(page, "USD", moneyX(leftBlockX, leftBlockW, "usd"), textY, 9, bold, ink);
+    drawRightAligned(page, "CDF", moneyX(leftBlockX, leftBlockW, "cdf"), textY, 9, bold, ink);
+    page.drawText("CHARGES", { x: rightBlockX + labelPad, y: textY, size: 10, font: bold, color: ink });
+    drawRightAligned(page, "USD", moneyX(rightBlockX, rightBlockW, "usd"), textY, 9, bold, ink);
+    drawRightAligned(page, "CDF", moneyX(rightBlockX, rightBlockW, "cdf"), textY, 9, bold, ink);
+  }
+
+  function drawSubHeader(yBottom: number) {
+    page.drawRectangle({
+      x: leftBlockX,
+      y: yBottom,
+      width: leftBlockW,
+      height: rowH,
+      borderWidth: 0.6,
+      borderColor: rgb(0.85, 0.87, 0.91),
+      color: white,
+    });
+    page.drawRectangle({
+      x: rightBlockX,
+      y: yBottom,
+      width: rightBlockW,
+      height: rowH,
+      borderWidth: 0.6,
+      borderColor: rgb(0.85, 0.87, 0.91),
+      color: white,
+    });
+    const textY = yBottom + 7;
+    const brandBlue = rgb(0.09, 0.212, 0.365);
+    page.drawText("Designation", { x: leftBlockX + labelPad, y: textY, size: 9, font: bold, color: brandBlue });
+    drawRightAligned(page, "USD", moneyX(leftBlockX, leftBlockW, "usd"), textY, 9, bold, brandBlue);
+    drawRightAligned(page, "CDF", moneyX(leftBlockX, leftBlockW, "cdf"), textY, 9, bold, brandBlue);
+    page.drawText("Designation", { x: rightBlockX + labelPad, y: textY, size: 9, font: bold, color: brandBlue });
+    drawRightAligned(page, "USD", moneyX(rightBlockX, rightBlockW, "usd"), textY, 9, bold, brandBlue);
+    drawRightAligned(page, "CDF", moneyX(rightBlockX, rightBlockW, "cdf"), textY, 9, bold, brandBlue);
+  }
+
+  const periodLabel = `${monthLabelFr(statement.reportMonth)} | ${statement.periodStart} - ${statement.periodEnd}`;
+  drawHeader(periodLabel);
+  let y = pageHeight - 120;
+
+  function ensureSpace(needed: number) {
+    if (y - needed >= 48) return;
+    page = pdf.addPage([pageWidth, pageHeight]);
+    drawHeader(`${periodLabel} (suite)`);
+    y = pageHeight - 120;
+    drawSectionHeader(y - rowH);
+    y -= rowH;
+    drawSubHeader(y - rowH);
+    y -= rowH;
+  }
+
+  drawSectionHeader(y - rowH);
+  y -= rowH;
+  drawSubHeader(y - rowH);
+  y -= rowH;
+
+  const rowCount = Math.max(statement.products.length, statement.charges.length, 1);
   for (let index = 0; index < rowCount; index += 1) {
     const product = statement.products[index];
     const charge = statement.charges[index];
-    const productLines = product ? wrapPdfText(product.label, font, fontSize, labelWidth) : [""];
-    const chargeLines = charge ? wrapPdfText(charge.label, font, fontSize, labelWidth) : [""];
-    const blockHeight = Math.max(productLines.length, chargeLines.length) * lineHeight;
-    ensureSpace(blockHeight + 4);
+    const productLines = product ? wrapPdfText(product.label, font, fontSize, leftLabelW) : [""];
+    const chargeLines = charge ? wrapPdfText(charge.label, font, fontSize, rightLabelW) : [""];
+    const lines = Math.max(productLines.length, chargeLines.length, 1);
+    const blockH = Math.max(rowH, lines * 12 + 8);
+    ensureSpace(blockH + 4);
 
-    for (let lineIndex = 0; lineIndex < Math.max(productLines.length, chargeLines.length); lineIndex += 1) {
+    const fill = index % 2 === 0 ? white : altRow;
+    drawFilledRow(page, leftBlockX, y - blockH, leftBlockW, blockH, fill);
+    drawFilledRow(page, rightBlockX, y - blockH, rightBlockW, blockH, fill);
+
+    let textY = y - 14;
+    for (let lineIndex = 0; lineIndex < lines; lineIndex += 1) {
       if (productLines[lineIndex]) {
-        page.drawText(productLines[lineIndex], { x: leftLabelX, y, size: fontSize, font, color: rgb(0.14, 0.16, 0.2) });
+        page.drawText(productLines[lineIndex], { x: leftBlockX + labelPad, y: textY, size: fontSize, font, color: ink });
       }
       if (chargeLines[lineIndex]) {
-        page.drawText(chargeLines[lineIndex], { x: rightLabelX, y, size: fontSize, font, color: rgb(0.14, 0.16, 0.2) });
+        page.drawText(chargeLines[lineIndex], { x: rightBlockX + labelPad, y: textY, size: fontSize, font, color: ink });
       }
       if (lineIndex === 0) {
         if (product) {
-          drawRightAligned(page, formatPdfMoney(product.usd), leftUsdRight, y, fontSize, font);
-          drawRightAligned(page, formatPdfMoney(product.cdf), leftCdfRight, y, fontSize, font);
+          drawRightAligned(page, formatPdfMoney(product.usd), moneyX(leftBlockX, leftBlockW, "usd"), textY, fontSize, font, ink);
+          drawRightAligned(page, formatPdfMoney(product.cdf), moneyX(leftBlockX, leftBlockW, "cdf"), textY, fontSize, font, ink);
         }
         if (charge) {
-          drawRightAligned(page, formatPdfMoney(charge.usd), rightUsdRight, y, fontSize, font);
-          drawRightAligned(page, formatPdfMoney(charge.cdf), rightCdfRight, y, fontSize, font);
+          drawRightAligned(page, formatPdfMoney(charge.usd), moneyX(rightBlockX, rightBlockW, "usd"), textY, fontSize, font, ink);
+          drawRightAligned(page, formatPdfMoney(charge.cdf), moneyX(rightBlockX, rightBlockW, "cdf"), textY, fontSize, font, ink);
         }
       }
-      y -= lineHeight;
+      textY -= 12;
     }
+    y -= blockH;
   }
 
-  ensureSpace(lineHeight * 5);
-  y -= 4;
-  page.drawLine({
-    start: { x: margin, y: y + 8 },
-    end: { x: pageWidth - margin, y: y + 8 },
-    thickness: 1,
-    color: rgb(0.85, 0.87, 0.91),
-  });
+  ensureSpace(rowH * 3 + 40);
+  y -= 6;
+  drawFilledRow(page, leftBlockX, y - rowH, leftBlockW, rowH, totalFill);
+  drawFilledRow(page, rightBlockX, y - rowH, rightBlockW, rowH, totalFill);
+  {
+    const textY = y - rowH + 7;
+    page.drawText("TOTAL PRODUITS", { x: leftBlockX + labelPad, y: textY, size: 9.5, font: bold, color: ink });
+    drawRightAligned(page, formatPdfMoney(statement.totalProducts.usd), moneyX(leftBlockX, leftBlockW, "usd"), textY, 9.5, bold, ink);
+    drawRightAligned(page, formatPdfMoney(statement.totalProducts.cdf), moneyX(leftBlockX, leftBlockW, "cdf"), textY, 9.5, bold, ink);
+    page.drawText("TOTAL CHARGES", { x: rightBlockX + labelPad, y: textY, size: 9.5, font: bold, color: ink });
+    drawRightAligned(page, formatPdfMoney(statement.totalCharges.usd), moneyX(rightBlockX, rightBlockW, "usd"), textY, 9.5, bold, ink);
+    drawRightAligned(page, formatPdfMoney(statement.totalCharges.cdf), moneyX(rightBlockX, rightBlockW, "cdf"), textY, 9.5, bold, ink);
+  }
+  y -= rowH + 10;
 
-  page.drawText("TOTAL PRODUITS", { x: leftLabelX, y, size: 9, font: bold, color: rgb(0.14, 0.16, 0.2) });
-  drawRightAligned(page, formatPdfMoney(statement.totalProducts.usd), leftUsdRight, y, 9, bold);
-  drawRightAligned(page, formatPdfMoney(statement.totalProducts.cdf), leftCdfRight, y, 9, bold);
-  page.drawText("TOTAL CHARGES", { x: rightLabelX, y, size: 9, font: bold, color: rgb(0.14, 0.16, 0.2) });
-  drawRightAligned(page, formatPdfMoney(statement.totalCharges.usd), rightUsdRight, y, 9, bold);
-  drawRightAligned(page, formatPdfMoney(statement.totalCharges.cdf), rightCdfRight, y, 9, bold);
-  y -= lineHeight + 10;
+  drawFilledRow(page, leftBlockX, y - rowH, leftBlockW, rowH, resultFill);
+  drawFilledRow(page, rightBlockX, y - rowH, rightBlockW, rowH, resultFill);
+  {
+    const textY = y - rowH + 7;
+    page.drawText("RESULTAT (USD)", { x: leftBlockX + labelPad, y: textY, size: 10, font: bold, color: resultText });
+    drawRightAligned(page, formatPdfMoney(statement.resultUsd), moneyX(leftBlockX, leftBlockW, "usd"), textY, 10, bold, resultText);
+    page.drawText("ECART EN CDF (non consolide)", { x: rightBlockX + labelPad, y: textY, size: 9.5, font: bold, color: resultText });
+    drawRightAligned(page, formatPdfMoney(statement.resultCdf), moneyX(rightBlockX, rightBlockW, "cdf"), textY, 10, bold, resultText);
+  }
+  y -= rowH + 18;
 
-  page.drawText("RESULTAT (USD)", { x: leftLabelX, y, size: 10, font: bold, color: rgb(0.05, 0.35, 0.2) });
-  drawRightAligned(page, formatPdfMoney(statement.resultUsd), leftUsdRight, y, 10, bold, rgb(0.05, 0.35, 0.2));
-  page.drawText("ECART EN CDF (non consolide)", { x: rightLabelX, y, size: 9, font: bold, color: rgb(0.14, 0.16, 0.2) });
-  drawRightAligned(page, formatPdfMoney(statement.resultCdf), rightUsdRight, y, 9, bold);
-  y -= lineHeight + 14;
-
-  if (statement.notes.length > 0) {
-    const noteLines = wrapPdfText(statement.notes.join(" "), font, 8, pageWidth - margin * 2);
-    ensureSpace(noteLines.length * 11 + 8);
-    for (const line of noteLines) {
-      page.drawText(line, { x: margin, y, size: 8, font, color: rgb(0.4, 0.45, 0.52) });
-      y -= 11;
-    }
+  const noteText = [EXCEL_TEMPLATE_NOTE, ...statement.notes.filter((note) => !/USD et CDF/i.test(note))].join(" ");
+  const noteLines = wrapPdfText(noteText, font, 8, pageWidth - margin * 2);
+  ensureSpace(noteLines.length * 11 + 8);
+  for (const line of noteLines) {
+    page.drawText(line, { x: margin, y, size: 8, font, color: muted });
+    y -= 11;
   }
 
   return Buffer.from(await pdf.save());
