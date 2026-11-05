@@ -64,6 +64,11 @@ export default async function PaymentReportsPage({
     desk: selectedDesk,
   }).toString();
 
+  const incomeStatementQuery = new URLSearchParams({
+    month: cashMonth,
+    format: "xlsx",
+  }).toString();
+
   return (
     <AppShell role={role}>
       <section className="space-y-6">
@@ -125,6 +130,12 @@ export default async function PaymentReportsPage({
           </a>
           <a href={`/api/payments/report?${cashSummaryQuery}&download=1`} className="rounded-2xl border border-black/10 bg-white p-4 shadow-sm hover:bg-black/5 dark:border-white/10 dark:bg-zinc-900 dark:hover:bg-white/5">
             <h2 className="text-sm font-semibold">Télécharger synthèse caisse</h2>
+          </a>
+          <a href={`/api/payments/income-statement?${incomeStatementQuery}`} className="rounded-2xl border border-black/10 bg-white p-4 shadow-sm hover:bg-black/5 dark:border-white/10 dark:bg-zinc-900 dark:hover:bg-white/5">
+            <h2 className="text-sm font-semibold">Excel compte de résultat (comptable)</h2>
+            <p className="mt-1 text-xs text-black/60 dark:text-white/60">
+              Produits (billetterie, marchés, autres) et charges (crédits consommés, Dream, frais, personnel…) pour le mois de caisse sélectionné.
+            </p>
           </a>
         </section>
       </section>
