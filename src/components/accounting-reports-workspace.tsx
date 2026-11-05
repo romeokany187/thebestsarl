@@ -127,7 +127,21 @@ type GeneralBalancePreview = {
   }>;
 };
 
-type PreviewPayload = JournalPreview | LedgerPreview | TrialBalancePreview | GeneralBalancePreview;
+type IncomeStatementPreview = {
+  reportType: "income-statement";
+  periodLabel: string;
+  data: {
+    products: Array<{ label: string; usd: number; cdf: number }>;
+    charges: Array<{ label: string; usd: number; cdf: number }>;
+    totalProducts: { usd: number; cdf: number };
+    totalCharges: { usd: number; cdf: number };
+    resultUsd: number;
+    resultCdf: number;
+    notes: string[];
+  };
+};
+
+type PreviewPayload = JournalPreview | LedgerPreview | TrialBalancePreview | GeneralBalancePreview | IncomeStatementPreview;
 type ReportType = PreviewPayload["reportType"];
 
 function money(value: number) {
@@ -170,20 +184,27 @@ export function AccountingReportsWorkspace({ accounts }: { accounts: AccountOpti
   const [error, setError] = useState("");
   const [preview, setPreview] = useState<PreviewPayload | null>(null);
 
+  const isIncomeStatement = reportType === "income-statement";
+
   function buildParams(extra?: Record<string, string>) {
     const params = new URLSearchParams();
-    params.set("reportType", reportType);
 
-    if (startDate || endDate) {
-      if (startDate) params.set("startDate", startDate);
-      if (endDate) params.set("endDate", endDate);
-    } else {
+    if (isIncomeStatement) {
       params.set("month", month);
-    }
+      params.set("format", "json");
+    } else {
+      params.set("reportType", reportType);
+      if (startDate || endDate) {
+        if (startDate) params.set("startDate", startDate);
+        if (endDate) params.set("endDate", endDate);
+      } else {
+        params.set("month", month);
+      }
 
-    if (reportType !== "journal" && accountCode.trim()) {
-      params.set("accountCode", accountCode.trim());
-      if (includeSubaccounts) params.set("includeSubaccounts", "1");
+      if (reportType !== "journal" && accountCode.trim()) {
+        params.set("accountCode", accountCode.trim());
+        if (includeSubaccounts) params.set("includeSubaccounts", "1");
+      }
     }
 
     if (extra) {
@@ -195,12 +216,19 @@ export function AccountingReportsWorkspace({ accounts }: { accounts: AccountOpti
     return params.toString();
   }
 
+  function reportsEndpoint(extra?: Record<string, string>) {
+    if (isIncomeStatement) {
+      return `/api/comptabilite/income-statement?${buildParams(extra)}`;
+    }
+    return `/api/comptabilite/reports?${buildParams(extra)}`;
+  }
+
   async function loadPreview() {
     setLoading(true);
     setError("");
 
     try {
-      const response = await fetch(`/api/comptabilite/reports?${buildParams()}`, { cache: "no-store" });
+      const response = await fetch(reportsEndpoint(), { cache: "no-store" });
       const payload = await response.json().catch(() => null);
       if (!response.ok) {
         setError(payload?.error ?? "Impossible de charger le rapport comptable.");
@@ -226,44 +254,71 @@ export function AccountingReportsWorkspace({ accounts }: { accounts: AccountOpti
             <button type="button" onClick={loadPreview} disabled={loading} className="rounded-md bg-black px-4 py-2 text-sm font-semibold text-white disabled:opacity-60 dark:bg-white dark:text-black">
               {loading ? "Chargement…" : "Afficher"}
             </button>
-            <a href={`/api/comptabilite/reports?${buildParams({ format: "pdf" })}`} target="_blank" rel="noreferrer" className="rounded-md border border-black/15 px-4 py-2 text-sm font-semibold hover:bg-black/5 dark:border-white/15 dark:hover:bg-white/10">
-              Ouvrir PDF
-            </a>
-            <a href={`/api/comptabilite/reports?${buildParams({ format: "pdf", download: "1" })}`} className="rounded-md border border-black/15 px-4 py-2 text-sm font-semibold hover:bg-black/5 dark:border-white/15 dark:hover:bg-white/10">
-              Télécharger PDF
-            </a>
+            {isIncomeStatement ? (
+              <a href={reportsEndpoint({ format: "xlsx" })} className="rounded-md border border-black/15 px-4 py-2 text-sm font-semibold hover:bg-black/5 dark:border-white/15 dark:hover:bg-white/10">
+                Télécharger Excel
+              </a>
+            ) : (
+              <>
+                <a href={reportsEndpoint({ format: "pdf" })} target="_blank" rel="noreferrer" className="rounded-md border border-black/15 px-4 py-2 text-sm font-semibold hover:bg-black/5 dark:border-white/15 dark:hover:bg-white/10">
+                  Ouvrir PDF
+                </a>
+                <a href={reportsEndpoint({ format: "pdf", download: "1" })} className="rounded-md border border-black/15 px-4 py-2 text-sm font-semibold hover:bg-black/5 dark:border-white/15 dark:hover:bg-white/10">
+                  Télécharger PDF
+                </a>
+              </>
+            )}
           </div>
         </div>
 
-        <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-5">
+        <div className={`mt-4 grid gap-3 md:grid-cols-2 ${isIncomeStatement ? "xl:grid-cols-2" : "xl:grid-cols-5"}`}>
           <div>
             <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-black/60 dark:text-white/60">Type de rapport</label>
-            <select value={reportType} onChange={(event) => setReportType(event.target.value as ReportType)} className="w-full rounded-md border border-black/15 bg-white px-3 py-2 text-sm dark:border-white/15 dark:bg-zinc-900">
+            <select
+              value={reportType}
+              onChange={(event) => {
+                setReportType(event.target.value as ReportType);
+                setPreview(null);
+                setError("");
+              }}
+              className="w-full rounded-md border border-black/15 bg-white px-3 py-2 text-sm dark:border-white/15 dark:bg-zinc-900"
+            >
               <option value="journal">Livre journal</option>
               <option value="ledger">Grand livre</option>
               <option value="trial-balance">Balance des comptes</option>
               <option value="general-balance">Balance générale</option>
+              <option value="income-statement">Compte de résultat (caisse)</option>
             </select>
           </div>
           <div>
             <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-black/60 dark:text-white/60">Mois</label>
             <input type="month" value={month} onChange={(event) => setMonth(event.target.value)} className="w-full rounded-md border border-black/15 bg-white px-3 py-2 text-sm dark:border-white/15 dark:bg-zinc-900" />
           </div>
-          <div>
-            <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-black/60 dark:text-white/60">Début personnalisé</label>
-            <input type="date" value={startDate} onChange={(event) => setStartDate(event.target.value)} className="w-full rounded-md border border-black/15 bg-white px-3 py-2 text-sm dark:border-white/15 dark:bg-zinc-900" />
-          </div>
-          <div>
-            <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-black/60 dark:text-white/60">Fin personnalisée</label>
-            <input type="date" value={endDate} onChange={(event) => setEndDate(event.target.value)} className="w-full rounded-md border border-black/15 bg-white px-3 py-2 text-sm dark:border-white/15 dark:bg-zinc-900" />
-          </div>
-          <div>
-            <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-black/60 dark:text-white/60">Compte de départ</label>
-            <input list="accounting-report-accounts" value={accountCode} onChange={(event) => setAccountCode(event.target.value)} placeholder="Tous les comptes mouvementés" className="w-full rounded-md border border-black/15 bg-white px-3 py-2 text-sm font-mono dark:border-white/15 dark:bg-zinc-900" />
-          </div>
+          {!isIncomeStatement ? (
+            <>
+              <div>
+                <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-black/60 dark:text-white/60">Début personnalisé</label>
+                <input type="date" value={startDate} onChange={(event) => setStartDate(event.target.value)} className="w-full rounded-md border border-black/15 bg-white px-3 py-2 text-sm dark:border-white/15 dark:bg-zinc-900" />
+              </div>
+              <div>
+                <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-black/60 dark:text-white/60">Fin personnalisée</label>
+                <input type="date" value={endDate} onChange={(event) => setEndDate(event.target.value)} className="w-full rounded-md border border-black/15 bg-white px-3 py-2 text-sm dark:border-white/15 dark:bg-zinc-900" />
+              </div>
+              <div>
+                <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-black/60 dark:text-white/60">Compte de départ</label>
+                <input list="accounting-report-accounts" value={accountCode} onChange={(event) => setAccountCode(event.target.value)} placeholder="Tous les comptes mouvementés" className="w-full rounded-md border border-black/15 bg-white px-3 py-2 text-sm font-mono dark:border-white/15 dark:bg-zinc-900" />
+              </div>
+            </>
+          ) : null}
         </div>
 
-        {reportType !== "journal" ? (
+        {isIncomeStatement ? (
+          <p className="mt-3 text-xs text-black/55 dark:text-white/55">
+            Agrège le journal de caisse importé (produits / charges) et les ventes billets (crédits consommés) pour le mois sélectionné.
+          </p>
+        ) : null}
+
+        {!isIncomeStatement && reportType !== "journal" ? (
           <label className="mt-3 flex items-center gap-2 text-sm text-black/65 dark:text-white/65">
             <input type="checkbox" checked={includeSubaccounts} onChange={(event) => setIncludeSubaccounts(event.target.checked)} />
             Inclure les sous-comptes du compte sélectionné
@@ -293,12 +348,84 @@ export function AccountingReportsWorkspace({ accounts }: { accounts: AccountOpti
                   ? "Grand livre"
                   : preview.reportType === "trial-balance"
                     ? "Balance des comptes"
-                    : "Balance générale"}
+                    : preview.reportType === "income-statement"
+                      ? "Compte de résultat"
+                      : "Balance générale"}
               {" · "}
               {preview.periodLabel}
             </h3>
           </div>
 
+          {preview.reportType === "income-statement" ? (
+            <div className="space-y-4">
+              <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+                <div className="rounded-xl border border-black/10 px-3 py-3 text-sm dark:border-white/10">
+                  <p className="text-xs text-black/55 dark:text-white/55">Total produits USD</p>
+                  <p className="mt-1 font-semibold">{money(preview.data.totalProducts.usd)}</p>
+                </div>
+                <div className="rounded-xl border border-black/10 px-3 py-3 text-sm dark:border-white/10">
+                  <p className="text-xs text-black/55 dark:text-white/55">Total charges USD</p>
+                  <p className="mt-1 font-semibold">{money(preview.data.totalCharges.usd)}</p>
+                </div>
+                <div className="rounded-xl border border-emerald-400/40 bg-emerald-50 px-3 py-3 text-sm dark:border-emerald-600/40 dark:bg-emerald-950/25">
+                  <p className="text-xs text-black/55 dark:text-white/55">Résultat USD</p>
+                  <p className="mt-1 font-semibold">{money(preview.data.resultUsd)}</p>
+                </div>
+                <div className="rounded-xl border border-black/10 px-3 py-3 text-sm dark:border-white/10">
+                  <p className="text-xs text-black/55 dark:text-white/55">Écart CDF</p>
+                  <p className="mt-1 font-semibold">{money(preview.data.resultCdf)}</p>
+                </div>
+              </div>
+
+              <div className="grid gap-4 lg:grid-cols-2">
+                <div className="overflow-x-auto rounded-xl border border-black/10 dark:border-white/10">
+                  <table className="min-w-full text-sm">
+                    <thead className="bg-black/5 dark:bg-white/10">
+                      <tr>
+                        <th className="px-3 py-2 text-left font-semibold">Produits</th>
+                        <th className="px-3 py-2 text-right font-semibold">USD</th>
+                        <th className="px-3 py-2 text-right font-semibold">CDF</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {preview.data.products.map((row) => (
+                        <tr key={row.label} className="border-t border-black/5 dark:border-white/10">
+                          <td className="px-3 py-2">{row.label}</td>
+                          <td className="px-3 py-2 text-right tabular-nums">{money(row.usd)}</td>
+                          <td className="px-3 py-2 text-right tabular-nums">{money(row.cdf)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                <div className="overflow-x-auto rounded-xl border border-black/10 dark:border-white/10">
+                  <table className="min-w-full text-sm">
+                    <thead className="bg-black/5 dark:bg-white/10">
+                      <tr>
+                        <th className="px-3 py-2 text-left font-semibold">Charges</th>
+                        <th className="px-3 py-2 text-right font-semibold">USD</th>
+                        <th className="px-3 py-2 text-right font-semibold">CDF</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {preview.data.charges.map((row) => (
+                        <tr key={row.label} className="border-t border-black/5 dark:border-white/10">
+                          <td className="px-3 py-2">{row.label}</td>
+                          <td className="px-3 py-2 text-right tabular-nums">{money(row.usd)}</td>
+                          <td className="px-3 py-2 text-right tabular-nums">{money(row.cdf)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              {preview.data.notes.length > 0 ? (
+                <p className="text-xs text-black/55 dark:text-white/55">{preview.data.notes.join(" ")}</p>
+              ) : null}
+            </div>
+          ) : (
+            <>
           <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
             <div className="rounded-xl border border-black/10 px-3 py-3 text-sm dark:border-white/10">
               <p className="text-xs text-black/55 dark:text-white/55">USD débit</p>
@@ -512,6 +639,8 @@ export function AccountingReportsWorkspace({ accounts }: { accounts: AccountOpti
                 </tbody>
               </table>
             </div>
+          )}
+            </>
           )}
         </section>
       ) : null}
