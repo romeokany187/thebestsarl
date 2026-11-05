@@ -66,15 +66,18 @@ const TICKET_PRODUCT_RULES: PatternRule[] = [
   { pattern: /\bmjm\b|\bmbujimayi\b/, score: 68, reason: "agence MJM / Mbujimayi" },
 ];
 
+/** Indices de libellé (gilets, ADRA…) → une seule rubrique P&L : Marchés publics. */
 const MARKET_PRODUCT_RULES: PatternRule[] = [
-  { pattern: /\badra\b/, score: 100, reason: "ADRA" },
-  { pattern: /\bgilets?\b|\bguillets?\b/, score: 98, reason: "gilets / guillets" },
-  { pattern: /\bmarches?\s+publics?\b|\bmaeches?\b/, score: 95, reason: "marché public" },
-  { pattern: /\bmarches?\b|\bmaeches?\b/, score: 88, reason: "marché" },
-  { pattern: /\bfortutex\b|\bfprtute[sx]\b/, score: 90, reason: "marché FORTUTEX" },
-  { pattern: /\bdigitalisations?\b/, score: 70, reason: "digitalisation (marché)" },
-  { pattern: /\betat\s+de\s+besoin\b|\bedb\b/, score: 72, reason: "EDB" },
+  { pattern: /\bmarches?\s+publics?\b|\bmaeches?\s+publics?\b/, score: 100, reason: "marché public" },
+  { pattern: /\bmarches?\b|\bmaeches?\b/, score: 95, reason: "marché" },
+  { pattern: /\badra\b/, score: 90, reason: "marché public (ADRA)" },
+  { pattern: /\bgilets?\b|\bguillets?\b/, score: 88, reason: "marché public (gilets)" },
+  { pattern: /\bfortutex\b|\bfprtute[sx]\b/, score: 90, reason: "marché public (FORTUTEX)" },
+  { pattern: /\bdigitalisations?\b/, score: 70, reason: "marché public (digitalisation)" },
+  { pattern: /\betat\s+de\s+besoin\b|\bedb\b/, score: 72, reason: "marché public (EDB)" },
 ];
+
+export const MARKET_PRODUCT_LABEL = "Marchés publics";
 
 const OTHER_PRODUCT_RULES: PatternRule[] = [
   { pattern: /\bpaiements?\s+du\s+prets?\b|\bremboursements?\s+(du\s+)?prets?\b/, score: 80, reason: "remboursement de prêt" },
@@ -164,14 +167,13 @@ function isConversionText(text: string) {
 }
 
 function isOpeningText(text: string) {
-  return /\breport\s+a\s+nouveau\b|\bsolde\s+d\s*ouverture\b/.test(text);
-}
-
-function marketTitle(line: Pick<ImportedJournalLineRecord, "libelle" | "typeOperation">) {
-  const raw = (line.libelle || line.typeOperation || "Marché public").trim().replace(/\s+/g, " ");
-  // Normalise GUILLETS → intitulé lisible pour le comptable
-  const pretty = raw.replace(/guillets?/gi, "Gilets").replace(/\s+/g, " ");
-  return pretty.length > 80 ? `${pretty.slice(0, 77)}…` : pretty;
+  return (
+    /\breports?\s+a\s+nouveaux?\b/.test(text)
+    || /\breport\s+a\s+nouveau\b/.test(text)
+    || /\bran\b/.test(text)
+    || /\bsolde\s+d\s*ouverture\b/.test(text)
+    || /\bsolde\s+initial\b/.test(text)
+  );
 }
 
 function resolveMovementSide(line: ImportedJournalLineRecord, text: string): "inflow" | "outflow" | "none" {
@@ -203,7 +205,7 @@ export function classifyIncomeStatementLine(
   const category = line.lineCategory;
 
   if (category === "OPENING" || category === "SKIP" || isOpeningText(text)) {
-    return { side: "excluded", reason: "report à nouveau / hors résultat" };
+    return { side: "excluded", reason: "report à nouveau exclu du compte de résultat" };
   }
   if (isConversionText(text)) {
     return { side: "excluded", reason: "conversion de change (hors P&L)" };
@@ -255,18 +257,17 @@ export function classifyIncomeStatementLine(
       return {
         side: "product",
         bucket: "market",
-        label: marketTitle(line),
+        label: MARKET_PRODUCT_LABEL,
         reason: marketHit.reason,
       };
     }
 
     if (category === "TICKET_INFLOW" || ticketHit) {
-      // Évite de classer « paiement non détaillé » marché comme billet si ADRA/gilets présents
-      if (marketHit && marketHit.score >= 90) {
+      if (marketHit && marketHit.score >= 88) {
         return {
           side: "product",
           bucket: "market",
-          label: marketTitle(line),
+          label: MARKET_PRODUCT_LABEL,
           reason: marketHit.reason,
         };
       }

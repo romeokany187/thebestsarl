@@ -117,8 +117,8 @@ export async function buildCashIncomeStatement(reportMonth: string): Promise<Cas
   const lines = sanitizeImportedJournalLinesForDisplay(rawLines);
 
   const ticketInflows = emptyMoney();
+  const marketInflows = emptyMoney();
   const otherInflows = emptyMoney();
-  const marketBuckets = new Map<string, IncomeStatementMoney>();
   const chargeTotals: Record<ChargeBucket, IncomeStatementMoney> = {
     dream: emptyMoney(),
     bank: emptyMoney(),
@@ -149,9 +149,7 @@ export async function buildCashIncomeStatement(reportMonth: string): Promise<Cas
         addMoney(ticketInflows, line.usdIn, line.cdfIn);
         addMoney(journalCovered, line.usdIn, line.cdfIn);
       } else if (bucket === "market") {
-        const money = marketBuckets.get(disposition.label) ?? emptyMoney();
-        addMoney(money, line.usdIn, line.cdfIn);
-        marketBuckets.set(disposition.label, money);
+        addMoney(marketInflows, line.usdIn, line.cdfIn);
         addMoney(journalCovered, line.usdIn, line.cdfIn);
       } else {
         addMoney(otherInflows, line.usdIn, line.cdfIn);
@@ -174,25 +172,21 @@ export async function buildCashIncomeStatement(reportMonth: string): Promise<Cas
       source: "cash-journal",
       kind: "product",
     },
-  ];
-
-  for (const [label, money] of [...marketBuckets.entries()].sort((a, b) => a[0].localeCompare(b[0], "fr"))) {
-    products.push({
-      label,
-      usd: money.usd,
-      cdf: money.cdf,
+    {
+      label: "Marchés publics",
+      usd: marketInflows.usd,
+      cdf: marketInflows.cdf,
       source: "cash-journal",
       kind: "product",
-    });
-  }
-
-  products.push({
-    label: "Autres recettes",
-    usd: otherInflows.usd,
-    cdf: otherInflows.cdf,
-    source: "cash-journal",
-    kind: "product",
-  });
+    },
+    {
+      label: "Autres recettes",
+      usd: otherInflows.usd,
+      cdf: otherInflows.cdf,
+      source: "cash-journal",
+      kind: "product",
+    },
+  ];
 
   const consumedCredits = await loadTicketSalesConsumedCredits(reportMonth);
   const chargeOrder: ChargeBucket[] = ["dream", "bank", "transport", "salary", "internet", "commission", "other_charge"];
@@ -224,7 +218,7 @@ export async function buildCashIncomeStatement(reportMonth: string): Promise<Cas
 
   const notes = [
     "Chaque ligne du journal est reclassée via le libellé (feuille « Détail classement ») — pas seulement la catégorie d’import.",
-    "Produits : billetterie, marchés publics (1 ligne par libellé), autres recettes. Conversions / report à nouveau exclus.",
+    "Produits : billetterie, marchés publics (ADRA/gilets/… agrégés), autres recettes. Report à nouveau et conversions exclus.",
     "Crédits consommés : somme TicketSale.amount du mois (ventes), hors journal.",
     "USD et CDF présentés séparément.",
   ];
