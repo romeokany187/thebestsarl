@@ -3,6 +3,12 @@ import { prisma } from "@/lib/prisma";
 import { loadImportedJournalLinesForDateRange, type ImportedJournalLineRecord } from "@/lib/cash-journal-ledger";
 import { sanitizeImportedJournalLinesForDisplay } from "@/lib/cash-journal-import-sanitize";
 import { monthUtcRange } from "@/lib/cash-report-month-constat";
+import {
+  chargeBucketLabel,
+  classifyIncomeStatementLine,
+  type ChargeBucket,
+  type ProductBucket,
+} from "@/lib/cash-income-statement-classify";
 
 export type IncomeStatementMoney = { usd: number; cdf: number };
 
@@ -12,6 +18,21 @@ export type IncomeStatementLine = {
   cdf: number;
   source: "cash-journal" | "ticket-sales";
   kind: "product" | "charge";
+};
+
+export type IncomeStatementAuditRow = {
+  businessDate: string;
+  typeOperation: string;
+  libelle: string;
+  lineCategory: string;
+  usdIn: number;
+  usdOut: number;
+  cdfIn: number;
+  cdfOut: number;
+  side: "product" | "charge" | "excluded";
+  bucket: string;
+  assignedLabel: string;
+  reason: string;
 };
 
 export type CashIncomeStatement = {
@@ -25,17 +46,10 @@ export type CashIncomeStatement = {
   resultUsd: number;
   resultCdf: number;
   notes: string[];
+  auditRows: IncomeStatementAuditRow[];
+  journalCoveredUsd: IncomeStatementMoney;
+  journalExcludedUsd: IncomeStatementMoney;
 };
-
-function normalizeMatchText(value: string) {
-  return value
-    .normalize("NFD")
-    .replace(/\p{M}/gu, "")
-    .toLowerCase()
-    .replace(/['’]/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
-}
 
 function round2(value: number) {
   return Math.round((value + Number.EPSILON) * 100) / 100;
@@ -48,96 +62,6 @@ function emptyMoney(): IncomeStatementMoney {
 function addMoney(target: IncomeStatementMoney, usd: number, cdf: number) {
   target.usd = round2(target.usd + usd);
   target.cdf = round2(target.cdf + cdf);
-}
-
-function matchesAny(haystack: string, needles: string[]) {
-  return needles.some((needle) => haystack.includes(needle));
-}
-
-function isConversionLine(line: ImportedJournalLineRecord) {
-  return normalizeMatchText(`${line.typeOperation} ${line.libelle}`).includes("conversion");
-}
-
-function isPublicMarketInflow(line: ImportedJournalLineRecord) {
-  const text = normalizeMatchText(`${line.typeOperation} ${line.libelle}`);
-  return matchesAny(text, [
-    "marche",
-    "marche public",
-    "marches publics",
-    "adra",
-    "gilet",
-    "gilets",
-    "etat de besoin",
-    "edb",
-  ]);
-}
-
-type ChargeBucket =
-  | "dream"
-  | "bank"
-  | "transport"
-  | "salary"
-  | "internet"
-  | "commission"
-  | "other";
-
-const CHARGE_BUCKET_META: Array<{ key: ChargeBucket; label: string; keywords: string[] }> = [
-  {
-    key: "dream",
-    label: "Factures Dream",
-    keywords: ["dream", "facture dream", "partenaire dream"],
-  },
-  {
-    key: "bank",
-    label: "Frais bancaires",
-    keywords: [
-      "frais bancaire",
-      "frais banque",
-      "commission retrait",
-      "commission depot",
-      "tenue de compte",
-      "frais airtel",
-      "frais orange",
-      "frais mpesa",
-      "frais m-pesa",
-      "frais equity",
-      "frais rawbank",
-      "frais illico",
-    ],
-  },
-  {
-    key: "transport",
-    label: "Mobilité et transport",
-    keywords: ["mobilite", "transport", "deplacement", "mission", "taxi", "carburant", "essence"],
-  },
-  {
-    key: "salary",
-    label: "Charges du personnel",
-    keywords: ["salaire", "salaires", "paie", "personnel", "remuneration", "prime"],
-  },
-  {
-    key: "internet",
-    label: "Internet",
-    keywords: ["internet", "forfait internet", "fibre", "wifi", "credit telephone", "forfait"],
-  },
-  {
-    key: "commission",
-    label: "Commissions versées",
-    keywords: ["commission versee", "commissions versees", "commission", "hk service", "hkservice", "honoraire"],
-  },
-];
-
-function classifyOutflowBucket(line: ImportedJournalLineRecord): ChargeBucket {
-  const text = normalizeMatchText(`${line.typeOperation} ${line.libelle}`);
-  for (const bucket of CHARGE_BUCKET_META) {
-    if (matchesAny(text, bucket.keywords)) return bucket.key;
-  }
-  return "other";
-}
-
-function titleFromLibelle(line: ImportedJournalLineRecord) {
-  const raw = (line.libelle || line.typeOperation || "Marché public").trim();
-  return raw.length > 80 ? `${raw.slice(0, 77)}…` : raw;
 }
 
 function monthBounds(reportMonth: string) {
@@ -166,6 +90,23 @@ async function loadTicketSalesConsumedCredits(reportMonth: string): Promise<Inco
   return totals;
 }
 
+function toAuditRow(line: ImportedJournalLineRecord, disposition: ReturnType<typeof classifyIncomeStatementLine>): IncomeStatementAuditRow {
+  return {
+    businessDate: line.businessDate,
+    typeOperation: line.typeOperation,
+    libelle: line.libelle,
+    lineCategory: line.lineCategory,
+    usdIn: line.usdIn,
+    usdOut: line.usdOut,
+    cdfIn: line.cdfIn,
+    cdfOut: line.cdfOut,
+    side: disposition.side,
+    bucket: disposition.side === "excluded" ? "EXCLUDED" : disposition.bucket,
+    assignedLabel: disposition.side === "excluded" ? "—" : disposition.label,
+    reason: disposition.reason,
+  };
+}
+
 export async function buildCashIncomeStatement(reportMonth: string): Promise<CashIncomeStatement> {
   if (!/^\d{4}-\d{2}$/.test(reportMonth)) {
     throw new Error(`Mois invalide: ${reportMonth}`);
@@ -173,42 +114,67 @@ export async function buildCashIncomeStatement(reportMonth: string): Promise<Cas
 
   const { periodStart, periodEnd } = monthBounds(reportMonth);
   const rawLines = await loadImportedJournalLinesForDateRange(periodStart, periodEnd);
-  const lines = sanitizeImportedJournalLinesForDisplay(rawLines).filter(
-    (line) => line.lineCategory !== "OPENING" && line.lineCategory !== "SKIP",
-  );
+  const lines = sanitizeImportedJournalLinesForDisplay(rawLines);
 
-  const products: IncomeStatementLine[] = [];
   const ticketInflows = emptyMoney();
   const otherInflows = emptyMoney();
   const marketBuckets = new Map<string, IncomeStatementMoney>();
+  const chargeTotals: Record<ChargeBucket, IncomeStatementMoney> = {
+    dream: emptyMoney(),
+    bank: emptyMoney(),
+    transport: emptyMoney(),
+    salary: emptyMoney(),
+    internet: emptyMoney(),
+    commission: emptyMoney(),
+    other_charge: emptyMoney(),
+  };
+
+  const auditRows: IncomeStatementAuditRow[] = [];
+  const journalCovered = emptyMoney();
+  const journalExcluded = emptyMoney();
+  let unclassifiedOtherCharges = 0;
 
   for (const line of lines) {
-    if (line.lineCategory !== "TICKET_INFLOW" && line.lineCategory !== "OTHER_INFLOW") continue;
-    if (isConversionLine(line)) continue;
+    const disposition = classifyIncomeStatementLine(line);
+    auditRows.push(toAuditRow(line, disposition));
 
-    if (line.lineCategory === "TICKET_INFLOW") {
-      addMoney(ticketInflows, line.usdIn, line.cdfIn);
+    if (disposition.side === "excluded") {
+      addMoney(journalExcluded, line.usdIn + line.usdOut, line.cdfIn + line.cdfOut);
       continue;
     }
 
-    if (isPublicMarketInflow(line)) {
-      const label = titleFromLibelle(line);
-      const bucket = marketBuckets.get(label) ?? emptyMoney();
-      addMoney(bucket, line.usdIn, line.cdfIn);
-      marketBuckets.set(label, bucket);
+    if (disposition.side === "product") {
+      const bucket = disposition.bucket as ProductBucket;
+      if (bucket === "ticket") {
+        addMoney(ticketInflows, line.usdIn, line.cdfIn);
+        addMoney(journalCovered, line.usdIn, line.cdfIn);
+      } else if (bucket === "market") {
+        const money = marketBuckets.get(disposition.label) ?? emptyMoney();
+        addMoney(money, line.usdIn, line.cdfIn);
+        marketBuckets.set(disposition.label, money);
+        addMoney(journalCovered, line.usdIn, line.cdfIn);
+      } else {
+        addMoney(otherInflows, line.usdIn, line.cdfIn);
+        addMoney(journalCovered, line.usdIn, line.cdfIn);
+      }
       continue;
     }
 
-    addMoney(otherInflows, line.usdIn, line.cdfIn);
+    const chargeBucket = disposition.bucket as ChargeBucket;
+    addMoney(chargeTotals[chargeBucket], line.usdOut, line.cdfOut);
+    addMoney(journalCovered, line.usdOut, line.cdfOut);
+    if (chargeBucket === "other_charge") unclassifiedOtherCharges += 1;
   }
 
-  products.push({
-    label: "Recettes billetteries",
-    usd: ticketInflows.usd,
-    cdf: ticketInflows.cdf,
-    source: "cash-journal",
-    kind: "product",
-  });
+  const products: IncomeStatementLine[] = [
+    {
+      label: "Recettes billetteries",
+      usd: ticketInflows.usd,
+      cdf: ticketInflows.cdf,
+      source: "cash-journal",
+      kind: "product",
+    },
+  ];
 
   for (const [label, money] of [...marketBuckets.entries()].sort((a, b) => a[0].localeCompare(b[0], "fr"))) {
     products.push({
@@ -228,24 +194,8 @@ export async function buildCashIncomeStatement(reportMonth: string): Promise<Cas
     kind: "product",
   });
 
-  const chargeTotals: Record<ChargeBucket, IncomeStatementMoney> = {
-    dream: emptyMoney(),
-    bank: emptyMoney(),
-    transport: emptyMoney(),
-    salary: emptyMoney(),
-    internet: emptyMoney(),
-    commission: emptyMoney(),
-    other: emptyMoney(),
-  };
-
-  for (const line of lines) {
-    if (line.lineCategory !== "OUTFLOW") continue;
-    if (isConversionLine(line)) continue;
-    const bucket = classifyOutflowBucket(line);
-    addMoney(chargeTotals[bucket], line.usdOut, line.cdfOut);
-  }
-
   const consumedCredits = await loadTicketSalesConsumedCredits(reportMonth);
+  const chargeOrder: ChargeBucket[] = ["dream", "bank", "transport", "salary", "internet", "commission", "other_charge"];
   const charges: IncomeStatementLine[] = [
     {
       label: "Crédits consommés",
@@ -254,50 +204,38 @@ export async function buildCashIncomeStatement(reportMonth: string): Promise<Cas
       source: "ticket-sales",
       kind: "charge",
     },
+    ...chargeOrder.map((bucket) => ({
+      label: chargeBucketLabel(bucket),
+      usd: chargeTotals[bucket].usd,
+      cdf: chargeTotals[bucket].cdf,
+      source: "cash-journal" as const,
+      kind: "charge" as const,
+    })),
   ];
 
-  for (const meta of CHARGE_BUCKET_META) {
-    charges.push({
-      label: meta.label,
-      usd: chargeTotals[meta.key].usd,
-      cdf: chargeTotals[meta.key].cdf,
-      source: "cash-journal",
-      kind: "charge",
-    });
-  }
-
-  charges.push({
-    label: "Autres charges",
-    usd: chargeTotals.other.usd,
-    cdf: chargeTotals.other.cdf,
-    source: "cash-journal",
-    kind: "charge",
-  });
-
-  const totalProducts = products.reduce(
-    (sum, line) => {
-      addMoney(sum, line.usd, line.cdf);
-      return sum;
-    },
-    emptyMoney(),
-  );
-  const totalCharges = charges.reduce(
-    (sum, line) => {
-      addMoney(sum, line.usd, line.cdf);
-      return sum;
-    },
-    emptyMoney(),
-  );
+  const totalProducts = products.reduce((sum, line) => {
+    addMoney(sum, line.usd, line.cdf);
+    return sum;
+  }, emptyMoney());
+  const totalCharges = charges.reduce((sum, line) => {
+    addMoney(sum, line.usd, line.cdf);
+    return sum;
+  }, emptyMoney());
 
   const notes = [
-    "Produits : journal de caisse importé Excel (entrées billetterie, marchés publics, autres recettes). Conversions exclues.",
-    "Crédits consommés : somme des montants billets vendus (TicketSale.amount) sur le mois.",
-    "Autres charges : sorties journal non classées Dream / frais bancaires / transport / personnel / internet / commissions.",
-    "USD et CDF présentés séparément (pas de consolidation de change).",
+    "Chaque ligne du journal est reclassée via le libellé (feuille « Détail classement ») — pas seulement la catégorie d’import.",
+    "Produits : billetterie, marchés publics (1 ligne par libellé), autres recettes. Conversions / report à nouveau exclus.",
+    "Crédits consommés : somme TicketSale.amount du mois (ventes), hors journal.",
+    "USD et CDF présentés séparément.",
   ];
 
   if (rawLines.length === 0) {
     notes.unshift("Aucune ligne journal Excel importée pour ce mois — produits/charges caisse à 0.");
+  }
+  if (unclassifiedOtherCharges > 0) {
+    notes.unshift(
+      `${unclassifiedOtherCharges} sortie(s) classée(s) en « Autres charges » : vérifier l’onglet Détail classement pour affiner les libellés.`,
+    );
   }
 
   return {
@@ -311,6 +249,9 @@ export async function buildCashIncomeStatement(reportMonth: string): Promise<Cas
     resultUsd: round2(totalProducts.usd - totalCharges.usd),
     resultCdf: round2(totalProducts.cdf - totalCharges.cdf),
     notes,
+    auditRows,
+    journalCoveredUsd: journalCovered,
+    journalExcludedUsd: journalExcluded,
   };
 }
 
@@ -321,11 +262,7 @@ function monthLabelFr(reportMonth: string) {
   return label.charAt(0).toUpperCase() + label.slice(1);
 }
 
-export async function buildCashIncomeStatementExcelBuffer(statement: CashIncomeStatement) {
-  const workbook = new ExcelJS.Workbook();
-  workbook.creator = "THE BEST SARL";
-  workbook.created = new Date();
-
+function addSummarySheet(workbook: ExcelJS.Workbook, statement: CashIncomeStatement) {
   const sheet = workbook.addWorksheet("Compte de résultat", {
     views: [{ showGridLines: false }],
   });
@@ -337,7 +274,6 @@ export async function buildCashIncomeStatementExcelBuffer(statement: CashIncomeS
   sheet.getColumn(5).width = 34;
   sheet.getColumn(6).width = 14;
   sheet.getColumn(7).width = 14;
-  sheet.getColumn(8).width = 3;
 
   sheet.getCell("A1").value = "THE BEST SARL";
   sheet.getCell("A1").font = { bold: true, size: 14 };
@@ -350,9 +286,7 @@ export async function buildCashIncomeStatementExcelBuffer(statement: CashIncomeS
   sheet.getCell("E4").value = "CHARGES";
   sheet.getCell("F4").value = "USD";
   sheet.getCell("G4").value = "CDF";
-  for (const col of ["A", "B", "C", "E", "F", "G"]) {
-    sheet.getCell(`${col}4`).font = { bold: true };
-  }
+  for (const col of ["A", "B", "C", "E", "F", "G"]) sheet.getCell(`${col}4`).font = { bold: true };
 
   sheet.getCell("A5").value = "Désignation";
   sheet.getCell("B5").value = "USD";
@@ -360,9 +294,7 @@ export async function buildCashIncomeStatementExcelBuffer(statement: CashIncomeS
   sheet.getCell("E5").value = "Désignation";
   sheet.getCell("F5").value = "USD";
   sheet.getCell("G5").value = "CDF";
-  for (const col of ["A", "B", "C", "E", "F", "G"]) {
-    sheet.getCell(`${col}5`).font = { bold: true };
-  }
+  for (const col of ["A", "B", "C", "E", "F", "G"]) sheet.getCell(`${col}5`).font = { bold: true };
 
   const rowCount = Math.max(statement.products.length, statement.charges.length);
   for (let index = 0; index < rowCount; index += 1) {
@@ -392,12 +324,8 @@ export async function buildCashIncomeStatementExcelBuffer(statement: CashIncomeS
   sheet.getCell(`E${totalRow}`).value = "TOTAL CHARGES";
   sheet.getCell(`F${totalRow}`).value = statement.totalCharges.usd;
   sheet.getCell(`G${totalRow}`).value = statement.totalCharges.cdf;
-  for (const col of ["A", "B", "C", "E", "F", "G"]) {
-    sheet.getCell(`${col}${totalRow}`).font = { bold: true };
-  }
-  for (const col of ["B", "C", "F", "G"]) {
-    sheet.getCell(`${col}${totalRow}`).numFmt = "#,##0.00";
-  }
+  for (const col of ["A", "B", "C", "E", "F", "G"]) sheet.getCell(`${col}${totalRow}`).font = { bold: true };
+  for (const col of ["B", "C", "F", "G"]) sheet.getCell(`${col}${totalRow}`).numFmt = "#,##0.00";
 
   const resultRow = totalRow + 2;
   sheet.getCell(`A${resultRow}`).value = "RÉSULTAT (USD)";
@@ -413,7 +341,67 @@ export async function buildCashIncomeStatementExcelBuffer(statement: CashIncomeS
   sheet.mergeCells(`A${noteRow}:G${noteRow}`);
   sheet.getCell(`A${noteRow}`).value = statement.notes.join(" ");
   sheet.getCell(`A${noteRow}`).alignment = { wrapText: true };
-  sheet.getRow(noteRow).height = 48;
+  sheet.getRow(noteRow).height = 60;
+}
 
+function addAuditSheet(workbook: ExcelJS.Workbook, statement: CashIncomeStatement) {
+  const sheet = workbook.addWorksheet("Détail classement");
+  const headers = [
+    "Date",
+    "Type opération",
+    "Libellé",
+    "Catégorie import",
+    "USD in",
+    "USD out",
+    "CDF in",
+    "CDF out",
+    "Côté P&L",
+    "Rubrique",
+    "Libellé affecté",
+    "Motif classement",
+  ];
+  sheet.addRow(headers);
+  sheet.getRow(1).font = { bold: true };
+
+  for (const row of statement.auditRows) {
+    const excelRow = sheet.addRow([
+      row.businessDate,
+      row.typeOperation,
+      row.libelle,
+      row.lineCategory,
+      row.usdIn,
+      row.usdOut,
+      row.cdfIn,
+      row.cdfOut,
+      row.side,
+      row.bucket,
+      row.assignedLabel,
+      row.reason,
+    ]);
+    if (row.side === "excluded") {
+      excelRow.font = { color: { argb: "FF6B7280" } };
+    } else if (row.bucket === "other_charge" || row.bucket === "other_product") {
+      excelRow.fill = {
+        type: "pattern",
+        pattern: "solid",
+        fgColor: { argb: "FFFFF7ED" },
+      };
+    }
+  }
+
+  sheet.columns.forEach((column, index) => {
+    column.width = [12, 22, 42, 16, 12, 12, 12, 12, 12, 16, 28, 36][index] ?? 14;
+  });
+  for (const col of [5, 6, 7, 8]) {
+    sheet.getColumn(col).numFmt = "#,##0.00";
+  }
+}
+
+export async function buildCashIncomeStatementExcelBuffer(statement: CashIncomeStatement) {
+  const workbook = new ExcelJS.Workbook();
+  workbook.creator = "THE BEST SARL";
+  workbook.created = new Date();
+  addSummarySheet(workbook, statement);
+  addAuditSheet(workbook, statement);
   return Buffer.from(await workbook.xlsx.writeBuffer());
 }
