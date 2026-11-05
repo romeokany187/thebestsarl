@@ -255,9 +255,17 @@ export function AccountingReportsWorkspace({ accounts }: { accounts: AccountOpti
               {loading ? "Chargement…" : "Afficher"}
             </button>
             {isIncomeStatement ? (
-              <a href={reportsEndpoint({ format: "xlsx" })} className="rounded-md border border-black/15 px-4 py-2 text-sm font-semibold hover:bg-black/5 dark:border-white/15 dark:hover:bg-white/10">
-                Télécharger Excel
-              </a>
+              <>
+                <a href={reportsEndpoint({ format: "xlsx" })} className="rounded-md border border-black/15 px-4 py-2 text-sm font-semibold hover:bg-black/5 dark:border-white/15 dark:hover:bg-white/10">
+                  Télécharger Excel
+                </a>
+                <a href={reportsEndpoint({ format: "pdf" })} target="_blank" rel="noreferrer" className="rounded-md border border-black/15 px-4 py-2 text-sm font-semibold hover:bg-black/5 dark:border-white/15 dark:hover:bg-white/10">
+                  Ouvrir PDF
+                </a>
+                <a href={reportsEndpoint({ format: "pdf", download: "1" })} className="rounded-md border border-black/15 px-4 py-2 text-sm font-semibold hover:bg-black/5 dark:border-white/15 dark:hover:bg-white/10">
+                  Télécharger PDF
+                </a>
+              </>
             ) : (
               <>
                 <a href={reportsEndpoint({ format: "pdf" })} target="_blank" rel="noreferrer" className="rounded-md border border-black/15 px-4 py-2 text-sm font-semibold hover:bg-black/5 dark:border-white/15 dark:hover:bg-white/10">

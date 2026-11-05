@@ -1,4 +1,8 @@
+import { readFile } from "fs/promises";
+import path from "path";
 import ExcelJS from "exceljs";
+import fontkit from "@pdf-lib/fontkit";
+import { PDFDocument, StandardFonts, rgb, type PDFFont, type PDFPage } from "pdf-lib";
 import { prisma } from "@/lib/prisma";
 import { loadImportedJournalLinesForDateRange, type ImportedJournalLineRecord } from "@/lib/cash-journal-ledger";
 import { sanitizeImportedJournalLinesForDisplay } from "@/lib/cash-journal-import-sanitize";
@@ -398,4 +402,195 @@ export async function buildCashIncomeStatementExcelBuffer(statement: CashIncomeS
   addSummarySheet(workbook, statement);
   addAuditSheet(workbook, statement);
   return Buffer.from(await workbook.xlsx.writeBuffer());
+}
+
+function formatPdfMoney(value: number) {
+  return value.toLocaleString("fr-FR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+function wrapPdfText(text: string, font: PDFFont, size: number, maxWidth: number) {
+  const content = (text ?? "").trim();
+  if (!content) return [""];
+
+  const words = content.split(/\s+/);
+  const lines: string[] = [];
+  let current = "";
+
+  for (const word of words) {
+    const candidate = current ? `${current} ${word}` : word;
+    if (font.widthOfTextAtSize(candidate, size) <= maxWidth) {
+      current = candidate;
+      continue;
+    }
+    if (current) lines.push(current);
+    if (font.widthOfTextAtSize(word, size) <= maxWidth) {
+      current = word;
+      continue;
+    }
+    let chunk = "";
+    for (const char of word) {
+      const next = `${chunk}${char}`;
+      if (chunk && font.widthOfTextAtSize(next, size) > maxWidth) {
+        lines.push(chunk);
+        chunk = char;
+      } else {
+        chunk = next;
+      }
+    }
+    current = chunk;
+  }
+  if (current) lines.push(current);
+  return lines.length > 0 ? lines : [""];
+}
+
+async function loadIncomeStatementPdfFonts(pdf: PDFDocument) {
+  pdf.registerFontkit(fontkit);
+  const fontsDir = path.join(process.cwd(), "public", "fonts");
+  try {
+    const [regularBytes, boldBytes] = await Promise.all([
+      readFile(path.join(fontsDir, "Montserrat-Regular.ttf")),
+      readFile(path.join(fontsDir, "Montserrat-Bold.ttf")),
+    ]);
+    return {
+      body: await pdf.embedFont(regularBytes),
+      bold: await pdf.embedFont(boldBytes),
+    };
+  } catch (error) {
+    console.warn("Failed to load Montserrat for income-statement PDF, falling back to Helvetica.", error);
+    return {
+      body: await pdf.embedFont(StandardFonts.Helvetica),
+      bold: await pdf.embedFont(StandardFonts.HelveticaBold),
+    };
+  }
+}
+
+function drawRightAligned(page: PDFPage, text: string, xRight: number, y: number, size: number, font: PDFFont, color = rgb(0.14, 0.16, 0.2)) {
+  const width = font.widthOfTextAtSize(text, size);
+  page.drawText(text, { x: xRight - width, y, size, font, color });
+}
+
+export async function buildCashIncomeStatementPdfBuffer(statement: CashIncomeStatement) {
+  const pdf = await PDFDocument.create();
+  const { body: font, bold } = await loadIncomeStatementPdfFonts(pdf);
+  const pageWidth = 842;
+  const pageHeight = 595;
+  const margin = 28;
+  let page = pdf.addPage([pageWidth, pageHeight]);
+
+  const leftLabelX = margin;
+  const leftUsdRight = margin + 250;
+  const leftCdfRight = margin + 330;
+  const rightLabelX = margin + 370;
+  const rightUsdRight = pageWidth - margin - 90;
+  const rightCdfRight = pageWidth - margin;
+  const labelWidth = 170;
+  const fontSize = 9;
+  const lineHeight = 13;
+
+  page.drawRectangle({ x: 0, y: pageHeight - 78, width: pageWidth, height: 78, color: rgb(0.08, 0.1, 0.14) });
+  page.drawText("THE BEST SARL", { x: margin, y: pageHeight - 28, size: 16, font: bold, color: rgb(1, 1, 1) });
+  page.drawText(`COMPTE DE RESULTAT - ${monthLabelFr(statement.reportMonth).toUpperCase()}`, {
+    x: margin,
+    y: pageHeight - 48,
+    size: 11,
+    font: bold,
+    color: rgb(0.92, 0.94, 0.99),
+  });
+  page.drawText(`Periode ${statement.periodStart} -> ${statement.periodEnd} | Source journal caisse + ventes billets`, {
+    x: margin,
+    y: pageHeight - 64,
+    size: 8,
+    font,
+    color: rgb(0.75, 0.79, 0.86),
+  });
+
+  let y = pageHeight - 104;
+
+  page.drawText("PRODUITS", { x: leftLabelX, y, size: 10, font: bold, color: rgb(0.14, 0.16, 0.2) });
+  drawRightAligned(page, "USD", leftUsdRight, y, 9, bold);
+  drawRightAligned(page, "CDF", leftCdfRight, y, 9, bold);
+  page.drawText("CHARGES", { x: rightLabelX, y, size: 10, font: bold, color: rgb(0.14, 0.16, 0.2) });
+  drawRightAligned(page, "USD", rightUsdRight, y, 9, bold);
+  drawRightAligned(page, "CDF", rightCdfRight, y, 9, bold);
+  y -= 8;
+  page.drawLine({
+    start: { x: margin, y },
+    end: { x: pageWidth - margin, y },
+    thickness: 1,
+    color: rgb(0.85, 0.87, 0.91),
+  });
+  y -= lineHeight;
+
+  const rowCount = Math.max(statement.products.length, statement.charges.length, 1);
+
+  function ensureSpace(needed: number) {
+    if (y - needed >= 40) return;
+    page = pdf.addPage([pageWidth, pageHeight]);
+    y = pageHeight - margin - 12;
+    page.drawText("COMPTE DE RESULTAT (suite)", { x: margin, y, size: 10, font: bold, color: rgb(0.14, 0.16, 0.2) });
+    y -= lineHeight + 4;
+  }
+
+  for (let index = 0; index < rowCount; index += 1) {
+    const product = statement.products[index];
+    const charge = statement.charges[index];
+    const productLines = product ? wrapPdfText(product.label, font, fontSize, labelWidth) : [""];
+    const chargeLines = charge ? wrapPdfText(charge.label, font, fontSize, labelWidth) : [""];
+    const blockHeight = Math.max(productLines.length, chargeLines.length) * lineHeight;
+    ensureSpace(blockHeight + 4);
+
+    for (let lineIndex = 0; lineIndex < Math.max(productLines.length, chargeLines.length); lineIndex += 1) {
+      if (productLines[lineIndex]) {
+        page.drawText(productLines[lineIndex], { x: leftLabelX, y, size: fontSize, font, color: rgb(0.14, 0.16, 0.2) });
+      }
+      if (chargeLines[lineIndex]) {
+        page.drawText(chargeLines[lineIndex], { x: rightLabelX, y, size: fontSize, font, color: rgb(0.14, 0.16, 0.2) });
+      }
+      if (lineIndex === 0) {
+        if (product) {
+          drawRightAligned(page, formatPdfMoney(product.usd), leftUsdRight, y, fontSize, font);
+          drawRightAligned(page, formatPdfMoney(product.cdf), leftCdfRight, y, fontSize, font);
+        }
+        if (charge) {
+          drawRightAligned(page, formatPdfMoney(charge.usd), rightUsdRight, y, fontSize, font);
+          drawRightAligned(page, formatPdfMoney(charge.cdf), rightCdfRight, y, fontSize, font);
+        }
+      }
+      y -= lineHeight;
+    }
+  }
+
+  ensureSpace(lineHeight * 5);
+  y -= 4;
+  page.drawLine({
+    start: { x: margin, y: y + 8 },
+    end: { x: pageWidth - margin, y: y + 8 },
+    thickness: 1,
+    color: rgb(0.85, 0.87, 0.91),
+  });
+
+  page.drawText("TOTAL PRODUITS", { x: leftLabelX, y, size: 9, font: bold, color: rgb(0.14, 0.16, 0.2) });
+  drawRightAligned(page, formatPdfMoney(statement.totalProducts.usd), leftUsdRight, y, 9, bold);
+  drawRightAligned(page, formatPdfMoney(statement.totalProducts.cdf), leftCdfRight, y, 9, bold);
+  page.drawText("TOTAL CHARGES", { x: rightLabelX, y, size: 9, font: bold, color: rgb(0.14, 0.16, 0.2) });
+  drawRightAligned(page, formatPdfMoney(statement.totalCharges.usd), rightUsdRight, y, 9, bold);
+  drawRightAligned(page, formatPdfMoney(statement.totalCharges.cdf), rightCdfRight, y, 9, bold);
+  y -= lineHeight + 10;
+
+  page.drawText("RESULTAT (USD)", { x: leftLabelX, y, size: 10, font: bold, color: rgb(0.05, 0.35, 0.2) });
+  drawRightAligned(page, formatPdfMoney(statement.resultUsd), leftUsdRight, y, 10, bold, rgb(0.05, 0.35, 0.2));
+  page.drawText("ECART EN CDF (non consolide)", { x: rightLabelX, y, size: 9, font: bold, color: rgb(0.14, 0.16, 0.2) });
+  drawRightAligned(page, formatPdfMoney(statement.resultCdf), rightUsdRight, y, 9, bold);
+  y -= lineHeight + 14;
+
+  if (statement.notes.length > 0) {
+    const noteLines = wrapPdfText(statement.notes.join(" "), font, 8, pageWidth - margin * 2);
+    ensureSpace(noteLines.length * 11 + 8);
+    for (const line of noteLines) {
+      page.drawText(line, { x: margin, y, size: 8, font, color: rgb(0.4, 0.45, 0.52) });
+      y -= 11;
+    }
+  }
+
+  return Buffer.from(await pdf.save());
 }

@@ -3,6 +3,7 @@ import { requireApiModuleAccess } from "@/lib/rbac";
 import {
   buildCashIncomeStatement,
   buildCashIncomeStatementExcelBuffer,
+  buildCashIncomeStatementPdfBuffer,
 } from "@/lib/cash-income-statement";
 
 export const dynamic = "force-dynamic";
@@ -13,7 +14,7 @@ function resolveReportMonth(params: URLSearchParams) {
   return new Date().toISOString().slice(0, 7);
 }
 
-/** GET /api/comptabilite/income-statement?month=YYYY-MM&format=xlsx|json */
+/** GET /api/comptabilite/income-statement?month=YYYY-MM&format=xlsx|pdf|json */
 export async function GET(request: NextRequest) {
   const access = await requireApiModuleAccess("comptabilite", [
     "ADMIN",
@@ -27,6 +28,7 @@ export async function GET(request: NextRequest) {
   const params = request.nextUrl.searchParams;
   const reportMonth = resolveReportMonth(params);
   const format = (params.get("format") ?? "xlsx").trim().toLowerCase();
+  const forceDownload = params.get("download") === "1";
 
   try {
     const statement = await buildCashIncomeStatement(reportMonth);
@@ -36,6 +38,17 @@ export async function GET(request: NextRequest) {
         reportType: "income-statement",
         periodLabel: reportMonth,
         data: statement,
+      });
+    }
+
+    if (format === "pdf") {
+      const buffer = await buildCashIncomeStatementPdfBuffer(statement);
+      const filename = `compte-de-resultat-THE-BEST-SARL-${reportMonth}.pdf`;
+      return new NextResponse(buffer, {
+        headers: {
+          "Content-Type": "application/pdf",
+          "Content-Disposition": `${forceDownload ? "attachment" : "inline"}; filename="${filename}"`,
+        },
       });
     }
 
