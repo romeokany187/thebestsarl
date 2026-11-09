@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useMemo } from "react";
 
-export type SalesHubView = "sell" | "list" | "stats";
+export type SalesHubView = "sell" | "list" | "stats" | "mbujimayi";
 
 function buildHref(view: SalesHubView, params: URLSearchParams) {
   const next = new URLSearchParams(params);
@@ -34,6 +34,7 @@ export function SalesHubTabs({
     ...(showSellTab ? [{ view: "sell" as const, label: "Vendre" }] : []),
     { view: "list", label: "Liste" },
     { view: "stats", label: "Statistiques" },
+    { view: "mbujimayi", label: "Analyse Mbujimayi" },
   ];
 
   return (

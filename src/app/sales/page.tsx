@@ -11,6 +11,7 @@ import { listTicketWorkbookImportHistory } from "@/lib/ticket-excel-import";
 import { getTicketCommissionAmount, getTicketTotalAmount } from "@/lib/ticket-pricing";
 import { SalesHubTabs, type SalesHubView } from "@/components/sales-hub-tabs";
 import { TicketsStatsPanel } from "@/components/tickets-stats-panel";
+import { MbujimayiReconcileWorkspace } from "@/components/mbujimayi-reconcile-workspace";
 
 export const dynamic = "force-dynamic";
 
@@ -111,13 +112,15 @@ export default async function SalesPage({
     ? "sell"
     : requestedView === "stats"
     ? "stats"
-    : requestedView === "list"
-      ? "list"
-      : requestedView === "sell" && canCreateTicketEarly
-        ? "sell"
-        : canCreateTicketEarly
+    : requestedView === "mbujimayi"
+      ? "mbujimayi"
+      : requestedView === "list"
+        ? "list"
+        : requestedView === "sell" && canCreateTicketEarly
           ? "sell"
-          : "list";
+          : canCreateTicketEarly
+            ? "sell"
+            : "list";
 
   if (activeView === "stats") {
     return (
@@ -135,6 +138,26 @@ export default async function SalesPage({
           }}
         />
         <TicketsStatsPanel searchParams={Promise.resolve(resolvedSearchParams)} />
+      </AppShell>
+    );
+  }
+
+  if (activeView === "mbujimayi") {
+    return (
+      <AppShell role={role}>
+        <section className="mb-2">
+          <h1 className="text-2xl font-semibold">Billets & ventes</h1>
+        </section>
+        <SalesHubTabs
+          active="mbujimayi"
+          showSellTab={canCreateTicketEarly}
+          searchParams={{
+            startDate: resolvedSearchParams.startDate,
+            endDate: resolvedSearchParams.endDate,
+            q: resolvedSearchParams.q,
+          }}
+        />
+        <MbujimayiReconcileWorkspace />
       </AppShell>
     );
   }
