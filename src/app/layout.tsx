@@ -1,16 +1,17 @@
 import type { Metadata } from "next";
-import { Montserrat, Geist_Mono } from "next/font/google";
+import localFont from "next/font/local";
 import "./globals.css";
 
-const montserrat = Montserrat({
+/** Polices locales : évite l’échec CI/deploy quand Google Fonts est injoignable. */
+const montserrat = localFont({
+  src: [
+    { path: "../../public/fonts/Montserrat-Regular.ttf", weight: "400", style: "normal" },
+    { path: "../../public/fonts/Montserrat-Regular.ttf", weight: "500", style: "normal" },
+    { path: "../../public/fonts/Montserrat-Bold.ttf", weight: "600", style: "normal" },
+    { path: "../../public/fonts/Montserrat-Bold.ttf", weight: "700", style: "normal" },
+  ],
   variable: "--font-montserrat",
-  subsets: ["latin"],
-  weight: ["400", "500", "600", "700"],
-});
-
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
-  subsets: ["latin"],
+  display: "swap",
 });
 
 export const metadata: Metadata = {
@@ -77,7 +78,8 @@ export default function RootLayout({
         />
       </head>
       <body
-        className={`${montserrat.variable} ${geistMono.variable} antialiased`}
+        className={`${montserrat.variable} antialiased`}
+        style={{ ["--font-geist-mono" as string]: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace" }}
       >
         {children}
       </body>
