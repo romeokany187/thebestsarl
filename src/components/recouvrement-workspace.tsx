@@ -145,14 +145,22 @@ export function RecouvrementWorkspace({
                           )}
                         </td>
                         <td className="px-3 py-2">
-                          <button
-                            type="button"
-                            disabled={!canSend || busyPayerKey === group.payerKey}
-                            onClick={() => handleRecover(group.payerKey, group.payerLabel)}
-                            className="rounded-md bg-blue-700 px-3 py-1.5 text-xs font-semibold text-white disabled:cursor-not-allowed disabled:opacity-40"
-                          >
-                            {busyPayerKey === group.payerKey ? "Envoi…" : "Recouvrer"}
-                          </button>
+                          <div className="flex flex-wrap items-center gap-2">
+                            <button
+                              type="button"
+                              disabled={!canSend || busyPayerKey === group.payerKey}
+                              onClick={() => handleRecover(group.payerKey, group.payerLabel)}
+                              className="rounded-md bg-blue-700 px-3 py-1.5 text-xs font-semibold text-white disabled:cursor-not-allowed disabled:opacity-40"
+                            >
+                              {busyPayerKey === group.payerKey ? "Envoi…" : "Recouvrer"}
+                            </button>
+                            <a
+                              href={`/api/recouvrement/pdf?month=${encodeURIComponent(monthRaw)}&payerKey=${encodeURIComponent(group.payerKey)}&download=1`}
+                              className="rounded-md border border-black/20 px-3 py-1.5 text-xs font-semibold hover:bg-black/5 dark:border-white/20 dark:hover:bg-white/10"
+                            >
+                              PDF
+                            </a>
+                          </div>
                         </td>
                       </tr>
                       <tr className="border-t border-black/5 bg-black/[0.02] dark:border-white/10 dark:bg-white/[0.03]">
