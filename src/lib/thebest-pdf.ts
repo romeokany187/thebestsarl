@@ -55,3 +55,22 @@ export function shortPdfLabel(value: string | null | undefined, max: number) {
   if (trimmed.length <= max) return trimmed;
   return `${trimmed.slice(0, Math.max(1, max - 1))}…`;
 }
+
+/** Tronque selon la largeur réelle de la police (évite les chevauchements de colonnes PDF). */
+export function fitPdfLabel(value: string | null | undefined, font: PDFFont, size: number, maxWidth: number) {
+  const trimmed = (value ?? "").trim() || "-";
+  if (font.widthOfTextAtSize(trimmed, size) <= maxWidth) return trimmed;
+
+  const ellipsis = "…";
+  const ellipsisWidth = font.widthOfTextAtSize(ellipsis, size);
+  let low = 0;
+  let high = trimmed.length;
+  while (low < high) {
+    const mid = Math.ceil((low + high) / 2);
+    const candidate = trimmed.slice(0, mid);
+    if (font.widthOfTextAtSize(candidate, size) + ellipsisWidth <= maxWidth) low = mid;
+    else high = mid - 1;
+  }
+  if (low <= 0) return ellipsis;
+  return `${trimmed.slice(0, low)}${ellipsis}`;
+}

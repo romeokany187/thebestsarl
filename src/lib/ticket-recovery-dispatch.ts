@@ -6,8 +6,8 @@ import { buildTicketReceivableBalance, normalizeMoneyCurrency, type TicketReceiv
 import {
   THEBEST_PDF_COLORS,
   drawTheBestDocumentFooter,
+  fitPdfLabel,
   loadTheBestDocumentFonts,
-  shortPdfLabel,
 } from "@/lib/thebest-pdf";
 
 export const TICKET_PAYMENT_SELECT = {
@@ -124,11 +124,23 @@ export async function buildRecoveryPdf(params: {
     page.drawLine({ start: { x: 24, y: 451 }, end: { x: pageWidth - 24, y: 451 }, thickness: 0.7, color: lineGray });
   };
 
-  const headers = ["Date", "PNR", "Client", "Compagnie", "Route", "Facturé", "Encaissé", "Reste", "Statut"];
-  const x = [24, 92, 158, 248, 308, 408, 488, 568, 648];
+  const headers = ["Date", "PNR", "Client", "Cie", "Route", "Facturé", "Encaissé", "Reste", "Statut"];
+  // Colonnes avec largeurs max mesurées — Client ne peut plus déborder sur Cie.
+  const columns = [
+    { x: 24, width: 64 },
+    { x: 90, width: 62 },
+    { x: 156, width: 168 },
+    { x: 330, width: 42 },
+    { x: 378, width: 78 },
+    { x: 462, width: 78 },
+    { x: 546, width: 78 },
+    { x: 630, width: 78 },
+    { x: 714, width: 100 },
+  ];
+  const fontSize = 7.5;
   const drawTableHeader = (topY: number) => {
     headers.forEach((header, index) => {
-      page.drawText(header, { x: x[index], y: topY, size: 8, font: fontBold, color: textBlack });
+      page.drawText(header, { x: columns[index].x, y: topY, size: 8, font: fontBold, color: textBlack });
     });
     page.drawLine({ start: { x: 24, y: topY - 4 }, end: { x: pageWidth - 24, y: topY - 4 }, thickness: 0.6, color: lineGray });
   };
@@ -158,19 +170,19 @@ export async function buildRecoveryPdf(params: {
           : "PAYÉ";
 
     const values = [
-      new Date(ticket.soldAt).toISOString().slice(0, 10),
-      shortPdfLabel(ticket.ticketNumber, 10),
-      shortPdfLabel(ticket.customerName, 22),
-      ticket.airline.code,
-      shortPdfLabel(ticket.route, 14),
-      billedLabel,
-      paidLabel,
-      remainingLabel,
-      statusLabel,
+      fitPdfLabel(new Date(ticket.soldAt).toISOString().slice(0, 10), font, fontSize, columns[0].width),
+      fitPdfLabel(ticket.ticketNumber, font, fontSize, columns[1].width),
+      fitPdfLabel(ticket.customerName, font, fontSize, columns[2].width),
+      fitPdfLabel(ticket.airline.code, font, fontSize, columns[3].width),
+      fitPdfLabel(ticket.route, font, fontSize, columns[4].width),
+      fitPdfLabel(billedLabel, font, fontSize, columns[5].width),
+      fitPdfLabel(paidLabel, font, fontSize, columns[6].width),
+      fitPdfLabel(remainingLabel, font, fontSize, columns[7].width),
+      fitPdfLabel(statusLabel, font, fontSize, columns[8].width),
     ];
 
     values.forEach((value, index) => {
-      page.drawText(value, { x: x[index], y, size: 7.7, font, color: textBlack });
+      page.drawText(value, { x: columns[index].x, y, size: fontSize, font, color: textBlack });
     });
     page.drawLine({ start: { x: 24, y: y - 3 }, end: { x: pageWidth - 24, y: y - 3 }, thickness: 0.25, color: lineGray });
     y -= 11.5;
