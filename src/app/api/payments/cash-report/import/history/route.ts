@@ -9,7 +9,8 @@ export async function GET(request: NextRequest) {
   if (access.error) return access.error;
 
   const reportMonth = request.nextUrl.searchParams.get("reportMonth")?.trim() || undefined;
-  const rows = await listCashReportImportsForRestore({ reportMonth, limit: 20 });
+  // Limite haute : l'UI ne montre qu'1 restauration / mois, le reste est replié.
+  const rows = await listCashReportImportsForRestore({ reportMonth, limit: reportMonth ? 80 : 40 });
 
   return NextResponse.json({
     data: rows.map(({ preImportSnapshot, _count, importedBy, ...row }) => ({

@@ -248,11 +248,49 @@ type ImportHistoryRow = {
   canRestore: boolean;
 };
 
+type ImportHistoryMonthGroup = {
+  reportMonth: string;
+  latestRestorable: ImportHistoryRow | null;
+  latestOverall: ImportHistoryRow;
+  olderRows: ImportHistoryRow[];
+  totalCount: number;
+  restorableCount: number;
+};
+
+function groupImportHistoryByMonth(rows: ImportHistoryRow[]): ImportHistoryMonthGroup[] {
+  const byMonth = new Map<string, ImportHistoryRow[]>();
+  for (const row of rows) {
+    const list = byMonth.get(row.reportMonth) ?? [];
+    list.push(row);
+    byMonth.set(row.reportMonth, list);
+  }
+
+  return [...byMonth.entries()]
+    .map(([month, monthRows]) => {
+      const sorted = [...monthRows].sort(
+        (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+      );
+      const latestOverall = sorted[0];
+      const latestRestorable = sorted.find((row) => row.canRestore) ?? null;
+      const primaryId = latestRestorable?.id ?? latestOverall.id;
+      return {
+        reportMonth: month,
+        latestRestorable,
+        latestOverall,
+        olderRows: sorted.filter((row) => row.id !== primaryId),
+        totalCount: sorted.length,
+        restorableCount: sorted.filter((row) => row.canRestore).length,
+      };
+    })
+    .sort((a, b) => b.reportMonth.localeCompare(a.reportMonth));
+}
+
 function ImportRestoreHistoryPanel({ reportMonth }: { reportMonth?: string }) {
   const [rows, setRows] = useState<ImportHistoryRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [restoringId, setRestoringId] = useState<string | null>(null);
   const [feedback, setFeedback] = useState("");
+  const [expandedMonths, setExpandedMonths] = useState<Record<string, boolean>>({});
 
   const loadHistory = useCallback(async () => {
     setLoading(true);
@@ -277,6 +315,8 @@ function ImportRestoreHistoryPanel({ reportMonth }: { reportMonth?: string }) {
   useEffect(() => {
     void loadHistory();
   }, [loadHistory]);
+
+  const monthGroups = useMemo(() => groupImportHistoryByMonth(rows), [rows]);
 
   async function restoreImport(importId: string, fileName: string) {
     const confirmed = window.confirm(
@@ -305,13 +345,48 @@ function ImportRestoreHistoryPanel({ reportMonth }: { reportMonth?: string }) {
     }
   }
 
+  function renderRestoreRow(row: ImportHistoryRow, options?: { primary?: boolean }) {
+    return (
+      <li
+        key={row.id}
+        className={`flex flex-wrap items-center justify-between gap-2 px-3 py-2 text-xs ${
+          options?.primary ? "bg-white/50 dark:bg-black/10" : ""
+        }`}
+      >
+        <div>
+          <p className="font-semibold text-amber-950 dark:text-amber-100">
+            {options?.primary ? `Dernier import · ${row.fileName}` : row.fileName}
+          </p>
+          <p className="text-amber-900/80 dark:text-amber-200/80">
+            {new Date(row.createdAt).toLocaleString("fr-FR")} · {row.journalLineCount} lignes · {row.importedByLabel}
+            {row.restoredAt ? ` · restauré le ${new Date(row.restoredAt).toLocaleString("fr-FR")}` : ""}
+          </p>
+        </div>
+        {row.canRestore ? (
+          <button
+            type="button"
+            disabled={restoringId === row.id}
+            onClick={() => void restoreImport(row.id, row.fileName)}
+            className="rounded-md border border-amber-700/40 bg-white px-3 py-1.5 font-semibold text-amber-950 hover:bg-amber-100 disabled:opacity-50 dark:border-amber-600 dark:bg-amber-950/40 dark:text-amber-100 dark:hover:bg-amber-900/50"
+          >
+            {restoringId === row.id ? "Restauration…" : options?.primary ? "Restaurer le dernier" : "Restaurer"}
+          </button>
+        ) : (
+          <span className="text-[11px] text-amber-900/65 dark:text-amber-200/65">
+            {row.status === "RESTORED" || row.restoredAt ? "Déjà restauré" : "Sans sauvegarde"}
+          </span>
+        )}
+      </li>
+    );
+  }
+
   return (
     <div className="space-y-3 rounded-xl border border-amber-300/70 bg-amber-50/60 p-4 dark:border-amber-800 dark:bg-amber-950/20">
       <div>
         <p className="text-sm font-semibold text-amber-950 dark:text-amber-100">Restaurer après import Excel</p>
         <p className="mt-1 text-xs text-amber-900/85 dark:text-amber-200/85">
-          Chaque import confirmé enregistre une sauvegarde des opérations caisse THE BEST sur les jours remplacés. Utilisez
-          « Restaurer » pour annuler un import et revenir à l&apos;état précédent (paiements billets non concernés).
+          Un seul point de restauration est affiché par mois (le dernier import encore annulable). Les imports répétés du
+          même mois restent dans un historique replié — inutile d&apos;avoir 20 boutons « Restaurer » côte à côte.
         </p>
       </div>
 
@@ -322,36 +397,53 @@ function ImportRestoreHistoryPanel({ reportMonth }: { reportMonth?: string }) {
         <p className="text-xs text-amber-900/70 dark:text-amber-200/70">Aucun import enregistré pour le moment.</p>
       ) : null}
 
-      {rows.length > 0 ? (
-        <ul className="divide-y divide-amber-200/80 rounded-lg border border-amber-200/80 dark:divide-amber-900 dark:border-amber-900">
-          {rows.map((row) => (
-            <li key={row.id} className="flex flex-wrap items-center justify-between gap-2 px-3 py-2 text-xs">
-              <div>
-                <p className="font-semibold text-amber-950 dark:text-amber-100">
-                  {row.reportMonth} · {row.fileName}
-                </p>
-                <p className="text-amber-900/80 dark:text-amber-200/80">
-                  {new Date(row.createdAt).toLocaleString("fr-FR")} · {row.journalLineCount} lignes · {row.importedByLabel}
-                  {row.restoredAt ? ` · restauré le ${new Date(row.restoredAt).toLocaleString("fr-FR")}` : ""}
-                </p>
+      {monthGroups.length > 0 ? (
+        <div className="space-y-3">
+          {monthGroups.map((group) => {
+            const primary = group.latestRestorable ?? group.latestOverall;
+            const expanded = Boolean(expandedMonths[group.reportMonth]);
+            return (
+              <div
+                key={group.reportMonth}
+                className="overflow-hidden rounded-lg border border-amber-200/80 dark:border-amber-900"
+              >
+                <div className="flex flex-wrap items-center justify-between gap-2 border-b border-amber-200/80 bg-amber-100/50 px-3 py-2 dark:border-amber-900 dark:bg-amber-950/40">
+                  <p className="text-xs font-semibold text-amber-950 dark:text-amber-100">
+                    Mois {group.reportMonth}
+                    <span className="ml-2 font-normal text-amber-900/75 dark:text-amber-200/75">
+                      {group.totalCount} import{group.totalCount > 1 ? "s" : ""}
+                      {group.restorableCount > 0
+                        ? ` · ${group.restorableCount} annulable${group.restorableCount > 1 ? "s" : ""}`
+                        : " · aucun annulable"}
+                    </span>
+                  </p>
+                  {group.olderRows.length > 0 ? (
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setExpandedMonths((prev) => ({
+                          ...prev,
+                          [group.reportMonth]: !prev[group.reportMonth],
+                        }))
+                      }
+                      className="text-[11px] font-semibold text-amber-900 underline-offset-2 hover:underline dark:text-amber-200"
+                    >
+                      {expanded
+                        ? "Masquer l'historique"
+                        : `Voir ${group.olderRows.length} import${group.olderRows.length > 1 ? "s" : ""} plus ancien${group.olderRows.length > 1 ? "s" : ""}`}
+                    </button>
+                  ) : null}
+                </div>
+                <ul className="divide-y divide-amber-200/80 dark:divide-amber-900">
+                  {renderRestoreRow(primary, { primary: true })}
+                  {expanded
+                    ? group.olderRows.map((row) => renderRestoreRow(row))
+                    : null}
+                </ul>
               </div>
-              {row.canRestore ? (
-                <button
-                  type="button"
-                  disabled={restoringId === row.id}
-                  onClick={() => void restoreImport(row.id, row.fileName)}
-                  className="rounded-md border border-amber-700/40 bg-white px-3 py-1.5 font-semibold text-amber-950 hover:bg-amber-100 disabled:opacity-50 dark:border-amber-600 dark:bg-amber-950/40 dark:text-amber-100 dark:hover:bg-amber-900/50"
-                >
-                  {restoringId === row.id ? "Restauration…" : "Restaurer"}
-                </button>
-              ) : (
-                <span className="text-[11px] text-amber-900/65 dark:text-amber-200/65">
-                  {row.status === "RESTORED" || row.restoredAt ? "Déjà restauré" : "Sans sauvegarde"}
-                </span>
-              )}
-            </li>
-          ))}
-        </ul>
+            );
+          })}
+        </div>
       ) : null}
     </div>
   );
