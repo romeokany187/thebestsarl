@@ -188,12 +188,16 @@ export function AccountingJournalWorkspace({
     return response;
   }
 
-  async function loadData() {
+  async function loadData(searchOverride?: string) {
     setLoading(true);
     setError("");
 
     try {
-      const response = await fetchAccounting("/api/comptabilite/journal", { cache: "no-store" });
+      const query = (searchOverride ?? historySearch).trim();
+      const params = new URLSearchParams();
+      if (query) params.set("q", query);
+      const url = `/api/comptabilite/journal${params.toString() ? `?${params.toString()}` : ""}`;
+      const response = await fetchAccounting(url, { cache: "no-store" });
       const payload = await response.json().catch(() => null);
 
       if (!response.ok) {
@@ -218,7 +222,9 @@ export function AccountingJournalWorkspace({
   }
 
   useEffect(() => {
-    loadData();
+    void loadData("");
+    // Chargement initial uniquement — les recherches relancent loadData explicitement.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const accountMap = useMemo(
@@ -246,32 +252,8 @@ export function AccountingJournalWorkspace({
       .filter((ticket) => `${ticket.customerName} ${ticket.invoiceNumber} ${ticket.ticketNumber}`.toLowerCase().includes(query))
       .slice(0, 8);
   }, [ticketInvoiceOptions, ticketInvoiceQuery]);
-  const filteredRecentEntries = useMemo(() => {
-    const query = historySearch.trim().toLowerCase();
-
-    if (!query) {
-      return recentEntries;
-    }
-
-    return recentEntries.filter((entry) => {
-      const linesSearch = entry.lines
-        .map((line) => `${line.accountCode} ${line.accountLabel}`)
-        .join(" ");
-      const searchable = [
-        String(entry.sequence ?? ""),
-        entry.libelle,
-        entry.pieceJustificative ?? "",
-        entry.pole ?? "",
-        entry.createdBy?.name ?? "",
-        new Date(entry.entryDate).toLocaleString("fr-FR"),
-        linesSearch,
-      ]
-        .join(" ")
-        .toLowerCase();
-
-      return searchable.includes(query);
-    });
-  }, [recentEntries, historySearch]);
+  // Les résultats viennent déjà filtrés par l'API quand une recherche est active.
+  const filteredRecentEntries = recentEntries;
 
   useEffect(() => {
     const matchingRate = dailyRateMap.get(rateDate);
@@ -315,12 +297,15 @@ export function AccountingJournalWorkspace({
   }
 
   function applyHistorySearch() {
-    setHistorySearch(historySearchInput.trim());
+    const next = historySearchInput.trim();
+    setHistorySearch(next);
+    void loadData(next);
   }
 
   function clearHistorySearch() {
     setHistorySearchInput("");
     setHistorySearch("");
+    void loadData("");
   }
 
   function formatTicketInvoiceSearchLabel(ticket: TicketInvoiceOption) {
@@ -777,15 +762,16 @@ export function AccountingJournalWorkspace({
                   applyHistorySearch();
                 }
               }}
-              placeholder="Rechercher: n° écriture, pièce, libellé, compte..."
+              placeholder="Rechercher dans tout le journal : n°, pièce, libellé, compte…"
               className="w-full rounded-md border border-black/15 bg-white px-3 py-2 text-sm md:w-96 dark:border-white/15 dark:bg-zinc-900"
             />
             <button
               type="button"
               onClick={applyHistorySearch}
-              className="rounded-md border border-black/15 px-3 py-2 text-sm font-semibold hover:bg-black/5 dark:border-white/15 dark:hover:bg-white/10"
+              disabled={loading}
+              className="rounded-md border border-black/15 px-3 py-2 text-sm font-semibold hover:bg-black/5 disabled:opacity-60 dark:border-white/15 dark:hover:bg-white/10"
             >
-              Rechercher
+              {loading && historySearchInput.trim() ? "Recherche…" : "Rechercher"}
             </button>
             {(historySearch || historySearchInput) ? (
               <button

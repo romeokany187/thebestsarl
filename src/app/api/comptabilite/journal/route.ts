@@ -280,29 +280,45 @@ export async function GET(request: NextRequest) {
   const supportStart = ticketSupportRangeStart();
   const yearStart = new Date(Date.UTC(supportStart.getUTCFullYear(), 0, 1, 0, 0, 0, 0));
 
-  const entryWhere = searchQuery
-    ? {
-        OR: [
-          { libelle: { contains: searchQuery } },
-          { pieceJustificative: { contains: searchQuery } },
-          { pole: { contains: searchQuery } },
-          { createdBy: { name: { contains: searchQuery } } },
-          { lines: { some: { accountCode: { contains: searchQuery } } } },
-          { lines: { some: { accountLabel: { contains: searchQuery } } } },
-        ],
-      }
-    : {};
+  // Chronologie d'abord : le n° affiché à l'écran n'est pas forcément le sequence SQL auto-incrémenté.
+  const chronologyRows = await listAccountingChronologyRows({ accountingEntry: accountingEntryClient });
+  const chronologySequenceById = buildAccountingChronologySequenceMap(chronologyRows);
 
-  const [accounts, chronologyRows, recentEntriesRaw, yearlyTickets, ticketChronology, dailyRates, deletedEntries] = await Promise.all([
+  const searchOr: Array<Record<string, unknown>> = [];
+  if (searchQuery) {
+    searchOr.push(
+      { libelle: { contains: searchQuery } },
+      { pieceJustificative: { contains: searchQuery } },
+      { pole: { contains: searchQuery } },
+      { createdBy: { name: { contains: searchQuery } } },
+      { lines: { some: { accountCode: { contains: searchQuery } } } },
+      { lines: { some: { accountLabel: { contains: searchQuery } } } },
+    );
+
+    if (/^\d+$/.test(searchQuery)) {
+      const numericSequence = Number.parseInt(searchQuery, 10);
+      const chronologyMatches = [...chronologySequenceById.entries()]
+        .filter(([, sequence]) => sequence === numericSequence)
+        .map(([id]) => id);
+      if (chronologyMatches.length > 0) {
+        searchOr.push({ id: { in: chronologyMatches } });
+      }
+      searchOr.push({ sequence: numericSequence });
+    }
+  }
+
+  const entryWhere = searchOr.length > 0 ? { OR: searchOr } : {};
+
+  const [accounts, recentEntriesRaw, yearlyTickets, ticketChronology, dailyRates, deletedEntries] = await Promise.all([
     prisma.account.findMany({
       select: { code: true, label: true, normalBalance: true },
       orderBy: { code: "asc" },
     }),
-    listAccountingChronologyRows({ accountingEntry: accountingEntryClient }),
     accountingEntryClient.findMany({
       where: entryWhere,
       orderBy: [{ entryDate: "desc" }, { createdAt: "desc" }, { id: "desc" }],
-      ...(searchQuery ? {} : { take: 500 }),
+      // Sans recherche : aperçu des plus récentes. Avec recherche : plafond large sur tout l'historique.
+      take: searchQuery ? 2000 : 500,
       include: {
         createdBy: { select: { name: true } },
         lines: {
@@ -356,7 +372,7 @@ export async function GET(request: NextRequest) {
 
   const recentEntries = applyAccountingChronologySequence(
     recentEntriesRaw,
-    buildAccountingChronologySequenceMap(chronologyRows),
+    chronologySequenceById,
   );
 
   let focusedEntry = !focusedEntryId
