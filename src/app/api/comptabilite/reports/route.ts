@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { PDFDocument, PDFFont, PDFPage, StandardFonts, rgb } from "pdf-lib";
 import fontkit from "@pdf-lib/fontkit";
+import ExcelJS from "exceljs";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { applyAccountingChronologySequence, buildAccountingChronologySequenceMap } from "@/lib/accounting-chronology";
@@ -1494,6 +1495,308 @@ async function buildPdf(report: ReportPayload, appBaseUrl: string | null) {
   return pdf.save();
 }
 
+const EXCEL_BRAND = "0017365D";
+const EXCEL_HEADER = "00E8EEF5";
+const EXCEL_SECTION = "00E5EAF2";
+const EXCEL_TOTAL = "00FFF2CC";
+const EXCEL_ALT = "00F8F9FB";
+
+function excelSolid(argb: string): ExcelJS.Fill {
+  return { type: "pattern", pattern: "solid", fgColor: { argb } };
+}
+
+function excelThinBorder(): Partial<ExcelJS.Borders> {
+  return {
+    top: { style: "thin", color: { argb: "00B7B7B7" } },
+    left: { style: "thin", color: { argb: "00B7B7B7" } },
+    bottom: { style: "thin", color: { argb: "00B7B7B7" } },
+    right: { style: "thin", color: { argb: "00B7B7B7" } },
+  };
+}
+
+function styleExcelHeaderBand(sheet: ExcelJS.Worksheet, title: string, subtitle: string, colCount: number) {
+  sheet.mergeCells(1, 1, 1, colCount);
+  sheet.mergeCells(2, 1, 2, colCount);
+  const brand = sheet.getCell(1, 1);
+  brand.value = "THEBEST SARL";
+  brand.font = { name: "Arial", bold: true, size: 16, color: { argb: "00FFFFFF" } };
+  brand.fill = excelSolid(EXCEL_BRAND);
+  brand.alignment = { horizontal: "left", vertical: "middle" };
+  sheet.getRow(1).height = 26;
+
+  const titleCell = sheet.getCell(2, 1);
+  titleCell.value = `${title} — ${subtitle}`;
+  titleCell.font = { name: "Arial", bold: true, size: 12, color: { argb: "00FFFFFF" } };
+  titleCell.fill = excelSolid(EXCEL_BRAND);
+  titleCell.alignment = { horizontal: "left", vertical: "middle" };
+  sheet.getRow(2).height = 22;
+
+  for (let col = 1; col <= colCount; col += 1) {
+    sheet.getCell(1, col).fill = excelSolid(EXCEL_BRAND);
+    sheet.getCell(2, col).fill = excelSolid(EXCEL_BRAND);
+  }
+}
+
+function writeExcelHeaderRow(
+  sheet: ExcelJS.Worksheet,
+  rowNumber: number,
+  columns: Array<{ label: string; width: number; align?: "left" | "center" | "right" }>,
+) {
+  columns.forEach((column, index) => {
+    const cell = sheet.getCell(rowNumber, index + 1);
+    cell.value = column.label;
+    cell.font = { name: "Arial", bold: true, size: 10, color: { argb: EXCEL_BRAND } };
+    cell.fill = excelSolid(EXCEL_HEADER);
+    cell.border = excelThinBorder();
+    cell.alignment = { horizontal: column.align ?? "left", vertical: "middle", wrapText: true };
+    sheet.getColumn(index + 1).width = Math.max(10, Math.round(column.width / 7));
+  });
+  sheet.getRow(rowNumber).height = 22;
+}
+
+function writeExcelDataRow(
+  sheet: ExcelJS.Worksheet,
+  rowNumber: number,
+  values: string[],
+  columns: Array<{ align?: "left" | "center" | "right" }>,
+  options?: { bold?: boolean; fill?: string },
+) {
+  values.forEach((value, index) => {
+    const cell = sheet.getCell(rowNumber, index + 1);
+    cell.value = value;
+    cell.font = { name: "Arial", size: 10, bold: options?.bold ?? false };
+    cell.border = excelThinBorder();
+    cell.alignment = { horizontal: columns[index]?.align ?? "left", vertical: "middle", wrapText: true };
+    if (options?.fill) cell.fill = excelSolid(options.fill);
+  });
+}
+
+async function buildExcel(report: ReportPayload) {
+  const workbook = new ExcelJS.Workbook();
+  workbook.creator = "THEBEST SARL";
+  workbook.created = new Date();
+
+  const reportTitle = report.reportType === "journal"
+    ? "Livre journal comptable"
+    : report.reportType === "ledger"
+      ? "Grand livre comptable"
+      : report.reportType === "trial-balance"
+        ? "Balance des comptes"
+        : "Balance générale";
+
+  if (report.reportType === "journal") {
+    const sheet = workbook.addWorksheet("Livre journal", { views: [{ showGridLines: false }] });
+    styleExcelHeaderBand(sheet, reportTitle, report.periodLabel, JOURNAL_COLUMNS.length);
+    sheet.getCell(3, 1).value = `Écritures: ${report.entryCount} | USD débit ${formatMoney(report.totals.debitUsd)} | crédit ${formatMoney(report.totals.creditUsd)}`;
+    sheet.getCell(3, 1).font = { name: "Arial", size: 10, bold: true };
+    sheet.mergeCells(3, 1, 3, JOURNAL_COLUMNS.length);
+
+    writeExcelHeaderRow(sheet, 5, JOURNAL_COLUMNS);
+    const rows = flattenJournalRows(report.entries);
+    rows.forEach((row, index) => {
+      writeExcelDataRow(
+        sheet,
+        6 + index,
+        JOURNAL_COLUMNS.map((column) => row[column.key]),
+        JOURNAL_COLUMNS,
+        { fill: index % 2 === 1 ? EXCEL_ALT : undefined },
+      );
+    });
+    const totalRow: JournalPdfRow = {
+      entryId: "",
+      sequence: "",
+      entryDate: "",
+      pole: "",
+      debitCode: "",
+      debitLabel: "TOTAL",
+      creditCode: "",
+      creditLabel: "",
+      libelle: `${report.entryCount} ecritures`,
+      pieceJustificative: "",
+      usdDebit: formatJournalAmountCell(report.totals.debitUsd, report.totals.debitCdf),
+      usdCredit: formatJournalAmountCell(report.totals.creditUsd, report.totals.creditCdf),
+      exchangeRate: "",
+    };
+    writeExcelDataRow(
+      sheet,
+      6 + rows.length,
+      JOURNAL_COLUMNS.map((column) => totalRow[column.key]),
+      JOURNAL_COLUMNS,
+      { bold: true, fill: EXCEL_TOTAL },
+    );
+  } else if (report.reportType === "ledger") {
+    const sheet = workbook.addWorksheet("Grand livre", { views: [{ showGridLines: false }] });
+    styleExcelHeaderBand(sheet, reportTitle, report.periodLabel, LEDGER_COLUMNS.length);
+    sheet.getCell(3, 1).value = `Comptes mouvementés: ${report.groupCount} | Filtre: ${report.accountCode ?? "Tous"} | Sous-comptes: ${report.includeSubaccounts ? "Oui" : "Non"}`;
+    sheet.getCell(3, 1).font = { name: "Arial", size: 10, bold: true };
+    sheet.mergeCells(3, 1, 3, LEDGER_COLUMNS.length);
+
+    let excelRow = 5;
+    for (const group of report.groups) {
+      writeExcelDataRow(
+        sheet,
+        excelRow,
+        [
+          `${group.accountCode} - ${group.accountLabel}`,
+          "",
+          "",
+          "",
+          `Lignes ${group.rows.length}`,
+          `USD D ${formatMoney(group.totals.debitUsd)} / C ${formatMoney(group.totals.creditUsd)}`,
+          "",
+          `CDF D ${formatMoney(group.totals.debitCdf)} / C ${formatMoney(group.totals.creditCdf)}`,
+          "",
+          "",
+        ].slice(0, LEDGER_COLUMNS.length),
+        LEDGER_COLUMNS,
+        { bold: true, fill: EXCEL_SECTION },
+      );
+      sheet.mergeCells(excelRow, 1, excelRow, 4);
+      excelRow += 1;
+      writeExcelHeaderRow(sheet, excelRow, LEDGER_COLUMNS);
+      excelRow += 1;
+
+      group.rows.forEach((row, index) => {
+        const pdfRow: LedgerPdfRow = {
+          entryId: String(row.entryId),
+          sequence: row.sequence === 0 ? "A.N." : String(row.sequence),
+          entryDate: new Date(row.entryDate).toLocaleDateString("fr-FR"),
+          pole: row.pole ?? "-",
+          pieceJustificative: row.pieceJustificative ?? "-",
+          libelle: row.libelle ?? "-",
+          counterparts: row.counterparts || "-",
+          debitUsd: formatLedgerUsdWithCdfEquivalent(row.debitUsd, row.debitCdf, row.exchangeRate),
+          creditUsd: formatLedgerUsdWithCdfEquivalent(row.creditUsd, row.creditCdf, row.exchangeRate),
+          debitCdf: row.debitCdf > 0 ? formatMoneyCell(row.debitCdf) : "",
+          creditCdf: row.creditCdf > 0 ? formatMoneyCell(row.creditCdf) : "",
+        };
+        writeExcelDataRow(
+          sheet,
+          excelRow,
+          LEDGER_COLUMNS.map((column) => pdfRow[column.key]),
+          LEDGER_COLUMNS,
+          { fill: index % 2 === 1 ? EXCEL_ALT : undefined },
+        );
+        excelRow += 1;
+      });
+
+      const totalRow: LedgerPdfRow = {
+        entryId: "",
+        sequence: "",
+        entryDate: "",
+        pole: "",
+        pieceJustificative: "",
+        libelle: "TOTAL COMPTE",
+        counterparts: `${group.rows.length} ligne(s)`,
+        debitUsd: formatMoneyCell(group.totals.debitUsd),
+        creditUsd: formatMoneyCell(group.totals.creditUsd),
+        debitCdf: formatMoneyCell(group.totals.debitCdf),
+        creditCdf: formatMoneyCell(group.totals.creditCdf),
+      };
+      writeExcelDataRow(
+        sheet,
+        excelRow,
+        LEDGER_COLUMNS.map((column) => totalRow[column.key]),
+        LEDGER_COLUMNS,
+        { bold: true, fill: EXCEL_TOTAL },
+      );
+      excelRow += 2;
+    }
+  } else if (report.reportType === "trial-balance") {
+    const sheet = workbook.addWorksheet("Balance des comptes", { views: [{ showGridLines: false }] });
+    styleExcelHeaderBand(sheet, reportTitle, report.periodLabel, TRIAL_BALANCE_COLUMNS.length);
+    sheet.getCell(3, 1).value = `Comptes: ${report.rowCount} | Filtre: ${report.accountCode ?? "Tous"}`;
+    sheet.getCell(3, 1).font = { name: "Arial", size: 10, bold: true };
+    sheet.mergeCells(3, 1, 3, TRIAL_BALANCE_COLUMNS.length);
+    writeExcelHeaderRow(sheet, 5, TRIAL_BALANCE_COLUMNS);
+
+    report.rows.forEach((row, index) => {
+      const pdfRow: BalancePdfRow = {
+        accountCode: row.accountCode,
+        accountLabel: row.accountLabel,
+        debitUsd: formatMoneyCell(row.debitUsd),
+        creditUsd: formatMoneyCell(row.creditUsd),
+        balanceUsd: `${formatMoneyCell(Math.abs(row.balanceUsd))}${row.balanceUsdSide === "ZERO" ? "" : row.balanceUsdSide === "DEBIT" ? " D" : " C"}`,
+        debitCdf: formatMoneyCell(row.debitCdf),
+        creditCdf: formatMoneyCell(row.creditCdf),
+        balanceCdf: `${formatMoneyCell(Math.abs(row.balanceCdf))}${row.balanceCdfSide === "ZERO" ? "" : row.balanceCdfSide === "DEBIT" ? " D" : " C"}`,
+      };
+      writeExcelDataRow(
+        sheet,
+        6 + index,
+        TRIAL_BALANCE_COLUMNS.map((column) => pdfRow[column.key]),
+        TRIAL_BALANCE_COLUMNS,
+        { fill: index % 2 === 1 ? EXCEL_ALT : undefined },
+      );
+    });
+
+    const totalRow: BalancePdfRow = {
+      accountCode: "",
+      accountLabel: "TOTAL",
+      debitUsd: formatMoneyCell(report.totals.debitUsd),
+      creditUsd: formatMoneyCell(report.totals.creditUsd),
+      balanceUsd: `${formatMoneyCell(Math.abs(report.totals.debitUsd - report.totals.creditUsd))}${balanceSide(report.totals.debitUsd - report.totals.creditUsd) === "ZERO" ? "" : balanceSide(report.totals.debitUsd - report.totals.creditUsd) === "DEBIT" ? " D" : " C"}`,
+      debitCdf: formatMoneyCell(report.totals.debitCdf),
+      creditCdf: formatMoneyCell(report.totals.creditCdf),
+      balanceCdf: `${formatMoneyCell(Math.abs(report.totals.debitCdf - report.totals.creditCdf))}${balanceSide(report.totals.debitCdf - report.totals.creditCdf) === "ZERO" ? "" : balanceSide(report.totals.debitCdf - report.totals.creditCdf) === "DEBIT" ? " D" : " C"}`,
+    };
+    writeExcelDataRow(
+      sheet,
+      6 + report.rows.length,
+      TRIAL_BALANCE_COLUMNS.map((column) => totalRow[column.key]),
+      TRIAL_BALANCE_COLUMNS,
+      { bold: true, fill: EXCEL_TOTAL },
+    );
+  } else {
+    const sheet = workbook.addWorksheet("Balance générale", { views: [{ showGridLines: false }] });
+    styleExcelHeaderBand(sheet, reportTitle, report.periodLabel, GENERAL_BALANCE_COLUMNS.length);
+    sheet.getCell(3, 1).value = `Classes: ${report.rowCount} | Filtre: ${report.accountCode ?? "Toutes"}`;
+    sheet.getCell(3, 1).font = { name: "Arial", size: 10, bold: true };
+    sheet.mergeCells(3, 1, 3, GENERAL_BALANCE_COLUMNS.length);
+    writeExcelHeaderRow(sheet, 5, GENERAL_BALANCE_COLUMNS);
+
+    report.rows.forEach((row, index) => {
+      const pdfRow: GeneralBalancePdfRow = {
+        classLabel: row.classLabel,
+        accountCount: String(row.accountCount),
+        debitUsd: formatMoneyCell(row.debitUsd),
+        creditUsd: formatMoneyCell(row.creditUsd),
+        balanceUsd: `${formatMoneyCell(Math.abs(row.balanceUsd))}${balanceSide(row.balanceUsd) === "ZERO" ? "" : balanceSide(row.balanceUsd) === "DEBIT" ? " D" : " C"}`,
+        debitCdf: formatMoneyCell(row.debitCdf),
+        creditCdf: formatMoneyCell(row.creditCdf),
+        balanceCdf: `${formatMoneyCell(Math.abs(row.balanceCdf))}${balanceSide(row.balanceCdf) === "ZERO" ? "" : balanceSide(row.balanceCdf) === "DEBIT" ? " D" : " C"}`,
+      };
+      writeExcelDataRow(
+        sheet,
+        6 + index,
+        GENERAL_BALANCE_COLUMNS.map((column) => pdfRow[column.key]),
+        GENERAL_BALANCE_COLUMNS,
+        { fill: index % 2 === 1 ? EXCEL_ALT : undefined },
+      );
+    });
+
+    const totalRow: GeneralBalancePdfRow = {
+      classLabel: "TOTAL",
+      accountCount: "",
+      debitUsd: formatMoneyCell(report.totals.debitUsd),
+      creditUsd: formatMoneyCell(report.totals.creditUsd),
+      balanceUsd: `${formatMoneyCell(Math.abs(report.totals.debitUsd - report.totals.creditUsd))}${balanceSide(report.totals.debitUsd - report.totals.creditUsd) === "ZERO" ? "" : balanceSide(report.totals.debitUsd - report.totals.creditUsd) === "DEBIT" ? " D" : " C"}`,
+      debitCdf: formatMoneyCell(report.totals.debitCdf),
+      creditCdf: formatMoneyCell(report.totals.creditCdf),
+      balanceCdf: `${formatMoneyCell(Math.abs(report.totals.debitCdf - report.totals.creditCdf))}${balanceSide(report.totals.debitCdf - report.totals.creditCdf) === "ZERO" ? "" : balanceSide(report.totals.debitCdf - report.totals.creditCdf) === "DEBIT" ? " D" : " C"}`,
+    };
+    writeExcelDataRow(
+      sheet,
+      6 + report.rows.length,
+      GENERAL_BALANCE_COLUMNS.map((column) => totalRow[column.key]),
+      GENERAL_BALANCE_COLUMNS,
+      { bold: true, fill: EXCEL_TOTAL },
+    );
+  }
+
+  return Buffer.from(await workbook.xlsx.writeBuffer());
+}
+
 export async function GET(request: NextRequest) {
   const access = await requireApiModuleAccess("comptabilite", ["ADMIN", "DIRECTEUR_GENERAL", "MANAGER", "ACCOUNTANT", "EMPLOYEE"], "READ");
   if (access.error) return access.error;
@@ -1502,7 +1805,8 @@ export async function GET(request: NextRequest) {
 
   const searchParams = request.nextUrl.searchParams;
   const reportType = reportTypeFromSearch(searchParams);
-  const format = searchParams.get("format") === "pdf" ? "pdf" : "json";
+  const formatRaw = (searchParams.get("format") ?? "json").trim().toLowerCase();
+  const format = formatRaw === "pdf" ? "pdf" : formatRaw === "xlsx" || formatRaw === "excel" ? "xlsx" : "json";
   const selectedAccountCode = (searchParams.get("accountCode") ?? "").trim();
   const includeSubaccounts = searchParams.get("includeSubaccounts") === "1";
   const range = parseDateRange(searchParams);
@@ -1556,26 +1860,39 @@ export async function GET(request: NextRequest) {
     return NextResponse.json(payload);
   }
 
+  const baseName = reportType === "journal"
+    ? `livre-journal-${range.startRaw}-${range.endRaw}`
+    : reportType === "ledger"
+      ? `grand-livre-${selectedAccountCode || "general"}-${range.startRaw}-${range.endRaw}`
+      : reportType === "trial-balance"
+        ? `balance-comptes-${selectedAccountCode || "general"}-${range.startRaw}-${range.endRaw}`
+        : `balance-generale-${selectedAccountCode || "general"}-${range.startRaw}-${range.endRaw}`;
+
+  if (format === "xlsx") {
+    const excelBuffer = await buildExcel(payload);
+    return new NextResponse(excelBuffer, {
+      status: 200,
+      headers: {
+        "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        "Content-Disposition": `attachment; filename="${baseName}.xlsx"`,
+        "Cache-Control": "no-store",
+      },
+    });
+  }
+
   const configuredBaseUrl = process.env.NEXTAUTH_URL?.trim();
   const appBaseUrl = configuredBaseUrl && /^https?:\/\//i.test(configuredBaseUrl)
     ? configuredBaseUrl
     : request.nextUrl.origin;
 
   const pdfBytes = await buildPdf(payload, appBaseUrl);
-  const filename = reportType === "journal"
-    ? `livre-journal-${range.startRaw}-${range.endRaw}.pdf`
-    : reportType === "ledger"
-      ? `grand-livre-${selectedAccountCode || "general"}-${range.startRaw}-${range.endRaw}.pdf`
-      : reportType === "trial-balance"
-        ? `balance-comptes-${selectedAccountCode || "general"}-${range.startRaw}-${range.endRaw}.pdf`
-        : `balance-generale-${selectedAccountCode || "general"}-${range.startRaw}-${range.endRaw}.pdf`;
   const disposition = searchParams.get("download") === "1" ? "attachment" : "inline";
 
   return new NextResponse(Buffer.from(pdfBytes), {
     status: 200,
     headers: {
       "Content-Type": "application/pdf",
-      "Content-Disposition": `${disposition}; filename="${filename}"`,
+      "Content-Disposition": `${disposition}; filename="${baseName}.pdf"`,
       "Cache-Control": "no-store",
     },
   });
