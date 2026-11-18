@@ -74,8 +74,8 @@ export function RecouvrementWorkspace({
         </p>
         <p className="mt-1 text-xs text-black/60 dark:text-white/60">
           Envoi recouvrement : agents <strong>Kinshasa</strong> uniquement ({kinshasaUserCount} compte
-          {kinshasaUserCount > 1 ? "s" : ""}). Le payant « Agent - Nom » est rapproche du profil utilisateur (id + e-mail
-          de connexion) dans toute la base, puis filtre Kinshasa.
+          {kinshasaUserCount > 1 ? "s" : ""}). « Agent - Nom » → l&apos;agent concerné. Payant{" "}
+          <strong>agence / équipe Kinshasa</strong> → <strong>ADMIN</strong> Kinshasa seulement (pas toute l&apos;équipe).
         </p>
       </section>
 

@@ -1,7 +1,11 @@
 import { AppShell } from "@/components/app-shell";
 import { RecouvrementWorkspace, type RecouvrementGroupRow } from "@/components/recouvrement-workspace";
 import { kinshasaDateKey } from "@/lib/kinshasa-time";
-import { loadKinshasaWorkspaceUsers, resolveKinshasaRecoveryRecipients } from "@/lib/kinshasa-team";
+import {
+  isKinshasaAgencyPayer,
+  loadKinshasaWorkspaceUsers,
+  resolveKinshasaRecoveryRecipients,
+} from "@/lib/kinshasa-team";
 import { monthLabelFromKey, monthRangeFromValue } from "@/lib/month-range";
 import { requirePageModuleAccess } from "@/lib/rbac";
 import { loadPayerRecoveryTargetUsers } from "@/lib/ticket-payer-recovery-targets";
@@ -41,6 +45,9 @@ export default async function RecouvrementPage({
     let resolutionHint: string | null = null;
     if (recipients.length === 0 && matchedOutsideKinshasa.length > 0) {
       resolutionHint = `Compte trouvé (${matchedOutsideKinshasa.map((u) => u.email).join(", ")}) mais hors équipe Kinshasa — recouvrement réservé aux agents Kinshasa.`;
+    } else if (recipients.length === 0 && isKinshasaAgencyPayer(group.payerLabel)) {
+      resolutionHint =
+        "Payant agence Kinshasa : aucun compte ADMIN rattaché à l'équipe Kinshasa — assignez un admin à cette équipe.";
     } else if (recipients.length === 0) {
       resolutionHint =
         "Aucun agent Kinshasa : vérifiez que le nom après « Agent - » correspond exactement au profil utilisateur en base.";
