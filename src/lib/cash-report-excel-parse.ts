@@ -271,6 +271,7 @@ function formatDateKey(date: Date) {
   return `${y}-${m}-${d}`;
 }
 
+/** Dates caissière en français : JJ/MM/AAAA (éventuellement préfixées « VENDREDI 02/01/2026 »). */
 export function parseBusinessDateCell(value: unknown, fallbackYear: number): string | null {
   if (value instanceof Date && !Number.isNaN(value.getTime())) {
     return formatDateKey(value);
@@ -279,10 +280,13 @@ export function parseBusinessDateCell(value: unknown, fallbackYear: number): str
   const raw = String(value ?? "").trim();
   if (!raw) return null;
 
-  const slashMatch = raw.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})$/);
+  const isoMatch = raw.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (isoMatch) return `${isoMatch[1]}-${isoMatch[2]}-${isoMatch[3]}`;
+
+  const slashMatch = raw.match(/(\d{1,2})\/(\d{1,2})\/(\d{2,4})/);
   if (slashMatch) {
-    const month = Number(slashMatch[1]);
-    const day = Number(slashMatch[2]);
+    const day = Number(slashMatch[1]);
+    const month = Number(slashMatch[2]);
     let year = Number(slashMatch[3]);
     if (year < 100) year += 2000;
     if (month >= 1 && month <= 12 && day >= 1 && day <= 31) {
@@ -290,21 +294,78 @@ export function parseBusinessDateCell(value: unknown, fallbackYear: number): str
     }
   }
 
-  const isoMatch = raw.match(/^(\d{4})-(\d{2})-(\d{2})/);
-  if (isoMatch) return `${isoMatch[1]}-${isoMatch[2]}-${isoMatch[3]}`;
+  if (/^\d{1,2}\/\d{1,2}$/.test(raw)) {
+    const [day, month] = raw.split("/").map((part) => Number(part));
+    if (month >= 1 && month <= 12 && day >= 1 && day <= 31) {
+      return `${fallbackYear}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+    }
+  }
 
   const parsed = Date.parse(raw);
   if (!Number.isNaN(parsed)) {
     return formatDateKey(new Date(parsed));
   }
 
-  if (/^\d{1,2}\/\d{1,2}$/.test(raw)) {
-    const [m, d] = raw.split("/").map((part) => Number(part));
-    if (m >= 1 && m <= 12 && d >= 1 && d <= 31) {
-      return `${fallbackYear}-${String(m).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+  return null;
+}
+
+const FRENCH_MONTHS: Record<string, number> = {
+  janvier: 1,
+  fevrier: 2,
+  mars: 3,
+  avril: 4,
+  mai: 5,
+  juin: 6,
+  juillet: 7,
+  aout: 8,
+  septembre: 9,
+  octobre: 10,
+  novembre: 11,
+  decembre: 12,
+};
+
+function inferMonthFromWorkbookText(rows: unknown[][], sheetNames: string[], fallbackYear: number): string | null {
+  const haystacks = [
+    ...sheetNames.map((name) => normalizeText(name)),
+    ...rows.slice(0, 30).flatMap((row) => (row ?? []).slice(0, 6).map((cell) => normalizeText(cell))),
+  ];
+
+  for (const text of haystacks) {
+    for (const [monthName, monthIndex] of Object.entries(FRENCH_MONTHS)) {
+      const match = text.match(new RegExp(`${monthName}\\s+(\\d{4})`));
+      if (match) {
+        return `${match[1]}-${String(monthIndex).padStart(2, "0")}`;
+      }
+      const yearFirst = text.match(new RegExp(`(\\d{4})[^a-z0-9]{0,3}${monthName}`));
+      if (yearFirst) {
+        return `${yearFirst[1]}-${String(monthIndex).padStart(2, "0")}`;
+      }
     }
   }
 
+  for (const text of haystacks) {
+    for (const [monthName, monthIndex] of Object.entries(FRENCH_MONTHS)) {
+      if (text.includes(monthName)) {
+        return `${fallbackYear}-${String(monthIndex).padStart(2, "0")}`;
+      }
+    }
+  }
+
+  return null;
+}
+
+function findJournalSheetName(sheetNames: string[]) {
+  const matchers = [
+    /journal\s*de\s*caisse/,
+    /^caisse$/,
+    /^journal$/,
+    /feuille\s*caisse/,
+    /rapport\s*caisse/,
+  ];
+  for (const matcher of matchers) {
+    const found = findSheetName(sheetNames, matcher);
+    if (found) return found;
+  }
   return null;
 }
 
@@ -435,6 +496,18 @@ function parseJournalSheet(rows: unknown[][], fallbackYear: number, reportMonthH
 
   const moneyColumns = resolveJournalMoneyColumns(rows, headerRowIndex);
   const lines: ParsedJournalLine[] = [];
+  const titleMonth = inferMonthFromWorkbookText(rows, [], fallbackYear);
+  const defaultOpeningDate = `${(reportMonthHint ?? titleMonth ?? `${fallbackYear}-01`)}-01`;
+
+  // Première date valide du journal (pour rattacher « REPORT A NOUVEAU » sans date).
+  let firstMovementDate: string | null = null;
+  for (let i = headerRowIndex + 2; i < rows.length; i += 1) {
+    const candidate = parseBusinessDateCell((rows[i] ?? [])[0], fallbackYear);
+    if (candidate) {
+      firstMovementDate = candidate;
+      break;
+    }
+  }
 
   for (let i = headerRowIndex + 2; i < rows.length; i += 1) {
     const row = rows[i] ?? [];
@@ -443,11 +516,22 @@ function parseJournalSheet(rows: unknown[][], fallbackYear: number, reportMonthH
     const libelle = String(row[2] ?? "").trim();
     if (!dateCell && !typeOperation && !libelle) continue;
 
-    const businessDate = parseBusinessDateCell(dateCell, fallbackYear);
+    let lineCategory = classifyJournalLine(typeOperation, libelle);
+    let businessDate = parseBusinessDateCell(dateCell, fallbackYear);
+
+    if (!businessDate && lineCategory === "OPENING") {
+      businessDate = firstMovementDate ?? defaultOpeningDate;
+    }
+
     if (!businessDate) {
-      if (typeOperation || libelle) warnings.push(`Journal ligne ${i + 1}: date invalide (${String(dateCell)})`);
+      // Pied de feuille (totaux compagnies, caisse cash, etc.) : ignorer sans alerte.
+      if (lineCategory !== "SKIP" && (typeOperation || libelle)) {
+        warnings.push(`Journal ligne ${i + 1}: date invalide (${String(dateCell)})`);
+      }
       continue;
     }
+
+    if (lineCategory === "SKIP") continue;
 
     let { usdIn, usdOut, cdfIn, cdfOut } = normalizeJournalMovementColumns({
       usdIn: parseMoneyCell(row[moneyColumns.usdIn]),
@@ -460,17 +544,31 @@ function parseJournalSheet(rows: unknown[][], fallbackYear: number, reportMonthH
     let usdBalance = usdBalanceRaw === "" || usdBalanceRaw == null ? null : parseMoneyCell(usdBalanceRaw);
     let cdfBalance = cdfBalanceRaw === "" || cdfBalanceRaw == null ? null : parseMoneyCell(cdfBalanceRaw);
 
-    let lineCategory = classifyJournalLine(typeOperation, libelle);
-    if (lineCategory === "SKIP") continue;
-
     if (lineCategory === "OPENING") {
-      if (moneyColumns.usdBalance != null && (usdIn + usdOut === 0 || usdBalance != null)) {
-        usdBalance = parseMoneyCell(row[moneyColumns.usdBalance]);
+      // Ouverture : soldes souvent placés aussi en colonnes « entrées » (ex. N° / REPORT A NOUVEAU).
+      if (moneyColumns.usdBalance != null) {
+        const balanceFromCol = parseMoneyCell(row[moneyColumns.usdBalance]);
+        usdBalance = balanceFromCol !== 0 || usdBalance != null ? balanceFromCol : (usdIn || usdOut || usdBalance || 0);
+        if ((usdBalance ?? 0) === 0 && (usdIn !== 0 || usdOut !== 0)) {
+          usdBalance = usdIn || usdOut;
+        }
+        usdIn = 0;
+        usdOut = 0;
+      } else if (usdIn !== 0 || usdOut !== 0) {
+        usdBalance = usdIn || usdOut;
         usdIn = 0;
         usdOut = 0;
       }
       if (moneyColumns.cdfBalance != null) {
-        cdfBalance = parseMoneyCell(row[moneyColumns.cdfBalance]);
+        const balanceFromCol = parseMoneyCell(row[moneyColumns.cdfBalance]);
+        cdfBalance = balanceFromCol !== 0 || cdfBalance != null ? balanceFromCol : (cdfIn || cdfOut || cdfBalance || 0);
+        if ((cdfBalance ?? 0) === 0 && (cdfIn !== 0 || cdfOut !== 0)) {
+          cdfBalance = cdfIn || cdfOut;
+        }
+        cdfIn = 0;
+        cdfOut = 0;
+      } else if (cdfIn !== 0 || cdfOut !== 0) {
+        cdfBalance = cdfIn || cdfOut;
         cdfIn = 0;
         cdfOut = 0;
       }
@@ -588,17 +686,32 @@ export function parseCashReportWorkbook(buffer: Buffer, options?: { fallbackYear
   const workbook = XLSX.read(buffer, { type: "buffer", cellDates: true });
   const warnings: string[] = [];
 
-  const journalSheet = findSheetName(workbook.SheetNames, /journal\s*de\s*caisse/);
-  if (!journalSheet) warnings.push("Feuille « journal de caisse » introuvable.");
-
-  let journalLines: ParsedJournalLine[] = [];
-  if (journalSheet) {
-    const parsed = parseJournalSheet(sheetRows(workbook, journalSheet), fallbackYear, options?.reportMonthHint);
-    journalLines = parsed.lines;
-    warnings.push(...parsed.warnings);
+  const journalSheet = findJournalSheetName(workbook.SheetNames);
+  if (!journalSheet) {
+    warnings.push("Feuille journal introuvable (attendu : « journal de caisse » ou « CAISSE »).");
   }
 
-  const reportMonth = options?.reportMonthHint ?? inferReportMonthFromJournal(journalLines, fallbackYear);
+  let journalLines: ParsedJournalLine[] = [];
+  let titleMonth: string | null = null;
+  if (journalSheet) {
+    const rows = sheetRows(workbook, journalSheet);
+    titleMonth = inferMonthFromWorkbookText(rows, workbook.SheetNames, fallbackYear);
+    const parsed = parseJournalSheet(
+      rows,
+      fallbackYear,
+      options?.reportMonthHint ?? titleMonth ?? undefined,
+    );
+    journalLines = parsed.lines;
+    warnings.push(...parsed.warnings);
+    if (journalLines.length === 0) {
+      warnings.push(`Feuille « ${journalSheet} » trouvée mais aucune ligne de mouvement reconnue.`);
+    }
+  }
+
+  const reportMonth = options?.reportMonthHint
+    ?? (journalLines.length > 0 ? inferReportMonthFromJournal(journalLines, fallbackYear) : null)
+    ?? titleMonth
+    ?? inferReportMonthFromJournal(journalLines, fallbackYear);
   journalLines = journalLines.map((line) => ({
     ...line,
     externalKey: buildExternalKey(reportMonth, line.businessDate, line.typeOperation, line.libelle, line.referenceDoc),
