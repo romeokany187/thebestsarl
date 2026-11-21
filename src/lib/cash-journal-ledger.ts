@@ -137,7 +137,12 @@ export async function loadImportedJournalLinesForDateRange(
   });
 }
 
-/** Journal PDF / écran : une ligne = une ligne Excel (6 colonnes montants + soldes). */
+/**
+ * Journal PDF / écran / Excel export.
+ * Les lignes « REPORT À NOUVEAU » (OPENING) restent en base mais sont exclues
+ * de l’affichage et des calculs de solde (évite de mélanger les mois).
+ * Seul le premier report de la période sert éventuellement de solde d’ouverture KPI.
+ */
 export function buildCashJournalLedgerFromImportedLines(lines: ImportedJournalLineRecord[]): {
   rows: CashJournalLedgerRow[];
   usesExcelDailyOpenings: boolean;
@@ -147,25 +152,30 @@ export function buildCashJournalLedgerFromImportedLines(lines: ImportedJournalLi
   periodClosingCdf: number;
 } {
   const normalizedLines = sanitizeImportedJournalLinesForDisplay(lines);
-  let runningUsd = 0;
-  let runningCdf = 0;
-  const rows: CashJournalLedgerRow[] = normalizedLines.map((line) => {
-    if (line.lineCategory === "OPENING") {
-      if (line.usdBalance != null) runningUsd = line.usdBalance;
-      else runningUsd += line.usdIn - line.usdOut;
-      if (line.cdfBalance != null) runningCdf = line.cdfBalance;
-      else runningCdf += line.cdfIn - line.cdfOut;
-    } else {
-      runningUsd += line.usdIn - line.usdOut;
-      runningCdf += line.cdfIn - line.cdfOut;
-    }
+  // OPENING (report à nouveau) : ignoré pour affichage et calculs (reste stocké en base).
+  const movements = normalizedLines.filter((line) => line.lineCategory !== "OPENING");
+
+  let periodOpeningUsd = 0;
+  let periodOpeningCdf = 0;
+  if (movements[0]) {
+    const first = movements[0];
+    const firstUsd = first.usdBalance ?? first.usdIn - first.usdOut;
+    const firstCdf = first.cdfBalance ?? first.cdfIn - first.cdfOut;
+    periodOpeningUsd = firstUsd - first.usdIn + first.usdOut;
+    periodOpeningCdf = firstCdf - first.cdfIn + first.cdfOut;
+  }
+
+  let runningUsd = periodOpeningUsd;
+  let runningCdf = periodOpeningCdf;
+
+  const rows: CashJournalLedgerRow[] = movements.map((line) => {
+    runningUsd += line.usdIn - line.usdOut;
+    runningCdf += line.cdfIn - line.cdfOut;
 
     const usdBalance = line.usdBalance ?? runningUsd;
     const cdfBalance = line.cdfBalance ?? runningCdf;
     if (line.usdBalance != null) runningUsd = line.usdBalance;
-    else runningUsd = usdBalance;
     if (line.cdfBalance != null) runningCdf = line.cdfBalance;
-    else runningCdf = cdfBalance;
 
     return {
       occurredAt: new Date(`${line.businessDate}T12:00:00.000Z`),
@@ -178,21 +188,20 @@ export function buildCashJournalLedgerFromImportedLines(lines: ImportedJournalLi
       cdfOut: line.cdfOut,
       usdBalance,
       cdfBalance,
-      isOpeningRow: line.lineCategory === "OPENING",
+      isOpeningRow: false,
     };
   });
 
-  const firstOpening = rows.find((row) => row.isOpeningRow) ?? rows[0];
   const last = rows[rows.length - 1];
-  const usesExcelDailyOpenings = normalizedLines.some((line) => line.lineCategory === "OPENING");
 
   return {
     rows,
-    usesExcelDailyOpenings,
-    periodOpeningUsd: firstOpening?.usdBalance ?? 0,
-    periodOpeningCdf: firstOpening?.cdfBalance ?? 0,
-    periodClosingUsd: last?.usdBalance ?? firstOpening?.usdBalance ?? 0,
-    periodClosingCdf: last?.cdfBalance ?? firstOpening?.cdfBalance ?? 0,
+    // Ne plus activer le mode « reports quotidiens » : les OPENING ne s’affichent plus.
+    usesExcelDailyOpenings: false,
+    periodOpeningUsd,
+    periodOpeningCdf,
+    periodClosingUsd: last?.usdBalance ?? periodOpeningUsd,
+    periodClosingCdf: last?.cdfBalance ?? periodOpeningCdf,
   };
 }
 
@@ -261,7 +270,6 @@ export function buildCashJournalLedger(options: {
   periodClosingUsd: number;
   periodClosingCdf: number;
 } {
-  const usesExcelDailyOpenings = options.excelOpeningsByDate.size > 0;
   const movementOps = options.operations.filter((operation) => operation.category !== "OPENING_BALANCE");
 
   const opsByDate = new Map<string, CashJournalLedgerOperation[]>();
@@ -275,51 +283,20 @@ export function buildCashJournalLedger(options: {
     list.sort((a, b) => new Date(a.occurredAt).getTime() - new Date(b.occurredAt).getTime());
   }
 
-  const dateKeys = [...new Set([...options.excelOpeningsByDate.keys(), ...opsByDate.keys()])].sort();
+  const dateKeys = [...opsByDate.keys()].sort();
   const rows: CashJournalLedgerRow[] = [];
 
-  let runningUsd: number | null = null;
-  let runningCdf: number | null = null;
-  let periodOpeningUsd = options.periodFallbackOpening.usd;
-  let periodOpeningCdf = options.periodFallbackOpening.cdf;
+  // Un seul report d’ouverture pour la période (premier jour), jamais affiché ni réappliqué chaque mois.
+  const sortedOpeningDates = [...options.excelOpeningsByDate.keys()].sort();
+  const periodStartOpening = options.excelOpeningsByDate.get(options.periodStartDate)
+    ?? (sortedOpeningDates[0] ? options.excelOpeningsByDate.get(sortedOpeningDates[0]) : undefined);
+
+  let periodOpeningUsd = periodStartOpening?.usd ?? options.periodFallbackOpening.usd;
+  let periodOpeningCdf = periodStartOpening?.cdf ?? options.periodFallbackOpening.cdf;
+  let runningUsd = periodOpeningUsd;
+  let runningCdf = periodOpeningCdf;
 
   for (const dateKey of dateKeys) {
-    const excelOpening = options.excelOpeningsByDate.get(dateKey);
-
-    if (excelOpening) {
-      runningUsd = excelOpening.usd;
-      runningCdf = excelOpening.cdf;
-      if (dateKey === options.periodStartDate || rows.length === 0) {
-        periodOpeningUsd = excelOpening.usd;
-        periodOpeningCdf = excelOpening.cdf;
-      }
-      rows.push({
-        occurredAt: new Date(`${dateKey}T00:00:00.000Z`),
-        typeOperation: excelOpening.typeOperation || "Report à nouveau",
-        libelle: excelOpening.libelle || "Report à nouveau (fichier Excel)",
-        reference: "-",
-        usdIn: 0,
-        usdOut: 0,
-        cdfIn: 0,
-        cdfOut: 0,
-        usdBalance: runningUsd,
-        cdfBalance: runningCdf,
-        isOpeningRow: true,
-      });
-    } else if (runningUsd === null) {
-      runningUsd = options.periodFallbackOpening.usd;
-      runningCdf = options.periodFallbackOpening.cdf;
-      if (!usesExcelDailyOpenings) {
-        periodOpeningUsd = runningUsd;
-        periodOpeningCdf = runningCdf;
-      }
-    }
-
-    if (runningUsd === null || runningCdf === null) {
-      runningUsd = 0;
-      runningCdf = 0;
-    }
-
     for (const operation of opsByDate.get(dateKey) ?? []) {
       const movement = mapOperationToMovementRow(operation);
       runningUsd += movement.usdIn - movement.usdOut;
@@ -333,28 +310,13 @@ export function buildCashJournalLedger(options: {
   }
 
   const last = rows[rows.length - 1];
-  let periodClosingUsd = last?.usdBalance ?? periodOpeningUsd;
-  let periodClosingCdf = last?.cdfBalance ?? periodOpeningCdf;
-
-  if (!usesExcelDailyOpenings && rows.length === 0) {
-    periodOpeningUsd = options.periodFallbackOpening.usd;
-    periodOpeningCdf = options.periodFallbackOpening.cdf;
-  }
-
-  if (usesExcelDailyOpenings && rows.length > 0) {
-    const first = rows[0];
-    periodOpeningUsd = first.usdBalance;
-    periodOpeningCdf = first.cdfBalance;
-    periodClosingUsd = last?.usdBalance ?? periodOpeningUsd;
-    periodClosingCdf = last?.cdfBalance ?? periodOpeningCdf;
-  }
 
   return {
     rows,
-    usesExcelDailyOpenings,
+    usesExcelDailyOpenings: false,
     periodOpeningUsd,
     periodOpeningCdf,
-    periodClosingUsd,
-    periodClosingCdf,
+    periodClosingUsd: last?.usdBalance ?? periodOpeningUsd,
+    periodClosingCdf: last?.cdfBalance ?? periodOpeningCdf,
   };
 }

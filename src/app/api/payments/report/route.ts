@@ -633,7 +633,6 @@ export async function GET(request: NextRequest) {
   let journalClosingCdf = journalOpeningCdf + cashInflowCdf - cashOutflowCdf;
 
   let journalCaisseLedger: Array<CashJournalRow & { usdBalance: number; cdfBalance: number; isOpeningRow?: boolean }>;
-  let usesExcelDailyJournalOpenings = false;
   let journalFromExcelImport = false;
 
   if (isMainCashJournalDesk) {
@@ -654,9 +653,10 @@ export async function GET(request: NextRequest) {
       })),
       periodFallbackOpening: { usd: journalOpeningUsd, cdf: journalOpeningCdf },
     });
-    usesExcelDailyJournalOpenings = built.usesExcelDailyOpenings;
     journalFromExcelImport = built.source === "excel-import";
-    journalCaisseLedger = built.rows.map((row) => ({
+    journalCaisseLedger = built.rows
+      .filter((row) => !row.isOpeningRow)
+      .map((row) => ({
       occurredAt: row.occurredAt,
       typeOperation: row.typeOperation,
       libelle: row.libelle,
@@ -667,7 +667,7 @@ export async function GET(request: NextRequest) {
       cdfOut: row.cdfOut,
       usdBalance: row.usdBalance,
       cdfBalance: row.cdfBalance,
-      isOpeningRow: row.isOpeningRow,
+      isOpeningRow: false,
     }));
     journalOpeningUsd = built.periodOpeningUsd;
     journalOpeningCdf = built.periodOpeningCdf;
@@ -830,8 +830,10 @@ export async function GET(request: NextRequest) {
     const ledgerClosingUsd = isMainCashJournalDesk ? journalClosingUsd : closingUsd;
     const ledgerOpeningCdf = isMainCashJournalDesk ? journalOpeningCdf : openingCdf;
     const ledgerClosingCdf = isMainCashJournalDesk ? journalClosingCdf : closingCdf;
-    const includeSyntheticOpening = !(isMainCashJournalDesk && (usesExcelDailyJournalOpenings || journalFromExcelImport));
-    const exportRows = ledgerForJournal.map(ledgerRowToExportRow);
+    // Reports à nouveau : conservés en base, exclus des exports (lignes + ligne synthétique).
+    const exportRows = ledgerForJournal
+      .filter((row) => !row.isOpeningRow)
+      .map(ledgerRowToExportRow);
 
     if (format === "xlsx" || format === "excel") {
       const buffer = await buildCashJournalExcelBuffer({
@@ -843,7 +845,7 @@ export async function GET(request: NextRequest) {
         closingUsd: ledgerClosingUsd,
         closingCdf: ledgerClosingCdf,
         rows: exportRows,
-        includeSyntheticOpening,
+        includeSyntheticOpening: false,
         periodStart,
       });
       return new NextResponse(Uint8Array.from(buffer), {
@@ -895,10 +897,8 @@ export async function GET(request: NextRequest) {
       if (isMainCashJournalDesk) {
         page.drawText(
           journalFromExcelImport
-            ? "Journal = feuille Excel importée (colonnes USD et CDF distinctes) — paiements billets exclus"
-            : usesExcelDailyJournalOpenings
-              ? "Report à nouveau par jour = Excel importé • opérations caisse (saisie + import) — billets exclus"
-              : "Opérations de caisse uniquement (saisie + import Excel) — paiements billets exclus",
+            ? "Journal = Excel importé (mouvements uniquement — reports à nouveau exclus) — billets exclus"
+            : "Opérations de caisse uniquement (saisie + import Excel) — reports à nouveau exclus",
           {
             x: margin,
             y: pageHeight - 92,
@@ -941,45 +941,9 @@ export async function GET(request: NextRequest) {
     drawTableHeader(pageHeight - 184);
     let y = pageHeight - 224;
 
-    if (includeSyntheticOpening) {
-      const openingRowHeight = 28;
-      page.drawRectangle({ x: tableX, y: y - openingRowHeight + 6, width: tableWidth, height: openingRowHeight, color: rgb(0.97, 0.97, 0.98), borderWidth: 0.5, borderColor: rgb(0.88, 0.89, 0.92) });
-      const openingCellMap: Record<CashJournalExportColumnKey, string[]> = {
-        date: [periodStart],
-        type: ["Solde d'ouverture"],
-        libelle: wrapTextToWidth("Report à nouveau calculé depuis l’historique caisse", font, 9.1, libelleColumn.width - 10),
-        usdIn: ["-"],
-        usdOut: ["-"],
-        usdBalance: [ledgerOpeningUsd.toFixed(2)],
-        gap: [""],
-        cdfIn: ["-"],
-        cdfOut: ["-"],
-        cdfBalance: [ledgerOpeningCdf.toFixed(2)],
-        reference: ["-"],
-      };
-      let openingX = tableX;
-      columns.forEach((column) => {
-        const lines = openingCellMap[column.key];
-        const text = lines[0] ?? "";
-        if (text) {
-          const textWidth = font.widthOfTextAtSize(text, 9.1);
-          const x = column.money
-            ? openingX + column.width - textWidth - 6
-            : openingX + 6;
-          page.drawText(text, {
-            x,
-            y: y - 10,
-            size: 9.1,
-            font: column.key === "type" ? fontBold : font,
-            color: textBlack,
-          });
-        }
-        openingX += column.width;
-      });
-      y -= 36;
-    }
+    const ledgerRowsForPdf = ledgerForJournal.filter((row) => !row.isOpeningRow);
 
-    for (const [rowIndex, row] of ledgerForJournal.entries()) {
+    for (const [rowIndex, row] of ledgerRowsForPdf.entries()) {
       const cellMap: Record<CashJournalExportColumnKey, string[]> = {
         date: [row.occurredAt.toISOString().slice(0, 10)],
         type: wrapTextToWidth(row.typeOperation, font, bodySize, typeColumn.width - 10),

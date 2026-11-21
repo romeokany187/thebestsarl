@@ -855,8 +855,6 @@ export default async function PaymentsPage({
     ? await resolveExcelOnlyMainCashJournalLedger(cashRange.startRaw, cashRange.endRaw)
     : null;
 
-  const usesExcelDailyJournalOpenings = journalLedgerBuilt?.usesExcelDailyOpenings ?? false;
-  const journalFromExcelImport = isMainDesk ? true : journalLedgerBuilt?.source === "excel-import";
   const billetageReferenceUsd = excelJournalAnalysis?.journalClosingUsd ?? closingUsd;
   const billetageReferenceCdf = excelJournalAnalysis?.journalClosingCdf ?? closingCdf;
   const journalOpeningUsd = journalLedgerBuilt?.periodOpeningUsd ?? openingUsd;
@@ -865,7 +863,7 @@ export default async function PaymentsPage({
   const journalClosingCdf = journalLedgerBuilt?.periodClosingCdf ?? closingCdf;
 
   const caisseLedger: CashJournalLedgerRow[] = isMainDesk && journalLedgerBuilt
-    ? journalLedgerBuilt.rows
+    ? journalLedgerBuilt.rows.filter((row) => !row.isOpeningRow)
     : (() => {
         const caisseRows = cashOperationsWithoutOpeningBalance
           .map((operation) => {
@@ -1818,7 +1816,7 @@ export default async function PaymentsPage({
 
             <section className="overflow-hidden rounded-2xl border border-black/10 bg-white shadow-sm dark:border-white/10 dark:bg-zinc-900">
               <div className="border-b border-black/10 px-4 py-3 dark:border-white/10">
-                <h2 className="text-sm font-semibold">Journal caisse (fichier Excel importé — reports à nouveau et mouvements)</h2>
+                <h2 className="text-sm font-semibold">Journal caisse (Excel importé — mouvements uniquement, sans report à nouveau)</h2>
               </div>
               <div className="overflow-x-auto">
                 <table className="min-w-full text-sm">
