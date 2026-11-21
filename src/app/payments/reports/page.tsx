@@ -5,17 +5,12 @@ import { resolvePaymentsDeskState } from "@/lib/payments-desk";
 type SearchParams = {
   startDate?: string;
   endDate?: string;
-  cashMonth?: string;
   airlineId?: string;
   desk?: string;
 };
 
 function todayIso() {
   return new Date().toISOString().slice(0, 10);
-}
-
-function currentMonthIso() {
-  return new Date().toISOString().slice(0, 7);
 }
 
 export const dynamic = "force-dynamic";
@@ -35,7 +30,6 @@ export default async function PaymentReportsPage({
 
   const startDate = resolvedSearchParams.startDate ?? todayIso();
   const endDate = resolvedSearchParams.endDate ?? startDate;
-  const cashMonth = resolvedSearchParams.cashMonth ?? currentMonthIso();
   const selectedDesk = deskState.desk;
 
   const paymentsQuery = new URLSearchParams({
@@ -52,15 +46,15 @@ export default async function PaymentReportsPage({
 
   const cashJournalQuery = new URLSearchParams({
     reportType: "cash-journal",
-    mode: "month",
-    month: cashMonth,
+    startDate,
+    endDate,
     desk: selectedDesk,
   }).toString();
 
   const cashSummaryQuery = new URLSearchParams({
     reportType: "cash-summary",
-    mode: "month",
-    month: cashMonth,
+    startDate,
+    endDate,
     desk: selectedDesk,
   }).toString();
 
@@ -69,6 +63,9 @@ export default async function PaymentReportsPage({
       <section className="space-y-6">
         <header>
           <h1 className="text-2xl font-semibold tracking-tight">Rapports paiements et caisse</h1>
+          <p className="mt-1 text-sm text-black/60 dark:text-white/60">
+            Choisissez une plage de dates (un jour, un mois ou plusieurs mois), puis ouvrez le PDF ou Excel.
+          </p>
         </header>
 
         <section className="rounded-2xl border border-black/10 bg-white p-4 shadow-sm dark:border-white/10 dark:bg-zinc-900">
@@ -82,10 +79,6 @@ export default async function PaymentReportsPage({
               <input type="date" name="endDate" defaultValue={endDate} className="w-full rounded-md border border-black/15 bg-white px-3 py-2 text-sm dark:border-white/15 dark:bg-zinc-900" />
             </div>
             <div>
-              <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-black/60 dark:text-white/60">Mois de caisse</label>
-              <input type="month" name="cashMonth" defaultValue={cashMonth} className="w-full rounded-md border border-black/15 bg-white px-3 py-2 text-sm dark:border-white/15 dark:bg-zinc-900" />
-            </div>
-            <div>
               <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-black/60 dark:text-white/60">Caisse active</label>
               <select name="desk" defaultValue={selectedDesk} className="w-full rounded-md border border-black/15 bg-white px-3 py-2 text-sm dark:border-white/15 dark:bg-zinc-900">
                 {deskState.deskOptions.map((desk) => (
@@ -93,7 +86,7 @@ export default async function PaymentReportsPage({
                 ))}
               </select>
             </div>
-            <button type="submit" className="rounded-md bg-black px-4 py-2 text-sm font-semibold text-white dark:bg-white dark:text-black lg:col-span-4 lg:justify-self-start">
+            <button type="submit" className="rounded-md bg-black px-4 py-2 text-sm font-semibold text-white dark:bg-white dark:text-black lg:self-end">
               Actualiser les liens
             </button>
           </form>
@@ -115,16 +108,21 @@ export default async function PaymentReportsPage({
             <p className="mt-1 text-xs text-black/60 dark:text-white/60">Tableau prêt pour comptabilité (1 ligne par billet).</p>
           </a>
           <a href={`/api/payments/report?${cashJournalQuery}`} target="_blank" rel="noreferrer" className="rounded-2xl border border-black/10 bg-white p-4 shadow-sm hover:bg-black/5 dark:border-white/10 dark:bg-zinc-900 dark:hover:bg-white/5">
-            <h2 className="text-sm font-semibold">Voir journal de caisse</h2>
+            <h2 className="text-sm font-semibold">Voir journal de caisse (PDF)</h2>
+            <p className="mt-1 text-xs text-black/60 dark:text-white/60">Colonnes alignées sur l&apos;Excel caissière (USD puis CDF).</p>
           </a>
           <a href={`/api/payments/report?${cashJournalQuery}&download=1`} className="rounded-2xl border border-black/10 bg-white p-4 shadow-sm hover:bg-black/5 dark:border-white/10 dark:bg-zinc-900 dark:hover:bg-white/5">
-            <h2 className="text-sm font-semibold">Télécharger journal de caisse</h2>
+            <h2 className="text-sm font-semibold">Télécharger journal de caisse (PDF)</h2>
+          </a>
+          <a href={`/api/payments/report?${cashJournalQuery}&format=xlsx`} className="rounded-2xl border border-black/10 bg-white p-4 shadow-sm hover:bg-black/5 dark:border-white/10 dark:bg-zinc-900 dark:hover:bg-white/5">
+            <h2 className="text-sm font-semibold">Excel journal de caisse</h2>
+            <p className="mt-1 text-xs text-black/60 dark:text-white/60">Une feuille pour toute la plage sélectionnée.</p>
           </a>
           <a href={`/api/payments/report?${cashSummaryQuery}`} target="_blank" rel="noreferrer" className="rounded-2xl border border-black/10 bg-white p-4 shadow-sm hover:bg-black/5 dark:border-white/10 dark:bg-zinc-900 dark:hover:bg-white/5">
-            <h2 className="text-sm font-semibold">Voir synthèse caisse</h2>
+            <h2 className="text-sm font-semibold">Voir synthèse caisse (PDF)</h2>
           </a>
           <a href={`/api/payments/report?${cashSummaryQuery}&download=1`} className="rounded-2xl border border-black/10 bg-white p-4 shadow-sm hover:bg-black/5 dark:border-white/10 dark:bg-zinc-900 dark:hover:bg-white/5">
-            <h2 className="text-sm font-semibold">Télécharger synthèse caisse</h2>
+            <h2 className="text-sm font-semibold">Télécharger synthèse caisse (PDF)</h2>
           </a>
         </section>
       </section>

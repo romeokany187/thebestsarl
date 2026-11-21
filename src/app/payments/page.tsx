@@ -155,25 +155,6 @@ function dateRangeFromParams(params: SearchParams) {
   };
 }
 
-function monthRangeFromValue(rawMonth?: string) {
-  const fallbackMonth = new Date().toISOString().slice(0, 7);
-  const monthRaw = rawMonth && /^\d{4}-\d{2}$/.test(rawMonth) ? rawMonth : fallbackMonth;
-  const [yearPart, monthPart] = monthRaw.split("-");
-  const year = Number.parseInt(yearPart, 10);
-  const monthIndex = Math.max(0, Math.min(11, Number.parseInt(monthPart, 10) - 1));
-  const start = new Date(Date.UTC(year, monthIndex, 1, 0, 0, 0, 0));
-  const end = new Date(Date.UTC(year, monthIndex + 1, 1, 0, 0, 0, 0));
-
-  return {
-    start,
-    end,
-    monthRaw,
-    startRaw: start.toISOString().slice(0, 10),
-    endRaw: new Date(end.getTime() - 1).toISOString().slice(0, 10),
-    label: `Journal de caisse du ${start.toISOString().slice(0, 10)} au ${new Date(end.getTime() - 1).toISOString().slice(0, 10)}`,
-  };
-}
-
 function resolveInitialWorkspaceMode(value?: string) {
   if (value === "tickets" || value === "cash" || value === "virtual" || value === "billetage" || value === "payment-orders" || value === "needs" || value === "float" || value === "reports" || value === "cash-report-import") {
     return value;
@@ -518,7 +499,15 @@ export default async function PaymentsPage({
   const scopedCashOperationsWhere = buildDeskScopedCashOperationWhere(selectedDeskKey);
   const journalCashOperationsWhere = isMainDesk ? buildMainCashJournalOperationWhere() : scopedCashOperationsWhere;
   const range = dateRangeFromParams(resolvedSearchParams);
-  const cashRange = monthRangeFromValue(resolvedSearchParams.cashMonth);
+  // Journal / exports caisse : plage libre (Du → Au). Le mois dérivé sert aux analyses Excel mensuelles.
+  const cashRange = {
+    start: range.start,
+    end: range.end,
+    startRaw: range.startRaw,
+    endRaw: range.endRaw,
+    monthRaw: range.startRaw.slice(0, 7),
+    label: `Journal de caisse du ${range.startRaw} au ${range.endRaw}`,
+  };
 
   if (canReviewApprovals) {
     await ensureCashOperationApprovalRequestTable();
@@ -535,14 +524,14 @@ export default async function PaymentsPage({
   }).toString();
   const cashJournalReportQuery = new URLSearchParams({
     reportType: "cash-journal",
-    mode: "month",
-    month: cashRange.monthRaw,
+    startDate: cashRange.startRaw,
+    endDate: cashRange.endRaw,
     desk: selectedDeskKey,
   }).toString();
   const cashSummaryReportQuery = new URLSearchParams({
     reportType: "cash-summary",
-    mode: "month",
-    month: cashRange.monthRaw,
+    startDate: cashRange.startRaw,
+    endDate: cashRange.endRaw,
     desk: selectedDeskKey,
   }).toString();
   const selectedYear = range.start.getUTCFullYear();
@@ -1549,7 +1538,19 @@ export default async function PaymentsPage({
                 rel="noreferrer"
                 className="rounded-lg border border-black/15 px-3 py-2 text-xs font-semibold hover:bg-black/5 dark:border-white/15 dark:hover:bg-white/10"
               >
-                Voir journal de caisse
+                Voir journal de caisse (PDF)
+              </a>
+              <a
+                href={`/api/payments/report?${cashJournalReportQuery}&download=1`}
+                className="rounded-lg border border-black/15 px-3 py-2 text-xs font-semibold hover:bg-black/5 dark:border-white/15 dark:hover:bg-white/10"
+              >
+                Télécharger journal PDF
+              </a>
+              <a
+                href={`/api/payments/report?${cashJournalReportQuery}&format=xlsx`}
+                className="rounded-lg border border-black/15 px-3 py-2 text-xs font-semibold hover:bg-black/5 dark:border-white/15 dark:hover:bg-white/10"
+              >
+                Excel journal de caisse
               </a>
               <a
                 href={`/api/payments/report?${cashSummaryReportQuery}`}
@@ -1558,12 +1559,6 @@ export default async function PaymentsPage({
                 className="rounded-lg border border-black/15 px-3 py-2 text-xs font-semibold hover:bg-black/5 dark:border-white/15 dark:hover:bg-white/10"
               >
                 Voir synthèse caisse
-              </a>
-              <a
-                href={`/api/payments/report?${cashJournalReportQuery}&download=1`}
-                className="rounded-lg border border-black/15 px-3 py-2 text-xs font-semibold hover:bg-black/5 dark:border-white/15 dark:hover:bg-white/10"
-              >
-                Télécharger journal de caisse
               </a>
               <a
                 href={`/api/payments/report?${cashSummaryReportQuery}&download=1`}
@@ -1580,7 +1575,6 @@ export default async function PaymentsPage({
               <form method="GET" className="grid gap-3 sm:grid-cols-3 sm:items-end">
                 <input type="hidden" name="desk" value={selectedDeskKey} />
                 <input type="hidden" name="mode" value="tickets" />
-                <input type="hidden" name="cashMonth" value={cashRange.monthRaw} />
                 <div>
                   <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-black/60 dark:text-white/60">Du</label>
                   <input type="date" name="startDate" defaultValue={range.startRaw} className="w-full rounded-md border border-black/15 bg-white px-3 py-2 text-sm dark:border-white/15 dark:bg-zinc-900" />
@@ -1773,12 +1767,14 @@ export default async function PaymentsPage({
                 <form method="GET" className="flex flex-wrap items-end gap-2 text-xs">
                   <input type="hidden" name="desk" value={selectedDeskKey} />
                   <input type="hidden" name="mode" value="cash" />
-                  <input type="hidden" name="startDate" value={range.startRaw} />
-                  <input type="hidden" name="endDate" value={range.endRaw} />
                   <input type="hidden" name="airlineId" value={resolvedSearchParams.airlineId ?? "ALL"} />
                   <div>
-                    <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-black/60 dark:text-white/60">Mois du journal</label>
-                    <input type="month" name="cashMonth" defaultValue={cashRange.monthRaw} className="rounded-md border border-black/15 bg-white px-3 py-2 text-sm dark:border-white/15 dark:bg-zinc-900" />
+                    <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-black/60 dark:text-white/60">Du</label>
+                    <input type="date" name="startDate" defaultValue={cashRange.startRaw} className="rounded-md border border-black/15 bg-white px-3 py-2 text-sm dark:border-white/15 dark:bg-zinc-900" />
+                  </div>
+                  <div>
+                    <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-black/60 dark:text-white/60">Au</label>
+                    <input type="date" name="endDate" defaultValue={cashRange.endRaw} className="rounded-md border border-black/15 bg-white px-3 py-2 text-sm dark:border-white/15 dark:bg-zinc-900" />
                   </div>
                   <button type="submit" className="rounded-md bg-black px-3 py-2 text-xs font-semibold text-white dark:bg-white dark:text-black">Afficher</button>
                 </form>
@@ -1791,7 +1787,19 @@ export default async function PaymentsPage({
                   rel="noreferrer"
                   className="inline-flex rounded-md border border-black/20 px-2.5 py-1 font-semibold hover:bg-black/5 dark:border-white/20 dark:hover:bg-white/10"
                 >
-                  Voir le journal de caisse
+                  Voir journal PDF
+                </a>
+                <a
+                  href={`/api/payments/report?${cashJournalReportQuery}&download=1`}
+                  className="inline-flex rounded-md border border-black/20 px-2.5 py-1 font-semibold hover:bg-black/5 dark:border-white/20 dark:hover:bg-white/10"
+                >
+                  Télécharger journal PDF
+                </a>
+                <a
+                  href={`/api/payments/report?${cashJournalReportQuery}&format=xlsx`}
+                  className="inline-flex rounded-md border border-black/20 px-2.5 py-1 font-semibold hover:bg-black/5 dark:border-white/20 dark:hover:bg-white/10"
+                >
+                  Excel journal
                 </a>
                 <a
                   href={`/api/payments/report?${cashSummaryReportQuery}`}
@@ -1799,7 +1807,7 @@ export default async function PaymentsPage({
                   rel="noreferrer"
                   className="inline-flex rounded-md border border-black/20 px-2.5 py-1 font-semibold hover:bg-black/5 dark:border-white/20 dark:hover:bg-white/10"
                 >
-                  Voir le récapitulatif caisse
+                  Voir synthèse PDF
                 </a>
               </div>
             </section>
@@ -1869,7 +1877,7 @@ export default async function PaymentsPage({
                     {caisseLedger.length === 0 ? (
                       <tr>
                         <td colSpan={canManageLedger ? 11 : 10} className="px-4 py-8 text-center text-sm text-black/55 dark:text-white/55">
-                          Aucune ligne pour ce mois. Importez le fichier Excel caissière (à partir d&apos;avril 2026) via
+                          Aucune ligne pour cette période. Importez le fichier Excel caissière (à partir d&apos;avril 2026) via
                           Import Excel caisse.
                         </td>
                       </tr>

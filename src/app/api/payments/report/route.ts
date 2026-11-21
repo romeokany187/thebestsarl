@@ -15,6 +15,13 @@ import {
   normalizeCashDeskValue,
   resolveCashOperationWhereForReport,
 } from "@/lib/payments-desk";
+import {
+  CASH_JOURNAL_EXPORT_COLUMNS,
+  buildCashJournalExcelBuffer,
+  formatExportMoneyCell,
+  ledgerRowToExportRow,
+  type CashJournalExportColumnKey,
+} from "@/lib/cash-journal-export";
 
 type ReportMode = "date" | "month" | "year";
 type ReportType = "payments" | "cash-journal" | "cash-summary";
@@ -802,11 +809,6 @@ export async function GET(request: NextRequest) {
     },
   );
 
-  const pdf = await PDFDocument.create();
-  const { body: font, bold: fontBold } = await loadPaymentReportFonts(pdf);
-  const textBlack = rgb(0, 0, 0);
-  const lineGray = rgb(0.84, 0.84, 0.84);
-  const generatedBy = access.session.user.name ?? access.session.user.email ?? "Utilisateur";
   const selectedDeskLabel = ALL_CASH_DESKS.find((desk) => desk.value === selectedDesk)?.label ?? selectedDesk;
   const subtitle = airline
     ? `${range.label} • ${airline.code} - ${airline.name} • ${selectedDeskLabel}`
@@ -818,36 +820,66 @@ export async function GET(request: NextRequest) {
       : ticketStatusFilter === "PARTIAL"
         ? "Billets partiels"
         : "Tous les billets";
+  const format = (request.nextUrl.searchParams.get("format") ?? "pdf").toLowerCase();
   let filenameBase = "rapport-paiements";
 
   if (reportType === "cash-journal") {
     filenameBase = "journal-caisse";
-    const ledgerForJournalPdf = isMainCashJournalDesk ? journalCaisseLedger : caisseLedger;
+    const ledgerForJournal = isMainCashJournalDesk ? journalCaisseLedger : caisseLedger;
     const ledgerOpeningUsd = isMainCashJournalDesk ? journalOpeningUsd : openingUsd;
     const ledgerClosingUsd = isMainCashJournalDesk ? journalClosingUsd : closingUsd;
     const ledgerOpeningCdf = isMainCashJournalDesk ? journalOpeningCdf : openingCdf;
     const ledgerClosingCdf = isMainCashJournalDesk ? journalClosingCdf : closingCdf;
+    const includeSyntheticOpening = !(isMainCashJournalDesk && (usesExcelDailyJournalOpenings || journalFromExcelImport));
+    const exportRows = ledgerForJournal.map(ledgerRowToExportRow);
+
+    if (format === "xlsx" || format === "excel") {
+      const buffer = await buildCashJournalExcelBuffer({
+        title: "THE BEST SARL — Journal de caisse",
+        periodLabel: `Période du ${periodStart} au ${periodEnd}`,
+        deskLabel: selectedDeskLabel,
+        openingUsd: ledgerOpeningUsd,
+        openingCdf: ledgerOpeningCdf,
+        closingUsd: ledgerClosingUsd,
+        closingCdf: ledgerClosingCdf,
+        rows: exportRows,
+        includeSyntheticOpening,
+        periodStart,
+      });
+      return new NextResponse(Uint8Array.from(buffer), {
+        status: 200,
+        headers: {
+          "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+          "Content-Disposition": `attachment; filename="${filenameBase}-${periodStart}-${periodEnd}.xlsx"`,
+          "Cache-Control": "no-store",
+        },
+      });
+    }
+
+    const pdf = await PDFDocument.create();
+    const { body: font, bold: fontBold } = await loadPaymentReportFonts(pdf);
+    const textBlack = rgb(0, 0, 0);
+    const lineGray = rgb(0.84, 0.84, 0.84);
+    const generatedBy = access.session.user.name ?? access.session.user.email ?? "Utilisateur";
     const pageWidth = 1191;
     const pageHeight = 842;
     const margin = 28;
     let page = pdf.addPage([pageWidth, pageHeight]);
 
-    const columns = [
-      { key: "date", label: "Date", width: 72 },
-      { key: "type", label: "Type d'opération", width: 128 },
-      { key: "libelle", label: "Libellé", width: 352 },
-      { key: "usdIn", label: "USD +", width: 74 },
-      { key: "usdOut", label: "USD -", width: 74 },
-      { key: "usdBalance", label: "USD solde", width: 88 },
-      { key: "cdfIn", label: "CDF +", width: 84 },
-      { key: "cdfOut", label: "CDF -", width: 84 },
-      { key: "cdfBalance", label: "CDF solde", width: 96 },
-      { key: "reference", label: "Référence", width: 80 },
-    ] as const;
+    const columns = CASH_JOURNAL_EXPORT_COLUMNS.map((column) => ({
+      key: column.key,
+      label: column.label,
+      width: column.pdfWidth,
+      money: Boolean(column.money),
+      spacer: Boolean(column.spacer),
+    }));
     const tableWidth = columns.reduce((sum, column) => sum + column.width, 0);
     const tableX = margin;
     const lineHeight = 11;
     const bodySize = 9.2;
+    const referenceColumn = columns.find((column) => column.key === "reference") ?? columns[columns.length - 1];
+    const typeColumn = columns.find((column) => column.key === "type") ?? columns[1];
+    const libelleColumn = columns.find((column) => column.key === "libelle") ?? columns[2];
 
     const drawHeader = (continuation = false) => {
       page.drawRectangle({ x: 0, y: pageHeight - 108, width: pageWidth, height: 108, color: rgb(0.09, 0.1, 0.14) });
@@ -898,7 +930,9 @@ export async function GET(request: NextRequest) {
       page.drawRectangle({ x: tableX, y: topY - 28, width: tableWidth, height: 28, color: rgb(0.9, 0.92, 0.96), borderWidth: 0.8, borderColor: rgb(0.63, 0.67, 0.76) });
       let cursorX = tableX;
       columns.forEach((column) => {
-        page.drawText(column.label, { x: cursorX + 6, y: topY - 18, size: 9.2, font: fontBold, color: rgb(0.12, 0.14, 0.18) });
+        if (column.label) {
+          page.drawText(column.label, { x: cursorX + 4, y: topY - 18, size: 8.4, font: fontBold, color: rgb(0.12, 0.14, 0.18) });
+        }
         cursorX += column.width;
       });
     };
@@ -907,43 +941,59 @@ export async function GET(request: NextRequest) {
     drawTableHeader(pageHeight - 184);
     let y = pageHeight - 224;
 
-    if (!(isMainCashJournalDesk && (usesExcelDailyJournalOpenings || journalFromExcelImport))) {
+    if (includeSyntheticOpening) {
       const openingRowHeight = 28;
       page.drawRectangle({ x: tableX, y: y - openingRowHeight + 6, width: tableWidth, height: openingRowHeight, color: rgb(0.97, 0.97, 0.98), borderWidth: 0.5, borderColor: rgb(0.88, 0.89, 0.92) });
+      const openingCellMap: Record<CashJournalExportColumnKey, string[]> = {
+        date: [periodStart],
+        type: ["Solde d'ouverture"],
+        libelle: wrapTextToWidth("Report à nouveau calculé depuis l’historique caisse", font, 9.1, libelleColumn.width - 10),
+        usdIn: ["-"],
+        usdOut: ["-"],
+        usdBalance: [ledgerOpeningUsd.toFixed(2)],
+        gap: [""],
+        cdfIn: ["-"],
+        cdfOut: ["-"],
+        cdfBalance: [ledgerOpeningCdf.toFixed(2)],
+        reference: ["-"],
+      };
       let openingX = tableX;
-      const openingValues = [
-        periodStart,
-        "Solde d'ouverture",
-        "Report à nouveau calculé depuis l’historique caisse",
-        "-",
-        "-",
-        ledgerOpeningUsd.toFixed(2),
-        "-",
-        "-",
-        ledgerOpeningCdf.toFixed(2),
-        "-",
-      ];
-      openingValues.forEach((value, index) => {
-        page.drawText(value, { x: openingX + 6, y: y - 10, size: 9.1, font: index === 1 ? fontBold : font, color: textBlack });
-        openingX += columns[index].width;
+      columns.forEach((column) => {
+        const lines = openingCellMap[column.key];
+        const text = lines[0] ?? "";
+        if (text) {
+          const textWidth = font.widthOfTextAtSize(text, 9.1);
+          const x = column.money
+            ? openingX + column.width - textWidth - 6
+            : openingX + 6;
+          page.drawText(text, {
+            x,
+            y: y - 10,
+            size: 9.1,
+            font: column.key === "type" ? fontBold : font,
+            color: textBlack,
+          });
+        }
+        openingX += column.width;
       });
       y -= 36;
     }
 
-    for (const [rowIndex, row] of ledgerForJournalPdf.entries()) {
-      const cellMap = {
+    for (const [rowIndex, row] of ledgerForJournal.entries()) {
+      const cellMap: Record<CashJournalExportColumnKey, string[]> = {
         date: [row.occurredAt.toISOString().slice(0, 10)],
-        type: wrapTextToWidth(row.typeOperation, font, bodySize, columns[1].width - 10),
-        libelle: wrapTextToWidth(row.libelle, font, bodySize, columns[2].width - 10),
-        usdIn: [row.usdIn > 0 ? row.usdIn.toFixed(2) : "-"],
-        usdOut: [row.usdOut > 0 ? row.usdOut.toFixed(2) : "-"],
+        type: wrapTextToWidth(row.typeOperation, font, bodySize, typeColumn.width - 10),
+        libelle: wrapTextToWidth(row.libelle, font, bodySize, libelleColumn.width - 10),
+        usdIn: [formatExportMoneyCell(row.usdIn > 0 ? row.usdIn : null)],
+        usdOut: [formatExportMoneyCell(row.usdOut > 0 ? row.usdOut : null)],
         usdBalance: [row.usdBalance.toFixed(2)],
-        cdfIn: [row.cdfIn > 0 ? row.cdfIn.toFixed(2) : "-"],
-        cdfOut: [row.cdfOut > 0 ? row.cdfOut.toFixed(2) : "-"],
+        gap: [""],
+        cdfIn: [formatExportMoneyCell(row.cdfIn > 0 ? row.cdfIn : null)],
+        cdfOut: [formatExportMoneyCell(row.cdfOut > 0 ? row.cdfOut : null)],
         cdfBalance: [row.cdfBalance.toFixed(2)],
-        reference: wrapTextToWidth(row.reference, font, bodySize, columns[9].width - 10),
-      } as const;
-      const maxLines = Math.max(...Object.values(cellMap).map((lines) => lines.length));
+        reference: wrapTextToWidth(row.reference, font, bodySize, referenceColumn.width - 10),
+      };
+      const maxLines = Math.max(...Object.values(cellMap).map((lines) => Math.max(1, lines.length)));
       const rowHeight = Math.max(30, maxLines * lineHeight + 10);
 
       if (y - rowHeight < 42) {
@@ -968,14 +1018,38 @@ export async function GET(request: NextRequest) {
         const lines = cellMap[column.key];
         const startY = y - 11;
         lines.forEach((line, index) => {
-          page.drawText(line, { x: cursorX + 6, y: startY - index * lineHeight, size: bodySize, font, color: textBlack });
+          if (!line) return;
+          const textWidth = font.widthOfTextAtSize(line, bodySize);
+          const x = column.money
+            ? cursorX + column.width - textWidth - 6
+            : cursorX + 6;
+          page.drawText(line, { x, y: startY - index * lineHeight, size: bodySize, font, color: textBlack });
         });
         cursorX += column.width;
       });
 
       y -= rowHeight + 6;
     }
-  } else if (reportType === "cash-summary") {
+
+    drawFooter(pdf, font, generatedBy, textBlack, lineGray);
+    const bytes = await pdf.save();
+    return new NextResponse(Buffer.from(bytes), {
+      status: 200,
+      headers: {
+        "Content-Type": "application/pdf",
+        "Content-Disposition": `${request.nextUrl.searchParams.get("download") === "1" ? "attachment" : "inline"}; filename="${filenameBase}-${periodStart}-${periodEnd}.pdf"`,
+        "Cache-Control": "no-store",
+      },
+    });
+  }
+
+  const pdf = await PDFDocument.create();
+  const { body: font, bold: fontBold } = await loadPaymentReportFonts(pdf);
+  const textBlack = rgb(0, 0, 0);
+  const lineGray = rgb(0.84, 0.84, 0.84);
+  const generatedBy = access.session.user.name ?? access.session.user.email ?? "Utilisateur";
+
+  if (reportType === "cash-summary") {
     filenameBase = "recap-caisse";
     const page = pdf.addPage([1000, 700]);
     const margin = 30;
